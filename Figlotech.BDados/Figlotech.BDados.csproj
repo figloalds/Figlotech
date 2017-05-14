@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="FunctionalExtension\" />
+    <Folder Include="Interfaces\Extensions\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
+</Project>
