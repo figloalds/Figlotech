@@ -11,7 +11,6 @@ using System.Drawing.Imaging;
 
 namespace imgdupt {
     class ImageComparator {
-        #region **** Declarações globais. ****
         String RandomsDir;
         String DuplicatesDir;
         String UniquesDir;
@@ -20,12 +19,11 @@ namespace imgdupt {
         bool UniquesAreInitialized = false;
         List<Thread> UnicityCheckers = new List<Thread>();
         ConcurrentBag<ImageData> UniquesData = new ConcurrentBag<ImageData>();
-        const int Tollerance = 2;
-        const double MinDiff = 35;
-        const bool DebugComparator = false;
-        const int ComparatorSize = 32;
+        public int Tollerance = 2;
+        public double MinDiff = 35;
+        public bool DebugComparator = false;
+        public int ComparatorSize = 32;
         static int DebugCount = 0;
-        #endregion
 
         public ImageComparator(String Path) {
             if (!Path.EndsWith(@"\"))
@@ -48,7 +46,7 @@ namespace imgdupt {
         }
         #endregion
 
-        static Byte[] GetImageData(Bitmap InputImage) {
+        Byte[] GetImageData(Bitmap InputImage) {
             Byte[] ImageData = new Byte[ComparatorSize * ComparatorSize * 3];
             int RedOffset = 0;
             int GreenOffset = ComparatorSize * ComparatorSize;
@@ -73,7 +71,7 @@ namespace imgdupt {
             return a > b ? a - b : b - a;
         }
 
-        static double CheckDifference(Byte[] Value1, Byte[] Value2, Int32 Tollerance) {
+        double CheckDifference(Byte[] Value1, Byte[] Value2, Int32 Tollerance) {
             int Difference = 0;
             int RedOffset = 0;
             int GreenOffset = ComparatorSize * ComparatorSize;

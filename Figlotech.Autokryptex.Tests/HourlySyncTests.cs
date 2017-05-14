@@ -6,7 +6,7 @@ using Figlotech.Autokryptex.EncryptMethods;
 namespace Figlotech.Autokryptex.Tests
 {
     [TestClass]
-    public class HourlySyncTest {
+    public class HourlySyncTests {
         [TestMethod]
         public void HourlySyncShouldValidate() {
             var hourly = HourlySyncCode.Generate("This is just a test");

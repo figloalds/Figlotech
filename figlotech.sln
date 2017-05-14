@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Fetchit", "Figlot
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "imgdupt", "imgdupt\imgdupt.csproj", "{83E7E895-5EE7-499C-9DE0-60BB4941430F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.Autokryptex.Tests", "Figlotech.AutokryptexTest\Figlotech.Autokryptex.Tests.csproj", "{B4DD8A38-B1FC-4161-9E71-5F4F0FF318AA}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Autokryptex.Tests", "Figlotech.Autokryptex.Tests\Figlotech.Autokryptex.Tests.csproj", "{2E3C4578-0413-47B4-A326-77480667AA1A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -35,10 +35,10 @@ Global
 		{83E7E895-5EE7-499C-9DE0-60BB4941430F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{83E7E895-5EE7-499C-9DE0-60BB4941430F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{83E7E895-5EE7-499C-9DE0-60BB4941430F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B4DD8A38-B1FC-4161-9E71-5F4F0FF318AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B4DD8A38-B1FC-4161-9E71-5F4F0FF318AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B4DD8A38-B1FC-4161-9E71-5F4F0FF318AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B4DD8A38-B1FC-4161-9E71-5F4F0FF318AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E3C4578-0413-47B4-A326-77480667AA1A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E3C4578-0413-47B4-A326-77480667AA1A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E3C4578-0413-47B4-A326-77480667AA1A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E3C4578-0413-47B4-A326-77480667AA1A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
