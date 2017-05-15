@@ -43,7 +43,7 @@ namespace Figlotech.BDados.Entity {
             BlobContainer.CreateIfNotExists();
         }
 
-        private void absMkDirs(string dir) {
+        private void AbsMkDirs(string dir) {
 
             // NO WORK NEEDED HERE APPARENTLY
             // YAYPERS
@@ -51,7 +51,7 @@ namespace Figlotech.BDados.Entity {
         }
 
         public void MkDirs(string dir) {
-            absMkDirs(dir);
+            AbsMkDirs(dir);
         }
 
         public void Write(String relative, Action<Stream> func) {

@@ -41,7 +41,7 @@ namespace Figlotech.BDados.Helpers
                     if(expression is UnaryExpression)
                         exclude = ((expression as UnaryExpression).Operand as MemberExpression).Member.Name;
                     if (exclude == null) continue;
-                    if (DataObject.GetFieldNames(_join.Joins[_index].ValueObject).Contains(exclude)) {
+                    if (FTH.GetFieldNames(_join.Joins[_index].ValueObject).Contains(exclude)) {
                         _join.Joins[_index].Excludes.Add(exclude);
                     }
                     continue;

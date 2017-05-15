@@ -40,7 +40,7 @@ namespace Figlotech.BDados.Entity
         }
 
         private static IntEx _cpuhash;
-        private static IntEx cpuhash {
+        private static IntEx CpuHash {
             get {
                 if (_cpuhash != null) {
                     return _cpuhash;

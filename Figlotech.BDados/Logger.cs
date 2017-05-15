@@ -13,12 +13,12 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados {
     public class Logger : ILogger, IRequiresFileAccessor {
-        public IFileAccessor FileAccessor { get; set; }
         public static int gid = 0;
         private int myid = ++gid;
         private int writec = 0;
-        public bool isEnabled = true;
-        
+        public bool Enabled { get; set; }
+        public IFileAccessor FileAccessor { get; set; }
+
         public List<String> BDadosLogCache = new List<String>();
         private object BDLogLock = new Object();
 
@@ -30,7 +30,7 @@ namespace Figlotech.BDados {
         }
 
         public void ConversionLog(String log) {
-            if (!isEnabled)
+            if (!Enabled)
                 return;
             try {
                 FileAccessor.AppendAllLines(
@@ -43,7 +43,7 @@ namespace Figlotech.BDados {
 
         int maxBounce = 5;
         public void WriteLog(String log) {
-            if (!isEnabled)
+            if (!Enabled)
                 return;
             try {
 
@@ -70,7 +70,7 @@ namespace Figlotech.BDados {
         }
 
         public void BDadosLogDropLines() {
-            if (!isEnabled)
+            if (!Enabled)
                 return;
             try {
                 FileAccessor.AppendAllLines(
@@ -82,7 +82,7 @@ namespace Figlotech.BDados {
         }
 
         public void WriteLog(Exception x) {
-            if (!isEnabled)
+            if (!Enabled)
                 return;
             try {
 
@@ -127,7 +127,7 @@ namespace Figlotech.BDados {
         }
 
         public void SetEnabled(bool enabled) {
-            isEnabled = enabled;
+            Enabled = enabled;
         }
     }
 }

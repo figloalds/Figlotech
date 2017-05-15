@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.Helpers;
+using Figlotech.BDados.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -39,7 +40,7 @@ namespace Figlotech.BDados.Entity
             _dataTable = table;
         }
 
-        public RecordSet<T> CaptureEntities<T>(String Alias, int parentId) where T:DataObject, new()
+        public RecordSet<T> CaptureEntities<T>(String Alias, int parentId) where T : IDataObject, new()
         {
             var thisEntity = (from a in _join.Joins where a.Alias == Alias select a).FirstOrDefault();
             if(thisEntity == null) 

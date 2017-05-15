@@ -38,7 +38,7 @@ namespace Figlotech.BDados {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
 
-        //public static WorkQueuer GlobalQueuer = new WorkQueuer("FIGLOTECH_INTERNAL_JOBS", -1, true);
+        public static WorkQueuer GlobalQueuer = new WorkQueuer("FIGLOTECH_INTERNAL_JOBS", -1, true);
 
         public static int currentBDadosConnections = 0;
 
@@ -77,21 +77,21 @@ namespace Figlotech.BDados {
             return FillBlanks((String)i.ToString(IntEx.Base36));
         }
 
-        public static void RecursiveGiveRids(IDataObject<T>obj) {
+        public static void RecursiveGiveRids(IDataObject obj) {
             if(obj.RID == null) {
                 obj.RID = FTH.GenerateIdString(obj.GetType().Name, 64);
                 var props = ReflectionTool.FieldsAndPropertiesOf(obj.GetType());
 
                 for(int i = 0; i < props.Count; i++) {
                     var t = ReflectionTool.GetTypeOf(props[i]);
-                    if (t.GetInterfaces().Contains(typeof(IDataObject<T>)) {
-                        RecursiveGiveRids((IDataObject<T>ReflectionTool.GetValue(obj, props[i].Name));
+                    if (t.GetInterfaces().Contains(typeof(IDataObject))) {
+                        RecursiveGiveRids((IDataObject) ReflectionTool.GetValue(obj, props[i].Name));
                     }
                 }
             }
         }
 
-        public static T Deserialize<T>(String txt) where T: IDataObject<T>{
+        public static T Deserialize<T>(String txt) where T: IDataObject{
             var v = JsonConvert.DeserializeObject<T>(txt);
             RecursiveGiveRids(v);
             return v;
@@ -767,7 +767,7 @@ namespace Figlotech.BDados {
             return null;
         }
 
-        public static RecordSet<T> LoadAllOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : IDataObject<T>, new() {
+        public static RecordSet<T> LoadAllOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : IDataObject, new() {
             return new RecordSet<T>(da);
         }
 
@@ -814,63 +814,6 @@ namespace Figlotech.BDados {
             int current = 0;
         }
 
-        public static void CopyDb(IDataAccessor origin, IDataAccessor destination, Type[] types) {
-            destination.Logger.SetEnabled(true);
-            origin.Logger.SetEnabled(true);
-            WorkQueuer.Live(q => {
-                q.Enqueue(() => {
-                    if (origin is IRdbmsDataAccessor) {
-                        ((IRdbmsDataAccessor)destination).CheckStructure(types, false);
-                    }
-                });
-                q.Enqueue(() => {
-                    if (destination is IRdbmsDataAccessor) {
-                        ((IRdbmsDataAccessor)destination).CheckStructure(types, false);
-                    }
-                });
-            });
-
-            var typeofOrigin = origin.GetType();
-            List<Exception> exces = new List<Exception>();
-            WorkQueuer.Live((q) => {
-                foreach (var a in types) {
-                    q.Enqueue(() => {
-                        try {
-                            if (!a.GetInterfaces().Any((i) => i == typeof(IDataObject<T>)) {
-                                return;
-                            }
-                            var recordSet = GetRecordSetOf(a, origin);
-                            if (recordSet == null) {
-                                return;
-                            }
-                            int went = 0;
-                            int rodeRows = 0;
-                            int p = 1;
-                            int? lim = null;
-                            if (origin is IRdbmsDataAccessor)
-                                lim = 10000;
-                            do {
-                                recordSet = LoadAllOfType(origin, a, p++, lim);
-                                SetAccessorOfRecordSet(recordSet, destination);
-                                SaveRecordSet(recordSet);
-                                rodeRows = GetCountOfRecordSet(recordSet);
-                                went += rodeRows;
-
-                            } while (lim != null && rodeRows >= lim);
-                        } catch (Exception x) {
-                            exces.Add(new Exception($"Error copying table {a.Name}", x));
-                        }
-                    });
-                }
-            }, 1);
-            //Parallel.ForEach(types, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, a => {
-
-            //});
-            if (exces.Any()) {
-                throw new AggregateException(exces);
-            }
-        }
-
         public static string GetMimeType(string filename) {
             String extension = filename;
             while (extension.Contains(".")) {
@@ -884,9 +827,22 @@ namespace Figlotech.BDados {
                 extension = "." + extension;
             }
 
-            string mime;
+            return _mappings.TryGetValue(extension, out string mime) ? mime : "application/octet-stream";
+        }
 
-            return _mappings.TryGetValue(extension, out mime) ? mime : "application/octet-stream";
+        public static String[] GetFieldNames(Type t) {
+            var members = ReflectionTool.FieldsAndPropertiesOf(t)
+                .Where(m=> m.GetCustomAttribute<FieldAttribute>() != null);
+            List<String> retv = new List<String>();
+            foreach(var a in members) {
+                retv.Add(a.Name);
+            }
+            return retv.ToArray();
+        }
+
+        internal static bool FindColumn(string ChaveA, Type type) {
+            FieldInfo[] fields = type.GetFields();
+            return fields.Where((f) => f.GetCustomAttribute<FieldAttribute>() != null && f.Name == ChaveA).Any();
         }
 
         const int keySize = 16;

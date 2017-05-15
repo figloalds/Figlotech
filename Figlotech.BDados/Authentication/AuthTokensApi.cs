@@ -40,7 +40,7 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public static String NewToken() {
-            String Auth = Enkryptador.GerarIdString("CadastrarUsuario", 128);
+            String Auth = FTH.GenerateIdString("UserCreation", 128);
             AuthTokens.Add(new AuthToken(Auth, DateTime.Now));
             return Auth;
         }

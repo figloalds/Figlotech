@@ -21,8 +21,8 @@ namespace Figlotech.BDados.Interfaces {
 
         T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
 
-        T LoadByRid<T>(object RID) where T : IDataObject, new();
-        T LoadById<T>(object Id) where T : IDataObject, new();
+        T LoadByRid<T>(RID RID) where T : IDataObject, new();
+        T LoadById<T>(long Id) where T : IDataObject, new();
 
         bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> rids) where T : IDataObject, new();
         bool Delete<T>(Expression<Func<T, bool>> condition) where T : IDataObject, new();

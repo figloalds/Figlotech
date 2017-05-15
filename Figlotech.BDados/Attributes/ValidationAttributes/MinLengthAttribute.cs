@@ -29,7 +29,7 @@ namespace Figlotech.BDados.Attributes {
 
         public override bool Validate(object value) {
             bool retv = true;
-            Iae.As<string>(value, (str) => {
+            FTH.As<string>(value, (str) => {
                 if (str.Length < MinLength)
                     retv = false;
             });

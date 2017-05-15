@@ -10,7 +10,6 @@
 
 
 using Figlotech.BDados.Interfaces;
-using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -34,7 +33,7 @@ namespace Figlotech.BDados.Builders {
         }
 
         internal StringBuilder _queryString = new StringBuilder();
-        internal List<DbParameter> _objParams = new List<DbParameter>();
+        internal Dictionary<String, Object> _objParams = new Dictionary<String, Object>();
         public bool IsEmpty {
             get {
                 return _queryString.Length == 0;
@@ -95,12 +94,12 @@ namespace Figlotech.BDados.Builders {
                 }
                 foreach (Match match in matches) {
                     var pname = match.Groups["tagname"].Value;
-                    if (_objParams.Where((p) => p.ParameterName == pname).Any()) {
+                    if (_objParams.Where((p) => p.Key == pname).Any()) {
                         continue;
                     }
                     if (++iterator > args.Length - 1)
                         break;
-                    _objParams.Add(new MySqlParameter(pname, args[iterator]));
+                    _objParams.Add(pname, args[iterator]);
                 }
             }
             return this;
@@ -110,7 +109,9 @@ namespace Figlotech.BDados.Builders {
             if (!_conditionalEngaged || (_conditionalEngaged && _conditionalRetv)) {
                 this._queryString.Append(" ");
                 this._queryString.Append(other.GetCommandText());
-                this._objParams.AddRange(other.GetParameters());
+                foreach(var a in other.GetParameters()) {
+                    this._objParams.Add(a.Key, a.Value);
+                }
             }
             return this;
         }
@@ -139,7 +140,7 @@ namespace Figlotech.BDados.Builders {
             return this;
         }
 
-        public List<DbParameter> GetParameters() {
+        public Dictionary<String, Object> GetParameters() {
             return _objParams;
         }
 

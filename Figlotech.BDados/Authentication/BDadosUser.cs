@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
-    public class BDadosUser : DataObject {
+    public class BDadosUser : DataObject<BDadosUser> {
         [Field(Size = 64, AllowNull = false)]
         public String Username;
 

@@ -17,13 +17,17 @@ using System.Data;
 using System.Text.RegularExpressions;
 using Figlotech.BDados.Interfaces;
 using System.Globalization;
+using Figlotech.Autokryptex.EncryptMethods;
 
 namespace Figlotech.BDados.Authentication {
 
     internal static class AuthenticationUtils {
         // Taking Single responsibility thingy too seriously.
         public static String HashPass(String pass, String usr) {
-            return Convert.ToBase64String(Enkryptador.Criptografar(pass, usr));
+            return Convert.ToBase64String(
+                new AesEncryptor(usr).Encrypt(
+                    Encoding.UTF8.GetBytes(pass)
+                ));
         }
 
     }

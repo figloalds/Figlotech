@@ -18,7 +18,7 @@ namespace Figlotech.BDados.Entity
     {
         None, AggregateField, AggregateList, AggregateObject
     }
-    public enum TipoJuncao
+    public enum JoinType
     {
         LEFT, RIGHT, INNER, CROSS, LEFT_OUTER, RIGHT_OUTER, NATURAL, NATURAL_LEFT_OUTER, NATURAL_RIGHT_OUTER
     }
@@ -39,7 +39,7 @@ namespace Figlotech.BDados.Entity
         public JoiningTable() { }
         public Type ValueObject = null;
         public String TableName = null;
-        public TipoJuncao Type = TipoJuncao.LEFT;
+        public JoinType Type = JoinType.LEFT;
         public String Args = null;
         public String Prefix = null;
         public String Alias = null;
@@ -56,37 +56,37 @@ namespace Figlotech.BDados.Entity
         {
         }
 
-        private void ValidateOnClauses(String Args, String Prefixo)
+        private void ValidateOnClauses(String args, String prefix)
         {
-            if (Args == null || Args.Length < 1)
-                throw new BDadosException("Faltando argumentos");
+            if (args == null || args.Length < 1)
+                throw new BDadosException($"ON CLAUSE should be declared for {prefix}");
 
-            if (Args == "true" || Args == "false") {
+            if (args == "true" || args == "false") {
                 return;
             }
-            if (!Args.Contains("=")) {
-                throw new BDadosException("Os argumentos de junção passados não estão comparando nada com nada. Veja http://Figlotech.com/IaeDados/Documentacao/ArgumentosJuncao para mais informações.");
+            if (!args.Contains("=")) {
+                throw new BDadosException($"ON CLAUSE {args} doesn't make sense, BDados doesn't know how to deal with this kind of crazy yet.");
             }
 
             List<String> usedAliases = new List<String>();
             foreach (String a in (from a in Joins select a.Prefix)) {
-                if (Args.Contains(a + ".")) {
+                if (args.Contains(a + ".")) {
                     usedAliases.Add(a);
                     break;
                 }
             }
-            if (Args.Contains(Prefixo + "."))
-                usedAliases.Add(Prefixo);
+            if (args.Contains(prefix + "."))
+                usedAliases.Add(prefix);
             if (usedAliases.Count < 2) {
-                throw new BDadosException("Os argumentos de junção passados não estão comparando nada com nada. Eles deveriam fazer referencia a pelo menos dois Alias diferentes");
+                throw new BDadosException("ON CLAUSE should reference at least 2 different aliases");
             }
             // TODO: Adicionar validação dos nomes dos campos depois.
         }
 
-        public JoinConfigureHelper<T> AggregateRoot<T>(String Alias) where T : IDataObject<T>
+        public JoinConfigureHelper<T> AggregateRoot<T>(String Alias) where T : IDataObject
         {
             // Tipo junção é ignorado para a primeira tabela, de qualquer forma.
-            Join<T>(Alias, "", TipoJuncao.LEFT);
+            Join<T>(Alias, "", JoinType.LEFT);
             return GenerateNewHelper<T>(Joins.Count-1);
         }
 
@@ -106,35 +106,35 @@ namespace Figlotech.BDados.Entity
                     int IndexB = Joins.IndexOf((from b in Joins where b.Prefix == m.Groups["PreB"].Value select b).First());
                     if (IndexA < 0 || IndexB < 0) {
                         Relations.Clear();
-                        throw new BDadosException(String.Format("Os argumentos '{0}' na junção {1} não são válidos.", Joins[i].Args, i + 1));
+                        throw new BDadosException(String.Format("Join arguments '{0}' in join {1} are invalid.", Joins[i].Args, i + 1));
                     }
-                    String ChaveA = m.Groups["KeyA"].Value;
-                    String ChaveB = m.Groups["KeyB"].Value;
-                    if (!DataObject.FindColumn(ChaveA, Joins[IndexA].ValueObject)) {
+                    String keyA = m.Groups["KeyA"].Value;
+                    String keyB = m.Groups["KeyB"].Value;
+                    if (!FTH.FindColumn(keyA, Joins[IndexA].ValueObject)) {
                         Relations.Clear();
-                        throw new BDadosException($"Field {ChaveA} does not exist on '{Joins[IndexA].TableName} AS {Joins[IndexA].Prefix}'");
+                        throw new BDadosException($"Field {keyA} does not exist on '{Joins[IndexA].TableName} AS {Joins[IndexA].Prefix}'");
                     }
-                    if (!DataObject.FindColumn(ChaveB, Joins[IndexB].ValueObject)) {
+                    if (!FTH.FindColumn(keyB, Joins[IndexB].ValueObject)) {
                         Relations.Clear();
-                        throw new BDadosException($"Field {ChaveB} does not exist on '{Joins[IndexB].TableName} AS {Joins[IndexB].Prefix}'");
+                        throw new BDadosException($"Field {keyB} does not exist on '{Joins[IndexB].TableName} AS {Joins[IndexB].Prefix}'");
                     }
                     Relation r1 = new Relation();
                     Relation r2 = new Relation();
-                    r1.ParentKey = ChaveB;
+                    r1.ParentKey = keyB;
                     r1.ParentIndex = IndexB;
-                    r1.ChildKey = ChaveA;
+                    r1.ChildKey = keyA;
                     r1.ChildIndex = IndexA;
                     r1.AssemblyOption = AggregateBuildOptions.None;
 
-                    r2.ParentKey = ChaveA;
+                    r2.ParentKey = keyA;
                     r2.ParentIndex = IndexA;
-                    r2.ChildKey = ChaveB;
+                    r2.ChildKey = keyB;
                     r2.ChildIndex = IndexB;
                     r2.AssemblyOption = AggregateBuildOptions.None;
                     Relations.Add(r1);
                     Relations.Add(r2);
                 } catch (Exception x) {
-                    throw new BDadosException($"Nasty unforeseen error: {x.Message}");
+                    throw new BDadosException($"This error was not supposed to happen: {x.Message}");
                 }
             }
 
@@ -143,59 +143,30 @@ namespace Figlotech.BDados.Entity
         }
 
         /// <summary>
-        /// Adiciona um tipo BDTabela ao prototipo de junção.
+        /// Adds a DataObject into this join.
         /// </summary>
-        /// <typeparam name="T">O tipo BDTabela a adicionar à junção</typeparam>
-        /// <param name="Alias">O alias que essa tabela vai receber</param>
-        /// <param name="Args">O argumento de junção que sera usado na clausula ON (deve ser em branco pra primeira tabela e válido paras as demais)</param>
-        /// <param name="Tipo">Tipo de junção: Agregar adiciona os valores da tabela B (essa nova) à tabela referenciada nos args / Ramificar cria um vetor de tabelas B dentro da tabela A.
-        /// Esse parametro só é usado na montagem dessa junção como objeto dinamico.</param>
-        public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", TipoJuncao tipoJuncao = TipoJuncao.LEFT) where T : IDataObject<T>
+        /// <typeparam name="T">The IDataObject type of this join</typeparam>
+        /// <param name="Alias">Table alias</param>
+        /// <param name="Args">ON CLAUSE argument</param>
+        /// <param name="joinType">Specifies the join type between LEFT, RIGHT or INNER</param>
+        public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", JoinType joinType = JoinType.LEFT) where T : IDataObject
         {
             Validated = false;
             Relations.Clear();
             if ((from a in Joins select a.Args).Contains(Alias)) {
-                throw new BDadosException("Esse Alias já foi usado antes nessa mesma junção.");
+                throw new BDadosException("This Alias has already been used in this join.");
             }
-            //T insta = Activator.CreateInstance<T>();
-            //DataObject genericInstance = insta as DataObject;
-            //String Prefixo = ObterPrefixo(tbGenerica);
-            //FieldInfo[] campos = tbGenerica.GetType().GetFields();
-            //for (int i = 0; i < campos.Length; i++) {
-            //    foreach (var attr in campos[i].CustomAttributes) {
-            //        if (attr.AttributeType == typeof(AttColuna)) {
-            //            tBuilder.DefineField(Prefixo + campos[i].Name, campos[i].DeclaringType, campos[i].Attributes);
-            //        }
-            //    }
-            //}
 
             JoiningTable tj = new JoiningTable();
             tj.Alias = Alias;
             tj.TableName = typeof(T).Name.ToLower();
             tj.ValueObject = typeof(T);
             tj.Args = Args;
-            tj.Type = tipoJuncao;
+            tj.Type = joinType;
             tj.Prefix = GetAPrefix(Alias);
             Joins.Add(tj);
             return GenerateNewHelper<T>(Joins.Count - 1);
         }
-
-        //private bool ValidarConsulta() {
-        //    List<String> aliasesUsados = new List<String>();
-        //    foreach (String b in (from a in Juncoes select a.Prefixo)) {
-        //        if (Args.Contains(b + ".")) {
-        //            aliasesUsados.Add(b);
-        //            break;
-        //        }
-        //    }
-        //    if (Juncoes.Count > 1) {
-        //        if (Args.Contains(tj.Prefixo + "."))
-        //            aliasesUsados.Add(tj.Prefixo);
-        //        if (aliasesUsados.Count < 2) {
-        //            throw new BDadosException("Os argumentos de junção passados não estão comparando nada com nada. Eles deveriam fazer referencia a pelo menos dois Alias diferentes");
-        //        }
-        //    }
-        //}
 
         private bool ValidateTableCount()
         {
@@ -205,7 +176,7 @@ namespace Figlotech.BDados.Entity
         
         private String GetAPrefix(String Alias)
         {
-            List<String> Prefixos = (from a in Joins select a.Prefix).ToList();
+            List<String> prefixes = (from a in Joins select a.Prefix).ToList();
             int tam = 0;
             int c = 0;
             String retv = "";
@@ -216,19 +187,8 @@ namespace Figlotech.BDados.Entity
                     retv = tab.ToLower().Substring(0, ++tam);
                 else
                     retv = tab.ToLower() + (++c);
-            } while (Prefixos.Contains(retv));
+            } while (prefixes.Contains(retv));
             return retv;
-        }
-
-        private bool IsBDTabela(Type t)
-        {
-            while (t.BaseType != null) {
-                if (t == typeof(DataObject)) {
-                    return true;
-                }
-                t = t.BaseType;
-            }
-            return false;
         }
 
     }

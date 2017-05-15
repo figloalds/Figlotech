@@ -23,7 +23,7 @@ namespace Figlotech.BDados.Entity {
         Delete = 3,
     }
 
-    public class BDadosRelay : DataObject {
+    public class BDadosRelay : DataObject<BDadosRelay> {
         [FieldAttribute(Size = 64)]
         public String Tabela;
 

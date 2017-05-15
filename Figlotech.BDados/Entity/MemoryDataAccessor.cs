@@ -19,7 +19,7 @@ namespace Figlotech.BDados.Entity {
         List<IDataObject> GenericCache { get; }
     }
 
-    internal class DataCache<T> : IDataCache where T: IDataObject<T>, new() {
+    internal class DataCache<T> : IDataCache where T: IDataObject, new() {
         public Type Type { get; set; }
         public DateTime LastUpdate { get; set; } = DateTime.MinValue;
         public List<IDataObject> GenericCache {
@@ -55,7 +55,7 @@ namespace Figlotech.BDados.Entity {
             CachesList.Add(newDc);
             return newDc;
         }
-        private DataCache<E> GetCacheOf<E>() where E : IDataObject<E>, new() {
+        private DataCache<E> GetCacheOf<E>() where E : IDataObject, new() {
             foreach (var a in CachesList) {
                 if (a.Type == typeof(E)) {
                     return (DataCache<E>)a;
@@ -91,7 +91,7 @@ namespace Figlotech.BDados.Entity {
             }
         }
 
-        private void AddCache<T>(RecordSet<T> recordSet) where T : IDataObject<T>, new() {
+        private void AddCache<T>(RecordSet<T> recordSet) where T : IDataObject, new() {
             var thisCache = GetCacheOf<T>();
             lock(thisCache.Cache) {
                 for (var i = 0; i < recordSet.Count; i++) {
@@ -110,7 +110,7 @@ namespace Figlotech.BDados.Entity {
             }
         }
 
-        private T Clean<T>(T obj) where T : IDataObject<T>, new() {
+        private T Clean<T>(T obj) where T : IDataObject, new() {
             var thisCache = GetCacheOf<T>();
             Type type = typeof(T);
             T retv = Activator.CreateInstance<T>();
@@ -124,7 +124,7 @@ namespace Figlotech.BDados.Entity {
             return retv;
         }
 
-        public RecordSet<T> CacheLoad<T>(Expression<Func<T, bool>> cnd) where T : IDataObject<T>, new() {
+        public RecordSet<T> CacheLoad<T>(Expression<Func<T, bool>> cnd) where T : IDataObject, new() {
             var thisCache = GetCacheOf<T>();
             var Cache = thisCache.Cache;
                 var ret = new RecordSet<T>(this);
@@ -136,7 +136,7 @@ namespace Figlotech.BDados.Entity {
             return ret;
         }
 
-        private T Decorate<T>(T input) where T : IDataObject<T>, new() {
+        private T Decorate<T>(T input) where T : IDataObject, new() {
             var members = new List<MemberInfo>();
             members.AddRange(typeof(T).GetFields());
             members.AddRange(typeof(T).GetProperties());
@@ -206,7 +206,7 @@ namespace Figlotech.BDados.Entity {
                 .GenericCache.Where((o) => (string)o.RID == v).FirstOrDefault();
         }
 
-        public RecordSet<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, int? limit = default(int?), int? page = default(int?), int PageSize = 200, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject<T>, new() {
+        public RecordSet<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, int? limit = default(int?), int? page = default(int?), int PageSize = 200, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
             var cache = GetCacheOf<T>();
             RecordSet<T> retv = new RecordSet<T>(this);
             WorkQueuer.Live((queuer) => {
@@ -234,7 +234,7 @@ namespace Figlotech.BDados.Entity {
             return retv;
         }
 
-        public void Decorate<T>() where T : IDataObject<T>, new() {
+        public void Decorate<T>() where T : IDataObject, new() {
             var retv = GetCacheOf<T>().Cache;
 
             WorkQueuer.Live((queuer) => {
@@ -251,13 +251,13 @@ namespace Figlotech.BDados.Entity {
             //DataAccessor.Close();
         }
 
-        public bool Delete<T>(T obj) where T : IDataObject<T>, new() {
+        public bool Delete<T>(T obj) where T : IDataObject, new() {
             var dl = GetCacheOf<T>();
             dl.Cache.Remove(obj);
             return true;
         }
 
-        public bool Delete<T>(Expression<Func<T, bool>> condition) where T : IDataObject<T>, new() {
+        public bool Delete<T>(Expression<Func<T, bool>> condition) where T : IDataObject, new() {
             var dl = GetCacheOf<T>();
             var o = dl.Cache.Where((t) => condition.Compile().Invoke((T)t));
             foreach (var a in o) {
@@ -266,7 +266,7 @@ namespace Figlotech.BDados.Entity {
             return true;
         }
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> rids) where T : IDataObject<T>, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> rids) where T : IDataObject, new() {
             var dl = GetCacheOf<T>();
             var o = dl.Cache.Where((t) => rids.Select((r) => r.RID).Contains(t.RID) && !cnd.Compile().Invoke((T)t));
             foreach (var a in o) {
@@ -275,7 +275,7 @@ namespace Figlotech.BDados.Entity {
             return true;
         }
 
-        public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject<T>, new() {
+        public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject, new() {
             var dl = GetCacheOf<T>();
             T o = (T)dl.Cache.Where((t) => ((Expression<Func<T, bool>>)qb.expression).Compile().Invoke((T)t)).FirstOrDefault();
             if (o == null) {
@@ -284,12 +284,12 @@ namespace Figlotech.BDados.Entity {
             return o;
         }
 
-        public T Instantiate<T>() where T : IDataObject<T>, new() {
+        public T Instantiate<T>() where T : IDataObject, new() {
             return Activator.CreateInstance<T>();
         }
 
         static int lc = 0;
-        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> cnd, int? page = default(int?), int? limit = 200) where T : IDataObject<T>, new() {
+        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> cnd, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
             var cache = GetCacheOf<T>();
             //var cachedValues = CacheLoad<T>(cnd);]
             RecordSet<T> sel = new RecordSet<T>(this);
@@ -319,12 +319,12 @@ namespace Figlotech.BDados.Entity {
             return sel;
         }
 
-        public T LoadById<T>(object Id) where T : IDataObject<T>, new() {
+        public T LoadById<T>(long Id) where T : IDataObject, new() {
             var cachedValues = CacheLoad<T>((t) => t.Id == Id);
             return cachedValues.FirstOrDefault();
         }
 
-        public T LoadByRid<T>(object RID) where T : IDataObject<T>, new() {
+        public T LoadByRid<T>(RID RID) where T : IDataObject, new() {
             if (RID == null)
                 return default(T);
             var cachedValues = CacheLoad<T>((t) => t.RID == RID);
@@ -339,23 +339,22 @@ namespace Figlotech.BDados.Entity {
             return true;
         }
 
-        public bool SaveItem<T>(T input, Action postSaveAction = null) where T : IDataObject<T>, new() {
-            AddCache<T>(new RecordSet<T>(this) { input });
+        public bool SaveItem(IDataObject input, Action postSaveAction = null) {
+            GetCacheOf(input.GetType()).GenericCache.Add(input);
             return true;
         }
 
-        public bool Delete<T>(IDataObject obj) where T: IDataObject<T>, new() {
-            var cache = GetCacheOf<T>();
-            cache.GenericCache.Remove(obj);
+        public bool Delete(IDataObject input) {
+            GetCacheOf(input.GetType()).GenericCache.Remove(input);
             return true;
         }
 
-        public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject<T>, new() {
+        public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
             AddCache(rs);
             return true;
         }
 
-        public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject<T>, new() {
+        public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
             return LoadAll<T>(condicoes, page, limit).FirstOrDefault();
         }
     }

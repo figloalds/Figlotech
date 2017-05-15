@@ -132,10 +132,11 @@ namespace imgdupt {
             foreach (var UniqueFile in Uniques) {
                 using (FileStream fs = new FileStream(UniqueFile, FileMode.Open)) {
                     Bitmap Unique = new Bitmap(fs);
-                    ImageData Data = new ImageData();
-                    Data.Path = UniqueFile;
-                    Data.Data = GetImageData(Unique);
-                    Data.Size = Unique.Width * Unique.Height;
+                    ImageData Data = new ImageData() {
+                        Path = UniqueFile,
+                        Data = GetImageData(Unique),
+                        Size = Unique.Width * Unique.Height
+                    };
                     UniquesData.Add(Data);
                     Unique.Dispose();
                 }
@@ -175,8 +176,9 @@ namespace imgdupt {
                         }
                     }
                     if (IsUnique) {
-                        ImageData ThisUnique = new ImageData();
-                        ThisUnique.Path = UniquesDir + Path.GetFileName(ImagemAtual);
+                        ImageData ThisUnique = new ImageData() {
+                            Path = UniquesDir + Path.GetFileName(ImagemAtual)
+                        };
                         File.Move(ImagemAtual, UniquesDir + Path.GetFileName(ImagemAtual));
                         ThisUnique.Size = Size;
                         ThisUnique.Data = CurrentImageData;
@@ -251,8 +253,9 @@ namespace imgdupt {
                         });
                     }
                     if (IsUnique) {
-                        ImageData ThisUnique = new ImageData();
-                        ThisUnique.Path = UniquesDir + Path.GetFileName(ImagemAtual);
+                        ImageData ThisUnique = new ImageData() {
+                            Path = UniquesDir + Path.GetFileName(ImagemAtual)
+                        };
                         //File.Move(ImagemAtual, UniquesDir + Path.GetFileName(ImagemAtual));
                         UniquesFiles.Add(ImagemAtual);
                         ThisUnique.Size = Size;

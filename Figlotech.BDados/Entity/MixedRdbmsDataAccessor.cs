@@ -44,11 +44,11 @@ namespace Figlotech.BDados.Entity {
             return RdbmsAccessor.Execute(Query, args);
         }
 
-        public T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject<T>, new() {
+        public T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
             return RdbmsAccessor.ForceExist<T>(Default, qb);
         }
 
-        public T ForceExist<T>(Func<T> Default, string query, params object[] args) where T : IDataObject<T>, new() {
+        public T ForceExist<T>(Func<T> Default, string query, params object[] args) where T : IDataObject, new() {
             return RdbmsAccessor.ForceExist<T>(Default, query, args);
         }
 
@@ -60,11 +60,11 @@ namespace Figlotech.BDados.Entity {
             return RdbmsAccessor.GetQueryGenerator();
         }
 
-        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject<T>, new() {
+        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
             return RdbmsAccessor.LoadAll<T>(condicoes);
         }
 
-        public RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject<T>, new() {
+        public RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new() {
             return RdbmsAccessor.LoadAll<T>(where, args);
         }
 

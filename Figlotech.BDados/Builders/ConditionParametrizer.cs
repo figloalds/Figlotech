@@ -9,7 +9,6 @@ using Figlotech.Core;
 * August/2014
 * 
 **/
-using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -22,7 +21,7 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.Builders {
     public class ConditionParametrizer : QueryBuilder {
         int i;
-        String randomId {
+        String RandomId {
             get {
                 String s = IntEx.GerarShortRID();
                 return $"{s}{i++}";
@@ -36,13 +35,13 @@ namespace Figlotech.BDados.Builders {
 
         public ConditionParametrizer AddStringEquality(String target, String inputValue) {
             if (inputValue != null)
-                this.AppendCondition($"{target}=@{randomId}", inputValue);
+                this.AppendCondition($"{target}=@{RandomId}", inputValue);
             return this;
         }
 
         public ConditionParametrizer AddNulityCondition(String target, bool? inputValue) {
             if(inputValue != null)
-                this.AppendCondition($"({target} IS NULL)==@{randomId}", inputValue);
+                this.AppendCondition($"({target} IS NULL)==@{RandomId}", inputValue);
             return this;
         }
 
@@ -53,7 +52,7 @@ namespace Figlotech.BDados.Builders {
                     return this;
                 }
             }
-            this.AppendCondition($"{target}<==@{randomId}", dt);
+            this.AppendCondition($"{target}<==@{RandomId}", dt);
             return this;
         }
 
@@ -64,13 +63,13 @@ namespace Figlotech.BDados.Builders {
                     return this;
                 }
             }
-            this.AppendCondition($"{target}<==@{randomId}", dt);
+            this.AppendCondition($"{target}<==@{RandomId}", dt);
             return this;
         }
 
         public ConditionParametrizer AddBooleanEquality(String target, bool? inputValue) {
             if (inputValue != null)
-                this.AppendCondition($"{target}==@{randomId}", inputValue);
+                this.AppendCondition($"{target}==@{RandomId}", inputValue);
             return this;
         }
 

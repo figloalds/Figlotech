@@ -173,11 +173,11 @@ namespace Figlotech.BDados.Entity {
             return UsableAccessor.LoadAll<T>(condicoes, page??1, limit);
         }
 
-        public T LoadById<T>(object Id) where T : IDataObject, new() {
+        public T LoadById<T>(long Id) where T : IDataObject, new() {
             return UsableAccessor.LoadById<T>(Id);
         }
 
-        public T LoadByRid<T>(object RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(RID RID) where T : IDataObject, new() {
             return UsableAccessor.LoadByRid<T>(RID);
         }
 

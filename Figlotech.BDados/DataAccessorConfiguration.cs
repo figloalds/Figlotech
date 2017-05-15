@@ -1,7 +1,5 @@
 ﻿using System;
 using Microsoft.Win32;
-using System.Web.Configuration;
-using MySql.Data.MySqlClient;
 using System.Configuration;
 using System.Diagnostics;
 using Figlotech.Autokryptex;

@@ -11,7 +11,7 @@ namespace Figlotech.BDados.Interfaces {
         Asc,
         Desc
     }
-    public interface IRecordSet<T> : ISaveable where T: IDataObject<T>, new() {
+    public interface IRecordSet<T> : ISaveable where T: IDataObject, new() {
         //void LoadAll(IQueryBuilder conditions = null);
         IRecordSet<T> LoadAll(Expression<Func<T,bool>> conditions = null, int? page = null);
         IRecordSet<T> OrderBy(Expression<Func<T, object>> fn, OrderingType orderingType);

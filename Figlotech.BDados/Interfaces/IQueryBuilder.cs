@@ -11,7 +11,7 @@ namespace Figlotech.BDados.Interfaces {
         IQueryBuilder Append(string Text, params object[] args);
         IQueryBuilder Append(IQueryBuilder other);
 
-        List<DbParameter> GetParameters();
+        Dictionary<String, Object> GetParameters();
         string GetCommandText();
 
         bool IsEmpty { get; }
