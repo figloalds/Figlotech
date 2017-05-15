@@ -924,6 +924,9 @@ namespace Figlotech.BDados {
                     case "string":
                         type = $"VARCHAR({info.Size})";
                         break;
+                    case "RID":
+                        type = $"VARCHAR(64)";
+                        break;
                     case "int":
                     case "int32":
                         type = $"INT";
