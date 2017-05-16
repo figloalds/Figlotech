@@ -7,6 +7,6 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Interfaces {
     public interface IValidationRule<T> where T : IDataObject, new() {
-        ValidationErrors Validate(IDataObject<T> ObjectToValidate);
+        ValidationErrors Validate(IBusinessObject<T> ObjectToValidate);
     }
 }

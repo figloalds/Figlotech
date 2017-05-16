@@ -16,14 +16,14 @@ namespace Figlotech.Autokryptex.Tests
             CrossRandom crA = new CrossRandom(12345678);
             CrossRandom crB = new CrossRandom(12345678);
 
-            crA.UseSecret("What am I doing of my life...");
-            crB.UseSecret("What am I doing of my life...");
+            crA.UseInstanceSecret("What am I doing of my life...");
+            crB.UseInstanceSecret("What am I doing of my life...");
 
             for (int i = 0; i < listA.Length; i++) {
-                listA[i] = crA.Next(77777);
+                listA[i] = crA.Next(100);
             }
             for (int i = 0; i < listB.Length; i++) {
-                listB[i] = crB.Next(77777);
+                listB[i] = crB.Next(100);
             }
             for(int i = 0; i < listA.Length; i++) {
                 Assert.AreEqual(listA[i], listB[i]);

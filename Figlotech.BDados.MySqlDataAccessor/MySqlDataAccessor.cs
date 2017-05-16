@@ -1058,35 +1058,35 @@ namespace Figlotech.BDados {
             return retv;
         }
 
-        public List<T> Load<T>(string Consulta, params object[] args) {
-            List<T> retv = new List<T>();
-            Access((bd) => {
-                Query(retv, Consulta, args);
-            });
-            return retv;
-        }
+        //public List<T> Load<T>(string Consulta, params object[] args) {
+        //    List<T> retv = new List<T>();
+        //    Access((bd) => {
 
-        int roulette = 0;
+        //        return Query(Consulta, args);
+        //    });retv;
+        //}
 
         public MySqlConnection GetConnection() {
             return SqlConnection;
         }
 
-        public List<T> Query<T>(List<T> input, IQueryBuilder query) {
+        public List<T> Query<T>(IQueryBuilder query) {
             if (query == null) {
                 return new List<T>();
             }
             DataTable resultado = Query(query);
-            FieldInfo[] fields = typeof(T).GetFields();
+            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             String[] columnNames = new string[resultado.Columns.Count];
             for (int c = 0; c < resultado.Columns.Count; c++) {
                 columnNames[c] = resultado.Columns[c].ColumnName;
             }
+            var retv = new T[resultado.Rows.Count];
+            var objBuilder = new ObjectReflector();
             for (int i = 0; i < resultado.Rows.Count; i++) {
-                T novoObj = Activator.CreateInstance<T>();
+                objBuilder.Slot(retv[i]);
                 Parallel.ForEach(fields, (col) => {
-
                     bool exists = false;
+                    var typeofCol = ReflectionTool.GetTypeOf(col);
                     for (int c = 0; c < columnNames.Length; c++) {
                         if (resultado.Columns[c].ColumnName == col.Name) {
                             exists = true;
@@ -1096,81 +1096,33 @@ namespace Figlotech.BDados {
                     if (!exists) return;
 
                     Object o = resultado.Rows[i].Field<Object>(col.Name);
-                    // É nullable e nulo
-                    if (Nullable.GetUnderlyingType(col.FieldType) != null && o == null)
-                        col.SetValue(novoObj, null);
-                    // é nullable e não nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) != null && o != null)
-                        col.SetValue(novoObj, Convert.ChangeType(o, Nullable.GetUnderlyingType(col.FieldType)));
-                    // É não nullable e não nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) == null && o != null) {
+                    if (Nullable.GetUnderlyingType(typeofCol) != null && o == null)
+                        objBuilder[col] = null;
+                    else if (Nullable.GetUnderlyingType(typeofCol) != null && o != null)
+                        objBuilder[col] = Convert.ChangeType(o, Nullable.GetUnderlyingType(typeofCol));
+                    else if (Nullable.GetUnderlyingType(typeofCol) == null && o != null) {
                         try {
-                            if (col.FieldType.IsEnum) {
-                                col.SetValue(novoObj, Enum.ToObject(col.FieldType, o));
+                            if (typeofCol.IsEnum) {
+                                objBuilder[col] = Enum.ToObject(typeofCol, o);
                             }
                             else {
-                                col.SetValue(novoObj, Convert.ChangeType(o, col.FieldType));
+                                objBuilder[col] = Convert.ChangeType(o, typeofCol);
                             }
                         }
                         catch (Exception) {
-                            Logger.WriteLog($"Erro ao converter '{o.ToString()}' ({o.GetType().FullName}) para '{col.FieldType.FullName}'");
-                            col.SetValue(novoObj, Activator.CreateInstance(col.FieldType));
+                            objBuilder[col] = Activator.CreateInstance(typeofCol);
                         }
                     }
-                    // O campo é não-nulo mas o database retorna nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) == null && o != null) {
-                        col.SetValue(novoObj, Activator.CreateInstance(col.FieldType));
+                    else if (Nullable.GetUnderlyingType(typeofCol) == null && o != null) {
+                        objBuilder[col] = Activator.CreateInstance(typeofCol);
                     }
                 });
-                input.Add(novoObj);
             }
-            return input;
+            return retv.ToList();
         }
 
-        public List<T> Query<T>(List<T> retv, string Consulta, params object[] args) {
-            DataTable resultado = Query(Consulta, args);
-            //List<T> retv = new List<T>();
-            var fields = typeof(T).GetFields();
-            retv.AddRange(new T[resultado.Rows.Count]);
-            for (int i = 0; i < resultado.Rows.Count; i++) {
-                retv[i] = Activator.CreateInstance<T>();
-                var novoObj = retv[i];
-                Parallel.ForEach(fields, col => {
-                    Object o;
-                    try {
-                        o = resultado.Rows[i].Field<Object>(col.Name);
-                    }
-                    catch (Exception) {
-                        return;
-                    }
-                    // É nullable e nulo
-                    if (Nullable.GetUnderlyingType(col.FieldType) != null && o == null)
-                        col.SetValue(novoObj, null);
-                    // é nullable e não nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) != null && o != null)
-                        col.SetValue(novoObj, Convert.ChangeType(o, Nullable.GetUnderlyingType(col.FieldType)));
-                    // É não nullable e não nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) == null && o != null) {
-                        try {
-                            if (col.FieldType.IsEnum) {
-                                col.SetValue(novoObj, Enum.ToObject(col.FieldType, o));
-                            }
-                            else {
-                                col.SetValue(novoObj, Convert.ChangeType(o, col.FieldType));
-                            }
-                        }
-                        catch (Exception) {
-                            Logger.WriteLog($"Erro ao converter '{o.ToString()}' ({o.GetType().FullName}) para '{col.FieldType.FullName}'");
-                            col.SetValue(novoObj, Activator.CreateInstance(col.FieldType));
-                        }
-                    }
-                    // O campo é não-nulo mas o database retorna nulo
-                    else if (Nullable.GetUnderlyingType(col.FieldType) == null && o != null) {
-                        col.SetValue(novoObj, Activator.CreateInstance(col.FieldType));
-                    }
-                });
-            }
-            return retv;
+        public List<T> Query<T>(string queryString, params object[] args) {
+            return Query<T>(new QueryBuilder(queryString, args));
         }
 
         public static String GetIdColumn<T>() where T : IDataObject, new() { return GetIdColumn(typeof(T)); }
@@ -1224,11 +1176,15 @@ namespace Figlotech.BDados {
             int i = 0;
             if (dt.Rows.Count > 0) {
                 T add = (T)Activator.CreateInstance(typeof(T));
-                foreach (FieldInfo col in typeof(T).GetFields()) {
+                var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
+                    .Where(m=> m.GetCustomAttribute<FieldAttribute>() != null);
+                var objBuilder = new ObjectReflector(add);
+                foreach (var col in members) {
                     try {
-                        Type t = col.GetType();
+                        var typeofCol = ReflectionTool.GetTypeOf(col);
+                        Type t = typeofCol;
                         Object o = dt.Rows[i].Field<Object>(col.Name);
-                        col.SetValue(add, o);
+                        objBuilder[col] = o;
                     }
                     catch (Exception) { }
                 }
@@ -1257,11 +1213,15 @@ namespace Figlotech.BDados {
                 int i = 0;
                 if (dt.Rows.Count > 0) {
                     T add = (T)Activator.CreateInstance(typeof(T));
-                    foreach (FieldInfo col in typeof(T).GetFields()) {
+                    var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
+                        .Where(m => m.GetCustomAttribute<FieldAttribute>() != null);
+                    var objBuilder = new ObjectReflector(add);
+                    foreach (var col in members) {
                         try {
-                            Type t = col.GetType();
+                            var typeofCol = ReflectionTool.GetTypeOf(col);
+                            Type t = typeofCol;
                             Object o = dt.Rows[i].Field<Object>(col.Name);
-                            col.SetValue(add, o);
+                            objBuilder[col] = o;
                         }
                         catch (Exception) { }
                     }
@@ -1314,31 +1274,36 @@ namespace Figlotech.BDados {
                 if (dt == null)
                     return;
                 if (dt.Rows.Count < 1) {
-                    Logger.WriteLog("A consulta não retornou nenhum resultado.");
+                    Logger.WriteLog("Query returned no results.");
                     return;
                 }
-                var Fields = typeof(T).GetFields().Where((a) => a.GetCustomAttribute<FieldAttribute>() != null).ToList();
+                var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
+                    .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
+                    .ToList();
 
+                var objBuilder = new ObjectReflector();
                 for (int i = 0; i < dt.Rows.Count; i++) {
                     T add = new T();
-                    Parallel.ForEach(Fields, col => {
+                    objBuilder.Slot(add);
+                    Parallel.ForEach(fields, col => {
                         try {
+                            var typeofCol = ReflectionTool.GetTypeOf(col);
                             Object o = dt.Rows[i].Field<Object>(col.Name);
                             if (o == null) {
-                                if (Nullable.GetUnderlyingType(col.GetType()) != null
-                                || !col.GetType().IsValueType)
-                                    col.SetValue(add, null);
+                                if (Nullable.GetUnderlyingType(typeofCol) != null
+                                || !typeofCol.IsValueType)
+                                    objBuilder[col] = null;
                                 return;
                             }
-                            if (col.FieldType.IsAssignableFrom(o.GetType())
-                                || (Nullable.GetUnderlyingType(col.FieldType)?.IsAssignableFrom(o.GetType()) ?? false)) {
-                                col.SetValue(add, o);
+                            if (typeofCol.IsAssignableFrom(o.GetType())
+                                || (Nullable.GetUnderlyingType(typeofCol)?.IsAssignableFrom(o.GetType()) ?? false)) {
+                                objBuilder[col] = o;
                             }
-                            else if (col.FieldType.IsEnum || (Nullable.GetUnderlyingType(col.FieldType)?.IsEnum ?? false)) {
-                                col.SetValue(add, Enum.ToObject(col.FieldType, o));
+                            else if (typeofCol.IsEnum || (Nullable.GetUnderlyingType(typeofCol)?.IsEnum ?? false)) {
+                                objBuilder[col] = Enum.ToObject(typeofCol, o);
                             }
                             else
-                                col.SetValue(add, Convert.ChangeType(o, col.FieldType));
+                                objBuilder[col] = Convert.ChangeType(o, typeofCol);
                         }
                         catch (Exception x) {
                             Logger?.WriteLog($"{x.Message}");
@@ -1351,6 +1316,7 @@ namespace Figlotech.BDados {
             }, (x) => {
                 Logger.WriteLog(x.Message);
                 Logger.WriteLog(x.StackTrace);
+                Bench.Mark("Build RecordSet");
             });
             return retv;
         }

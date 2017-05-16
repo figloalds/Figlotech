@@ -80,12 +80,12 @@ namespace Figlotech.BDados.Entity {
             return RdbmsAccessor.Query(Query, args);
         }
 
-        public List<T> Query<T>(List<T> input, IQueryBuilder Query) {
-            return RdbmsAccessor.Query<T>(input, Query);
+        public List<T> Query<T>(IQueryBuilder Query) {
+            return RdbmsAccessor.Query<T>(Query);
         }
 
-        public List<T> Query<T>(List<T> input, string Query, params object[] args) {
-            return RdbmsAccessor.Query<T>(input, Query, args);
+        public List<T> Query<T>(string Query, params object[] args) {
+            return RdbmsAccessor.Query<T>(Query, args);
         }
     }
 }

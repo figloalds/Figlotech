@@ -4,6 +4,10 @@
     <TargetFramework>net462</TargetFramework>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>C:\Users\felyp\Dropbox\figlotech\.dist\</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <Folder Include="FunctionalExtension\" />
     <Folder Include="Interfaces\Extensions\" />

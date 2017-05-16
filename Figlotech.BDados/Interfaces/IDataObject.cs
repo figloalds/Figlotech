@@ -24,8 +24,4 @@ namespace Figlotech.BDados.Interfaces {
 
         IContextProvider Context { get; }
     }
-
-    public interface IDataObject<T> : IDataObject where T : IDataObject, new() {
-        List<IValidationRule<T>> ValidationRules { get; set; }
-    }
 }

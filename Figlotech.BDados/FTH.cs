@@ -997,6 +997,17 @@ namespace Figlotech.BDados {
             return new String(retval);
         }
 
+        public static void MemberwiseCopy(object origin, object destination) {
+            ObjectReflector.Open(origin, (objA) => {
+                var members = ReflectionTool.FieldsAndPropertiesOf(origin.GetType());
+                ObjectReflector.Open(destination, (objB) => {
+                    foreach(var field in members) {
+                        objB[field.Name] = objA[field];
+                    }
+                });
+            });
+        }
+
         private static String GenerateCode(int numDigits, bool useLetters) {
             char[] vector = new char[numDigits];
             List<char> map = new List<char>();

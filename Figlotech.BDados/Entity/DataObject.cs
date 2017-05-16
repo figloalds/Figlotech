@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Entity
 {
-    public class DataObject<T> : BaseDataObject, IDataObject<T> where T : IDataObject, new() {
+    public class DataObject<T> : BaseDataObject, IBusinessObject<T> where T : IDataObject, new() {
 
         [PrimaryKey]
         [Field(Options = "NOT NULL AUTO_INCREMENT PRIMARY KEY")]

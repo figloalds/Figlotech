@@ -4,6 +4,10 @@
     <TargetFramework>net462</TargetFramework>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>C:\Users\felyp\Dropbox\figlotech\.dist\</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="MySql.Data" Version="6.9.9" />
     <PackageReference Include="MySqlBackup" Version="1.0.0" />

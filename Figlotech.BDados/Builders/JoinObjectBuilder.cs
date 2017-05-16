@@ -162,6 +162,7 @@ namespace Figlotech.BDados.Builders {
             }
             foreach (DataRow dr in rs) {
                 object thisObject = Activator.CreateInstance(type);
+                var objBuilder = new ObjectReflector(thisObject);
                 // -- Adicionar os valores selecionados
                 MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null)
@@ -169,7 +170,7 @@ namespace Figlotech.BDados.Builders {
                 for (int i = 0; i < fields.Length; i++) {
                     if (_join.Joins[thisIndex].Excludes.Contains(fields[i].Name))
                         continue;
-                    ReflectionTool.SetValue(thisObject, fields[i].Name, dr.Field<Object>(Prefix + "_" + fields[i].Name));
+                    objBuilder[fields[i].Name] = dr.Field<Object>(Prefix + "_" + fields[i].Name);
                 }
 
                 // Here is where Recursivity gets real.
@@ -180,7 +181,7 @@ namespace Figlotech.BDados.Builders {
                                     String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
                                     var value = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
                                     String fieldName = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                    ReflectionTool.SetValue(thisObject, fieldName, dr.Field<Object>(childPrefix + "_" + rel.Fields[0]));
+                                    objBuilder[fieldName] = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
                                 } catch (Exception x) {
                                     Console.WriteLine(x.Message);
                                 }
@@ -198,7 +199,7 @@ namespace Figlotech.BDados.Builders {
                                 List<object> newList = new List<object>();
                                 Object parentRid = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
                                 newList = BuildAggregateList(objectType, parentRid, rel, ref dt);
-                                ReflectionTool.SetValue(thisObject, fieldAlias, newList);
+                                objBuilder[fieldAlias] = newList;
                                 break;
                             }
                         case AggregateBuildOptions.AggregateObject: {
@@ -214,7 +215,7 @@ namespace Figlotech.BDados.Builders {
                                 Object parentRid = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
                                 try {
                                     newObject = BuildAggregateList(type, parentRid, rel, ref dt).FirstOrDefault();
-                                    ReflectionTool.SetValue(thisObject, fieldAlias, newObject);
+                                    objBuilder[fieldAlias] = newObject;
                                 } catch (Exception) {
                                 }
                                 break;
@@ -227,10 +228,10 @@ namespace Figlotech.BDados.Builders {
                     if (finalTransform.Alias == Alias) {
                         if (finalTransform.Function == null) {
                             if (finalTransform.NewField != finalTransform.OldField) {
-                                ReflectionTool.SetValue(thisObject, finalTransform.NewField, ReflectionTool.GetValue(thisObject, finalTransform.OldField));
+                                objBuilder[finalTransform.NewField] = objBuilder[finalTransform.OldField];
                             }
                         } else {
-                            ReflectionTool.SetValue(thisObject, finalTransform.NewField, finalTransform.Function(thisObject));
+                            objBuilder[finalTransform.NewField] = finalTransform.Function(thisObject);
                         }
                     }
                 }
@@ -305,13 +306,14 @@ namespace Figlotech.BDados.Builders {
                 // and then we will conduce some crazy 
                 // recursiveness to objectize its children.
                 T thisObject = Activator.CreateInstance<T>();
+                var objBuilder = new ObjectReflector(thisObject);
 
                 FieldInfo[] fields = _join.Joins[TopLevel].ValueObject
                     .GetFields().Where((f) => f.GetCustomAttribute<FieldAttribute>() != null).ToArray();
                 for (int i = 0; i < fields.Length; i++) {
                     if (_join.Joins[TopLevel].Excludes.Contains(fields[i].Name))
                         continue;
-                    ReflectionTool.SetValue(thisObject, fields[i].Name, dr.Field<Object>(Prefix + "_" + fields[i].Name));
+                    objBuilder[fields[i].Name] = dr.Field<Object>(Prefix + "_" + fields[i].Name);
                 }
                 // -- Find all relations where current table is 'parent'.
                 var relations = (from a in Relations where a.ParentIndex == TopLevel select a);
@@ -323,7 +325,7 @@ namespace Figlotech.BDados.Builders {
                                     String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
                                     var value = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
                                     String nome = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                    ReflectionTool.SetValue(thisObject, nome, dr.Field<Object>(childPrefix + "_" + rel.Fields[0]));
+                                    objBuilder[nome] = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
                                 } catch (Exception x) {
                                     Console.WriteLine(x.Message);
                                 }
@@ -345,7 +347,7 @@ namespace Figlotech.BDados.Builders {
                                 if (parentVal == null)
                                     continue;
                                 newObjects = BuildAggregateList(objectType, parentVal, rel, ref dt);
-                                ReflectionTool.SetValue(thisObject, fieldAlias, newObjects);
+                                objBuilder[fieldAlias] = newObjects;
                                 break;
                             }
                         // this one is almost the same as previous one.
@@ -359,6 +361,7 @@ namespace Figlotech.BDados.Builders {
                                     continue;
                                 }
                                 var newObject = Activator.CreateInstance(objectType);
+                                var newObjectMan = new ObjectReflector(newObject);
                                 Object parentValue = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
                                 try {
                                     if (parentValue == null) {
@@ -368,7 +371,7 @@ namespace Figlotech.BDados.Builders {
                                     if (newObject == null) {
                                         continue;
                                     }
-                                    ReflectionTool.SetValue(thisObject, fieldAlias, newObject);
+                                    newObjectMan[fieldAlias] = newObject;
                                 } catch (Exception z) {
 
                                 }
@@ -377,30 +380,19 @@ namespace Figlotech.BDados.Builders {
                     }
                 }
 
-                // HOPE I DONT NEED THIS ANYMORE
-                // SERIOUSLY
-                //String Alias = _join.Joins[TopLevel].Alias;
-                //foreach (var refinement in _buildParameters._honingParameters) {
-                //    var dictObject = (thisObject as IDictionary<String, dynamic>);
-                //    if (refinement.Alias == Alias) {
-                //        if (refinement.Function == null) {
-                //            if (refinement.NewField != refinement.OldField) {
-                //                if (dictObject.ContainsKey(refinement.NewField))
-                //                    dictObject.Remove(refinement.NewField);
-                //                if (dictObject.ContainsKey(refinement.OldField)) {
-                //                    dictObject.Add(refinement.NewField, dictObject[refinement.OldField]);
-                //                    dictObject.Remove(refinement.OldField);
-                //                }
-                //            }
-                //        } else {
-                //            if (dictObject.ContainsKey(refinement.NewField))
-                //                dictObject.Remove(refinement.NewField);
-                //            try {
-                //                dictObject.Add(refinement.NewField, refinement.Function(thisObject));
-                //            } catch (Exception) { }
-                //        }
-                //    }
-                //}
+                String Alias = _join.Joins[TopLevel].Alias;
+                foreach (var refinement in _buildParameters._honingParameters) {
+                    if (refinement.Alias == Alias) {
+                        if (refinement.Function == null) {
+                            if (refinement.NewField != refinement.OldField) {
+                                objBuilder[refinement.NewField] = objBuilder[refinement.OldField];
+                            }
+                        } else {
+                            objBuilder[refinement.NewField] = refinement.Function(thisObject);
+                        }
+                    }
+                }
+
                 retv.Add(thisObject);
             }
             //});

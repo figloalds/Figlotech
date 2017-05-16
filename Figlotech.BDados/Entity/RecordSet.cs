@@ -132,7 +132,7 @@ namespace Figlotech.BDados.Entity {
             return this;
         }
 
-        int? LimitResults = FiglotechBDadosConfiguration.RecordSetDefaultMaximumResults;
+        int? LimitResults = BDadosConfiguration.DefaultResultsLimit;
 
         public RecordSet<T> Limit(int? limits) {
             LimitResults = limits;

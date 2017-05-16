@@ -35,9 +35,20 @@ namespace Figlotech.Autokryptex {
             Retv.Reverse();
             return new string(Retv.ToArray());
         }
-
+        
         public static byte[] CramString(String input, int digitCount) {
-            CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
+            // if I use CrossRandom here it might bug
+            // when setting the app secret or instance secret mutiple times.
+            // Now picture this, you could set several keys in a sequence
+            // and those keys in that exact sequence would effectively create a
+            // neat lock mechanism.
+            // Except... When you have an object at static level you might accidentally
+            // hit it twice with the same value, and we don't want that to screw 
+            // everything up.
+            // I'll be copying this function but with CrossRandom instead
+            // to inside CrossRandom and I'll use that to "set instanceKey"
+            // this will be neat 
+            Random cr = new Random(Int32.MaxValue ^ 123456789);
             byte[] workset = Encoding.UTF8.GetBytes(input);
             while (workset.Count() > digitCount) {
                 byte ch = workset[0];

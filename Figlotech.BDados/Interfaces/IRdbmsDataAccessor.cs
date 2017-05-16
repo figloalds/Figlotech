@@ -19,8 +19,8 @@ namespace Figlotech.BDados.Interfaces {
         T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
 
-        List<T> Query<T>(List<T> input, IQueryBuilder Query);
-        List<T> Query<T>(List<T> input, String Query, params object[] args);
+        List<T> Query<T>(IQueryBuilder Query);
+        List<T> Query<T>(String Query, params object[] args);
 
         DataTable Query(IQueryBuilder Query);
         DataTable Query(String Query, params object[] args);
