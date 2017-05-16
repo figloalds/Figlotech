@@ -13,7 +13,14 @@ Or maybe people like something and suggest or find something interesting and use
 And also, specially, it's here as a backup.
 
 # Figlotech.Autokryptex
-Provides simple encryption algorithms for quick encrypting stuff. 
+Provides simple encryption algorithms for quick encrypting.
+There's something new and special about this lib, it generates keys using an unusual pseudo-random algorithm.
+Also, the generation algorithm allows the definition of a global "AppKey" (through calling static `CrossRandom.UseAppKey(String key)`)
+AND an instance key.
+You can call the UseInstanceKey multiple times and all of the keys will affect the final results of the overall generator.
+So if you set multiple strings as keys, you'll need to know all of them in the same order to achieve the same ordered results as the first time.
+Now, a disclaimer: I'm really bad at math and I don't really know if this is actually useful or way too rubbish. I mean, AES and RSA involve all of that crazy mathmagic I can't legitemately keep with. this is just: Take these primes and manipulate them arround;
+Objective: A simple algorithm able to encrypt stuff and keep this encrypted data safe even if everyone and their mom's know the code, requiring reverse engineering in the binary in order to find the real secret to decrypt it.
 Needs from NET462: 
 - System.Cryptography for Figlotech.Autokryptex.EncriptionMethods.AesEnkryptor
 
