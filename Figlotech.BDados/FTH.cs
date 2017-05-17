@@ -91,7 +91,7 @@ namespace Figlotech.BDados {
             }
         }
 
-        public static T Deserialize<T>(String txt) where T: IDataObject{
+        public static T Deserialize<T>(String txt) where T: IDataObject, new() {
             var v = JsonConvert.DeserializeObject<T>(txt);
             RecursiveGiveRids(v);
             return v;
@@ -812,6 +812,36 @@ namespace Figlotech.BDados {
             int min = 0;
             int max = 1;
             int current = 0;
+        }
+
+        public static QueryBuilder ListRids<T>(RecordSet<T> set) where T: IDataObject, new() {
+            QueryBuilder retv = new QueryBuilder();
+            for (int i = 0; i < set.Count; i++) {
+                retv.Append(
+                    new QueryBuilder(
+                        $"@{IntEx.GerarShortRID()}",
+                        set[i].RID
+                    )
+                );
+                if (i < set.Count - 1)
+                    retv.Append(",");
+            }
+            return retv;
+        }
+
+        public static QueryBuilder ListIds<T>(RecordSet<T> set) where T : IDataObject, new()  {
+            QueryBuilder retv = new QueryBuilder();
+            for (int i = 0; i < set.Count; i++) {
+                retv.Append(
+                    new QueryBuilder(
+                        $"@{IntEx.GerarShortRID()}",
+                        set[i].Id
+                    )
+                );
+                if (i < set.Count - 1)
+                    retv.Append(",");
+            }
+            return retv;
         }
 
         public static string GetMimeType(string filename) {

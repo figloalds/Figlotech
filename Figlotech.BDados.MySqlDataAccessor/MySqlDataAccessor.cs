@@ -1231,11 +1231,11 @@ namespace Figlotech.BDados {
             return retv;
         }
 
-        public RecordSet<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
+        public RecordSet<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new()  {
             return LoadAll<T>(new QueryBuilder(where, args));
         }
 
-        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200) where T : IDataObject, new() {
+        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200) where T : IDataObject, new()  {
             var query = new ConditionParser().ParseExpression(conditions);
             if (page != null && limit != null)
                 query.Append($"LIMIT {(page - 1) * limit}, {limit}");
@@ -1246,7 +1246,7 @@ namespace Figlotech.BDados {
 
         Benchmarker Bench = null;
 
-        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
+        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new()  {
             RecordSet<T> retv = new RecordSet<T>(this);
             if (SqlConnection?.State != ConnectionState.Open) {
                 Access(bd => {

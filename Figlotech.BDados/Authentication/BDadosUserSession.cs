@@ -8,21 +8,17 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
-    public class BDadosUserSession : DataObject<BDadosUserSession> {
-        [Field(Size = 64, AllowNull = false)]
-        public String User;
-
-        [Field(Size = 256, AllowNull = false)]
-        public String Token;
-
-        [Field(AllowNull = false, DefaultValue = true)]
-        public bool isActive = true;
-
-        [Field(AllowNull = false)]
-        public DateTime StartTime = DateTime.UtcNow;
-
-        [Field(AllowNull = true)]
-        public DateTime? EndTime;
-
+    public interface IBDadosUserSession : IDataObject {
+        String User { get; set; }
+        String Token { get; set; }
+        bool isActive { get; set; }
+        DateTime StartTime { get; set; }
+        DateTime? EndTime { get; set; }
+         
+        bool CanRead(String Module, String Feature);
+        bool CanUpdate(String Module, String Feature);
+        bool CanWrite(String Module, String Feature);
+        bool CanDelete(String Module, String Feature);
+        bool CanAuthorize(String Module, String Feature);
     }
 }

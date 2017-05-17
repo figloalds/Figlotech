@@ -21,6 +21,9 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This is an example of ValidationAttribute
+    /// </summary>
     public class MaskAttribute : ValidationAttribute
     {
         string Mask;
@@ -28,18 +31,13 @@ namespace Figlotech.BDados.Attributes {
             Mask = value;
         }
 
-        public override bool Validate(object value) {
-            bool retv = true;
+        public override ValidationErrors Validate(MemberInfo member, object value) {
+            ValidationErrors retv = new ValidationErrors();
             FTH.As<string>(value, (str) => {
-                if(!Regex.Match(str, Mask).Success)
-                    retv = false;
+                if (!Regex.Match(str, Mask).Success)
+                    retv.Add(member.Name, $"{member.Name} must match the defined mask {Mask}.");
             });
             return retv;
         }
-
-        public override string GetValidationMessage(MemberInfo t) {
-            return $"{t.Name} must match the given mask.";
-        }
-
     }
 }

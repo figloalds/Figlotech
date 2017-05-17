@@ -83,7 +83,8 @@ namespace Figlotech.BDados.Entity
             // TODO: Adicionar validação dos nomes dos campos depois.
         }
 
-        public JoinConfigureHelper<T> AggregateRoot<T>(String Alias) where T : IDataObject
+        public JoinConfigureHelper<T> AggregateRoot<T>(String Alias) where T : IDataObject, new() 
+
         {
             // Tipo junção é ignorado para a primeira tabela, de qualquer forma.
             Join<T>(Alias, "", JoinType.LEFT);
@@ -149,7 +150,8 @@ namespace Figlotech.BDados.Entity
         /// <param name="Alias">Table alias</param>
         /// <param name="Args">ON CLAUSE argument</param>
         /// <param name="joinType">Specifies the join type between LEFT, RIGHT or INNER</param>
-        public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", JoinType joinType = JoinType.LEFT) where T : IDataObject
+        public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", JoinType joinType = JoinType.LEFT) where T : IDataObject, new() 
+
         {
             Validated = false;
             Relations.Clear();

@@ -16,6 +16,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Tells BDados DataAccessors to ignore this field when persisting updates
+    /// </summary>
     public class NoUpdateAttribute : Attribute
     {
         public NoUpdateAttribute() { }

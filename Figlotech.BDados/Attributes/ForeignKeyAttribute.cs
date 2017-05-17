@@ -16,6 +16,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Tells BDados IRDBMS structure checkers that this field should 
+    /// have a foreign key attached to it referencing a field (column) of other
+    /// valueobject (table)
+    /// </summary>
     public class ForeignKeyAttribute : Attribute
     {
         public Type referencedType;

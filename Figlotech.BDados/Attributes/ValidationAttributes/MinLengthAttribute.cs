@@ -20,6 +20,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This is an example of ValidationAttribute
+    /// </summary>
     public class MinLengthAttribute : ValidationAttribute
     {
         int MinLength;
@@ -27,17 +30,13 @@ namespace Figlotech.BDados.Attributes {
             MinLength = value;
         }
 
-        public override bool Validate(object value) {
-            bool retv = true;
+        public override ValidationErrors Validate(MemberInfo member, object value) {
+            ValidationErrors retv = new ValidationErrors();
             FTH.As<string>(value, (str) => {
-                if (str.Length < MinLength)
-                    retv = false;
+                if (str.Length > MinLength)
+                    retv.Add(member.Name, $"{member.Name} should contain at least {MinLength}");
             });
             return retv;
-        }
-
-        public override string GetValidationMessage(MemberInfo t) {
-            return $"Minimum length for {t.Name} is {MinLength}";
         }
 
     }

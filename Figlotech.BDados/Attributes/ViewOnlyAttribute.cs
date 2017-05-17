@@ -18,6 +18,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Decorate a dataobject with this to stop 
+    /// the IRdbmsDataAccessor structure checker from creating a table
+    /// for this data object (in future I might add a functionality for the structurechecker to create and use 
+    /// a view, based on the definition of the class.)
+    /// </summary>
     public class ViewOnlyAttribute : Attribute {
         public ViewOnlyAttribute() {
         }

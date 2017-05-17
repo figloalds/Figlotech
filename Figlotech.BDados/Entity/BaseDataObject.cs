@@ -92,11 +92,6 @@ namespace Figlotech.BDados.Entity
             return false;
         }
 
-        // Syntax suggars for everyoners
-        protected IQueryBuilder Qb(String Query, params object[] args) {
-            return new QueryBuilder(Query, args);
-        }
-
         void CascadingDoForFields<T>(Action<T> process, List<Type> prevList = null) {
             if (prevList == null)
                 prevList = new List<Type>();

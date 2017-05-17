@@ -22,6 +22,9 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Builders {
+    public class Qb : QueryBuilder {
+    }
+
     public class QueryBuilder : IQueryBuilder {
         private bool _conditionalEngaged = false;
         private bool _elseEngaged = false;
@@ -71,6 +74,13 @@ namespace Figlotech.BDados.Builders {
 
         public static QueryBuilder operator +(QueryBuilder a, String b) {
             return (QueryBuilder) a.Append(b);
+        }
+
+        public IQueryBuilder Build(params IQueryBuilder[] args) {
+            foreach(var a in args) {
+                Append(a);
+            }
+            return this;
         }
 
         public IQueryBuilder Append(String fragment, params object[] args) {

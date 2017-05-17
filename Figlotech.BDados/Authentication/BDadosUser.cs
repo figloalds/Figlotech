@@ -8,14 +8,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
-    public class BDadosUser : DataObject<BDadosUser> {
-        [Field(Size = 64, AllowNull = false)]
-        public String Username;
-
-        [Field(Size = 256, AllowNull = false)]
-        public String Password;
-
-        [Field(AllowNull = false, DefaultValue = true)]
-        public bool isActive = true;
+    public interface IBDadosUser : IDataObject {
+        String Username { get; set; }
+        String Password { get; set; }
+        bool isActive { get; set; }
     }
 }

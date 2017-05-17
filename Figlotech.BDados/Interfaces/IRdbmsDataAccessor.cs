@@ -13,8 +13,8 @@ namespace Figlotech.BDados.Interfaces {
 
         Object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null);
 
-        RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new() ;
+        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() ;
 
         T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();

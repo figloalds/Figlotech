@@ -10,26 +10,49 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados {
+
+    public class DS {
+        public static T New<T>() where T : IBDadosInjectable {
+            return DependencySolver.Default.New<T>();
+        }
+    }
+    /// <summary>
+    /// This is my very own approach and study of dependency injection. 
+    /// Plan here is to have a dependency solver able to work both in a static singleton level
+    /// </summary>
     public class DependencySolver {
         public static DependencySolver Default { get; } = new DependencySolver();
 
         public DependencySolver(IContextProvider newContext) {
             Context = newContext;
         }
+
         public DependencySolver() {
             Context = new DefaultContextProvider();
         }
 
-        //public T Instantiate<T>() {
-            
-        //}
+        public T New<T>() where T : IBDadosInjectable {
+            try {
+                var retv = (T) Activator.CreateInstance(typeof(T));
+                Resolve(retv);
+                return retv;
+            } catch(Exception) {
+                throw new Exception($"You called DS.New for {typeof(T).Name}, but it doesn't have any constructor that takes DependencySolver");
+            }
+        }
 
         public IContextProvider Context { get; private set; } = new DefaultContextProvider();
         public void Resolve(object o) {
             Type t = o.GetType();
             foreach (var a in t.GetInterfaces()) {
-                if (a.Name.StartsWith("IRequires")) {
-                    var role = a.Name.Replace("IRequires", "");
+                if (a.Name.StartsWith("IRequires") || a.Name.StartsWith("IUses")) {
+                    var role = "";
+                    if (a.Name.StartsWith("IRequires")) {
+                        role = a.Name.Substring("IRequires".Length);
+                    }
+                    if (a.Name.StartsWith("IUses")) {
+                        role = a.Name.Substring("IUses".Length);
+                    }
                     var typeName = $"I{role}";
                     Type type = null;
                     foreach(var findType in Assembly.GetAssembly(a).GetTypes()) {
@@ -58,9 +81,9 @@ namespace Figlotech.BDados {
             }
         }
 
-        public void PushDefault<T>(T value)  {
-            // Makers of .NET
-            // Fuck you for not allowing where T : interface
+        public void PushDefault<T>(T value) {
+            // Makers of C# .NET
+            // You should implement " where T : interface "
             if (!typeof(T).IsInterface)
                 throw new BDadosException("T Should be an interface. Don't let your editor infere this specific generic type.");
 

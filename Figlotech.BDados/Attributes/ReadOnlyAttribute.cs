@@ -6,6 +6,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This attribute works exactly the same as NoUpdateAttribute
+    /// </summary>
     public class ReadOnlyAttribute : Attribute, IPersistancePolicyAttribute {
         public ReadOnlyAttribute() { }
 

@@ -95,18 +95,19 @@ namespace Figlotech.BDados.Entity
 
             // Here goes LogicalField validation to initialize 
             // relevant fields for business logic and validation
-            foreach (var field in myValues.Where((f) => f.GetCustomAttribute<FieldAttribute>() != null)) {
-                var info = field.GetCustomAttribute<FieldAttribute>();
-                if (!info.AllowNull && ReflectionTool.GetMemberValue(field, this) == null) {
-                    ve.Add($"{field.Name}", $"{field.Name} cannot be null.");
-                }
-            }
+            //foreach (var field in myValues.Where((f) => f.GetCustomAttribute<FieldAttribute>() != null)) {
+            //    var info = field.GetCustomAttribute<FieldAttribute>();
+            //    if (!info.AllowNull && ReflectionTool.GetMemberValue(field, this) == null) {
+            //        ve.Add($"{field.Name}", $"{field.Name} cannot be null.");
+            //    }
+            //}
 
             // Validations
             foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
                 var vAttribute = field.GetCustomAttribute<ValidationAttribute>();
-                if (!vAttribute.Validate(ReflectionTool.GetMemberValue(field, this))) {
-                    ve.Add($"{field.Name}", vAttribute.GetValidationMessage(field));
+                if (vAttribute != null) {
+                    foreach(var a in vAttribute.Validate(field, ReflectionTool.GetMemberValue(field, this)))
+                        ve.Add(a);
                 }
             }
 

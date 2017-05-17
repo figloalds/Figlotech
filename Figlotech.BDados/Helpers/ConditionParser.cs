@@ -181,7 +181,7 @@ namespace Figlotech.BDados.Helpers {
                     CanGetValue(expr.Right) &&
                     GetValue(expr.Right).GetType() == typeof(string) &&
                     (expr.Left is MemberExpression) &&
-                    (expr.Left as MemberExpression).Member.GetCustomAttribute<ComparisonTypeAttribute>()?.Type == DataStringComparisonType.ByLikeliness
+                    (expr.Left as MemberExpression).Member.GetCustomAttribute<QueryComparisonAttribute>()?.Type == DataStringComparisonType.Containing
                 ) {
                     if (GetValue(expr.Right).GetType() == typeof(string)) {
                         strBuilder.Append("(");

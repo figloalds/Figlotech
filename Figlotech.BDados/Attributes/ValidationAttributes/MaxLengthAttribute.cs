@@ -20,6 +20,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This is an example of ValidationAttribute
+    /// </summary>
     public class MaxLengthAttribute : ValidationAttribute
     {
         int MaxLength;
@@ -27,18 +30,13 @@ namespace Figlotech.BDados.Attributes {
             MaxLength = value;
         }
 
-        public override bool Validate(object value) {
-            bool retv = true;
+        public override ValidationErrors Validate(MemberInfo member, object value) {
+            ValidationErrors retv = new ValidationErrors();
             FTH.As<string>(value, (str) => {
                 if (str.Length > MaxLength)
-                    retv = false;
+                    retv.Add(member.Name, $"{member.Name} exceeds the maximum of {MaxLength} characters");
             });
             return retv;
         }
-
-        public override string GetValidationMessage(MemberInfo t) {
-            return $"Maximum length for {t.Name} is {MaxLength}";
-        }
-
     }
 }

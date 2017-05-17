@@ -16,6 +16,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This attribute could be AMAZING if C# allowed functions in attributes.
+    /// </summary>
     public class NoUpdateIfAttribute : Attribute
     {
         public Func<bool> Condition;

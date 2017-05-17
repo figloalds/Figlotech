@@ -10,7 +10,5 @@ namespace Figlotech.BDados.Interfaces {
         IQueryBuildHelper Cmp<T>(Expression<Func<T, bool>> expression);
         IQueryBuildHelper And();
         IQueryBuildHelper Or();
-
-        String Build();
     }
 }

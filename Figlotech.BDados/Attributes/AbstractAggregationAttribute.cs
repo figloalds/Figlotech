@@ -1,6 +1,9 @@
 ﻿using System;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This is used by AggregateFieldAttribute
+    /// </summary>
     public abstract class AbstractAggregationAttribute : Attribute {
         public string ObjectKey;
         public Type RemoteObjectType; 

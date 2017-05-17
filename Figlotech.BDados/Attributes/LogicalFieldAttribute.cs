@@ -18,6 +18,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// This attribute won't ever work until C# allows compiled functions in Attributes :\ 
+    /// </summary>
     public class LogicalFieldAttribute : Attribute
     {
         public Func<Object> LogicalFunction;

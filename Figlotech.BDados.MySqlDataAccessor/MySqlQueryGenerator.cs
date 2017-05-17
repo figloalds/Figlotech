@@ -364,7 +364,9 @@ namespace Figlotech.BDados.Builders
                 }
             }
 
-            Query.Append($"WHERE {id} IN ({workingSet.ListIds()});");
+            Query.Append($"WHERE {id} IN (")
+                .Append(FTH.ListRids(workingSet))
+                .Append(");");
             // --
             return Query;
         }

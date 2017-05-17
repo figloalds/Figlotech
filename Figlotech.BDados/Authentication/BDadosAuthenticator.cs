@@ -42,12 +42,12 @@ namespace Figlotech.BDados.Authentication {
     public class UserSession {
         public static int MaximumInactiveSpanInMinutes = 60;
 
-        public UserSession(BDadosAuthenticator auth) {
+        public UserSession(IBDadosAuthenticator auth) {
             Authenticator = auth;
         }
 
         public String UserRID;
-        public String SessionRID;
+        public IBDadosUserSession SessionObject;
         public String Username;
         public String Token;
         public DateTime Expiry = DateTime.Now.Add(TimeSpan.FromMinutes(MaximumInactiveSpanInMinutes));
@@ -57,25 +57,29 @@ namespace Figlotech.BDados.Authentication {
         }
 
         [JsonIgnore]
-        protected BDadosAuthenticator Authenticator;
+        protected IBDadosAuthenticator Authenticator;
 
-        public List<BDadosPermission> Permissions = new List<BDadosPermission>();
+        public IList<IBDadosPermission> Permissions;
 
-        public BDadosUser Usuario { get; set; }
+        public IBDadosUser User { get; set; }
 
         public void Logoff() {
-            Authenticator.Logoff(this);
+            Authenticator.Logoff(this.Token);
         }
     }
 
-    public class BDadosAuthenticator : IRequiresDataAccessor {
+    public class BDadosAuthenticator<TUser, TPermission, TSession>
+        : IBDadosAuthenticator, IRequiresDataAccessor
+        where TUser: IBDadosUser, new()
+        where TPermission: IBDadosPermission, new()
+        where TSession: IBDadosUserSession, new() {
         public IDataAccessor DataAccessor { get; set; }
 
         public BDadosAuthenticator(IDataAccessor dataAccessor) {
-
+            DataAccessor = dataAccessor;
         }
 
-        public BDadosAuthenticator(DependencySolver ds) {
+        public BDadosAuthenticator(DependencySolver ds = null) {
             if (ds == null)
                 return;
             ds.Resolve(this);
@@ -83,23 +87,10 @@ namespace Figlotech.BDados.Authentication {
         public BDadosAuthenticator() {
             DependencySolver.Default.Resolve(this);
         }
-
-        public void CheckStructure(bool resetKeys = true) {
-            if(DataAccessor is IRdbmsDataAccessor) {
-                (DataAccessor as IRdbmsDataAccessor).CheckStructure(
-                    new Type[] {
-                        typeof(BDadosUser),
-                        typeof(BDadosPermission)
-                    }, resetKeys
-                );
-            }
-        }
-
-        public static List<BDadosAuthenticator> Authenticators = new List<BDadosAuthenticator>();
-        private List<UserSession> WebBDadosUserSession = new List<UserSession>();
-        public delegate bool MetodoLogin(UserSession s);
+        
+        private List<UserSession> Sessions = new List<UserSession>();
         private List<Attempt> TrackAttempts = new List<Attempt>();
-        public long IdGlobal;
+        public long globalId;
         //static List<string> RanChecks = new List<string>();
 
         public Attempt TrackAttempt(String userName, bool Success) {
@@ -124,19 +115,19 @@ namespace Figlotech.BDados.Authentication {
             return att;
         }
 
-        private String New(BDadosUser Usuario, BDadosUserSession Session, String Token) {
+        private String New(IBDadosUser User, TSession Session, String Token) {
             UserSession s = new UserSession(this);
             s.Token = Token;
-            s.UserRID = Usuario.RID;
-            s.SessionRID = Session.RID;
-            s.Permissions = DataAccessor.LoadAll<BDadosPermission>((u) => u.User == Usuario.RID);
-            WebBDadosUserSession.Add(s);
+            s.UserRID = User.RID;
+            s.SessionObject = Session;
+            s.Permissions = (IList<IBDadosPermission>) DataAccessor.LoadAll<TPermission>((u) => u.User == User.RID);
+            Sessions.Add(s);
             return s.Token;
         }
 
-        public BDadosUser CheckLogin(String userName, String password) {
+        public TUser CheckLogin(String userName, String password) {
             String criptPass = AuthenticationUtils.HashPass(password, userName.ToLower());
-            var userQuery = DataAccessor.LoadAll<BDadosUser>(
+            var userQuery = DataAccessor.LoadAll<TUser>(
                 (u) => u.Username == userName);
             if (!userQuery.Any()) {
                 TrackAttempt(userName, false);
@@ -149,13 +140,13 @@ namespace Figlotech.BDados.Authentication {
             if (!loadedUser.isActive) {
                 throw new UserBlockedException("User is blocked.");
             }
-            return userQuery.Any() ? userQuery.First() : null;
+            return userQuery.FirstOrDefault();
         }
 
-        public String LoginUser(String Ip, LoginRequestModel Model) {
-            var user = CheckLogin(Model.Username, Model.Password);
+        public String Login(String Username, String Password) {
+            var user = CheckLogin(Username, Password);
             if (user != null) {
-                var sess = new BDadosUserSession {
+                var sess = new TSession {
                     User = user.RID,
                     isActive = true,
                     Token = FTH.GenerateIdString($"Login:{user.Username};"),
@@ -173,34 +164,35 @@ namespace Figlotech.BDados.Authentication {
             return GetSession(Token) != null;
         }
 
-        public void Logoff(UserSession s) {
-            WebBDadosUserSession.Remove(s);
+        public void Logoff(String s) {
+            Sessions.RemoveAll(a=> a.Token == s);
             if(DataAccessor is IRdbmsDataAccessor) {
                 (DataAccessor as IRdbmsDataAccessor).Access((bd) => {
-                    (bd).Execute("UPDATE BDadosUserSession SET Active=0 WHERE RID=@1", s.SessionRID);
+                    // DID ANYONE SAY DRAGONS?!
+                    (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Active=0 WHERE Token=@1", s);
                 });
             } else {
-                var session = DataAccessor.LoadByRid<BDadosUserSession>(s.SessionRID);
+                var session = DataAccessor.LoadByRid<TUser>(s);
                 session.isActive = false;
                 DataAccessor.SaveItem(session);
             }
         }
 
-        public UserSession GetSession(String Token) {
-            var v = (from a in WebBDadosUserSession where a.Token == Token select a);
+        public IBDadosUserSession GetSession(String Token) {
+            var v = (from a in Sessions where a.Token == Token select a);
             if (v.Any())
-                return v.First();
+                return v.First().SessionObject;
             else {
-                var querySessao = DataAccessor.LoadAll<BDadosUserSession>((us) => us.Token.Equals(Token));
-                if (querySessao.Any()) {
-                    var User = DataAccessor.LoadByRid<BDadosUserSession>(querySessao.First().User) ?? new BDadosUserSession();
+                var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token.Equals(Token));
+                if (fetchSession.Any()) {
+                    var User = DataAccessor.LoadByRid<TUser>(fetchSession.First().User);
                     UserSession sess = new UserSession(this);
                     sess.Token = Token;
                     sess.UserRID = User.RID;
-                    sess.SessionRID = querySessao.First().RID;
-                    sess.Permissions = DataAccessor.LoadAll<BDadosPermission>((p) => p.User == User.RID);
-                    WebBDadosUserSession.Add(sess);
-                    return sess;
+                    sess.SessionObject = fetchSession.First();
+                    sess.Permissions = (IList<IBDadosPermission>) DataAccessor.LoadAll<TPermission>((p) => p.User == User.RID);
+                    Sessions.Add(sess);
+                    return fetchSession.FirstOrDefault();
                 }
             }
             return null;
@@ -211,17 +203,18 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public void Remove(String Token) {
-            var v = (from a in WebBDadosUserSession where a.Token == Token select a);
+            var v = (from a in Sessions where a.Token == Token select a);
             if (v.Count() > 0) {
                 foreach (UserSession s in v) {
-                    WebBDadosUserSession.Remove(s);
+                    Sessions.Remove(s);
                     break;
                 }
             }
+            // Here be DRAGONS!!
             if(DataAccessor is IRdbmsDataAccessor) {
                 (DataAccessor as IRdbmsDataAccessor).Access(
                     (bd) => {
-                        (bd).Execute($"UPDATE {nameof(BDadosUserSession)} SET Ativo=b'0' WHERE Token=@1", Token);
+                        (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Ativo=b'0' WHERE Token=@1;", Token);
                     }
                 );
             }

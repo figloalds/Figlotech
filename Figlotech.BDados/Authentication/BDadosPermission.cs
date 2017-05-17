@@ -8,24 +8,14 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
-    public class BDadosPermission : DataObject<BDadosPermission> {
-
-        [Field(Size = 64, AllowNull = false)]
-        public String User;
-
-        [Field(Size = 64, AllowNull = false)]
-        public String Form;
-
-        [Field(AllowNull = false, DefaultValue = false)]
-        public bool CanRead;
-
-        [Field(AllowNull = false, DefaultValue = false)]
-        public bool CanWrite;
-
-        [Field(AllowNull = false, DefaultValue = false)]
-        public bool CanDelete;
-
-        [Field(AllowNull = false, DefaultValue = false)]
-        public bool CanAuthorize;
+    public interface IBDadosPermission : IDataObject {
+        String User { get; set; }
+        String Module { get; set; }
+        String Resource { get; set; }
+        bool CanCreate { get; set; }
+        bool CanRead { get; set; }
+        bool CanUpdate { get; set; }
+        bool CanDelete { get; set; }
+        bool CanAuthorize { get; set; }
     }
 }

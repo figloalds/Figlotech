@@ -1,6 +1,10 @@
 ﻿using System;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Uses the specified relation to load an entire other dataobject into 
+    /// the annotated field/property
+    /// </summary>
     public class AggregateObjectAttribute : Attribute {
         public String ObjectKey;
 

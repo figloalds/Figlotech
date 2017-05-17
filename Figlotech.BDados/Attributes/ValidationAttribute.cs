@@ -1,6 +1,7 @@
 ﻿
 
 
+using Figlotech.BDados.Entity;
 using Newtonsoft.Json;
 /**
 * Figlotech::Database::Entity::FieldAttribute
@@ -19,9 +20,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Basic abstract ValidationAttribute, a work in progress.
+    /// </summary>
     public abstract class ValidationAttribute : Attribute
     {
-        public abstract bool Validate(object value);
-        public abstract string GetValidationMessage(MemberInfo t);
+        public abstract ValidationErrors Validate(MemberInfo member, object value);
     }
 }

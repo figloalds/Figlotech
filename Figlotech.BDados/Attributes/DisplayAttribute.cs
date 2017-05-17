@@ -26,6 +26,10 @@ namespace Figlotech.BDados.Attributes {
         Money,
         NoFormat,
     }
+    /// <summary>
+    /// Tells tools how to display this field on a screen.
+    /// can be used to generate forms or tables from dataobject metadata
+    /// </summary>
     public class DisplayAttribute : Attribute
     {
         public String Name;

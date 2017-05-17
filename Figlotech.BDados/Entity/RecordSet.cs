@@ -26,6 +26,10 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Entity {
+    public enum OrderingType {
+        Asc,
+        Desc
+    }
     public class RecordSet<T> : List<T>, IEnumerable<T>, IRequiresDataAccessor
         where T : IDataObject, new() {
 
@@ -64,37 +68,7 @@ namespace Figlotech.BDados.Entity {
         public T FirstOrDefault() {
             return this.Count > 0 ? this[0] : default(T);
         }
-
-        public QueryBuilder ListRids() {
-            QueryBuilder retv = new QueryBuilder();
-            for (int i = 0; i < this.Count; i++) {
-                retv.Append(
-                    new QueryBuilder(
-                        $"@{IntEx.GerarShortRID()}",
-                        this[i].RID
-                    )
-                );
-                if (i < this.Count - 1)
-                    retv.Append(",");
-            }
-            return retv;
-        }
-
-        public String ListIds() {
-            StringBuilder retv = new StringBuilder();
-            for (int i = 0; i < this.Count; i++) {
-                retv.Append(
-                    String.Format(
-                        "'{0}'",
-                        this[i].Id
-                    )
-                );
-                if (i < this.Count - 1)
-                    retv.Append(",");
-            }
-            return retv.ToString();
-        }
-
+        
         public String CustomListing(Func<T, String> fn) {
             StringBuilder retv = new StringBuilder();
             for (int i = 0; i < this.Count; i++) {
@@ -142,7 +116,7 @@ namespace Figlotech.BDados.Entity {
 
         public RecordSet<T> LoadAll(Expression<Func<T,bool>> cnd = null, int? page = null) {
             Clear();
-            var transport = DataAccessor.AggregateLoad(cnd, LimitResults, page, PageSize, OrderingMember, Ordering, LinearLoad);
+            var transport = DataAccessor.AggregateLoad<T>(cnd, LimitResults, page, PageSize, OrderingMember, Ordering, LinearLoad);
             foreach(var i in transport) {
                 this.Add(i);
             }

@@ -18,6 +18,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Tells BDados IRdbmsDataAccessors that this column had a previous name
+    /// this can be useful for structure checkers to rename columns instead of creating new ones
+    /// and transfer data over in the process avoiding data loss and extra management hassle.
+    /// </summary>
     public class OldNameAttribute : Attribute
     {
         public String Name { get; set; }

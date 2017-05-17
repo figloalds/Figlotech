@@ -15,6 +15,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Attributes {
+    /// <summary>
+    /// Tells IRdbmsDataAccessors that the decorated field should be a primary key in the database.
+    /// </summary>
     public class PrimaryKeyAttribute : Attribute
     {
         public PrimaryKeyAttribute()
