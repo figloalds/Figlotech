@@ -204,7 +204,48 @@ namespace Figlotech.BDados.Authentication {
             }
             return null;
         }
-        
+
+        public bool CanCreate(IBDadosUserSession Session, String Module, String Resource) {
+            return Session.Permissions
+                .Where(p => p.Module == Module && p.Resource == Resource)
+                .FirstOrDefault()?.CanRead() ?? false;
+        }
+        public bool CanRead(IBDadosUserSession Session, String Module, String Resource) {
+            return Session.Permissions
+                .Where(p => p.Module == Module && p.Resource == Resource)
+                .FirstOrDefault()?.CanRead() ?? false;
+        }
+        public bool CanUpdate(IBDadosUserSession Session, String Module, String Resource) {
+            return Session.Permissions
+                .Where(p => p.Module == Module && p.Resource == Resource)
+                .FirstOrDefault()?.CanUpdate() ?? false;
+        }
+        public bool CanDelete(IBDadosUserSession Session, String Module, String Resource) {
+            return Session.Permissions
+                .Where(p => p.Module == Module && p.Resource == Resource)
+                .FirstOrDefault()?.CanDelete() ?? false;
+        }
+        public bool CanAuthorize(IBDadosUserSession Session, String Module, String Resource) {
+            return Session.Permissions
+                .Where(p => p.Module == Module && p.Resource == Resource)
+                .FirstOrDefault()?.CanAuthorize() ?? false;
+        }
+        public bool CanCreate(String Token, String Module, String Resource) {
+            return CanCreate(GetSession(Token), Module, Resource);
+        }
+        public bool CanRead(String Token, String Module, String Resource) {
+            return CanRead(GetSession(Token), Module, Resource);
+        }
+        public bool CanUpdate(String Token, String Module, String Resource) {
+            return CanUpdate(GetSession(Token), Module, Resource);
+        }
+        public bool CanDelete(String Token, String Module, String Resource) {
+            return CanDelete(GetSession(Token), Module, Resource);
+        }
+        public bool CanAuthorize(String Token, String Module, String Resource) {
+            return CanAuthorize(GetSession(Token), Module, Resource);
+        }
+
         public void Remove(String Token) {
             var v = (from a in Sessions where a.Token == Token select a);
             if (v.Count() > 0) {
