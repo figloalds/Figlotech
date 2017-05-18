@@ -22,5 +22,12 @@ namespace Figlotech.BDados.Authentication
         public static bool CanAuthorize (this IBDadosPermission input) {
             return (input.Permission & (int)BDadosPermissions.Authorize) > 0;
         }
+
+        public static void SetPermission(this IBDadosPermission input, BDadosPermissions permission, bool value) {
+            if (value)
+                input.Permission |= (int) permission;
+            else
+                input.Permission ^= (input.Permission ^ (int) permission);
+        }
     }
 }
