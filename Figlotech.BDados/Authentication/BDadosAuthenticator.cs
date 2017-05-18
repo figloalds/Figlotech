@@ -146,12 +146,14 @@ namespace Figlotech.BDados.Authentication {
         public String Login(String Username, String Password) {
             var user = CheckLogin(Username, Password);
             if (user != null) {
+                var li = DataAccessor.LoadAll<TPermission>(p => p.User == user.RID);
                 var sess = new TSession {
                     User = user.RID,
                     isActive = true,
                     Token = FTH.GenerateIdString($"Login:{user.Username};"),
                     StartTime = DateTime.UtcNow,
                     EndTime = null,
+                    Permissions = li.Select(p=>(IBDadosPermission) p).ToList()
                 };
                 if (DataAccessor.SaveItem(sess)) {
                     return New(user, sess, sess.Token);
@@ -191,17 +193,18 @@ namespace Figlotech.BDados.Authentication {
                     sess.UserRID = User.RID;
                     sess.SessionObject = fetchSession.First();
                     sess.Permissions = (IList<IBDadosPermission>) DataAccessor.LoadAll<TPermission>((p) => p.User == User.RID);
+                    var retv = fetchSession.FirstOrDefault();
+                    retv.Permissions = DataAccessor
+                        .LoadAll<TPermission>(p => p.User == User.RID)
+                        .Select(p=>(IBDadosPermission) p)
+                        .ToList();
                     Sessions.Add(sess);
                     return fetchSession.FirstOrDefault();
                 }
             }
             return null;
         }
-
-        public string Login(object interno, string ipCliente, LoginRequestModel modelo) {
-            throw new NotImplementedException();
-        }
-
+        
         public void Remove(String Token) {
             var v = (from a in Sessions where a.Token == Token select a);
             if (v.Count() > 0) {

@@ -14,6 +14,8 @@ namespace Figlotech.BDados.Authentication {
         bool isActive { get; set; }
         DateTime StartTime { get; set; }
         DateTime? EndTime { get; set; }
+
+        List<IBDadosPermission> Permissions { get; set; }
          
         bool CanRead(String Module, String Feature);
         bool CanUpdate(String Module, String Feature);
