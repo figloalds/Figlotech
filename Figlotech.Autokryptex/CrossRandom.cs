@@ -56,7 +56,7 @@ namespace Figlotech.Autokryptex {
             var secretBytes = MathUtils.CramString(secret, 16);
             for (int i = 0; i < secretBytes.Length; i++) {
                 if (i <= AppSecret.Length)
-                    AppSecret[i] = MathUtils.PrimeNumbers().ElementAt((int)secretBytes[i] + 1000);
+                    AppSecret[i] = Primes[secretBytes[i] % Primes.Length];
             }
         }
         public void UseInstanceSecret(String secret) {
@@ -64,7 +64,7 @@ namespace Figlotech.Autokryptex {
             CrossRandom cr = new CrossRandom(Primes[77]);
             for (int i = 0; i < secretBytes.Length; i++) {
                 if (i <= InstanceSecret.Length) {
-                    InstanceSecret[i] = cr.Next(Primes.Length ^ secretBytes[i]);
+                    InstanceSecret[i] = Primes[secretBytes[i] % Primes.Length] + cr.Next(Primes.Length ^ secretBytes[i]);
                 }
             }
         }
@@ -109,7 +109,6 @@ namespace Figlotech.Autokryptex {
         }
 
         public int Next() {
-            ++this.CallCount;
             int num = (int)this.GenSalt();
             if (num < 0)
                 num = -num;
@@ -127,27 +126,51 @@ namespace Figlotech.Autokryptex {
         }
 
         long opc = 0;
+        long[] historianVals = new long[16];
         private long Xor128() {
-            long retv = 0;
-            for(int i = 0; i < AppSecret.Length; i++) {
-                switch(++opc % 3) {
-                    case 0:
-                        retv ^= AppSecret[i];
-                        break;
-                    case 1:
-                        retv ^= InstanceSecret[i];
-                        break;
-                    default:
-                        retv ^= AppSecret[i] * InstanceSecret[i];
-                        break;
-                }
+            long retv = Int64.MinValue;
+            int asl = AppSecret.Length;
+            int isl = InstanceSecret.Length;
+            opc += CallCount;
+            int r = 0;
+            for (int i = 0; i < 1 + (opc % 2); i++) {
+                ++opc;
+                var val = opc * CallCount * i;
+                retv += val;
+                var a = AppSecret[val % asl];
+                var b = Primes[val % Primes.Length];
+                var c = InstanceSecret[val % isl];
+                var d = historianVals[val % historianVals.Length];
+                switch (opc % 6) {
+                    case 0: retv += a*b; break;
+                    case 1: retv += a*c; break;
+                    case 2: retv += a*d; break;
+                    case 3: retv += b*c; break;
+                    case 4: retv += b*d; break;
+                    case 5: retv += c*d; break;
+                } 
             }
-            return retv;
+            //for (int i = 0; i < AppSecret.Length; i++) {
+            //    switch (++opc % 3) {
+            //        case 0:
+            //            retv ^= AppSecret[i];
+            //            break;
+            //        case 1:
+            //            retv ^= InstanceSecret[i];
+            //            break;
+            //        default:
+            //            retv ^= AppSecret[i] * InstanceSecret[i];
+            //            break;
+            //    }
+            //}
+            historianVals[CallCount % historianVals.Length] = retv;
+            return retv + CallCount;
         }
 
         public long GenSalt() {
+            ++CallCount;
             var xor = Xor128();
-            return xor ^ ++CallCount;
+            return xor;
         }
     }
 }

@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Autokryptex.EncryptMethods
 {
-    public class CrazyLockingEngine : IEncryptionMethod
+    public class AutokryptexEncryptor : IEncryptionMethod
     {
         AggregateEncryptor encryptor = new AggregateEncryptor();
 
         String instancePassword;
 
-        public CrazyLockingEngine(String password) {
+        public AutokryptexEncryptor(String password) {
             instancePassword = password;
             CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
             var passwordBytes = MathUtils.CramString(password, 16);

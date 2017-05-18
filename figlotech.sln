@@ -15,7 +15,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados", "Figlote
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.MySqlDataAccessor", "Figlotech.BDados.MySqlDataAccessor\Figlotech.BDados.MySqlDataAccessor.csproj", "{C74700AD-FB33-404F-AAB8-B0769198C863}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.Captcha", "Figlotech.Captcha\Figlotech.Captcha.csproj", "{8857517F-7842-4AD3-8C21-B91231E746EC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Captcha", "Figlotech.Captcha\Figlotech.Captcha.csproj", "{8857517F-7842-4AD3-8C21-B91231E746EC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

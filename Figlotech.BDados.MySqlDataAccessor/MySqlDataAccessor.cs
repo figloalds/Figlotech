@@ -1378,7 +1378,7 @@ namespace Figlotech.BDados {
             try {
                 Logger.WriteLog($"[{accessId}] BDados Open Connection --");
                 if (SqlConnection == null)
-                    SqlConnection = new MySqlConnection(Configuration.ConnectionString);
+                    SqlConnection = new MySqlConnection(Configuration.GetConnectionString());
 
                 if (SqlConnection.State != ConnectionState.Open)
                     SqlConnection.Open();
@@ -1747,7 +1747,7 @@ namespace Figlotech.BDados {
             DateTime inicio = DateTime.Now;
             List<T> retv = new List<T>();
             Logger.WriteLog($"[{accessId}] Executar procedure -- ");
-            using (SqlConnection = new MySqlConnection(Configuration.ConnectionString)) {
+            using (SqlConnection = new MySqlConnection(Configuration.GetConnectionString())) {
                 Open();
                 try {
                     Logger.WriteLog($"[{accessId}] Abriu conexão em [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");

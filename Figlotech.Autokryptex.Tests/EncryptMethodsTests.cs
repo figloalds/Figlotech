@@ -26,7 +26,7 @@ namespace Figlotech.Autokryptex.Tests
         [TestMethod]
         public void CrazyEncryptorShouldWork() {
             String input = "Encryption Test";
-            CrazyLockingEngine c1 = new CrazyLockingEngine("Some good key");
+            AutokryptexEncryptor c1 = new AutokryptexEncryptor("Some good key");
             Assert.IsTrue(TestIEncryptionMethod(c1, input));
         }
         [TestMethod]

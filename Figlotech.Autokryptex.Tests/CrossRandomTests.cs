@@ -2,6 +2,7 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using Figlotech.Autokryptex.EncryptMethods;
+using System.Drawing;
 
 namespace Figlotech.Autokryptex.Tests
 {
@@ -28,6 +29,31 @@ namespace Figlotech.Autokryptex.Tests
             for(int i = 0; i < listA.Length; i++) {
                 Assert.AreEqual(listA[i], listB[i]);
             }
+        }
+
+        [TestMethod]
+        public void CrossRandomShouldMakeABeautifulImg() {
+            Bitmap bmp = new Bitmap(500,500);
+            CrossRandom cr = new CrossRandom(12345678);
+            CrossRandom.UseAppSecret("Using an App secret for a change can help");
+
+            cr.UseInstanceSecret("ASDFASDF");
+            for (int x = 0; x < bmp.Width; x++) {
+                for (int y = 0; y< bmp.Width; y++) {
+                    int r = cr.Next(256);
+                    int g = cr.Next(256);
+                    int b = cr.Next(256);
+                    bmp.SetPixel(x, y, Color.FromArgb(r, g, b));
+                }
+            }
+
+            bmp.Save("CRYPTRANDOM.bmp");
+
+            // I don't think its possible to assert anything here.
+            // The human necessary validation is: 
+            // The image MUST be very noisy.
+            // And it must NOT CONTAIN ANY IDENTIFYABLE PATTERN.
+            // It must look like a noisy image.
         }
     }
 }
