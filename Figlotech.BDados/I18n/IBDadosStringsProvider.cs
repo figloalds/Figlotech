@@ -11,5 +11,6 @@ namespace Figlotech.BDados.I18n
         string AUTH_USER_NOT_FOUND { get; }
         string AUTH_PASSWORD_INCORRECT { get; }
         string AUTH_USER_BLOCKED { get; }
+        string AUTH_PASSWORDS_MUST_MATCH { get; }
     }
 }

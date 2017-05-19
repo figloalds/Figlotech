@@ -7,5 +7,6 @@ namespace Figlotech.BDados {
         public string AUTH_USER_NOT_FOUND => "User is not registered.";
         public string AUTH_PASSWORD_INCORRECT => "Password provided is incorrect";
         public string AUTH_USER_BLOCKED => "User is blocked.";
+        public string AUTH_PASSWORDS_MUST_MATCH => "Password and confirmation must match";
     }
 }

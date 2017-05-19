@@ -52,6 +52,7 @@ namespace Figlotech.BDados.Authentication {
         : IBDadosAuthenticator, IRequiresDataAccessor
         where TUser: IBDadosUser, new()
         where TSession: IBDadosUserSession, new() {
+
         public IDataAccessor DataAccessor { get; set; }
 
         public BDadosAuthenticator(IDataAccessor dataAccessor) {
@@ -63,6 +64,7 @@ namespace Figlotech.BDados.Authentication {
                 return;
             ds.Resolve(this);
         }
+
         public BDadosAuthenticator() {
             DependencySolver.Default.Resolve(this);
         }
@@ -101,7 +103,6 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public TUser CheckLogin(String userName, String password) {
-            String criptPass = AuthenticationUtils.HashPass(password, userName.ToLower());
             var userQuery = DataAccessor.LoadAll<TUser>(
                 (u) => u.Username == userName);
             if (!userQuery.Any()) {
@@ -109,6 +110,7 @@ namespace Figlotech.BDados.Authentication {
                 throw new UserNotRegisteredException(FTH.Strings.AUTH_USER_NOT_FOUND);
             }
             var loadedUser = userQuery.First();
+            String criptPass = AuthenticationUtils.HashPass(password, loadedUser.RID);
             if(loadedUser.Password != criptPass) {
                 throw new PasswordIncorrectException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
             }
@@ -225,6 +227,34 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
+        public IBDadosUser ForceCreateUser(string userName, string password) {
+            TUser retv = new TUser();
+            retv.Username = userName;
+            retv.Password = AuthenticationUtils.HashPass(password, retv.RID);
+            DataAccessor.SaveItem(retv);
+            return retv;
+        }
+        public IBDadosUser CreateUserSecure(string userName, string password, string confirmPassword) {
+            if(password != confirmPassword) {
+                throw new PasswordIncorrectException(FTH.Strings.AUTH_PASSWORDS_MUST_MATCH);
+            }
+            return ForceCreateUser(userName, password);
+        }
 
+        public bool ForcePassword(IBDadosUser user, string newPassword) {
+            user.Password = AuthenticationUtils.HashPass(newPassword, user.RID);
+            DataAccessor.SaveItem(user);
+            return true;
+        }
+
+        public bool ChangeUserPasswordSecure(IBDadosUser user, string oldPassword, string newPassword, string newPasswordConfirmation) {
+            if(user.Password != AuthenticationUtils.HashPass(oldPassword, user.RID)) {
+                throw new PasswordIncorrectException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
+            }
+            if (newPassword != newPasswordConfirmation) {
+                throw new PasswordIncorrectException(FTH.Strings.AUTH_PASSWORDS_MUST_MATCH);
+            }
+            return ForcePassword(user, newPassword);
+        }
     }
 }
