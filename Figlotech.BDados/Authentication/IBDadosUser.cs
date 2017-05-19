@@ -13,6 +13,6 @@ namespace Figlotech.BDados.Authentication {
         String Password { get; set; }
         bool isActive { get; set; }
 
-        IBDadosPermission GetPermissions();
+        IBDadosPermissionsContainer GetPermissionsContainer();
     }
 }

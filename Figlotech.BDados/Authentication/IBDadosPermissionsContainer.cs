@@ -23,7 +23,7 @@ namespace Figlotech.BDados.Authentication {
     /// You can socket this right into your User AND/OR Roles dataObjects
     /// BDados does the Magic of getting/setting the right permissions into these bytes.
     /// </summary>
-    public interface IBDadosPermission {
+    public interface IBDadosPermissionsContainer {
         /// <summary>
         /// This is supposed to be a sum of BDadosPermissions
         /// It's a C-Like additive tag 

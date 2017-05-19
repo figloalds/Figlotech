@@ -28,6 +28,7 @@ using Newtonsoft.Json;
 using Figlotech.Core;
 using Figlotech.Autokryptex;
 using Figlotech.BDados.Authentication;
+using Figlotech.BDados.I18n;
 
 namespace Figlotech.BDados {
     public delegate dynamic ComputeField(dynamic o);
@@ -42,6 +43,9 @@ namespace Figlotech.BDados {
     public static class FTH {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
+
+        public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(()=> new BDadosEnglishStringsProvider());
+        public static IBDadosStringsProvider Strings { get => (IBDadosStringsProvider) _strings; }
 
         private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(()=> new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
         public static WorkQueuer GlobalQueuer { get => (WorkQueuer) _globalQueuer; }

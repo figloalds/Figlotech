@@ -10,33 +10,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
 
-    public class LoginRequestModel {
-        /// <summary>
-        /// <para>Id do captcha solicidado (esses captchas tem um tempo limite de 30 minutos)</para>
-        /// </summary>
-        public String FormId { get; set; }
-        /// <summary>
-        /// <para>Nome de usuario</para>
-        /// </summary>
-        public String Username { get; set; }
-        /// <summary>
-        /// <para>Senha do usuario</para>
-        /// </summary>
-        public String Password { get; set; }
-        /// <summary>
-        /// <para>Resolução do captcha</para>
-        /// </summary>
-        public String Captcha { get; set; }
-    }
-
     public class Attempt {
         public String User;
         public bool Lock = false;
-        public int Attempts = 0;
-        public DateTime LockStamp;
+        public DateTime Timestamp = DateTime.UtcNow;
 
-        public const int maxAttemptsToLock = 7;
-        public static TimeSpan lockTime = TimeSpan.FromMinutes(1);
+        public static int maxAttemptsToLock = 12;
+        public static TimeSpan lockTime = TimeSpan.FromMinutes(3);
     }
 
     public class UserSession {
@@ -47,7 +27,7 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public String UserRID;
-        public IBDadosUserSession SessionObject;
+        public IBDadosUserSession Session;
         public String Username;
         public String Token;
         public DateTime Expiry = DateTime.Now.Add(TimeSpan.FromMinutes(MaximumInactiveSpanInMinutes));
@@ -59,19 +39,18 @@ namespace Figlotech.BDados.Authentication {
         [JsonIgnore]
         protected IBDadosAuthenticator Authenticator;
 
-        public IBDadosPermission Permissions;
+        public IBDadosPermissionsContainer Permissions;
 
         public IBDadosUser User { get; set; }
 
         public void Logoff() {
-            Authenticator.Logoff(this.Token);
+            Authenticator.Logoff(Session);
         }
     }
 
-    public class BDadosAuthenticator<TUser, TPermission, TSession>
+    public class BDadosAuthenticator<TUser, TSession>
         : IBDadosAuthenticator, IRequiresDataAccessor
         where TUser: IBDadosUser, new()
-        where TPermission: IBDadosPermission, new()
         where TSession: IBDadosUserSession, new() {
         public IDataAccessor DataAccessor { get; set; }
 
@@ -93,34 +72,30 @@ namespace Figlotech.BDados.Authentication {
         public long globalId;
         //static List<string> RanChecks = new List<string>();
 
-        public Attempt TrackAttempt(String userName, bool Success) {
-            var att = TrackAttempts.Find((a) => a.User == userName) ?? new Attempt();
-            if (Success) return att;
-            if (att != null) {
-                if (att.Lock) {
-                    if (DateTime.UtcNow.Subtract(att.LockStamp).TotalMilliseconds > Attempt.lockTime.TotalMilliseconds) {
-                        att.Lock = false;
-                        att.Attempts = 0;
-                    }
-                }
-                else if (++att.Attempts > Attempt.maxAttemptsToLock) {
-                    att.Lock = true;
-                    att.LockStamp = DateTime.UtcNow;
-                }
-            }
-            else {
-                att = new Attempt { User = userName };
-            }
+        public void TrackAttempt(String user, bool Success) {
+            TrackAttempts.RemoveAll(a =>
+                    DateTime.UtcNow.Subtract(a.Timestamp) > Attempt.lockTime);
 
-            return att;
+            var atts = TrackAttempts.Where(
+                (a) =>
+                    a.User == user
+            );
+            if (Success) {
+                TrackAttempts.RemoveAll(a=> a.User == user);
+            }
+            if (atts.Any()) {
+                if (atts.Count() >= Attempt.maxAttemptsToLock) {
+                    throw new UserBlockedException(String.Format(FTH.Strings.AUTH_USER_MAX_ATTEMPTS_EXCEEDED, Attempt.maxAttemptsToLock));
+                }
+            }
         }
 
         private String New(IBDadosUser User, TSession Session, String Token) {
             UserSession s = new UserSession(this);
             s.Token = Token;
             s.UserRID = User.RID;
-            s.SessionObject = Session;
-            s.Permissions = User.GetPermissions();
+            s.Session = Session;
+            s.Permissions = User.GetPermissionsContainer();
             Sessions.Add(s);
             return s.Token;
         }
@@ -131,19 +106,19 @@ namespace Figlotech.BDados.Authentication {
                 (u) => u.Username == userName);
             if (!userQuery.Any()) {
                 TrackAttempt(userName, false);
-                throw new UserNotRegisteredException("User is not registered.");
+                throw new UserNotRegisteredException(FTH.Strings.AUTH_USER_NOT_FOUND);
             }
             var loadedUser = userQuery.First();
             if(loadedUser.Password != criptPass) {
-                throw new PasswordIncorrectException("Password provided is incorrect");
+                throw new PasswordIncorrectException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
             }
             if (!loadedUser.isActive) {
-                throw new UserBlockedException("User is blocked.");
+                throw new UserBlockedException(FTH.Strings.AUTH_USER_BLOCKED);
             }
             return userQuery.FirstOrDefault();
         }
 
-        public String Login(String Username, String Password) {
+        public IBDadosUserSession Login(String Username, String Password) {
             var user = CheckLogin(Username, Password);
             if (user != null) {
                 var sess = new TSession {
@@ -152,28 +127,28 @@ namespace Figlotech.BDados.Authentication {
                     Token = FTH.GenerateIdString($"Login:{user.Username};"),
                     StartTime = DateTime.UtcNow,
                     EndTime = null,
-                    Permission = user.GetPermissions()
+                    Permission = user.GetPermissionsContainer()
                 };
                 if (DataAccessor.SaveItem(sess)) {
-                    return New(user, sess, sess.Token);
+                    return sess;
                 }
             }
-            return null;
+            return default(TSession);
         }
 
         public bool Exists(String Token) {
             return GetSession(Token) != null;
         }
 
-        public void Logoff(String s) {
-            Sessions.RemoveAll(a=> a.Token == s);
+        public void Logoff(IBDadosUserSession s) {
+            Sessions.RemoveAll(a=> a.Token == s.Token);
             if(DataAccessor is IRdbmsDataAccessor) {
                 (DataAccessor as IRdbmsDataAccessor).Access((bd) => {
                     // DID ANYONE SAY DRAGONS?!
                     (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Active=0 WHERE Token=@1", s);
                 });
             } else {
-                var session = DataAccessor.LoadByRid<TUser>(s);
+                var session = DataAccessor.LoadByRid<TSession>(s.RID);
                 session.isActive = false;
                 DataAccessor.SaveItem(session);
             }
@@ -182,7 +157,7 @@ namespace Figlotech.BDados.Authentication {
         public IBDadosUserSession GetSession(String Token) {
             var v = (from a in Sessions where a.Token == Token select a);
             if (v.Any())
-                return v.First().SessionObject;
+                return v.First().Session;
             else {
                 var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token.Equals(Token));
                 if (fetchSession.Any()) {
@@ -190,10 +165,10 @@ namespace Figlotech.BDados.Authentication {
                     UserSession sess = new UserSession(this);
                     sess.Token = Token;
                     sess.UserRID = User.RID;
-                    sess.SessionObject = fetchSession.First();
-                    sess.Permissions = User.GetPermissions();
+                    sess.Session = fetchSession.First();
+                    sess.Permissions = User.GetPermissionsContainer();
                     var retv = fetchSession.FirstOrDefault();
-                    retv.Permission = User.GetPermissions();
+                    retv.Permission = User.GetPermissionsContainer();
                     Sessions.Add(sess);
                     return fetchSession.FirstOrDefault();
                 }

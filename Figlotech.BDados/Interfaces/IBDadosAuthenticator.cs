@@ -20,14 +20,14 @@ namespace Figlotech.BDados.Interfaces {
         /// <param name="userName">Self explanatory: Username</param>
         /// <param name="password">Self explanatory: Password</param>
         /// <returns></returns>
-        string Login(String userName, String password);
+        IBDadosUserSession Login(String userName, String password);
         /// <summary>
         /// This is supposed to log the user off, destroy the token do whatever
         /// but not allow that token to access again.
         /// </summary>
         /// <param name="token">Self explanatory: Token</param>
         /// <returns></returns>
-        void Logoff(String token);
+        void Logoff(IBDadosUserSession session);
         /// <summary>
         /// This is supposed to return the user session or NULL in case of
         /// no session found.
