@@ -52,8 +52,10 @@ namespace Figlotech.Autokryptex.Tests
             // I don't think its possible to assert anything here.
             // The human necessary validation is: 
             // The image MUST be very noisy.
-            // And it must NOT CONTAIN ANY IDENTIFYABLE PATTERN.
-            // It must look like a noisy image.
+            // And it CANNOT CONTAIN ANY PATTERN.
+            // Because patterns in the image are indicators period,
+            // and our pseudo-random algorithm can't have a period.
+
         }
     }
 }
