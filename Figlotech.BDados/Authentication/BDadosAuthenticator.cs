@@ -59,7 +59,7 @@ namespace Figlotech.BDados.Authentication {
         [JsonIgnore]
         protected IBDadosAuthenticator Authenticator;
 
-        public IList<IBDadosPermission> Permissions;
+        public IBDadosPermission Permissions;
 
         public IBDadosUser User { get; set; }
 
@@ -120,7 +120,7 @@ namespace Figlotech.BDados.Authentication {
             s.Token = Token;
             s.UserRID = User.RID;
             s.SessionObject = Session;
-            s.Permissions = (IList<IBDadosPermission>) DataAccessor.LoadAll<TPermission>((u) => u.User == User.RID);
+            s.Permissions = User.GetPermissions();
             Sessions.Add(s);
             return s.Token;
         }
@@ -146,14 +146,13 @@ namespace Figlotech.BDados.Authentication {
         public String Login(String Username, String Password) {
             var user = CheckLogin(Username, Password);
             if (user != null) {
-                var li = DataAccessor.LoadAll<TPermission>(p => p.User == user.RID);
                 var sess = new TSession {
                     User = user.RID,
                     isActive = true,
                     Token = FTH.GenerateIdString($"Login:{user.Username};"),
                     StartTime = DateTime.UtcNow,
                     EndTime = null,
-                    Permissions = li.Select(p=>(IBDadosPermission) p).ToList()
+                    Permission = user.GetPermissions()
                 };
                 if (DataAccessor.SaveItem(sess)) {
                     return New(user, sess, sess.Token);
@@ -192,12 +191,9 @@ namespace Figlotech.BDados.Authentication {
                     sess.Token = Token;
                     sess.UserRID = User.RID;
                     sess.SessionObject = fetchSession.First();
-                    sess.Permissions = (IList<IBDadosPermission>) DataAccessor.LoadAll<TPermission>((p) => p.User == User.RID);
+                    sess.Permissions = User.GetPermissions();
                     var retv = fetchSession.FirstOrDefault();
-                    retv.Permissions = DataAccessor
-                        .LoadAll<TPermission>(p => p.User == User.RID)
-                        .Select(p=>(IBDadosPermission) p)
-                        .ToList();
+                    retv.Permission = User.GetPermissions();
                     Sessions.Add(sess);
                     return fetchSession.FirstOrDefault();
                 }
@@ -205,45 +201,35 @@ namespace Figlotech.BDados.Authentication {
             return null;
         }
 
-        public bool CanCreate(IBDadosUserSession Session, String Module, String Resource) {
-            return Session.Permissions
-                .Where(p => p.Module == Module && p.Resource == Resource)
-                .FirstOrDefault()?.CanRead() ?? false;
+        public bool CanCreate(IBDadosUserSession Session, int permission) {
+            return Session?.CanCreate(permission) ?? false;
         }
-        public bool CanRead(IBDadosUserSession Session, String Module, String Resource) {
-            return Session.Permissions
-                .Where(p => p.Module == Module && p.Resource == Resource)
-                .FirstOrDefault()?.CanRead() ?? false;
+        public bool CanRead(IBDadosUserSession Session, int permission) {
+            return Session?.CanRead(permission) ?? false;
         }
-        public bool CanUpdate(IBDadosUserSession Session, String Module, String Resource) {
-            return Session.Permissions
-                .Where(p => p.Module == Module && p.Resource == Resource)
-                .FirstOrDefault()?.CanUpdate() ?? false;
+        public bool CanUpdate(IBDadosUserSession Session, int permission) {
+            return Session?.CanUpdate(permission) ?? false;
         }
-        public bool CanDelete(IBDadosUserSession Session, String Module, String Resource) {
-            return Session.Permissions
-                .Where(p => p.Module == Module && p.Resource == Resource)
-                .FirstOrDefault()?.CanDelete() ?? false;
+        public bool CanDelete(IBDadosUserSession Session, int permission) {
+            return Session?.CanDelete(permission) ?? false;
         }
-        public bool CanAuthorize(IBDadosUserSession Session, String Module, String Resource) {
-            return Session.Permissions
-                .Where(p => p.Module == Module && p.Resource == Resource)
-                .FirstOrDefault()?.CanAuthorize() ?? false;
+        public bool CanAuthorize(IBDadosUserSession Session, int permission) {
+            return Session?.CanAuthorize(permission) ?? false;
         }
-        public bool CanCreate(String Token, String Module, String Resource) {
-            return CanCreate(GetSession(Token), Module, Resource);
+        public bool CanCreate(String Token, int permission) {
+            return CanCreate(GetSession(Token), permission);
         }
-        public bool CanRead(String Token, String Module, String Resource) {
-            return CanRead(GetSession(Token), Module, Resource);
+        public bool CanRead(String Token, int permission) {
+            return CanRead(GetSession(Token), permission);
         }
-        public bool CanUpdate(String Token, String Module, String Resource) {
-            return CanUpdate(GetSession(Token), Module, Resource);
+        public bool CanUpdate(String Token, int permission) {
+            return CanUpdate(GetSession(Token), permission);
         }
-        public bool CanDelete(String Token, String Module, String Resource) {
-            return CanDelete(GetSession(Token), Module, Resource);
+        public bool CanDelete(String Token, int permission) {
+            return CanDelete(GetSession(Token), permission);
         }
-        public bool CanAuthorize(String Token, String Module, String Resource) {
-            return CanAuthorize(GetSession(Token), Module, Resource);
+        public bool CanAuthorize(String Token, int permission) {
+            return CanAuthorize(GetSession(Token), permission);
         }
 
         public void Remove(String Token) {

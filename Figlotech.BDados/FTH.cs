@@ -27,6 +27,7 @@ using System.Reflection.Emit;
 using Newtonsoft.Json;
 using Figlotech.Core;
 using Figlotech.Autokryptex;
+using Figlotech.BDados.Authentication;
 
 namespace Figlotech.BDados {
     public delegate dynamic ComputeField(dynamic o);
@@ -34,11 +35,16 @@ namespace Figlotech.BDados {
         public static readonly Func<T> Activate =
             Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
     }
+    /// <summary>
+    /// This is an utilitarian class, it provides quick static logic 
+    /// for the rest of BDados to operate
+    /// </summary>
     public static class FTH {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
 
-        public static WorkQueuer GlobalQueuer = new WorkQueuer("FIGLOTECH_INTERNAL_JOBS", -1, true);
+        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(()=> new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
+        public static WorkQueuer GlobalQueuer { get => (WorkQueuer) _globalQueuer; }
 
         public static int currentBDadosConnections = 0;
 
@@ -61,6 +67,7 @@ namespace Figlotech.BDados {
             ) {
                 act((T)input);
             }
+
         }
         private static string FillBlanks(String rid) {
             var c = 64 - rid.Length;
@@ -827,6 +834,49 @@ namespace Figlotech.BDados {
                     retv.Append(",");
             }
             return retv;
+        }
+
+        static int numPerms = Enum.GetValues(typeof(Acl)).Length;
+        static string notEnoughBytesMsg =
+@"
+Your implementation of IBDadosUserPermissions doesn't have enough bytes.
+You need at least 5 * 'bpmi' bits, being bpmi the 'biggest permission index' you intend to use
+This math is in bits, do divide by 8 and round up to get the exact count of bytes you need for
+your program.
+EG: If I need a permission BDADOS_CREATE_SKYNET and that permission is runtime int value of
+77, I'll need ((77 * 5)+BDPIndex) / 8 = 49 bytes on my permissions buffer because this permisison will be
+saught for using this logic:
+byteIndex=((77 * 5)+BDPIndex) / 8;
+bitIndex=((77 * 5)+BDPIndex) % 8;
+permissionCheck = (Permissions[byteIndex] & (1 << bitOffset)) > 0
+Refer to the source code for more info
+";
+        internal static bool CheckForPermission(byte[] buffer, Acl p, int permission) {
+            if (buffer == null)
+                return false;
+            var permIndex = (permission * numPerms) + (int) p;
+            var byteIndex = permIndex / 8;
+            if (buffer.Length < byteIndex) {
+                throw new IndexOutOfRangeException(notEnoughBytesMsg);
+            }
+            var bitOffset = permIndex % 8;
+            return (buffer[byteIndex] & (1 << bitOffset)) > 0;
+        }
+        internal static void SetPermission(byte[] buffer, Acl p, int permission, bool value) {
+            if (buffer == null)
+                return;
+            var permIndex = (permission * numPerms) + (int)p;
+            var byteIndex = permIndex / 8;
+            if (buffer.Length < byteIndex) {
+                throw new IndexOutOfRangeException(notEnoughBytesMsg);
+            }
+            var bitOffset = permIndex % 8;
+            byte targetBit = (byte) (1 << bitOffset);
+            if (value) {
+                buffer[byteIndex] |= targetBit;
+            } else {
+                buffer[byteIndex] ^= targetBit;
+            }
         }
 
         public static QueryBuilder ListIds<T>(RecordSet<T> set) where T : IDataObject, new()  {

@@ -15,6 +15,6 @@ namespace Figlotech.BDados.Authentication {
         DateTime StartTime { get; set; }
         DateTime? EndTime { get; set; }
 
-        List<IBDadosPermission> Permissions { get; set; }
+        IBDadosPermission Permission { get; set; }
     }
 }

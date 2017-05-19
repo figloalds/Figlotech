@@ -10,6 +10,8 @@ namespace Figlotech.Autokryptex.Tests
 
         private bool TestIEncryptionMethod(IEncryptionMethod c1, String input) {
 
+            CrossRandom.UseAppSecret("SENHA DE CRIPTOGRAFIA");
+
             byte[] bytes = Encoding.UTF8.GetBytes(input);
 
             var encryptedBytes = c1.Encrypt(bytes);
