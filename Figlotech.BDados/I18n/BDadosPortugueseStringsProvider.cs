@@ -8,5 +8,6 @@ namespace Figlotech.BDados {
         public string AUTH_PASSWORD_INCORRECT => "Usuário e/ou senha incorreto(s)";
         public string AUTH_USER_BLOCKED => "Usuário bloqueado";
         public string AUTH_PASSWORDS_MUST_MATCH => "Senha e confirmação precisam ser idênticas.";
+        public string AUTH_USER_ALREADY_EXISTS => "Usuário já existe";
     }
 }
