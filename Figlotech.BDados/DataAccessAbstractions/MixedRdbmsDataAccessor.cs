@@ -37,10 +37,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return RdbmsAccessor.Access(funcaoAcessar, trataErros);
         }
 
-        public bool CheckStructure(IEnumerable<Type> types, bool resetKeys = true) {
-            return RdbmsAccessor.CheckStructure(types, resetKeys);
-        }
-
         public int Execute(IQueryBuilder Query) {
             return RdbmsAccessor.Execute(Query);
         }
