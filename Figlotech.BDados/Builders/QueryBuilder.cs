@@ -10,6 +10,7 @@
 
 
 using Figlotech.BDados.Interfaces;
+using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -69,17 +70,115 @@ namespace Figlotech.BDados.Builders {
         }
 
         public static QueryBuilder operator +(String a, QueryBuilder b) {
-            return (QueryBuilder) new QueryBuilder(a).Append(b);
+            return (QueryBuilder)new QueryBuilder(a).Append(b);
         }
 
         public static QueryBuilder operator +(QueryBuilder a, String b) {
-            return (QueryBuilder) a.Append(b);
+            return (QueryBuilder)a.Append(b);
         }
 
+        public QueryBuilder t(string text) {
+            return (QueryBuilder) Append(new QueryBuilder(text));
+        }
+        public QueryBuilder tif(bool condition, string text) {
+            return (QueryBuilder)Append(condition ? t(text) : new QueryBuilder());
+        }
+        public QueryBuilder v(object value) {
+            return (QueryBuilder)Append(new QueryBuilder($"@{IntEx.GerarShortRID()}", value));
+        }
+        public QueryBuilder vif(bool condition, string text) {
+            return (QueryBuilder)Append(condition ? v(text) : new QueryBuilder());
+        }
+        public QueryBuilder q(QueryBuilder qb) {
+            return (QueryBuilder)Append(qb);
+        }
+        public QueryBuilder q(Func<QueryBuilder, QueryBuilder> fun) {
+            return (QueryBuilder)Append(fun(new QueryBuilder()));
+        }
+        public QueryBuilder eq(string col, object val) {
+            return t($"{col}=").v(val);
+        }
+        public QueryBuilder neq(string col, object val) {
+            return t($"{col}!=").v(val);
+        }
+        public QueryBuilder gt(string col, object val) {
+            return t($"{col}>").v(val);
+        }
+        public QueryBuilder lt(string col, object val) {
+            return t($"{col}<").v(val);
+        }
+        public QueryBuilder gte(string col, object val) {
+            return t($"{col}>=").v(val);
+        }
+        public QueryBuilder lte(string col, object val) {
+            return t($"{col}<=").v(val);
+        }
+        public QueryBuilder isNull(string col) {
+            return t($"{col} IS NULL");
+        }
+        public QueryBuilder notNull(string col) {
+            return t($"{col} IS NOT NULL");
+        }
+    
+        public QueryBuilder Select(string cols) {
+            return (QueryBuilder)Append(new QueryBuilder().t($"SELECT {cols}"));
+        }
+        public QueryBuilder From<T>(string alias = null) {
+            return t($"FROM {typeof(T).Name.ToLower()}").tif(alias != null, alias);
+        }
+        public QueryBuilder From(string table, string alias = null) {
+            return t($"FROM {table}").tif(alias != null, alias);
+        }
+        public QueryBuilder Where(Func<QueryBuilder, QueryBuilder> fun) {
+            return t($"WHERE ").q(fun);
+        }
+        public QueryBuilder InsertInto<T>(params string[] cols) {
+            var retv = new QueryBuilder($"INSERT INTO {typeof(T).Name.ToLower()}");
+            if (cols.Length > 0) {
+                retv.Append("(");
+                for (int i = 0; i < cols.Length; i++) {
+                    retv.Append(cols[i]);
+                    if (i < cols.Length - 1) {
+                        retv.Append(",");
+                    }
+                }
+                retv.Append(")");
+            }
+            return (QueryBuilder)Append(retv);
+        }
+        public QueryBuilder InsertInto(string tbl, params string[] cols) {
+            var retv = new QueryBuilder($"INSERT INTO {tbl}");
+            if(cols.Length > 0) {
+                retv.Append("(");
+                for (int i = 0; i < cols.Length; i++) {
+                    retv.Append(cols[i]);
+                    if(i < cols.Length-1) {
+                        retv.Append(",");
+                    }
+                }
+                retv.Append(")");
+            }
+            return (QueryBuilder)Append(retv);
+        }
+        public QueryBuilder Update(string tbl) {
+            return t($"UPDATE {tbl}");
+        }
+        public QueryBuilder Set(IDictionary<String, Object> stuff) {
+            var retv = new QueryBuilder("SET");
+            for(int i = 0; i<stuff.Count; i++) {
+                retv.eq(stuff.Keys.ElementAt(i), stuff.Values.ElementAt(i));
+                if(i < stuff.Count - 1) {
+                    retv.Append(",");
+                }
+            }
+            return (QueryBuilder)Append(retv);
+        }
+        
         public IQueryBuilder Build(params IQueryBuilder[] args) {
             foreach(var a in args) {
                 Append(a);
             }
+
             return this;
         }
 
