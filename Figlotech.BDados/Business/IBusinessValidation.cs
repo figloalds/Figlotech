@@ -1,4 +1,4 @@
-﻿using Figlotech.BDados.Entity;
+﻿using Figlotech.BDados.DataAccessAbstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;

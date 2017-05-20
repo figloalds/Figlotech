@@ -1,5 +1,5 @@
 ﻿using Figlotech.BDados.Attributes;
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Interfaces;
 using System;
 using System.Collections.Generic;

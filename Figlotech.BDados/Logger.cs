@@ -1,18 +1,12 @@
-﻿using Figlotech.BDados.Entity;
+﻿using Figlotech.BDados.FileAcessAbstractions;
 using Figlotech.BDados.Interfaces;
-using Figlotech.BDados.Requirements;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados {
-    public class Logger : ILogger, IRequiresFileAccessor {
+    public class Logger : ILogger {
         public static int gid = 0;
         private int myid = ++gid;
         private int writec = 0;
@@ -23,7 +17,7 @@ namespace Figlotech.BDados {
         private object BDLogLock = new Object();
 
         public bool EnableConsoleLogging { get; set; } = true;
-
+        
         public Logger() { }
         public Logger(IFileAccessor Accessor) {
             FileAccessor = Accessor;

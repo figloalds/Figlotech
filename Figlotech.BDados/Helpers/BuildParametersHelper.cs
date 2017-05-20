@@ -10,7 +10,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace Figlotech.BDados.Entity
+namespace Figlotech.BDados.DataAccessAbstractions
 {
     public class ObjectHoningOption
     {

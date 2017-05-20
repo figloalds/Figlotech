@@ -1,4 +1,4 @@
-﻿using Figlotech.BDados.Entity;
+﻿using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.Interfaces;
 using System;

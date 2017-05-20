@@ -9,6 +9,7 @@
 **/
 
 
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Interfaces;
 using Figlotech.Core;
 using System;

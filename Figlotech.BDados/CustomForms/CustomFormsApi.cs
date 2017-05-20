@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.Builders;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Interfaces;
 using Figlotech.Core;
 using System;

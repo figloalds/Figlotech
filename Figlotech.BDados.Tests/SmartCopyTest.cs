@@ -1,10 +1,7 @@
-using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Figlotech.BDados.Entity;
-using Figlotech.BDados.Copy;
+using Figlotech.BDados.FileAcessAbstractions;
 
-namespace Figlotech.BDados.Tests
-{
+namespace Figlotech.BDados.Tests {
     [TestClass]
     public class SmartCopyTest
     {

@@ -1,6 +1,6 @@
 ﻿using Figlotech.BDados.Attributes;
 using Figlotech.BDados.Builders;
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core;
 using System;

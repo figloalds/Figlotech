@@ -1,13 +1,8 @@
-﻿using Figlotech.BDados.Authentication.Exceptions;
-using Figlotech.BDados.Entity;
-using Figlotech.BDados.Interfaces;
-using Figlotech.BDados.Requirements;
+﻿using Figlotech.BDados.DataAccessAbstractions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
 
@@ -50,7 +45,7 @@ namespace Figlotech.BDados.Authentication {
     }
 
     public class BDadosAuthenticator<TUser, TSession>
-        : IBDadosAuthenticator, IRequiresDataAccessor
+        : IBDadosAuthenticator
         where TUser: IBDadosUser, new()
         where TSession: IBDadosUserSession, new() {
 

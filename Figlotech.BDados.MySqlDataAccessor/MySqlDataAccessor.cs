@@ -2,41 +2,24 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using System.IO;
 using Figlotech.BDados.Interfaces;
 using Figlotech.BDados.Builders;
 using System.Reflection;
-using System.Collections;
-using System.Dynamic;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Linq.Expressions;
-using System.Management;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Requirements;
 using MySql.Data.MySqlClient;
 using Figlotech.BDados.Attributes;
 using Figlotech.Core;
-using System.Runtime.Serialization.Formatters.Binary;
 
 namespace Figlotech.BDados {
-    public class MySqlDataAccessor : IRdbmsDataAccessor, IRequiresLogger {
+    public class MySqlDataAccessor : IRdbmsDataAccessor {
 
-        ILogger _logger;
-        public ILogger Logger {
-            get {
-                return _logger ?? (_logger = new Logger(new FileAccessor(FTH.DefaultLogRepository)));
-            }
-            set {
-                _logger = value;
-            }
-        }
+        public ILogger Logger { get; set; }
         public Type[] _workingTypes = new Type[0];
         public Type[] WorkingTypes {
             get { return _workingTypes; }
@@ -74,6 +57,7 @@ namespace Figlotech.BDados {
                 throw new BDadosException("No RDBMS configuration provided, no default connection configured. Crashing. On purpose.");
             Configuration = GlobalConfiguration;
         }
+
         public MySqlDataAccessor(DataAccessorConfiguration Config) {
             Configuration = Config;
         }
@@ -302,11 +286,11 @@ namespace Figlotech.BDados {
         }
 
         public bool CheckStructureRenameColumnsPass(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- RENAME COLUMNS PASS");
-            Logger.WriteLog("-- Checking for renamed Columns");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- RENAME COLUMNS PASS");
+            Logger?.WriteLog("-- Checking for renamed Columns");
+            Logger?.WriteLog("-- ");
             DataTable columns = Query(
                          "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLUMN_TYPE, IS_NULLABLE FROM information_schema.columns WHERE TABLE_SCHEMA=@", Configuration.Database);
 
@@ -332,11 +316,11 @@ namespace Figlotech.BDados {
 
 
         public bool CheckStructureRenameTablesPass(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- RENAME TABLES PASS");
-            Logger.WriteLog("-- Changing table names from their [OldName]s");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- RENAME TABLES PASS");
+            Logger?.WriteLog("-- Changing table names from their [OldName]s");
+            Logger?.WriteLog("-- ");
             DataTable tables = Query(
                 "SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1", Configuration.Database);
 
@@ -356,11 +340,11 @@ namespace Figlotech.BDados {
         }
 
         public void CheckStructureDropKeysPass(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- DROP KEYS PASS");
-            Logger.WriteLog("-- Dropping keys so that we can work with the table structures");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- DROP KEYS PASS");
+            Logger?.WriteLog("-- Dropping keys so that we can work with the table structures");
+            Logger?.WriteLog("-- ");
 
             int errs = 0;
             var dt = this.Query("SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=@1", Configuration.Database);
@@ -397,11 +381,11 @@ namespace Figlotech.BDados {
         }
 
         public void CheckStructureSpecialDropKeysPass(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- DROP FOREIGN KEYS PASS");
-            Logger.WriteLog("-- Dropping foreign keys so that we can work with the table structures");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- DROP FOREIGN KEYS PASS");
+            Logger?.WriteLog("-- Dropping foreign keys so that we can work with the table structures");
+            Logger?.WriteLog("-- ");
             Benchmarker bench = new Benchmarker("");
             bench.WriteToOutput = showPerformanceLogs;
             int errs = 0;
@@ -428,15 +412,15 @@ namespace Figlotech.BDados {
                     errs++;
                 }
             }
-            Logger.WriteLog($"Special Dekeying took {bench.Mark("")}ms");
+            Logger?.WriteLog($"Special Dekeying took {bench.Mark("")}ms");
         }
 
         public void CheckStructureDicrepancyCheckPass(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- DISCREPANCY CHECK PASS");
-            Logger.WriteLog("-- Verifying if existing data complies with foreign key definitions");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- DISCREPANCY CHECK PASS");
+            Logger?.WriteLog("-- Verifying if existing data complies with foreign key definitions");
+            Logger?.WriteLog("-- ");
             // Get Keys straight.
             foreach (var t in types) {
                 if (!t.GetInterfaces().Contains(typeof(IDataObject))) {
@@ -591,15 +575,15 @@ namespace Figlotech.BDados {
         }
 
         public void CheckStructureSpecialAddForeignKeys(IEnumerable<Type> types) {
-            Logger.WriteLog("-- ");
-            Logger.WriteLog("-- CHECK STRUCTURE");
-            Logger.WriteLog("-- SPECIAL FOREIGN KEYING PASS");
-            Logger.WriteLog("-- Adding required foreign keys to structure.");
-            Logger.WriteLog("-- ");
+            Logger?.WriteLog("-- ");
+            Logger?.WriteLog("-- CHECK STRUCTURE");
+            Logger?.WriteLog("-- SPECIAL FOREIGN KEYING PASS");
+            Logger?.WriteLog("-- Adding required foreign keys to structure.");
+            Logger?.WriteLog("-- ");
             Benchmarker bench = new Benchmarker("");
             bench.WriteToOutput = showPerformanceLogs;
             // Gather all required keys and dictionary them into a 
-            // Map that will show us which keys need creating.
+            // Map that will show us which keys must exist
             Dictionary<ForeignKeyDefinition, bool> fkMap = new Dictionary<ForeignKeyDefinition, bool>();
             foreach (var type in types) {
                 if (!type.GetInterfaces().Contains(typeof(IDataObject)))
@@ -678,7 +662,7 @@ namespace Figlotech.BDados {
                 }
 
             });
-            Logger.WriteLog($"Special Foreign Keying took {bench.Mark("")}ms");
+            Logger?.WriteLog($"Special Foreign Keying took {bench.Mark("")}ms");
         }
 
         public void CheckStructureCollationsPass(IEnumerable<Type> types) {
@@ -770,8 +754,8 @@ namespace Figlotech.BDados {
                         }
                     }
                     if (circref) {
-                        Logger.WriteLog("-- Circular references detected in structure              --");
-                        Logger.WriteLog("-- We will bypass FK checks while restructuring           --");
+                        Logger?.WriteLog("-- Circular references detected in structure              --");
+                        Logger?.WriteLog("-- We will bypass FK checks while restructuring           --");
                         break;
                     }
                 } while (pass > 0);
@@ -792,12 +776,12 @@ namespace Figlotech.BDados {
                 //        }
                 //    } catch (Exception x) {
                 //        while (x != null && x.InnerException != x) {
-                //            Logger.WriteLog($"Err strut {x.Message}");
+                //            Logger?.WriteLog($"Err strut {x.Message}");
                 //            x = x.InnerException;
                 //        }
                 //    }
                 //}
-                Logger.WriteLog($"Verifying Database Structure | {instances.Count} value objects.");
+                Logger?.WriteLog($"Verifying Database Structure | {instances.Count} value objects.");
 
                 bool retv = false;
                 //Access((bd) => {
@@ -811,11 +795,11 @@ namespace Figlotech.BDados {
                 //            try {
                 //                backie.ExportToFile(Path.Combine(BDados.DefaultBackupStore, $"{BDadosInst.Configuration.Database}_" + DateTime.Now.ToString("dd-MM-yyyy HH-mm") + ".sql"));
                 //            } catch (Exception x) {
-                //                Logger.WriteLog("Erro ao fazer backup para reparar estrutura.");
+                //                Logger?.WriteLog("Erro ao fazer backup para reparar estrutura.");
                 //                while (x != null) {
-                //                    Logger.WriteLog(x.Message);
-                //                    Logger.WriteLog(x.StackTrace);
-                //                    Logger.WriteLog("--");
+                //                    Logger?.WriteLog(x.Message);
+                //                    Logger?.WriteLog(x.StackTrace);
+                //                    Logger?.WriteLog("--");
                 //                    x = x.InnerException;
                 //                }
                 //                //return;
@@ -857,7 +841,7 @@ namespace Figlotech.BDados {
 
                         var fields = t.GetFields().Where((a) => a.GetCustomAttribute<FieldAttribute>() != null).ToArray();
                         if (!found) {
-                            //Logger.WriteLog($"{instances[i].ValueObjectName} doesn't exist");
+                            //Logger?.WriteLog($"{instances[i].ValueObjectName} doesn't exist");
                             StringBuilder createTable = new StringBuilder();
                             createTable.Append($"CREATE TABLE {t.Name.ToLower()} (");
                             for (int x = 0; x < fields.Length; x++) {
@@ -878,13 +862,13 @@ namespace Figlotech.BDados {
                                 continue;
                             }
                             catch (Exception x) {
-                                Logger.WriteLog("Error creating table.");
-                                Logger.WriteLog(x.Message);
-                                Logger.WriteLog(x.StackTrace);
+                                Logger?.WriteLog("Error creating table.");
+                                Logger?.WriteLog(x.Message);
+                                Logger?.WriteLog(x.StackTrace);
                             }
                         }
                         else {
-                            //Logger.WriteLog($"{instances[i].ValueObjectName} exists");
+                            //Logger?.WriteLog($"{instances[i].ValueObjectName} exists");
                         }
 
                         DataTable columns = Query(
@@ -904,7 +888,7 @@ namespace Figlotech.BDados {
                                             }
                                     }
                                     catch (Exception x) {
-                                        Logger.WriteLog("Erro ao capturar o ColunaAttribute INFO");
+                                        Logger?.WriteLog("Erro ao capturar o ColunaAttribute INFO");
                                     }
                                     String dt = columns.Rows[row].Field<String>("DATA_TYPE");
                                     ulong? dtLength2 = columns.Rows[row].Field<ulong?>("CHARACTER_MAXIMUM_LENGTH");
@@ -917,14 +901,14 @@ namespace Figlotech.BDados {
                                     if (dt.ToLower() != tipo?.ToLower() ||
                                         ((dt.ToLower() == "varchar") && ((long?)dtLength2 != info?.Size)) ||
                                         (dbIsNullable != info?.AllowNull)) {
-                                        Logger.WriteLog($"{t.Name.ToLower()}: {dt.ToLower()}->{tipo?.ToLower()} | {dtLength2}->{info?.Size} | {dbIsNullable}->{info?.AllowNull}");
+                                        Logger?.WriteLog($"{t.Name.ToLower()}: {dt.ToLower()}->{tipo?.ToLower()} | {dtLength2}->{info?.Size} | {dbIsNullable}->{info?.AllowNull}");
                                         try {
                                             Execute($"ALTER TABLE {t.Name.ToLower()} {(info == null ? "ADD" : "CHANGE")} COLUMN {c.Name} {cdef}");
                                         }
                                         catch (Exception x) {
-                                            Logger.WriteLog("Error renaming column.");
-                                            Logger.WriteLog(x.Message);
-                                            Logger.WriteLog(x.StackTrace);
+                                            Logger?.WriteLog("Error renaming column.");
+                                            Logger?.WriteLog(x.Message);
+                                            Logger?.WriteLog(x.StackTrace);
                                         }
                                     }
                                     break;
@@ -932,7 +916,7 @@ namespace Figlotech.BDados {
                             }
 
                             if (!found) {
-                                //Logger.WriteLog($"{c.Name} doesn't exist");
+                                //Logger?.WriteLog($"{c.Name} doesn't exist");
                                 var catt = c.GetCustomAttribute<FieldAttribute>();
                                 if (catt == null) continue;
                                 String query = $"ALTER TABLE {t.Name.ToLower()} ADD COLUMN {GetColumnDefinition(c, catt)};";
@@ -941,22 +925,22 @@ namespace Figlotech.BDados {
                                         query);
                                 }
                                 catch (Exception x) {
-                                    Logger.WriteLog(query);
-                                    Logger.WriteLog("Error adding column.");
-                                    Logger.WriteLog(x.Message);
-                                    Logger.WriteLog(x.StackTrace);
-                                    Logger.WriteLog("");
+                                    Logger?.WriteLog(query);
+                                    Logger?.WriteLog("Error adding column.");
+                                    Logger?.WriteLog(x.Message);
+                                    Logger?.WriteLog(x.StackTrace);
+                                    Logger?.WriteLog("");
                                 }
                             }
                             else {
-                                //Logger.WriteLog($"{c.Name} exists");
+                                //Logger?.WriteLog($"{c.Name} exists");
                             }
 
                         }
                         // remover NOT NULL de colunas inexistentes na estrutura.
                         for (int y = 0; y < columns.Rows.Count; y++) {
                             DataRow col = columns.Rows[y];
-                            //Logger.WriteLog(col.Field<String>("TABLE_NAME"));
+                            //Logger?.WriteLog(col.Field<String>("TABLE_NAME"));
                             if (col.Field<String>("TABLE_NAME").ToLower() != t.Name.ToLower())
                                 continue;
                             String nomeCol = col.Field<String>("COLUMN_NAME");
@@ -1036,7 +1020,7 @@ namespace Figlotech.BDados {
 
             rs = Execute(GetQueryGenerator().GenerateInsertQuery(input));
             if (rs == 0) {
-                Logger.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
+                Logger?.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
             retv = rs > 0;
             if (retv && !input.IsPersisted()) {
@@ -1274,7 +1258,7 @@ namespace Figlotech.BDados {
                 if (dt == null)
                     return;
                 if (dt.Rows.Count < 1) {
-                    Logger.WriteLog("Query returned no results.");
+                    Logger?.WriteLog("Query returned no results.");
                     return;
                 }
                 var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
@@ -1314,8 +1298,8 @@ namespace Figlotech.BDados {
                 }
                 Bench.Mark("Build RecordSet");
             }, (x) => {
-                Logger.WriteLog(x.Message);
-                Logger.WriteLog(x.StackTrace);
+                Logger?.WriteLog(x.Message);
+                Logger?.WriteLog(x.StackTrace);
                 Bench.Mark("Build RecordSet");
             });
             return retv;
@@ -1376,7 +1360,7 @@ namespace Figlotech.BDados {
 
         public bool Open() {
             try {
-                Logger.WriteLog($"[{accessId}] BDados Open Connection --");
+                Logger?.WriteLog($"[{accessId}] BDados Open Connection --");
                 if (SqlConnection == null)
                     SqlConnection = new MySqlConnection(Configuration.GetConnectionString());
 
@@ -1385,10 +1369,10 @@ namespace Figlotech.BDados {
                 _simmultaneousConnections++;
             }
             catch (MySqlException x) {
-                Logger.WriteLog($"[{accessId}] BDados Open: {x.Message}");
-                Logger.WriteLog(x.Message);
-                Logger.WriteLog(x.StackTrace);
-                Logger.WriteLog($"BDados Open: {x.Message}");
+                Logger?.WriteLog($"[{accessId}] BDados Open: {x.Message}");
+                Logger?.WriteLog(x.Message);
+                Logger?.WriteLog(x.StackTrace);
+                Logger?.WriteLog($"BDados Open: {x.Message}");
                 if (++fail < 50) {
                     System.Threading.Thread.Sleep(25);
                     return Open();
@@ -1398,7 +1382,7 @@ namespace Figlotech.BDados {
                 }
             }
             catch (Exception x) {
-                Logger.WriteLog($"[{accessId}] BDados Open: {x.Message}");
+                Logger?.WriteLog($"[{accessId}] BDados Open: {x.Message}");
             }
             fail = 0;
             return SqlConnection.State == ConnectionState.Open;
@@ -1440,7 +1424,7 @@ namespace Figlotech.BDados {
             return retv;
         }
 
-        public IJoinBuilder MakeJoin(Action<Entity.JoinDefinition> fn) {
+        public IJoinBuilder MakeJoin(Action<DataAccessAbstractions.JoinDefinition> fn) {
             var retv = new JoinObjectBuilder(this, fn);
             return retv;
         }
@@ -1494,7 +1478,7 @@ namespace Figlotech.BDados {
                         //    Console.Write(thisCol.Field<Object>(x));
                         //    Console.Write("|");
                         //}
-                        //Logger.WriteLog();
+                        //Logger?.WriteLog();
                         lines.Add("");
                         if (thisCol.Field<String>("COLUMN_KEY") == "PRI") {
                             lineOptions.Add("PrimaryKey=true");
@@ -1593,16 +1577,16 @@ namespace Figlotech.BDados {
                     }
                 }
                 var total = Bench?.TotalMark();
-                Logger.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
+                Logger?.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
                 return null;
             }
             catch (Exception x) {
                 var total = Bench?.TotalMark();
-                Logger.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
+                Logger?.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
                 var ex = x;
-                Logger.WriteLog("Detalhes dessa exception:");
+                Logger?.WriteLog("Detalhes dessa exception:");
                 while (ex != null && ex.InnerException != ex) {
-                    Logger.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
+                    Logger?.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
                     ex = ex.InnerException;
                 }
                 //if (WorkingTypes.Length > 0)
@@ -1624,7 +1608,7 @@ namespace Figlotech.BDados {
                     Close();
                 }
                 //var total = Bench?.TotalMark();
-                //Logger.WriteLog(String.Format("(Total: {0,0} milis)", total));
+                //Logger?.WriteLog(String.Format("(Total: {0,0} milis)", total));
             }
 
         }
@@ -1647,11 +1631,11 @@ namespace Figlotech.BDados {
                     Comando.CommandText = QueryText;
                     Comando.CommandTimeout = Configuration.Timeout;
                     int i = 0;
-                    Logger.WriteLog($"[{accessId}] -- Query: {QueryText}");
+                    Logger?.WriteLog($"[{accessId}] -- Query: {QueryText}");
                     // Adiciona os parametros
                     foreach (var param in query.GetParameters()) {
                         Comando.Parameters.AddWithValue(param.Key, param.Value);
-                        Logger.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
+                        Logger?.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
                     }
                     // --
                     DataTable retv = new DataTable();
@@ -1664,19 +1648,19 @@ namespace Figlotech.BDados {
                                 throw new BDadosException("Database did not return any table.");
                             }
                             resultados = ds.Tables[0].Rows.Count;
-                            Logger.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                            Logger?.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                             retv = ds.Tables[0];
                         }
                         catch (Exception x) {
-                            Logger.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                            Logger.WriteLog(x.Message);
-                            Logger.WriteLog(x.StackTrace);
+                            Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                            Logger?.WriteLog(x.Message);
+                            Logger?.WriteLog(x.StackTrace);
                             throw x;
                         }
                         finally {
                             Adaptador.Dispose();
                             Comando.Dispose();
-                            Logger.WriteLog("------------------------------------");
+                            Logger?.WriteLog("------------------------------------");
                         }
                     }
                     return retv;
@@ -1699,9 +1683,9 @@ namespace Figlotech.BDados {
             }
             Bench.Mark("--");
 
-            Logger.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Configuration.Timeout}s timeout]");
+            Logger?.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Configuration.Timeout}s timeout]");
             foreach (var param in query.GetParameters()) {
-                Logger.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
+                Logger?.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
             }
             using (MySqlCommand scom = SqlConnection.CreateCommand()) {
                 try {
@@ -1710,22 +1694,22 @@ namespace Figlotech.BDados {
                         scom.Parameters.AddWithValue(param.Key, param.Value);
                     }
                     scom.CommandTimeout = Configuration.Timeout;
-                    Logger.WriteLog(scom.CommandText);
+                    Logger?.WriteLog(scom.CommandText);
                     Bench.Mark("Prepared Statement");
                     int result = scom.ExecuteNonQuery();
                     var elaps = Bench.Mark("Executed Statement");
-                    Logger.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
+                    Logger?.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                     return result;
                 }
                 catch (Exception x) {
-                    Logger.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench.Mark("Error")} ms]");
-                    Logger.WriteLog(x.Message);
-                    Logger.WriteLog(x.StackTrace);
-                    Logger.WriteLog($"BDados Execute: {x.Message}");
+                    Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench.Mark("Error")} ms]");
+                    Logger?.WriteLog(x.Message);
+                    Logger?.WriteLog(x.StackTrace);
+                    Logger?.WriteLog($"BDados Execute: {x.Message}");
                     throw x;
                 }
                 finally {
-                    Logger.WriteLog("------------------------------------");
+                    Logger?.WriteLog("------------------------------------");
                     scom.Dispose();
                 }
             }
@@ -1739,18 +1723,18 @@ namespace Figlotech.BDados {
                 SqlConnection.Close();
             }
             catch (Exception x) {
-                Logger.WriteLog($"[{accessId}] BDados Close: {x.Message}");
+                Logger?.WriteLog($"[{accessId}] BDados Close: {x.Message}");
             }
         }
 
         public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
             DateTime inicio = DateTime.Now;
             List<T> retv = new List<T>();
-            Logger.WriteLog($"[{accessId}] Executar procedure -- ");
+            Logger?.WriteLog($"[{accessId}] Executar procedure -- ");
             using (SqlConnection = new MySqlConnection(Configuration.GetConnectionString())) {
                 Open();
                 try {
-                    Logger.WriteLog($"[{accessId}] Abriu conexão em [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
+                    Logger?.WriteLog($"[{accessId}] Abriu conexão em [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
                     QueryBuilder query = (QueryBuilder)GetQueryGenerator().GenerateCallProcedure(typeof(T).Name, args);
                     DataTable dt = Query(query);
                     foreach (DataRow r in dt.Rows) {
@@ -1793,7 +1777,7 @@ namespace Figlotech.BDados {
                     Close();
                 }
             }
-            Logger.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
+            Logger?.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
             return retv;
         }
 
@@ -2034,7 +2018,7 @@ namespace Figlotech.BDados {
                     break;
             }
 
-            Logger.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {proofproof}.");
+            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {proofproof}.");
             // CLUMSY
             if (proofproof) {
                 var membersOfT = new List<MemberInfo>();
@@ -2069,7 +2053,7 @@ namespace Figlotech.BDados {
                 //}
             }
             else {
-                Logger.WriteLog(cnd?.ToString());
+                Logger?.WriteLog(cnd?.ToString());
 
                 retv.AddRange(LoadAll<T>(new ConditionParser().ParseExpression<T>(cnd)
                     .If(OrderingType != null).Then()
@@ -2118,7 +2102,7 @@ namespace Figlotech.BDados {
                 return true;
             for (int it = 0; it < rs.Count; it++) {
                 if (rs[it].RID == null) {
-                    rs[it].RID = FTH.GenerateRID();
+                    rs[it].RID = RID.GenerateRID();
                 }
             }
             var members = new List<MemberInfo>();

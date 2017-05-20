@@ -1,5 +1,5 @@
 ﻿using Figlotech;
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;

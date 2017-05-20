@@ -1,4 +1,5 @@
-﻿using Figlotech.BDados.Interfaces;
+﻿using Figlotech.BDados.FileAcessAbstractions;
+using Figlotech.BDados.Interfaces;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;

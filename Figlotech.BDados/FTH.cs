@@ -1,31 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Diagnostics;
-using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Figlotech.BDados.Entity;
-using System.IO;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core;
-using Figlotech.BDados.Interfaces;
 using Figlotech.BDados.Builders;
 using System.Reflection;
-using System.Collections;
-using System.Dynamic;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Linq.Expressions;
 using System.Management;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Requirements;
 using Figlotech.BDados.Attributes;
-using System.Threading;
-using System.Reflection.Emit;
 using Newtonsoft.Json;
-using Figlotech.Core;
 using Figlotech.Autokryptex;
 using Figlotech.BDados.Authentication;
 using Figlotech.BDados.I18n;
@@ -73,21 +58,6 @@ namespace Figlotech.BDados {
             }
 
         }
-        private static string FillBlanks(String rid) {
-            var c = 64 - rid.Length;
-            return FTH.GenerateIdString(rid, c) + rid;
-        }
-        private static Random r = new Random();
-        private static int sequentia = 0;
-        public static String GenerateRID() {
-            IntEx i = new IntEx((DateTime.Now.Ticks * 10000) + (sequentia++ % 10000));
-            i *= 100000000;
-            i *= r.Next(100000000);
-            i *= (long)Math.Pow(FTH.CpuId.Length, 16);
-            //i += cpuhash;
-            return FillBlanks((String)i.ToString(IntEx.Base36));
-        }
-
         public static void RecursiveGiveRids(IDataObject obj) {
             if(obj.RID == null) {
                 obj.RID = FTH.GenerateIdString(obj.GetType().Name, 64);

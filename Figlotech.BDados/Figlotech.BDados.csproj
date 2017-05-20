@@ -32,4 +32,8 @@
     <Reference Include="System.Management" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Tools\" />
+  </ItemGroup>
+
 </Project>

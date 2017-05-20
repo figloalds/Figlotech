@@ -1,7 +1,7 @@
 ﻿
 
 
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Newtonsoft.Json;
 /**
 * Figlotech::Database::Entity::FieldAttribute

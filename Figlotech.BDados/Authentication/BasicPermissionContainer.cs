@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Interfaces;
 
 namespace Figlotech.BDados.Authentication

@@ -8,7 +8,8 @@ using Figlotech.BDados.Attributes;
 * August/2014
 * 
 **/
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.Interfaces;
 using System;
@@ -23,7 +24,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Builders {
     public class JoinObjectBuilder : IJoinBuilder {
-        private Entity.JoinDefinition _join = new Entity.JoinDefinition();
+        private DataAccessAbstractions.JoinDefinition _join = new DataAccessAbstractions.JoinDefinition();
         private BuildParametersHelper _buildParameters;
         private IRdbmsDataAccessor _dataAccessor;
         //public delegate void JoinBuild(Join join);
@@ -36,7 +37,7 @@ namespace Figlotech.BDados.Builders {
             }
         }
 
-        public JoinObjectBuilder(IRdbmsDataAccessor dataAccessor, Action<Entity.JoinDefinition> fn) {
+        public JoinObjectBuilder(IRdbmsDataAccessor dataAccessor, Action<DataAccessAbstractions.JoinDefinition> fn) {
             fn(_join);
             _dataAccessor = dataAccessor;
             try {

@@ -1,0 +1,26 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data.Common;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Figlotech.BDados.DataAccessAbstractions {
+    public interface IQueryBuilder {
+
+        IQueryBuilder Append(string Text, params object[] args);
+        IQueryBuilder Append(IQueryBuilder other);
+
+        IQueryBuilder Build(params IQueryBuilder[] other);
+
+        Dictionary<String, Object> GetParameters();
+        string GetCommandText();
+
+        bool IsEmpty { get; }
+
+        IQueryBuilder If(bool condition);
+        IQueryBuilder Then();
+        IQueryBuilder EndIf();
+        IQueryBuilder Else();
+    }
+}

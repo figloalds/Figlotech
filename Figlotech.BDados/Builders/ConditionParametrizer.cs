@@ -1,5 +1,5 @@
 ﻿
-using Figlotech.BDados.Entity;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core;
 /**
 * Figlotech.BDados.Builders.ConditionParametrizer
