@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <OutputPath>C:\Users\felyp\Dropbox\figlotech\.dist\</OutputPath>
+    <OutputPath>bin\Release\net462\</OutputPath>
   </PropertyGroup>
 
 </Project>

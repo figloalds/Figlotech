@@ -39,6 +39,11 @@ namespace Figlotech.BDados.Entity
             return Id > 0;
         }
 
+        public DataObject() { }
+        public DataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) : base (dataAccessor, ctxProvider) {
+
+        }
+
         private static IntEx _cpuhash;
         private static IntEx CpuHash {
             get {
@@ -54,31 +59,6 @@ namespace Figlotech.BDados.Entity
 
         public List<IValidationRule<T>> ValidationRules { get; set; } = new List<IValidationRule<T>>();
 
-        public DataObject() {
-
-            StackTrace stackTrace = new StackTrace();           // get call stack
-            StackFrame[] stackFrames = stackTrace.GetFrames();  // get method calls (frames)
-
-            // write call stack method names
-            foreach (StackFrame stackFrame in stackFrames) {
-                if (
-                    stackFrame.GetMethod().Name.Contains("DeserializeObject") ||
-                    stackFrame.GetMethod().Name.Contains("LoadAll") ||
-                    stackFrame.GetMethod().Name.Contains("LoadByRid") ||
-                    stackFrame.GetMethod().Name.Contains("BuildObject") ||
-                    stackFrame.GetMethod().Name.Contains("Qualify") ||
-                    stackFrame.GetMethod().Name.Contains("Query")) {
-                    return;
-                }
-            }
-            Init();
-        }
-
-        public DataObject(bool NoInit) {
-            if (!NoInit)
-                Init();
-        }
-
         public override ValidationErrors Validate() {
             ValidationErrors ve = new ValidationErrors();
             var myType = this.GetType();
@@ -93,14 +73,13 @@ namespace Figlotech.BDados.Entity
                 }
             }
 
-            // Here goes LogicalField validation to initialize 
-            // relevant fields for business logic and validation
-            //foreach (var field in myValues.Where((f) => f.GetCustomAttribute<FieldAttribute>() != null)) {
-            //    var info = field.GetCustomAttribute<FieldAttribute>();
-            //    if (!info.AllowNull && ReflectionTool.GetMemberValue(field, this) == null) {
-            //        ve.Add($"{field.Name}", $"{field.Name} cannot be null.");
-            //    }
-            //}
+            var reflector = new ObjectReflector(this);
+            foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
+                var info = field.GetCustomAttribute<ValidationAttribute>();
+                foreach(var error in info.Validate(field, reflector[field])) {
+                    ve.Add(error);
+                }
+            }
 
             // Validations
             foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
