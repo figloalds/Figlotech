@@ -9,5 +9,6 @@ namespace Figlotech.BDados {
         public string AUTH_USER_BLOCKED => "User is blocked.";
         public string AUTH_PASSWORDS_MUST_MATCH => "Password and confirmation must match";
         public string AUTH_USER_ALREADY_EXISTS => "User already exists";
+        public string SCOPY_ACCESSORS_CANNOT_BE_SAME => "SmartCopy cannot copy from a repository back to itself";
     }
 }
