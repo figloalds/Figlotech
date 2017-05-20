@@ -19,19 +19,16 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.Entity
 {
     public abstract class BaseDataObject : 
-        IDataObject, ISaveable, IBusinessObject, IAggregateRoot, 
-        IRequiresLogger, IRequiresContextProvider {
+        IDataObject, ISaveable, IBusinessObject, IAggregateRoot {
 
-        public IContextProvider Context {
-            get; set;
-        } = new DefaultContextProvider();
-        private EntityDefinition definition = null;
-
-        public BaseDataObject() {
-            DependencySolver.Default.Resolve(this);
+        public BaseDataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) {
+            DataAccessor = dataAccessor;
+            ContextProvider = ctxProvider;
         }
 
-        public ILogger Logger { get; set; }
+        public BaseDataObject() {
+            DS.Default.SmartResolve(this);
+        }
 
         public virtual long Id { get; set; }
 
@@ -49,26 +46,10 @@ namespace Figlotech.BDados.Entity
 
         private IDataAccessor dataAccessor;
         [JsonIgnore]
-        public IDataAccessor DataAccessor {
-            get {
-                return dataAccessor;
-            }
-            set {
-                dataAccessor = value;
-                foreach(var m in this.GetType().GetFields()) {
-                    if(m.GetType().GetInterfaces().Contains(typeof(IRequiresDataAccessor))) {
-                        ((IRequiresDataAccessor)m.GetValue(this)).DataAccessor = dataAccessor;
-                    }
-                }
-            }
-        }
+        public IDataAccessor DataAccessor { get; set; }
 
         [JsonIgnore]
         public IContextProvider ContextProvider { get; set; }
-
-        public void SetContextProvider(IContextProvider contextProvider) {
-            ContextProvider = contextProvider;
-        }
 
         public void ForceId(long newId) {
             this.Id = newId;

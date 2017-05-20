@@ -8,6 +8,10 @@
     <OutputPath>C:\Users\felyp\Dropbox\figlotech\.dist\</OutputPath>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>bin\Release\net462\</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
   </ItemGroup>
