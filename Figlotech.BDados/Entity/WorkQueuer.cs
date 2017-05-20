@@ -67,7 +67,7 @@ namespace Figlotech.BDados.Entity {
         Thread SchedulesThread;
         private bool run = false;
         private bool isRunning = false;
-        public static int DefaultSleepInterval = 50;
+        public static int DefaultSleepInterval = 10;
 
         public bool Run { get { return run; } }
         public bool IsRunning { get { return isRunning; } }
