@@ -60,16 +60,6 @@ namespace Figlotech.BDados.Authentication {
             DataAccessor = dataAccessor;
         }
 
-        public BDadosAuthenticator(DependencySolver ds = null) {
-            if (ds == null)
-                return;
-            ds.Resolve(this);
-        }
-
-        public BDadosAuthenticator() {
-            DependencySolver.Default.Resolve(this);
-        }
-        
         private List<UserSession> Sessions = new List<UserSession>();
         private List<Attempt> TrackAttempts = new List<Attempt>();
         public long globalId;

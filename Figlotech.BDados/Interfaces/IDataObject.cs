@@ -8,9 +8,11 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Interfaces {
 
-    public interface IDataObject : IRequiresDataAccessor, ISaveable  {
+    public interface IDataObject : ISaveable  {
         void ForceId(long newId);
         void ForceRID(RID newRid);
+
+        IDataAccessor DataAccessor { get; set; }
 
         void SelfCompute(object Previous = null);
 
@@ -21,7 +23,5 @@ namespace Figlotech.BDados.Interfaces {
         RID RID { get; set; }
 
         bool IsPersisted();
-
-        IContextProvider Context { get; }
     }
 }
