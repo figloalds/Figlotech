@@ -18,6 +18,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         }
 
+        public IQueryGenerator QueryGenerator { get {
+            return RdbmsAccessor?.QueryGenerator;
+        } set { } }
+
+
         private IRdbmsDataAccessor RdbmsAccessor {
             get {
                 if (MainAccessor is IRdbmsDataAccessor)
@@ -57,7 +62,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public IQueryGenerator GetQueryGenerator() {
-            return RdbmsAccessor.GetQueryGenerator();
+            return RdbmsAccessor.QueryGenerator;
         }
 
         public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
@@ -87,5 +92,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> Query<T>(string Query, params object[] args) {
             return RdbmsAccessor.Query<T>(Query, args);
         }
+
     }
 }

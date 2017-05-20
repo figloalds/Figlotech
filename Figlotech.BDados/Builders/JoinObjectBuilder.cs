@@ -282,7 +282,7 @@ namespace Figlotech.BDados.Builders {
             }
 
             // First we generate the DataTable we'll be working with:
-            DataTable dt = GenerateDataTable((_dataAccessor).GetQueryGenerator(), conditions, p, limit, conditionsRoot);
+            DataTable dt = GenerateDataTable((_dataAccessor).QueryGenerator, conditions, p, limit, conditionsRoot);
             _buildParameters = new BuildParametersHelper(ref _join, dt);
             fn(_buildParameters);
             // And validate everything;

@@ -9,12 +9,11 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor {
-        bool CheckStructure(IEnumerable<Type> types, bool resetKeys);
 
         Object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null);
 
-        RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new() ;
-        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() ;
+        RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new();
 
         T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
@@ -30,10 +29,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IJoinBuilder MakeJoin(Action<DataAccessAbstractions.JoinDefinition> fn);
 
         IQueryBuilder GetPreferredQueryBuilder();
-        IQueryGenerator GetQueryGenerator();
+
+        IQueryGenerator QueryGenerator { get; set; }
 
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
-
     }
 }

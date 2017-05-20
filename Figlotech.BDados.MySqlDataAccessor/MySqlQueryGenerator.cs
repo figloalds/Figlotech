@@ -56,9 +56,9 @@ namespace Figlotech.BDados.Builders
             return query;
         }
 
-        public IQueryBuilder GetCreationCommand<T>() where T : IDataObject, new() {
-            String objectName = typeof(T).Name.ToLower();
-            FieldInfo[] columns = typeof(T).GetFields().Where((f)=>f.GetCustomAttribute<FieldAttribute>() != null).ToArray();
+        public IQueryBuilder GetCreationCommand(Type t) {
+            String objectName = t.Name.ToLower();
+            FieldInfo[] columns = t.GetFields().Where((f)=>f.GetCustomAttribute<FieldAttribute>() != null).ToArray();
             if (columns.Length == 0)
                 return null;
             if (objectName == null || objectName.Length == 0 )
@@ -80,13 +80,13 @@ namespace Figlotech.BDados.Builders
             if (ChavePrimaria != null) {
                 CreateTable.Append($"CONSTRAINT PK_{objectName} PRIMARY KEY ({ChavePrimaria.Name} ASC),\n");
             }
-            FieldInfo[] ForeignKeys = columns.Where((f) => f.GetCustomAttribute<ForeignKeyAttribute>() != null).ToArray();
-            for (int i = 0; i < ForeignKeys.Length; i++) {
-                var fk = ForeignKeys[i].GetCustomAttribute<ForeignKeyAttribute>();
-                CreateTable.Append($"CONSTRAINT FK_{objectName}_{ForeignKeys[i].Name}_{fk.referencedType}_{fk.referencedColumn} FOREIGN KEY ({ForeignKeys[i].Name}) REFERENCES {fk.referencedType} ({fk.referencedColumn})");
-                if (i < ForeignKeys.Length - 1)
-                    CreateTable.Append(",\n");
-            }
+            //FieldInfo[] ForeignKeys = columns.Where((f) => f.GetCustomAttribute<ForeignKeyAttribute>() != null).ToArray();
+            //for (int i = 0; i < ForeignKeys.Length; i++) {
+            //    var fk = ForeignKeys[i].GetCustomAttribute<ForeignKeyAttribute>();
+            //    CreateTable.Append($"CONSTRAINT FK_{objectName}_{ForeignKeys[i].Name}_{fk.referencedType}_{fk.referencedColumn} FOREIGN KEY ({ForeignKeys[i].Name}) REFERENCES {fk.referencedType} ({fk.referencedColumn})");
+            //    if (i < ForeignKeys.Length - 1)
+            //        CreateTable.Append(",\n");
+            //}
             CreateTable.Append(" );");
             return CreateTable;
         }
@@ -418,6 +418,30 @@ namespace Figlotech.BDados.Builders
                 sb.Append(fields[i].Name);
             }
             return sb;
+        }
+
+        public IQueryBuilder InformationSchemaQueryTables(String schema) {
+             
+            return new QueryBuilder("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
+        }
+        public IQueryBuilder InformationSchemaQueryKeys(string schema) {
+            return new QueryBuilder("SELECT TABLE_NAME FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+        }
+
+        public IQueryBuilder RenameTable(string tabName, string newName) {
+            return new QueryBuilder($"RENAME TABLE {tabName} TO {newName};");
+        }
+
+        public IQueryBuilder DropForeignKey(string target, string constraint) {
+            return new QueryBuilder($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
+        }
+
+        public IQueryBuilder AddColumn(string table, string columnDefinition) {
+            return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD COLUMN {columnDefinition};");
+        }
+
+        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
+            return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD CONSTRAINT fk_{table.ToLower()}_{column.ToLower()} FOREIGN KEY ({column}) REFERENCES {refTable.ToLower()}({refColumn})");
         }
     }
 }

@@ -19,6 +19,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> conjuntoInput) where T : IDataObject, new();
         IQueryBuilder GenerateMultiUpdate<T>(RecordSet<T> inputRecordset) where T : IDataObject, new();
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
-        IQueryBuilder GetCreationCommand<T>() where T : IDataObject, new();
+        IQueryBuilder GetCreationCommand(Type t);
+        IQueryBuilder InformationSchemaQueryTables(string schema);
+        IQueryBuilder InformationSchemaQueryKeys(string schema);
+        IQueryBuilder RenameTable(string tabName, string v);
+        IQueryBuilder DropForeignKey(string target, string constraint);
+        IQueryBuilder AddColumn(string tableName,string columnDefinition);
+        IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn);
     }
 }
