@@ -5,8 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
-
-    public class Benchmarker {
+     
+    public class Benchmarker : IBenchmarker {
         private class TimeMark {
             public DateTime Timestamp;
             public String Name;
@@ -19,12 +19,12 @@ namespace Figlotech.BDados.Helpers {
         String myName;
         List<TimeMark> marks = new List<TimeMark>();
 
-        public bool WriteToOutput { get; set; } = true;
-
         public Benchmarker(String name) {
             myName = name;
             marks.Add(new TimeMark(myName));
         }
+
+        public bool WriteToStdout { get; set; } = true;
 
         public double Mark(String txt) {
             marks.Add(new TimeMark(txt));
@@ -42,16 +42,22 @@ namespace Figlotech.BDados.Helpers {
             marks.Add(new TimeMark(myName));
             var retv = marks[marks.Count - 1].Timestamp
                 .Subtract(marks[0].Timestamp).TotalMilliseconds;
-            if (WriteToOutput) {
+            if (WriteToStdout) {
                 Console.WriteLine($"-- PERFORMANCE -----------");
                 Console.WriteLine($"{myName}");
                 Console.WriteLine($"--------------------------");
-                for(int i = 1; i < marks.Count; i++) {
+                double line = 0;
+                Console.WriteLine($" | 0ms ");
+                for (int i = 1; i < marks.Count-1; i++) {
                     var time = marks[i]
                         .Timestamp.Subtract(marks[i - 1].Timestamp).TotalMilliseconds;
+                    var time2 = marks[i+1]
+                        .Timestamp.Subtract(marks[i].Timestamp).TotalMilliseconds;
+                    line += time;
                     var name = marks[i - 1].Name;
-                    Console.WriteLine($"{name}: {time}ms");
+                    Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
                 }
+                Console.WriteLine($" v {retv}ms");
                 Console.WriteLine($"--------------------------");
                 Console.WriteLine($"Total: {retv}ms");
             }

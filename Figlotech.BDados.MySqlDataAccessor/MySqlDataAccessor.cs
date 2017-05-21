@@ -848,7 +848,7 @@ namespace Figlotech.BDados {
                     aid = ++accessId;
                     if (Bench == null) {
                         Bench = new Benchmarker($"---- Access [{++aid}]");
-                        Bench.WriteToOutput = showPerformanceLogs;
+                        Bench.WriteToStdout = showPerformanceLogs;
                     }
                     Open();
                     lock (SqlConnection) {

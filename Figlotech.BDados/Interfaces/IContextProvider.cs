@@ -10,8 +10,6 @@ namespace Figlotech.BDados.Interfaces {
         void Set(String name, Object value);
         Object Get(String name);
 
-        Object Get(Type t);
-
         T Get<T>(string name);
     }
 }
