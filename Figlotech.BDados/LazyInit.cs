@@ -40,7 +40,7 @@ namespace Figlotech.BDados
             initFun = initFunction;
         }
 
-        public static explicit operator T(Lazy<T> input) {
+        public static implicit operator T(Lazy<T> input) {
             return input.Value;
         }
 

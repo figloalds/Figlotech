@@ -88,26 +88,26 @@ namespace Figlotech.BDados.Authentication {
             return s.Token;
         }
 
-        public TUser CheckLogin(String userName, String password) {
-            var userQuery = DataAccessor.LoadAll<TUser>(
-                (u) => u.Username == userName);
-            if (!userQuery.Any()) {
-                TrackAttempt(userName, false);
-                throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
-            }
-            var loadedUser = userQuery.First();
+        public IUser CheckLogin(IUser loadedUser, String password) {
+            
             String criptPass = AuthenticationUtils.HashPass(password, loadedUser.RID);
             if(loadedUser.Password != criptPass) {
+                TrackAttempt(loadedUser?.RID, false);
                 throw new ValidationException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
             }
             if (!loadedUser.isActive) {
+                TrackAttempt(loadedUser?.RID, false);
                 throw new ValidationException(FTH.Strings.AUTH_USER_BLOCKED);
             }
-            return userQuery.FirstOrDefault();
+            return loadedUser;
         }
 
-        public IUserSession Login(String Username, String Password) {
-            var user = CheckLogin(Username, Password);
+        public IUserSession Login(IUser user, string attemptedPassword) {
+            if (user == null) {
+                //TrackAttempt(user?.RID, false);
+                throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
+            }
+            user = CheckLogin(user, attemptedPassword);
             if (user != null) {
                 var sess = new TSession {
                     User = user.RID,
