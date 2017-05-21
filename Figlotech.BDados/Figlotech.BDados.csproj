@@ -11,10 +11,13 @@
   <ItemGroup>
     <Compile Remove="FunctionalExtension\**" />
     <Compile Remove="Interfaces\Extensions\**" />
+    <Compile Remove="Tools\**" />
     <EmbeddedResource Remove="FunctionalExtension\**" />
     <EmbeddedResource Remove="Interfaces\Extensions\**" />
+    <EmbeddedResource Remove="Tools\**" />
     <None Remove="FunctionalExtension\**" />
     <None Remove="Interfaces\Extensions\**" />
+    <None Remove="Tools\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -30,10 +33,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Management" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Tools\" />
   </ItemGroup>
 
 </Project>

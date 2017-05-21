@@ -18,12 +18,12 @@ namespace Figlotech.BDados.Authentication {
     public class UserSession {
         public static int MaximumInactiveSpanInMinutes = 60;
 
-        public UserSession(IBDadosAuthenticator auth) {
+        public UserSession(IAuthenticator auth) {
             Authenticator = auth;
         }
 
         public String UserRID;
-        public IBDadosUserSession Session;
+        public IUserSession Session;
         public String Username;
         public String Token;
         public DateTime Expiry = DateTime.Now.Add(TimeSpan.FromMinutes(MaximumInactiveSpanInMinutes));
@@ -33,11 +33,11 @@ namespace Figlotech.BDados.Authentication {
         }
 
         [JsonIgnore]
-        protected IBDadosAuthenticator Authenticator;
+        protected IAuthenticator Authenticator;
 
-        public IBDadosPermissionsContainer Permissions;
+        public IPermissionsContainer Permissions;
 
-        public IBDadosUser User { get; set; }
+        public IUser User { get; set; }
 
         public void Logoff() {
             Authenticator.Logoff(Session);
@@ -45,9 +45,9 @@ namespace Figlotech.BDados.Authentication {
     }
 
     public class BDadosAuthenticator<TUser, TSession>
-        : IBDadosAuthenticator
-        where TUser: IBDadosUser, new()
-        where TSession: IBDadosUserSession, new() {
+        : IAuthenticator
+        where TUser: IUser, new()
+        where TSession: IUserSession, new() {
 
         public IDataAccessor DataAccessor { get; set; }
 
@@ -78,7 +78,7 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
-        private String New(IBDadosUser User, TSession Session, String Token) {
+        private String New(IUser User, TSession Session, String Token) {
             UserSession s = new UserSession(this);
             s.Token = Token;
             s.UserRID = User.RID;
@@ -106,7 +106,7 @@ namespace Figlotech.BDados.Authentication {
             return userQuery.FirstOrDefault();
         }
 
-        public IBDadosUserSession Login(String Username, String Password) {
+        public IUserSession Login(String Username, String Password) {
             var user = CheckLogin(Username, Password);
             if (user != null) {
                 var sess = new TSession {
@@ -128,7 +128,7 @@ namespace Figlotech.BDados.Authentication {
             return GetSession(Token) != null;
         }
 
-        public void Logoff(IBDadosUserSession s) {
+        public void Logoff(IUserSession s) {
             Sessions.RemoveAll(a=> a.Token == s.Token);
             if(DataAccessor is IRdbmsDataAccessor) {
                 (DataAccessor as IRdbmsDataAccessor).Access((bd) => {
@@ -142,7 +142,7 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
-        public IBDadosUserSession GetSession(String Token) {
+        public IUserSession GetSession(String Token) {
             var v = (from a in Sessions where a.Token == Token select a);
             if (v.Any())
                 return v.First().Session;
@@ -164,19 +164,19 @@ namespace Figlotech.BDados.Authentication {
             return null;
         }
 
-        public bool CanCreate(IBDadosUserSession Session, int permission) {
+        public bool CanCreate(IUserSession Session, int permission) {
             return Session?.CanCreate(permission) ?? false;
         }
-        public bool CanRead(IBDadosUserSession Session, int permission) {
+        public bool CanRead(IUserSession Session, int permission) {
             return Session?.CanRead(permission) ?? false;
         }
-        public bool CanUpdate(IBDadosUserSession Session, int permission) {
+        public bool CanUpdate(IUserSession Session, int permission) {
             return Session?.CanUpdate(permission) ?? false;
         }
-        public bool CanDelete(IBDadosUserSession Session, int permission) {
+        public bool CanDelete(IUserSession Session, int permission) {
             return Session?.CanDelete(permission) ?? false;
         }
-        public bool CanAuthorize(IBDadosUserSession Session, int permission) {
+        public bool CanAuthorize(IUserSession Session, int permission) {
             return Session?.CanAuthorize(permission) ?? false;
         }
         public bool CanCreate(String Token, int permission) {
@@ -213,7 +213,7 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
-        public IBDadosUser ForceCreateUser(string userName, string password) {
+        public IUser ForceCreateUser(string userName, string password) {
             TUser retv = new TUser();
             retv.Username = userName;
             retv.Password = AuthenticationUtils.HashPass(password, retv.RID);
@@ -222,20 +222,20 @@ namespace Figlotech.BDados.Authentication {
             }
             return retv;
         }
-        public IBDadosUser CreateUserSecure(string userName, string password, string confirmPassword) {
+        public IUser CreateUserSecure(string userName, string password, string confirmPassword) {
             if (password != confirmPassword) {
                 throw new ValidationException(FTH.Strings.AUTH_PASSWORDS_MUST_MATCH);
             }
             return ForceCreateUser(userName, password);
         }
 
-        public bool ForcePassword(IBDadosUser user, string newPassword) {
+        public bool ForcePassword(IUser user, string newPassword) {
             user.Password = AuthenticationUtils.HashPass(newPassword, user.RID);
             DataAccessor.SaveItem(user);
             return true;
         }
 
-        public bool ChangeUserPasswordSecure(IBDadosUser user, string oldPassword, string newPassword, string newPasswordConfirmation) {
+        public bool ChangeUserPasswordSecure(IUser user, string oldPassword, string newPassword, string newPasswordConfirmation) {
             if(user.Password != AuthenticationUtils.HashPass(oldPassword, user.RID)) {
                 throw new ValidationException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
             }

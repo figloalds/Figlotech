@@ -8,13 +8,13 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Authentication {
-    public interface IBDadosUserSession : IDataObject {
+    public interface IUserSession : IDataObject {
         String User { get; set; }
         String Token { get; set; }
         bool isActive { get; set; }
         DateTime StartTime { get; set; }
         DateTime? EndTime { get; set; }
 
-        IBDadosPermissionsContainer Permission { get; set; }
+        IPermissionsContainer Permission { get; set; }
     }
 }
