@@ -9,7 +9,8 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);
-    public interface IQueryGenerator {
+    public interface IQueryGenerator
+    {
         IQueryBuilder GenerateInsertQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput);
@@ -21,10 +22,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
         IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder InformationSchemaQueryTables(string schema);
+        IQueryBuilder InformationSchemaQueryColumns(string schema);
         IQueryBuilder InformationSchemaQueryKeys(string schema);
         IQueryBuilder RenameTable(string tabName, string v);
         IQueryBuilder DropForeignKey(string target, string constraint);
-        IQueryBuilder AddColumn(string tableName,string columnDefinition);
+        IQueryBuilder AddColumn(string tableName, string columnDefinition);
         IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn);
+        IQueryBuilder RenameColumn(string table, string column, string newName);
+        IQueryBuilder Purge(string table, string column, string refTable, string refColumn);
     }
 }

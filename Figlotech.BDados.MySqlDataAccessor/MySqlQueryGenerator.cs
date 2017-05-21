@@ -420,28 +420,46 @@ namespace Figlotech.BDados.Builders
             return sb;
         }
 
-        public IQueryBuilder InformationSchemaQueryTables(String schema) {
-             
-            return new QueryBuilder("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
+        public IQueryBuilder InformationSchemaQueryTables(String schema)
+        {
+            return new QueryBuilder("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
         }
-        public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder("SELECT TABLE_NAME FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+        public IQueryBuilder InformationSchemaQueryColumns(String schema)
+        {
+            return new QueryBuilder("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
+        }
+        public IQueryBuilder InformationSchemaQueryKeys(string schema)
+        {
+            return new QueryBuilder("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
         }
 
-        public IQueryBuilder RenameTable(string tabName, string newName) {
+        public IQueryBuilder RenameTable(string tabName, string newName)
+        {
             return new QueryBuilder($"RENAME TABLE {tabName} TO {newName};");
         }
 
-        public IQueryBuilder DropForeignKey(string target, string constraint) {
+        public IQueryBuilder RenameColumn(string table, string column, string newDefinition)
+        {
+            return new QueryBuilder($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
+        }
+
+        public IQueryBuilder DropForeignKey(string target, string constraint)
+        {
             return new QueryBuilder($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
         }
 
-        public IQueryBuilder AddColumn(string table, string columnDefinition) {
+        public IQueryBuilder AddColumn(string table, string columnDefinition)
+        {
             return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD COLUMN {columnDefinition};");
         }
 
-        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
+        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn)
+        {
             return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD CONSTRAINT fk_{table.ToLower()}_{column.ToLower()} FOREIGN KEY ({column}) REFERENCES {refTable.ToLower()}({refColumn})");
+        }
+        public IQueryBuilder Purge(string table, string column, string refTable, string refColumn)
+        {
+            return new QueryBuilder($"DELETE FROM {table.ToLower()} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable.ToLower()})");
         }
     }
 }
