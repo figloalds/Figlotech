@@ -145,18 +145,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private bool WorkOnTables(DataTable tables, DataTable keys) {
+            // Rename tables pass
             foreach (DataRow a in tables.Rows) {
                 var tabName = a.Field<String>("TABLE_NAME");
                 foreach (var type in workingTypes) {
                     var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
                     if (oldNameAtt != null) {
-                        DekeyTable(tabName, keys);
                         if (tabName.ToLower() == oldNameAtt.Name.ToLower()) {
+                            DekeyTable(tabName, keys);
                             Exec(DataAccessor.QueryGenerator.RenameTable(tabName, type.Name.ToLower()));
                         }
                     }
                 }
             }
+            // Create tables pass
             foreach (var type in workingTypes) {
                 var found = false;
                 foreach (DataRow a in tables.Rows) {
