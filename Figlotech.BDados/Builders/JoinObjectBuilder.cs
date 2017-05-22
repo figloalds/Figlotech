@@ -1,5 +1,5 @@
 ﻿
-using Figlotech.BDados.Attributes;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 /**
 * Figlotech.BDados.Builders.JoinBuilder
 * Default implementation for IJoinBuilder

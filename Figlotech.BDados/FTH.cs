@@ -9,7 +9,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Management;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Attributes;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Newtonsoft.Json;
 using Figlotech.Autokryptex;
 using Figlotech.BDados.Authentication;

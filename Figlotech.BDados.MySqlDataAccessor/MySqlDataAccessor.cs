@@ -13,7 +13,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using Figlotech.BDados.Helpers;
 using MySql.Data.MySqlClient;
-using Figlotech.BDados.Attributes;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 
 namespace Figlotech.BDados {
@@ -735,7 +735,7 @@ namespace Figlotech.BDados {
                     lines.Add($"// Arquivo gerado automaticamente.");
                     lines.Add($"// --------------------------------------------------");
                     lines.Add("using System;");
-                    lines.Add("using Figlotech.BDados.Attributes;");
+                    lines.Add("using Figlotech.BDados.DataAccessAbstractions.Attributes;");
                     lines.Add("using Figlotech.BDados.Interfaces;");
                     lines.Add("using Figlotech.BDados.Entity;");
                     lines.Add("");
