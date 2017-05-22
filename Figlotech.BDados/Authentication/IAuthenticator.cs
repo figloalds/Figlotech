@@ -1,11 +1,8 @@
-﻿using Figlotech.BDados.Authentication;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Linq.Expressions;
 
-namespace Figlotech.BDados.Authentication {
+namespace Figlotech.BDados.Authentication
+{
     /// This is a trick I've learned from MICROSOFT (reading their H4CKZ0R sources)
     /// You can create an abstract non-generic class so that you can reference
     /// Its abstract non-genericness, but still use generiqued dudes to do the
@@ -19,7 +16,7 @@ namespace Figlotech.BDados.Authentication {
         /// <param name="userName">Self explanatory: Username</param>
         /// <param name="password">Self explanatory: Password</param>
         /// <returns></returns>
-        IUserSession Login(IUser user, string password);
+        IUserSession Login<T>(Expression<Func<T,bool>> fetchUserFunction, string password) where T:IUser,new();
         /// <summary>
         /// This is supposed to log the user off, destroy the token do whatever
         /// but not allow that token to access again.

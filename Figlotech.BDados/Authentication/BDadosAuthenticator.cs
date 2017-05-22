@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 
 namespace Figlotech.BDados.Authentication {
 
@@ -102,12 +103,14 @@ namespace Figlotech.BDados.Authentication {
             return loadedUser;
         }
 
-        public IUserSession Login(IUser user, string attemptedPassword) {
+        public IUserSession Login<T>(Expression<Func<T, bool>> fetchUserFunction, string password) where T : IUser, new()
+        {
+            var user = DataAccessor.LoadAll<T>(fetchUserFunction).FirstOrDefault();
             if (user == null) {
                 //TrackAttempt(user?.RID, false);
                 throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
             }
-            user = CheckLogin(user, attemptedPassword);
+            user = (T) CheckLogin((IUser) user, password);
             if (user != null) {
                 var sess = new TSession {
                     User = user.RID,

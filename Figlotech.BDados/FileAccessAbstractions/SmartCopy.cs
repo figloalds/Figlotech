@@ -96,6 +96,23 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         int workedFiles = 0;
 
+        /// <summary>
+        /// <para>
+        /// Set to null to use default copy criteria
+        /// Default criteria uses SmartCopyOptions to decide rather the file should be copied or not.
+        /// </para>
+        /// <para>
+        /// The copier will run your function to decide if it should or not copy the file, return true and the copier will copy
+        /// return false and it will not, the parameter is the relative file path (you can use it with your file accessor
+        /// </para>
+        /// <para>
+        /// With a new revolutionary technology you can define your won copy criteria through a Lambda expression.
+        /// </para>
+        /// </summary>
+        public Func<String, bool> CopyDecisionCriteria { get; set; }
+
+        public Action<String> OnFileStaged { get; set; }
+
         private bool Changed(IFileAccessor o, IFileAccessor d, String f) {
             bool changed = false;
             var destLen = d.GetSize(f);
@@ -136,7 +153,15 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             origin.ForFilesIn(path, (f) => {
                 wq.Enqueue(() => {
 
-                    var changed = Changed(origin, destination, f);
+                    try {
+                        OnFileStaged?.Invoke(f);
+                    } catch (Exception) {
+                        return;
+                    }
+
+                    var changed = CopyDecisionCriteria != null ?
+                        CopyDecisionCriteria(f) :
+                        Changed(origin, destination, f);
 
                     if (changed) {
                         processFile(origin, destination, f);
