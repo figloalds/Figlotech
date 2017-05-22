@@ -27,6 +27,9 @@ namespace Figlotech.BDados.Helpers {
         public bool WriteToStdout { get; set; } = true;
 
         public double Mark(String txt) {
+            if(marks.Count == 0) {
+                marks.Add(new TimeMark(myName));
+            }
             marks.Add(new TimeMark(txt));
             var retv = marks[marks.Count - 1]
                 .Timestamp.Subtract(marks[marks.Count - 2].Timestamp).TotalMilliseconds;
@@ -61,6 +64,8 @@ namespace Figlotech.BDados.Helpers {
                 Console.WriteLine($"--------------------------");
                 Console.WriteLine($"Total: {retv}ms");
             }
+
+            marks.Clear();
             return retv;
         }
     }
