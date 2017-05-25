@@ -35,15 +35,14 @@ namespace Figlotech.BDados {
             var objBuilder = new ObjectReflector();
             var retv = new T();
             objBuilder.Slot(retv);
-            Parallel.ForEach(fields, (col) =>
-            {
-                if (!columns.Contains(col.Name)) return;
+            foreach (var col in fields) {
+                if (!columns.Contains(col.Name)) continue;
                 var typeofCol = ReflectionTool.GetTypeOf(col);
 
                 object o = dr.Field<object>(col.Name);
                 var tocUlType = Nullable.GetUnderlyingType(typeofCol);
                 if (typeofCol.IsValueType && o == null) {
-                    return;
+                    continue;
                 }
                 if (tocUlType != null) {
                     typeofCol = Nullable.GetUnderlyingType(typeofCol);
@@ -61,24 +60,22 @@ namespace Figlotech.BDados {
                 else {
                     objBuilder[col] = o;
                 }
-            });
+            }
             return retv;
         }
 
         public static void Map<T>(IList<T> input, DataTable dt) where T : new() {
+            var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            String[] columnNames = new string[dt.Columns.Count];
-            for (int c = 0; c < dt.Columns.Count; c++) {
-                columnNames[c] = dt.Columns[c].ColumnName;
-            }
-            var retv = new T[dt.Rows.Count];
             var objBuilder = new ObjectReflector();
-            for (int i = 0; i < dt.Rows.Count; i++) {
-                retv[i] = Map<T>(dt.Rows[i], dt.Columns);
-            }
-            foreach (var a in retv) {
-                input.Add(a);
-            }
+            Parallel.For(0, dt.Rows.Count, (i) =>
+            {
+                var val = Map<T>(dt.Rows[i], dt.Columns);
+                lock (input) {
+                    input.Add(val);
+                }
+            });
+            Console.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
         }
 
         public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(()=> new BDadosEnglishStringsProvider());

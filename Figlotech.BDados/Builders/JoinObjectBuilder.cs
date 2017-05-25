@@ -156,8 +156,12 @@ namespace Figlotech.BDados.Builders
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
+                                if (objBuilder[fieldAlias] == null) {
+                                    objBuilder[fieldAlias] = Activator.CreateInstance(objectType);
+                                }
                                 foreach (var a in newList) {
                                     var inVal = Convert.ChangeType(a, ulType);
+
                                     addMethod.Invoke(objBuilder[fieldAlias], new object[] { inVal });
                                 }
                                 break;
