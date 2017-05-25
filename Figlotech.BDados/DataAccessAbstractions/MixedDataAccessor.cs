@@ -165,10 +165,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return UsableAccessor.ForceExist<T>(Default, cnd);
         }
 
-        public T Instantiate<T>() where T : IDataObject, new() {
-            return UsableAccessor.Instantiate<T>();
-        }
-
         public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
             return UsableAccessor.LoadAll<T>(condicoes, page??1, limit);
         }
@@ -177,7 +173,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return UsableAccessor.LoadById<T>(Id);
         }
 
-        public T LoadByRid<T>(RID RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(String RID) where T : IDataObject, new() {
             return UsableAccessor.LoadByRid<T>(RID);
         }
 

@@ -23,20 +23,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         internal IDataAccessor dataAccessor;
 
-        public IDataAccessor DataAccessor {
-            get {
-                return dataAccessor;
-            }
-            set {
-                if(dataAccessor != value) {
-                    foreach (var a in this) {
-                        a.DataAccessor = dataAccessor;
-                        a.Id = 0;
-                    }
-                    dataAccessor = value;
-                }
-            }
-        }
+        public IDataAccessor DataAccessor { get; set; }
 
         public Type __BDadosTipoTabela {
             get {
@@ -109,10 +96,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.Add(i);
             }
             transport = null;
-
-            for(int i = 0; i < this.Count; i++) {
-                this[i].DataAccessor = this.DataAccessor;
-            }
 
             LimitResults = null;
             OrderingMember = null;

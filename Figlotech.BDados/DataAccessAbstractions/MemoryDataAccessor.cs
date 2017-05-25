@@ -324,7 +324,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return cachedValues.FirstOrDefault();
         }
 
-        public T LoadByRid<T>(RID RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(String RID) where T : IDataObject, new() {
             if (RID == null)
                 return default(T);
             var cachedValues = CacheLoad<T>((t) => t.RID == RID);

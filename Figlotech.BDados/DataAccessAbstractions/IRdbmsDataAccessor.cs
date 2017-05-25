@@ -8,7 +8,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public interface IRdbmsDataAccessor : IDataAccessor {
+    public interface IRdbmsDataAccessor : IDataAccessor
+    {
+        IQueryGenerator QueryGenerator { get; }
 
         Object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null);
 
@@ -18,21 +20,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
 
-        List<T> Query<T>(IQueryBuilder Query);
-        List<T> Query<T>(String Query, params object[] args);
+        List<T> Query<T>(IQueryBuilder Query) where T : new();
+        List<T> Query<T>(String Query, params object[] args) where T : new();
 
         DataTable Query(IQueryBuilder Query);
         DataTable Query(String Query, params object[] args);
 
         String SchemaName { get; }
 
-        IJoinBuilder MakeJoin(Action<DataAccessAbstractions.JoinDefinition> fn);
+        IJoinBuilder MakeJoin(Action<JoinDefinition> fn);
 
         IQueryBuilder GetPreferredQueryBuilder();
-
-        IQueryGenerator QueryGenerator { get; set; }
+        IQueryGenerator GetQueryGenerator();
 
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
+
     }
 }

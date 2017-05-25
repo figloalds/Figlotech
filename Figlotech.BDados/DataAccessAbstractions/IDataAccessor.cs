@@ -4,17 +4,14 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public interface IDataAccessor {
-
-        T Instantiate<T>() where T : IDataObject, new();
-
+    public interface IDataAccessor
+    {
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
 
-        RecordSet<T> LoadAll<T>(Expression<Func<T,bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
 
         T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
-
-        T LoadByRid<T>(RID RID) where T : IDataObject, new();
+        T LoadByRid<T>(String RID) where T : IDataObject, new();
         T LoadById<T>(long Id) where T : IDataObject, new();
 
         bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> rids) where T : IDataObject, new();

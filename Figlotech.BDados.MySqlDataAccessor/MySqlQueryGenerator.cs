@@ -25,30 +25,20 @@ using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.Builders
 {
-    public class MySqlQueryGenerator : IQueryGenerator {
+    public class MySqlQueryGenerator : IQueryGenerator
+    {
 
-        public IQueryBuilder GenerateInsertQuery(IDataObject inputObject)
-        {
+        public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             QueryBuilder query = new QueryBuilder($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
-            query.Append(GenerateFieldsString(inputObject, true));
+            query.Append(GenerateFieldsString(inputObject.GetType(), true));
             query.Append(")");
             query.Append("VALUES (");
-            List<FieldInfo> lifi = new List<FieldInfo>();
-            foreach (var fi in inputObject.GetType().GetFields()
-                .Where((a)=>a.GetCustomAttribute(typeof(FieldAttribute))!= null)
-                .ToArray()) {
-                if (fi.GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
-                    continue;
-                foreach (var at in fi.CustomAttributes) {
-                    if (at.AttributeType == typeof(FieldAttribute)) {
-                        lifi.Add(fi);
-                    }
-                }
-            }
-            for (int i = 0; i < lifi.Count; i++) {
-                query.Append($"@{i + 1}", lifi[i].GetValue(inputObject));
-                if (i < lifi.Count - 1) {
+            var members = GetMembers(inputObject.GetType());
+            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            for (int i = 0; i < members.Count; i++) {
+                query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
+                if (i < members.Count - 1) {
                     query.Append(",");
                 }
             }
@@ -58,25 +48,38 @@ namespace Figlotech.BDados.Builders
 
         public IQueryBuilder GetCreationCommand(Type t) {
             String objectName = t.Name.ToLower();
-            FieldInfo[] columns = t.GetFields().Where((f)=>f.GetCustomAttribute<FieldAttribute>() != null).ToArray();
-            if (columns.Length == 0)
+
+            List<MemberInfo> lifi = new List<MemberInfo>();
+            var members = ReflectionTool.FieldsAndPropertiesOf(t);
+            foreach (var fi in members
+                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                .ToArray()) {
+                if (fi.GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                    continue;
+                foreach (var at in fi.CustomAttributes) {
+                    if (at.AttributeType == typeof(FieldAttribute)) {
+                        lifi.Add(fi);
+                    }
+                }
+            }
+            if (lifi.Count == 0)
                 return null;
-            if (objectName == null || objectName.Length == 0 )
+            if (objectName == null || objectName.Length == 0)
                 return null;
             //ForeignKeys = ObterForeignKeys();
             QueryBuilder CreateTable = new QueryBuilder($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
-            for (int i = 0; i < columns.Length; i++) {
-                var info = columns[i].GetCustomAttribute<FieldAttribute>();
-                CreateTable.Append($"{columns[i].Name}");
+            for (int i = 0; i < lifi.Count; i++) {
+                var info = lifi[i].GetCustomAttribute<FieldAttribute>();
+                CreateTable.Append($"{lifi[i].Name}");
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Type);
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options);
-                if (i != columns.Length - 1) {
+                if (i != lifi.Count - 1) {
                     CreateTable.Append(", \n");
                 }
             }
-            var ChavePrimaria = columns.Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null).FirstOrDefault();
+            var ChavePrimaria = lifi.Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null).FirstOrDefault();
             if (ChavePrimaria != null) {
                 CreateTable.Append($"CONSTRAINT PK_{objectName} PRIMARY KEY ({ChavePrimaria.Name} ASC),\n");
             }
@@ -91,11 +94,10 @@ namespace Figlotech.BDados.Builders
             return CreateTable;
         }
 
-        public IQueryBuilder GenerateCallProcedure(string name, object[] args)
-        {
+        public IQueryBuilder GenerateCallProcedure(string name, object[] args) {
             QueryBuilder query = new QueryBuilder("CALL {name}");
             for (int i = 0; i < args.Length; i++) {
-                if(i == 0) {
+                if (i == 0) {
                     query.Append("(");
                 }
                 query.Append($"@{i + 1}", args[i]);
@@ -158,7 +160,7 @@ namespace Figlotech.BDados.Builders
             }
             Query.Append($"\tsub.*\n\t FROM (SELECT\n");
             for (int i = 0; i < Tabelas.Count; i++) {
-                if(!capturedInSub.Contains(i)) {
+                if (!capturedInSub.Contains(i)) {
                     continue;
                 }
                 Query.Append($"\t\t-- Tabela {tableNames[i]}\n");
@@ -222,7 +224,7 @@ namespace Figlotech.BDados.Builders
                 //if (condicoes.GetCommandText().ToLower().Contains("order by")) {
                 //    Query.Append(condicoes.GetCommandText().Substring(0, condicoes.GetCommandText().ToUpper().IndexOf("ORDER BY")), condicoes.GetParameters().Select((a) => a.Value).ToArray());
                 //} else {
-                    Query.Append(conditions);
+                Query.Append(conditions);
                 //}
             }
             if (limit != null) {
@@ -240,12 +242,13 @@ namespace Figlotech.BDados.Builders
                 var onClause = ArgsJuncoes[i];
                 onClause = onClause.Replace($"{aliases[i]}.", "##**##");
                 var m = Regex.Match(onClause, "(\\w+)\\.").Groups[0].Value;
-                if (capPrefixes.Contains(m.Replace(".",""))) {
+                if (capPrefixes.Contains(m.Replace(".", ""))) {
                     onClause = Regex.Replace(onClause, "(\\w+)\\.", "sub.$1_");
                 }
                 if (capPrefixes.Contains(aliases[i])) {
                     onClause = onClause.Replace("##**##", $"sub.{aliases[i]}_");
-                } else {
+                }
+                else {
                     onClause = onClause.Replace("##**##", $"{aliases[i]}.");
                 }
                 Query.Append($"\t{joinTypes[i].ToString().Replace('_', ' ').ToUpper()} JOIN {tableNames[i]} AS {aliases[i]} ON {onClause}\n");
@@ -253,36 +256,34 @@ namespace Figlotech.BDados.Builders
             return Query;
         }
 
-        public IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput)
-        {
+        public IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput) {
             return new QueryBuilder();
         }
 
-        public IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new()
-        {
-            BaseDataObject tab = ((BaseDataObject)Activator.CreateInstance(typeof(T)));
+        public IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new() {
+            var type = typeof(T);
             QueryBuilder Query = new QueryBuilder("SELECT ");
-            Query.Append(GenerateFieldsString(tab, false));
-            Query.Append($"FROM {tab.GetType().Name.ToLower()} AS a;");
+            Query.Append(GenerateFieldsString(type, false));
+            Query.Append($"FROM {type.Name.ToLower()} AS a;");
             return Query;
         }
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null) where T : IDataObject, new() {
-            BaseDataObject tab = ((BaseDataObject)Activator.CreateInstance(typeof(T)));
+            var type = typeof(T);
             QueryBuilder Query = new QueryBuilder("SELECT ");
-            Query.Append(GenerateFieldsString(tab, false));
-            Query.Append(String.Format("FROM {0} AS a", tab.GetType().Name.ToLower()));
+            Query.Append(GenerateFieldsString(type, false));
+            Query.Append(String.Format("FROM {0} AS a", type.Name.ToLower()));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
-            } else {
+            }
+            else {
                 Query.Append(";");
             }
             return Query;
         }
 
-        public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput)
-        {
+        public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
             var id = MySqlDataAccessor.GetIdColumn(tabelaInput.GetType());
             QueryBuilder Query = new QueryBuilder(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
@@ -291,21 +292,18 @@ namespace Figlotech.BDados.Builders
             return Query;
         }
 
-        internal QueryBuilder GerarParamsValoresUpdate(IDataObject tabelaInput)
-        {
+        internal QueryBuilder GerarParamsValoresUpdate(IDataObject tabelaInput) {
             QueryBuilder Query = new QueryBuilder();
-            var fields = tabelaInput.GetType().GetFields()
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-                .ToArray();
+            var lifi = GetMembers(tabelaInput.GetType());
             int k = 0;
-            for (int i = 0; i < fields.Length; i++) {
-                if (fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute))!=null)
+            for (int i = 0; i < lifi.Count; i++) {
+                if (lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
-                foreach (CustomAttributeData att in fields[i].CustomAttributes) {
+                foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
-                        Object val = fields[i].GetValue(tabelaInput);
-                        Query.Append($"{fields[i].Name} = @{(++k)}", val);
-                        if (i < fields.Length - 1)
+                        Object val = ReflectionTool.GetMemberValue(lifi[i], tabelaInput);
+                        Query.Append($"{lifi[i].Name} = @{(++k)}", val);
+                        if (i < lifi.Count - 1)
                             Query.Append(", ");
                     }
                 }
@@ -316,15 +314,13 @@ namespace Figlotech.BDados.Builders
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput) {
             var cod = IntEx.GerarShortRID();
             QueryBuilder Query = new QueryBuilder();
-            var fields = tabelaInput.GetType().GetFields()
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-                .Where((a) => a.GetCustomAttribute(typeof(PrimaryKeyAttribute)) == null)
-                .ToArray();
-            for (int i = 0; i < fields.Length; i++) {
-                Object val = fields[i].GetValue(tabelaInput);
+            var fields = GetMembers(tabelaInput.GetType());
+            fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            for (int i = 0; i < fields.Count; i++) {
+                Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
                 if (!Query.IsEmpty)
                     Query.Append(", ");
-                Query.Append($"@{cod}{i+1}",val);
+                Query.Append($"@{cod}{i + 1}", val);
             }
             return Query;
 
@@ -337,7 +333,7 @@ namespace Figlotech.BDados.Builders
 
             var id = MySqlDataAccessor.GetIdColumn<T>();
 
-            workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted()));
+            workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
                 return null;
             }
@@ -346,40 +342,37 @@ namespace Figlotech.BDados.Builders
             Query.Append("SET ");
 
             // -- 
-            var members = new List<MemberInfo>();
-            members.AddRange(typeof(T).GetFields());
-            members.AddRange(typeof(T).GetProperties());
-            members = members.Where((m) => m.GetCustomAttribute<FieldAttribute>() != null).ToList();
+            var members = GetMembers(typeof(T));
+            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             int x = 0;
             for (var i = 0; i < members.Count; i++) {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
-                foreach(var a in inputRecordset) {
+                foreach (var a in inputRecordset) {
                     string sid = IntEx.GerarShortRID();
-                    Query.Append($"WHEN {id}=@{sid}{x++} THEN @{sid}{x++}", a.Id, ReflectionTool.GetValue(a, members[i].Name));
+                    Query.Append($"WHEN {id}=@{sid}{x++} THEN @{sid}{x++}", a.Id, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
-                if(i < members.Count-1) {
+                if (i < members.Count - 1) {
                     Query.Append(",");
                 }
             }
 
             Query.Append($"WHERE {id} IN (")
-                .Append(FTH.ListRids(workingSet))
+                .Append(FTH.ListIds(workingSet))
                 .Append(");");
             // --
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> inputRecordset) where T: IDataObject, new()
-        {
+        public IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> inputRecordset) where T : IDataObject, new() {
             RecordSet<T> workingSet = new RecordSet<T>();
-            workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted() ));
+            workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
             Query.Append($"INSERT INTO {typeof(T).Name.ToLower()} (");
-            Query.Append(GenerateFieldsString(workingSet[0], true));
+            Query.Append(GenerateFieldsString(typeof(T), true));
             Query.Append(") VALUES");
             // -- 
             for (int i = 0; i < workingSet.Count; i++) {
@@ -391,12 +384,12 @@ namespace Figlotech.BDados.Builders
             }
             // -- 
             Query.Append("ON DUPLICATE KEY UPDATE ");
-            FieldInfo[] Fields = workingSet[0].GetType().GetFields().Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null).ToArray();
-            for (int i = 0; i < Fields.Length; ++i) {
+            var Fields = GetMembers(typeof(T));
+            for (int i = 0; i < Fields.Count; ++i) {
                 if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
-                if (i < Fields.Length - 1) {
+                if (i < Fields.Count - 1) {
                     Query.Append(",");
                 }
             }
@@ -404,13 +397,10 @@ namespace Figlotech.BDados.Builders
             return Query;
         }
 
-        public IQueryBuilder GenerateFieldsString(IDataObject inputObject, bool ommitPk = false)
-        {
+        public IQueryBuilder GenerateFieldsString(Type type, bool ommitPk = false) {
             QueryBuilder sb = new QueryBuilder();
-            var fields = inputObject.GetType().GetFields()
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-                .ToArray();
-            for (int i = 0; i < fields.Length; i++) {
+            var fields = GetMembers(type);
+            for (int i = 0; i < fields.Count; i++) {
                 if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 if (!sb.IsEmpty)
@@ -420,46 +410,53 @@ namespace Figlotech.BDados.Builders
             return sb;
         }
 
-        public IQueryBuilder InformationSchemaQueryTables(String schema)
-        {
+        public IQueryBuilder InformationSchemaQueryTables(String schema) {
             return new QueryBuilder("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
         }
-        public IQueryBuilder InformationSchemaQueryColumns(String schema)
-        {
+        public IQueryBuilder InformationSchemaQueryColumns(String schema) {
             return new QueryBuilder("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
         }
-        public IQueryBuilder InformationSchemaQueryKeys(string schema)
-        {
+        public IQueryBuilder InformationSchemaQueryKeys(string schema) {
             return new QueryBuilder("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
         }
 
-        public IQueryBuilder RenameTable(string tabName, string newName)
-        {
+        public IQueryBuilder RenameTable(string tabName, string newName) {
             return new QueryBuilder($"RENAME TABLE {tabName} TO {newName};");
         }
 
-        public IQueryBuilder RenameColumn(string table, string column, string newDefinition)
-        {
+        public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
             return new QueryBuilder($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
         }
 
-        public IQueryBuilder DropForeignKey(string target, string constraint)
-        {
+        public IQueryBuilder DropForeignKey(string target, string constraint) {
             return new QueryBuilder($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
         }
 
-        public IQueryBuilder AddColumn(string table, string columnDefinition)
-        {
+        public IQueryBuilder AddColumn(string table, string columnDefinition) {
             return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD COLUMN {columnDefinition};");
         }
 
-        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn)
-        {
+        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
             return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD CONSTRAINT fk_{table.ToLower()}_{column.ToLower()} FOREIGN KEY ({column}) REFERENCES {refTable.ToLower()}({refColumn})");
         }
-        public IQueryBuilder Purge(string table, string column, string refTable, string refColumn)
-        {
+
+        public IQueryBuilder Purge(string table, string column, string refTable, string refColumn) {
             return new QueryBuilder($"DELETE FROM {table.ToLower()} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable.ToLower()})");
+        }
+
+        private List<MemberInfo> GetMembers(Type t) {
+            List<MemberInfo> lifi = new List<MemberInfo>();
+            var members = ReflectionTool.FieldsAndPropertiesOf(t);
+            foreach (var fi in members
+                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                .ToArray()) {
+                foreach (var at in fi.CustomAttributes) {
+                    if (at.AttributeType == typeof(FieldAttribute)) {
+                        lifi.Add(fi);
+                    }
+                }
+            }
+            return lifi;
         }
     }
 }

@@ -81,11 +81,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return RdbmsAccessor.Query(Query, args);
         }
 
-        public List<T> Query<T>(IQueryBuilder Query) {
+        public List<T> Query<T>(IQueryBuilder Query) where T : new() {
             return RdbmsAccessor.Query<T>(Query);
         }
 
-        public List<T> Query<T>(string Query, params object[] args) {
+        public List<T> Query<T>(string Query, params object[] args) where T:new() {
             return RdbmsAccessor.Query<T>(Query, args);
         }
 

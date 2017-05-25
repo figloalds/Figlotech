@@ -14,6 +14,7 @@ using Newtonsoft.Json;
 using Figlotech.Autokryptex;
 using Figlotech.BDados.Authentication;
 using Figlotech.BDados.I18n;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados {
     public delegate dynamic ComputeField(dynamic o);
@@ -28,6 +29,57 @@ namespace Figlotech.BDados {
     public static class FTH {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
+
+        public static T Map<T>(DataRow dr, DataColumnCollection columns) where T : new() {
+            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
+            var objBuilder = new ObjectReflector();
+            var retv = new T();
+            objBuilder.Slot(retv);
+            Parallel.ForEach(fields, (col) =>
+            {
+                if (!columns.Contains(col.Name)) return;
+                var typeofCol = ReflectionTool.GetTypeOf(col);
+
+                object o = dr.Field<object>(col.Name);
+                var tocUlType = Nullable.GetUnderlyingType(typeofCol);
+                if (typeofCol.IsValueType && o == null) {
+                    return;
+                }
+                if (tocUlType != null) {
+                    typeofCol = Nullable.GetUnderlyingType(typeofCol);
+                }
+                else {
+                }
+
+                if (typeofCol.IsEnum) {
+                    objBuilder[col] = Enum.ToObject(typeofCol, o);
+                }
+                else
+                if (o != null && o.GetType() != typeofCol) {
+                    objBuilder[col] = Convert.ChangeType(o, typeofCol);
+                }
+                else {
+                    objBuilder[col] = o;
+                }
+            });
+            return retv;
+        }
+
+        public static void Map<T>(IList<T> input, DataTable dt) where T : new() {
+            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
+            String[] columnNames = new string[dt.Columns.Count];
+            for (int c = 0; c < dt.Columns.Count; c++) {
+                columnNames[c] = dt.Columns[c].ColumnName;
+            }
+            var retv = new T[dt.Rows.Count];
+            var objBuilder = new ObjectReflector();
+            for (int i = 0; i < dt.Rows.Count; i++) {
+                retv[i] = Map<T>(dt.Rows[i], dt.Columns);
+            }
+            foreach (var a in retv) {
+                input.Add(a);
+            }
+        }
 
         public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(()=> new BDadosEnglishStringsProvider());
         public static IBDadosStringsProvider Strings { get => _strings.Value; set { _strings = new Lazy<IBDadosStringsProvider>(()=>value); } }
