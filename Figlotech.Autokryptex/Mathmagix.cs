@@ -20,17 +20,17 @@ namespace Figlotech.Autokryptex {
 
         public static string BaseConvert(long number, string baseString) {
             List<char> Retv = new List<char>();
-            bool negativo = false;
-            long Backup = number;
-            if (negativo = (Backup < 0))
-                Backup = -Backup;
+            bool negative = false;
+            long wi = number;
+            if (negative = (wi < 0))
+                wi = -wi;
             char[] CharsBase = baseString.ToCharArray();
             do {
-                int Indice = (int)(Backup % baseString.Length);
+                int Indice = (int)(wi % baseString.Length);
                 Retv.Add(baseString[Indice]);
-                Backup = Backup / baseString.Length;
-            } while ((Backup) > 0);
-            if (negativo)
+                wi = wi / baseString.Length;
+            } while ((wi) > 0);
+            if (negative)
                 Retv.Add('-');
             Retv.Reverse();
             return new string(Retv.ToArray());

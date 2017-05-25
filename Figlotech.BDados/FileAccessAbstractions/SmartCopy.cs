@@ -51,22 +51,22 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// Copies files from local/origin accessor to remote/destination accessor
         /// Uploads data from the local to the remote accessor
         /// </summary>
-        public void mirrorUp(string path = "") {
+        public void MirrorUp(string path = "") {
             var totalFilesCount = CountFiles(local, path);
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
 
-            mirror(local, remote, path);
+            Mirror(local, remote, path);
         }
 
         /// <summary>
         /// Copies files remote/destination from accessor to local/origin accessor
         /// Downloads data from the remote to the local accessor
         /// </summary>
-        public void mirrorDown(string path = "") {
+        public void MirrorDown(string path = "") {
             var totalFilesCount = CountFiles(remote, path);
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
 
-            mirror(remote, local, path);
+            Mirror(remote, local, path);
         }
 
         private int CountFiles(IFileAccessor origin, string path) {
@@ -94,8 +94,6 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// </summary>
         public event Action<bool, String> OnReportProcessedFile;
 
-        int workedFiles = 0;
-
         /// <summary>
         /// <para>
         /// Set to null to use default copy criteria
@@ -114,7 +112,6 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public Action<String> OnFileStaged { get; set; }
 
         private bool Changed(IFileAccessor o, IFileAccessor d, String f) {
-            bool changed = false;
             var destLen = d.GetSize(f);
             var oriLen = o.GetSize(f);
             if (oriLen != destLen) {
@@ -123,26 +120,27 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             if (options.Usehash) {
                 var originHash = GetHash(o, f);
                 var destinationHash = GetHash(d, f);
-                if(originHash == destinationHash) {
+                if(originHash != destinationHash) {
                     return true;
                 }
             } else {
                 var originDate = o.GetLastFileWrite(f);
                 var destinationDate = d.GetLastFileWrite(f);
-                changed =
-                    (
+                if (
                         (originDate > destinationDate) ||
                         (
-                            (originDate < destinationDate && !options.IgnoreOlder)
+                            (originDate < destinationDate) &&
+                            (!options.IgnoreOlder)
                         )
-                    );
-                if (changed) return true;
+                ) {
+                    return true;
+                }
             }
 
             return false;
         }
 
-        private void mirror(IFileAccessor origin, IFileAccessor destination, string path, WorkQueuer wq = null)
+        private void Mirror(IFileAccessor origin, IFileAccessor destination, string path, WorkQueuer wq = null)
         {
             bool rec = wq == null;
             if(wq == null) {
@@ -164,7 +162,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                         Changed(origin, destination, f);
 
                     if (changed) {
-                        processFile(origin, destination, f);
+                        ProcessFile(origin, destination, f);
                     }
 
                     OnReportProcessedFile?.Invoke(changed, f);
@@ -181,7 +179,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             if (options.Recursive) {
                 origin.ForDirectoriesIn(path, (dir) => {
                     destination.MkDirs(dir);
-                    mirror(origin, destination, dir, wq);
+                    Mirror(origin, destination, dir, wq);
                 });
             }
             if (rec) {
@@ -190,18 +188,16 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             wq.Stop();
         }
 
-        private String ProcessPath(string path) {
+        private String ClearPathString(string path) {
             var l1 = path.Split('\\');
             var mid = Path.Combine(l1);
             var l2 = path.Split('/');
             return Path.Combine(l2);
         }
 
-        private void processFile(IFileAccessor origin, IFileAccessor destination, string workingFile) {
-            workingFile = ProcessPath(workingFile);
-            // DRAGONS?
-            // this is to avoid same file from being written by 2 or more threads
-            // I SHOULD NEVER HAPPEN naturally. But Idk, extra.
+        private void ProcessFile(IFileAccessor origin, IFileAccessor destination, string workingFile) {
+            workingFile = ClearPathString(workingFile);
+
             origin.Read(workingFile, (input) => {
                 var bufferSize = (int)options.BufferSize / options.NumWorkers;
                 if (bufferSize < 0) bufferSize = Int32.MaxValue;

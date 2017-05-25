@@ -479,16 +479,11 @@ namespace Figlotech.BDados
             if (condicoes == null) {
                 condicoes = new QueryBuilder("TRUE");
             }
-            // Cria uma instancia Dummy só pra poder pegar o reflector da classe usada como T.
-            T dummy = (T)Activator.CreateInstance(typeof(T));
-            BaseDataObject dummy2 = (BaseDataObject)(object)dummy;
-            // Usando o dummy2 eu consigo puxar uma query de select baseada nos campos da classe filha
-            DataTable dt = null;
             Access((bd) => {
                 Bench.Mark("Data Load ---");
                 var selectQuery = GetQueryGenerator().GenerateSelect<T>(condicoes);
                 Bench.Mark("Generate SELECT");
-                dt = Query(selectQuery);
+                var dt = Query(selectQuery);
                 Bench.Mark("Execute SELECT");
                 if (dt == null)
                     return;
@@ -496,6 +491,7 @@ namespace Figlotech.BDados
                     Logger?.WriteLog("Query returned no results.");
                     return;
                 }
+
                 var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                     .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
                     .ToList();
@@ -1121,7 +1117,7 @@ namespace Figlotech.BDados
                 String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
 
                 String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.RID";
-                // Yuck
+
                 if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
                     OnClause = $"{childAlias}.RID={thisAlias}.{info.RemoteField}";
                 }
@@ -1131,7 +1127,7 @@ namespace Figlotech.BDados
                     new Object[] { childAlias, OnClause, JoinType.RIGHT }
                 // ON CLAUSE
                 );
-                // The ultra supreme gimmick mode reigns supreme here.
+
                 joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
                 if (!Linear)
                     MakeQueryAggregations(ref query, info.RemoteObjectType, thisAlias, field.Name, prefixer);
@@ -1170,23 +1166,9 @@ namespace Figlotech.BDados
                 if (!Linear)
                     MakeBuildAggregations(ref build, ReflectionTool.GetTypeOf(field), thisAlias, field.Name, prefixer);
             }
-            // Iterating through ComputeFields
-            //foreach (var field in membersOfT.Where((f) => ReflectionTool.GetTypeOf(f) == typeof(ComputeField))) {
-            //    var memberType = ReflectionTool.GetTypeOf(field);
-            //    String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
-            //    if (field is FieldInfo) {
-            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((FieldInfo)field).GetValue(null));
-            //    }
-            //    if (field is PropertyInfo) {
-            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((PropertyInfo)field).GetValue(null));
-            //    }
-            //}
-            // We want to skip aggregate lists 
-            // When doing linear aggregate loads
-            // To avoid LIMIT ORDER BY MySQL dead-lock
+
             if (Linear)
                 return;
-            // Iterating through AggregateLists
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
@@ -1202,20 +1184,20 @@ namespace Figlotech.BDados
 
             var prefixer = new PrefixMaker();
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            bool proofproof = false;
+            bool needsAggregation = false;
             foreach (var a in Members) {
-                proofproof =
+                needsAggregation =
                     a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
                     a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (proofproof)
+                if (needsAggregation)
                     break;
             }
 
-            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {proofproof}.");
+            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {needsAggregation}.");
             // CLUMSY
-            if (proofproof) {
+            if (needsAggregation) {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
 
                 var join = MakeJoin(
