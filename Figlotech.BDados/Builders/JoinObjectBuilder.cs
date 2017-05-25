@@ -109,7 +109,7 @@ namespace Figlotech.BDados.Builders
             foreach (DataRow dr in rs) {
                 T thisObject = new T();
                 var objBuilder = new ObjectReflector(thisObject);
-                // -- Adicionar os valores selecionados
+                // -- Add aggregate values
                 MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where(at =>
                         at.GetCustomAttribute<FieldAttribute>() != null

@@ -84,10 +84,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
             }
         }
 
-        public void MergeAndKeepLatest(string path) {
-
-        }
-
         private int CountFiles(IFileAccessor origin, string path) {
             int count = 0;
             origin.ForFilesIn(path, (f) => {

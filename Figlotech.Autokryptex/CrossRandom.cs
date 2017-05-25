@@ -150,19 +150,6 @@ namespace Figlotech.Autokryptex {
                     case 5: retv += c*d; break;
                 } 
             }
-            //for (int i = 0; i < AppSecret.Length; i++) {
-            //    switch (++opc % 3) {
-            //        case 0:
-            //            retv ^= AppSecret[i];
-            //            break;
-            //        case 1:
-            //            retv ^= InstanceSecret[i];
-            //            break;
-            //        default:
-            //            retv ^= AppSecret[i] * InstanceSecret[i];
-            //            break;
-            //    }
-            //}
             historianVals[CallCount % historianVals.Length] = retv;
             return retv + CallCount;
         }

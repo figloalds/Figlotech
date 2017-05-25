@@ -331,17 +331,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var columnName = columns.Rows[i].Field<string>("COLUMN_NAME");
                         if (field.Name != columnName) continue;
                         // Found columns, check definitions
-                        var columnIsNullable = columns.Rows[i].Field<String>("IS_NULLABLE").ToUpper() == "YES";
-                        var length = columns.Rows[i].Field<ulong?>("CHARACTER_MAXIMUM_LENGTH");
-                        var datatype = columns.Rows[i].Field<String>("DATA_TYPE").ToUpper();
                         var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
                         if (fieldAtt == null) continue;
-                        var dbdef = GetDatabaseType(field, fieldAtt);
-                        var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
+
+                        var columnIsNullable = columns.Rows[i].Field<String>("IS_NULLABLE").ToUpper() == "YES";
+                        var columnLength = columns.Rows[i].Field<ulong?>("CHARACTER_MAXIMUM_LENGTH");
+                        var columnDataType = columns.Rows[i].Field<String>("DATA_TYPE").ToUpper();
+                        var fieldDefinition = GetDatabaseType(field, fieldAtt);
+                        var fieldDataType = fieldDefinition.Substring(0,
+                            fieldDefinition.IndexOf('(') > -1 ?
+                                fieldDefinition.IndexOf('(') : 
+                                fieldDefinition.Length
+                            );
                         if (
                             columnIsNullable != fieldAtt.AllowNull ||
-                            (int)(length ?? 0) != fieldAtt.Size ||
-                            datatype != dbDefinition
+                            (int)(columnLength ?? 0) != fieldAtt.Size ||
+                            columnDataType != fieldDataType
                             )
                         {
                             Benchmarker.Mark($"ACTION: Alter Column {type.Name.ToLower()}/{field.Name}");
@@ -366,7 +371,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //         |...|
         //         |...|
         // Use safety gear when going down there.
-        private static String GetDatabaseType(MemberInfo field, FieldAttribute info = null, bool size = true)
+        private static String GetDatabaseType(MemberInfo field, FieldAttribute info = null)
         {
             if (info == null)
                 foreach (var att in field.GetCustomAttributes())
