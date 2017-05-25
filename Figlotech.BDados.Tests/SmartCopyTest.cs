@@ -14,7 +14,7 @@ namespace Figlotech.BDados.Tests {
             var copy = new SmartCopy(fa1, new SmartCopyOptions());
             copy.SetRemote(fa2);
 
-            copy.mirrorUp("");
+            copy.MirrorUp("");
         }
     }
 }

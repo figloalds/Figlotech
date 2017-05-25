@@ -12,7 +12,13 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// if it has or not changed instead of date and length.
         /// Disable if using a over-internet file accessor like the BlobFileAccessor.
         /// </summary>
-        public bool Usehash { get; set; } = true;
+        public bool UseHash { get; set; } = true;
+        /// <summary>
+        /// If set to true (default), the comparator will calculate the file hash to determine
+        /// if it has or not changed instead of date and length.
+        /// Disable if using a over-internet file accessor like the BlobFileAccessor.
+        /// </summary>
+        public bool UseHashList { get; set; } = false;
         /// <summary>
         /// Consider older files as "not changed" and ignores them
         /// </summary>
