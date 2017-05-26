@@ -82,7 +82,7 @@ namespace Figlotech.BDados {
         public static IBDadosStringsProvider Strings { get => _strings.Value; set { _strings = new Lazy<IBDadosStringsProvider>(()=>value); } }
 
         private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(()=> new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
-        public static WorkQueuer GlobalQueuer { get => (WorkQueuer) _globalQueuer; }
+        public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
         public static int currentBDadosConnections = 0;
 

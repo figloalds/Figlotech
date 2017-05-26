@@ -38,20 +38,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         }
 
-        private static IntEx _cpuhash;
-        private static IntEx CpuHash {
-            get {
-                if (_cpuhash != null) {
-                    return _cpuhash;
-                } else {
-                    return _cpuhash = new IntEx(FTH.CpuId, IntEx.Hexadecimal);
-                }
-            }
-        }
-
-        private static int sequentia = 0;
-
-        public List<IValidationRule<T>> ValidationRules { get; set; } = new List<IValidationRule<T>>();
+        public virtual List<IValidationRule<T>> ValidationRules { get; set; } = new List<IValidationRule<T>>();
 
         public override ValidationErrors Validate() {
             ValidationErrors ve = new ValidationErrors();
@@ -62,7 +49,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             myValues.AddRange(this.GetType().GetProperties());
 
             foreach(var a in ValidationRules) {
-                foreach(var err in a.Validate(this)) {
+                foreach(var err in a.Validate(this, new ValidationErrors())) {
                     ve.Add(err);
                 }
             }
@@ -161,21 +148,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (null == DataAccessor) {
                 throw new BDadosException($"Data Accessor is undefined in this instance of {this.GetType().Name}");
             }
-            //if (this.GetType().BaseType != typeof(BaseDataObject)) {
-            //    throw new BDadosException("BaseDataObject default IMPL doesn't support indirect aggregate save yet. Make sure this class imediately derives from BaseDataObject.");
-            //}
-
             this.OnBeforePersist();
 
             var retv = true;
-
-            //CascadingDoForFields<IAggregateRoot>((field) => {
-            //    try {
-            //        field.DataAccessor = DataAccessor;
-            //        retv &= field?.CascadingSave(null, alreadyTreatedTypes) ?? true;
-            //    }
-            //    catch (Exception) { }
-            //});
 
             retv &= DataAccessor.SaveItem(this);
 

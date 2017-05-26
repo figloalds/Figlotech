@@ -37,12 +37,5 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public int Order;
         public DisplayFormatType Format;
         public String FormatString;
-        
-        public DisplayAttribute(String name, bool CanFilterBy, int order, DisplayFormatType format = DisplayFormatType.NoFormat, String formatString = null) {
-            Name = name;
-            Order = order;
-            Format = format;
-            FormatString = formatString;
-        }
     }
 }
