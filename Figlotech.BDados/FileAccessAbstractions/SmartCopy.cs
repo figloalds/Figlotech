@@ -7,21 +7,20 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+namespace Figlotech.BDados.FileAcessAbstractions {
 
-namespace Figlotech.BDados.FileAcessAbstractions
-{
-    public class FileData
-    {
+    public class FileData {
         public string RelativePath;
         public long Date;
         public long Length;
         public string Hash;
     }
+
     /// <summary>
     /// This is meant to provide easy in-program "robocopy" utility.
     /// </summary>
-    public class SmartCopy
-    {
+    public class SmartCopy {
+
         IFileAccessor local;
         IFileAccessor remote;
         ISmartCopyOptions options;
@@ -30,12 +29,11 @@ namespace Figlotech.BDados.FileAcessAbstractions
         /// Provides easy in-program robust copy utility
         /// </summary>
         /// <param name="localAccessor">"Local" or "Origin" accessor</param>
-        public SmartCopy(IFileAccessor localAccessor, ISmartCopyOptions copyOptions)
-        {
+        public SmartCopy(IFileAccessor localAccessor, ISmartCopyOptions copyOptions) {
             local = localAccessor;
             options = copyOptions;
         }
-        
+
         /// <summary>
         /// Sets the "other" file acessor to work with;
         /// </summary>
@@ -55,7 +53,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
             fa.Read(path, (stream) => {
                 hash = GetHash(stream);
             });
-            
             return hash;
         }
 
@@ -66,7 +63,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
         public void MirrorUp(string path = "") {
             var totalFilesCount = CountFiles(local, path);
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
-
             Mirror(local, remote, path);
         }
 
@@ -75,7 +71,7 @@ namespace Figlotech.BDados.FileAcessAbstractions
         /// Downloads data from the remote to the local accessor
         /// </summary>
         public void MirrorDown(string path = "") {
-            if(options.UseHashList) {
+            if (options.UseHashList) {
                 MirrorFromList(path);
             } else {
                 var totalFilesCount = CountFiles(remote, path);
@@ -89,19 +85,18 @@ namespace Figlotech.BDados.FileAcessAbstractions
             origin.ForFilesIn(path, (f) => {
                 count++;
             });
-
             if (options.Recursive) {
                 origin.ForDirectoriesIn(path, (dir) => {
                     count += CountFiles(origin, dir);
                 });
             }
-
             return count;
         }
         /// <summary>
         /// The copier triggers this event to notify when it finishes counting files.
         /// </summary>
         public event Action<int> OnReportTotalFilesCount;
+
         /// <summary>
         /// The copier triggers this event to notify that it finished processing a file.
         /// The arguments are Boolean saying rather the file changed or not and String with the 
@@ -133,7 +128,7 @@ namespace Figlotech.BDados.FileAcessAbstractions
                 var match = HashList.FirstOrDefault(fd => fd.RelativePath == f);
                 var hash = GetHash(o, f);
                 if (match != null) {
-                    if(hash != match.Hash) {
+                    if (hash != match.Hash) {
                         return true;
                     }
                 } else {
@@ -141,12 +136,11 @@ namespace Figlotech.BDados.FileAcessAbstractions
                         new FileData {
                             RelativePath = f,
                             Hash = hash,
-                            Date = o.GetLastFileWrite(f)?.Ticks??0,
+                            Date = o.GetLastFileWrite(f)?.Ticks ?? 0,
                             Length = o.GetSize(f)
                         });
                 }
             }
-
             bool changed = false;
             var destLen = d.GetSize(f);
             var oriLen = o.GetSize(f);
@@ -156,7 +150,7 @@ namespace Figlotech.BDados.FileAcessAbstractions
             if (options.UseHash) {
                 var originHash = GetHash(o, f);
                 var destinationHash = GetHash(d, f);
-                if(originHash == destinationHash) {
+                if (originHash == destinationHash) {
                     return true;
                 }
             } else {
@@ -171,7 +165,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
                     );
                 if (changed) return true;
             }
-
             return false;
         }
 
@@ -200,7 +193,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
                             });
                         }
                     }
-
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
                 });
             }
@@ -208,14 +200,14 @@ namespace Figlotech.BDados.FileAcessAbstractions
             wq.Stop();
         }
 
-        private void Mirror(IFileAccessor origin, IFileAccessor destination, string path, WorkQueuer wq = null)
-        {
+        int workedFiles = 0;
+        private void Mirror(IFileAccessor origin, IFileAccessor destination, string path, WorkQueuer wq = null) {
             bool rec = wq == null;
-            if(wq == null) {
+            if (wq == null) {
                 int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
                 wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
             }
-            if(options.UseHashList) {
+            if (options.UseHashList) {
                 try {
                     var txt = destination.ReadAllText(".fth-hashlist");
                     HashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
@@ -225,26 +217,21 @@ namespace Figlotech.BDados.FileAcessAbstractions
             workedFiles = 0;
             origin.ForFilesIn(path, (f) => {
                 wq.Enqueue(() => {
-
                     try {
                         OnFileStaged?.Invoke(f);
                     } catch (Exception) {
                         return;
                     }
-
                     var changed = CopyDecisionCriteria != null ?
                         CopyDecisionCriteria(f) :
                         Changed(origin, destination, f);
-
                     if (changed) {
                         processFile(origin, destination, f);
                     }
-
                     OnReportProcessedFile?.Invoke(changed, f);
                 });
             });
-            
-            if(options.AllowDelete) {
+            if (options.AllowDelete) {
                 destination.ForFilesIn(path, (f) => {
                     if (!origin.Exists(f)) {
                         destination.Delete(f);
@@ -260,12 +247,10 @@ namespace Figlotech.BDados.FileAcessAbstractions
             if (rec) {
                 wq.Start();
             }
-
-            if(options.UseHashList) {
+            if (options.UseHashList) {
                 HashList.RemoveAll((f) =>
                     !origin.Exists(path)
                     );
-
                 if (HashList.Count > 0) {
                     destination.Write($"$index.info", (stream) => {
                         string text = JsonConvert.SerializeObject(HashList);
@@ -279,7 +264,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
                     });
                 }
             }
-
             wq.Stop();
         }
 
@@ -292,7 +276,6 @@ namespace Figlotech.BDados.FileAcessAbstractions
 
         private void processFile(IFileAccessor origin, IFileAccessor destination, string workingFile) {
             workingFile = ProcessPath(workingFile);
-
             origin.Read(workingFile, (input) => {
                 var bufferSize = (int)options.BufferSize / options.NumWorkers;
                 if (bufferSize < 0) bufferSize = Int32.MaxValue;

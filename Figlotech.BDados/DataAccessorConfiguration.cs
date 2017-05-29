@@ -45,6 +45,9 @@ namespace Figlotech.BDados
             }
         }
         public static DataAccessorConfiguration LoadFromFile(String path, String password) {
+            if(!File.Exists(path)) {
+                return null;
+            }
 
             var bytes = File.ReadAllBytes(path);
             var autokryptex = new AutokryptexEncryptor(password);
