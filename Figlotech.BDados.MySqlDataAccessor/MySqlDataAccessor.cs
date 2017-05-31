@@ -17,8 +17,7 @@ using Figlotech.Core;
 
 namespace Figlotech.BDados
 {
-    public class MySqlDataAccessor : IRdbmsDataAccessor
-    {
+    public class MySqlDataAccessor : IRdbmsDataAccessor {
 
         public ILogger Logger { get; set; }
         public Type[] _workingTypes = new Type[0];
@@ -76,8 +75,7 @@ namespace Figlotech.BDados
             var f = LoadAll<T>(qb.Append("LIMIT 1"));
             if (f.Any()) {
                 return f.First();
-            }
-            else {
+            } else {
                 T quickSave = Default();
                 quickSave.RID = new T().RID;
                 quickSave.Save();
@@ -104,8 +102,7 @@ namespace Figlotech.BDados
             var f = LoadAll<T>(qb, 1, 1);
             if (f.Any()) {
                 return f.First();
-            }
-            else {
+            } else {
                 T quickSave = Default();
                 quickSave.Save();
                 return quickSave;
@@ -121,11 +118,6 @@ namespace Figlotech.BDados
             return result;
         }
         #endregion ***************************
-
-        public T Instantiate<T>() where T : IDataObject, new() {
-            var retv = Activator.CreateInstance<T>();
-            return retv;
-        }
 
         public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
             return LoadAll<T>(condicoes, page, limit).FirstOrDefault();
@@ -155,8 +147,7 @@ namespace Figlotech.BDados
             String type = "VARCHAR(20)";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
-            }
-            else {
+            } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
                         type = $"VARCHAR({info.Size})";
@@ -214,12 +205,10 @@ namespace Figlotech.BDados
             var options = "";
             if (info.Options != null && info.Options.Length > 0) {
                 options = info.Options;
-            }
-            else {
+            } else {
                 if (!info.AllowNull) {
                     options += " NOT NULL";
-                }
-                else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
+                } else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
                 }
                 //if (info.Unique)
@@ -273,8 +262,7 @@ namespace Figlotech.BDados
 
         }
 
-        public bool SaveItem(IDataObject input, Action fn = null)
-        {
+        public bool SaveItem(IDataObject input, Action fn = null) {
             bool retv = false;
             if (SqlConnection?.State != ConnectionState.Open) {
                 Access(bd => {
@@ -284,8 +272,8 @@ namespace Figlotech.BDados
             }
             int rs = -33;
 
-            var id = GetIdColumn(input.GetType());
-            var rid = GetRidColumn(input.GetType());
+            var id = FTH.GetIdColumn(input.GetType());
+            var rid = FTH.GetRidColumn(input.GetType());
 
             input.CreatedTime = DateTime.UtcNow;
             if (input.IsPersisted) {
@@ -307,8 +295,7 @@ namespace Figlotech.BDados
                 if (ridAtt.Any()) {
                     DataTable dt = Query($"SELECT {id} FROM " + input.GetType().Name + $" WHERE {rid}=@1", input.RID);
                     retvId = dt.Rows[0].Field<long>(id);
-                }
-                else {
+                } else {
                     retvId = (int)ScalarQuery($"SELECT last_insert_id();");
                 }
                 if (retvId > 0) {
@@ -346,39 +333,7 @@ namespace Figlotech.BDados
         public List<T> Query<T>(string queryString, params object[] args) where T : new() {
             return Query<T>(new QueryBuilder(queryString, args));
         }
-
-        public static String GetIdColumn<T>() where T : IDataObject, new() { return GetIdColumn(typeof(T)); }
-        public static String GetIdColumn(Type type) {
-            var fields = new List<FieldInfo>();
-            do {
-                fields.AddRange(type.GetFields());
-                type = type.BaseType;
-            } while (type != null);
-
-            var retv = fields
-                .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "Id";
-            return retv;
-        }
-
-        public static String GetRidColumn<T>() where T : IDataObject, new() { return GetRidColumn(typeof(T)); }
-        public static String GetRidColumn(Type type) {
-            var fields = new List<FieldInfo>();
-            do {
-                fields.AddRange(type.GetFields());
-                type = type.BaseType;
-            } while (type != null);
-
-            var retv = fields
-                .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "RID";
-            return retv;
-        }
-
+                
         public T LoadById<T>(long Id) where T : IDataObject, new() {
             T retv = default(T);
             if (SqlConnection?.State != ConnectionState.Open) {
@@ -387,7 +342,7 @@ namespace Figlotech.BDados
                 });
                 return retv;
             }
-            var name = GetIdColumn<T>();
+            var name = FTH.GetIdColumn<T>();
 
             // Cria uma instancia Dummy só pra poder pegar o reflector da classe usada como T.
             T dummy = (T)Activator.CreateInstance(typeof(T));
@@ -421,13 +376,12 @@ namespace Figlotech.BDados
             if (SqlConnection?.State != ConnectionState.Open) {
                 Access((bd) => {
                     retv = bd.LoadByRid<T>(RID);
-                }, x =>
-                {
+                }, x => {
                     throw x;
                 });
                 return retv;
             }
-            var rid = GetRidColumn<T>();
+            var rid = FTH.GetRidColumn<T>();
 
             DataTable dt = Query(GetQueryGenerator().GenerateSelect<T>(new ConditionParametrizer($"{rid}=@1", RID)));
             int i = 0;
@@ -443,8 +397,7 @@ namespace Figlotech.BDados
                     Object o = dt.Rows[i].Field<Object>(col.Name);
                     objBuilder[col] = o;
                 }
-            }
-            else {
+            } else {
                 retv = default(T);
             }
             return retv;
@@ -479,11 +432,13 @@ namespace Figlotech.BDados
             if (condicoes == null) {
                 condicoes = new QueryBuilder("TRUE");
             }
+            // Usando o dummy2 eu consigo puxar uma query de select baseada nos campos da classe filha
+            DataTable dt = null;
             Access((bd) => {
                 Bench.Mark("Data Load ---");
                 var selectQuery = GetQueryGenerator().GenerateSelect<T>(condicoes);
                 Bench.Mark("Generate SELECT");
-                var dt = Query(selectQuery);
+                dt = Query(selectQuery);
                 Bench.Mark("Execute SELECT");
                 if (dt == null)
                     return;
@@ -491,7 +446,6 @@ namespace Figlotech.BDados
                     Logger?.WriteLog("Query returned no results.");
                     return;
                 }
-
                 var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                     .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
                     .ToList();
@@ -518,7 +472,7 @@ namespace Figlotech.BDados
                 });
                 return retv;
             }
-            //var id = GetIdColumn(obj.GetType());
+            //var id = FTH.GetIdColumn(obj.GetType());
             var rid = obj.RID;
             var ridcol = (from a in ReflectionTool.FieldsAndPropertiesOf(obj.GetType())
                           where ReflectionTool.GetAttributeFrom<ReliableIdAttribute>(a) != null
@@ -542,7 +496,7 @@ namespace Figlotech.BDados
                 return retv;
             }
             T tabela = (T)Activator.CreateInstance(typeof(T));
-            var id = GetIdColumn<T>();
+            var id = FTH.GetIdColumn<T>();
             var p = new PrefixMaker();
             var join = MakeJoin(
                     (q) => {
@@ -580,8 +534,7 @@ namespace Figlotech.BDados
                 if (++fail < 50) {
                     System.Threading.Thread.Sleep(25);
                     return Open();
-                }
-                else {
+                } else {
                     throw new Exception("Failed to Open Mysql Connection.");
                 }
             } catch (Exception x) {
@@ -765,8 +718,7 @@ namespace Figlotech.BDados
                         functions.Invoke(this);
                     }
                     return null;
-                }
-                else {
+                } else {
                     aid = ++accessId;
                     if (Bench == null) {
                         Bench = new Benchmarker($"---- Access [{++aid}]");
@@ -802,8 +754,7 @@ namespace Figlotech.BDados
                 if (handler != null)
                     handler.Invoke(x);
                 return null;
-            }
-            finally {
+            } finally {
                 if (!Configuration.ContinuousConnection) {
                     Close();
                 }
@@ -855,8 +806,7 @@ namespace Figlotech.BDados
                             Logger?.WriteLog(x.Message);
                             Logger?.WriteLog(x.StackTrace);
                             throw x;
-                        }
-                        finally {
+                        } finally {
                             Adaptador.Dispose();
                             Comando.Dispose();
                             Logger?.WriteLog("------------------------------------");
@@ -905,8 +855,7 @@ namespace Figlotech.BDados
                     Logger?.WriteLog(x.StackTrace);
                     Logger?.WriteLog($"BDados Execute: {x.Message}");
                     throw x;
-                }
-                finally {
+                } finally {
                     Logger?.WriteLog("------------------------------------");
                     scom.Dispose();
                 }
@@ -941,8 +890,7 @@ namespace Figlotech.BDados
                                 Object v = r.Field<Object>(f.Name);
                                 if (v == null) {
                                     f.SetValue(newval, null);
-                                }
-                                else {
+                                } else {
                                     f.SetValue(newval, r.Field<Object>(f.Name));
                                 }
                             } catch (Exception x) {
@@ -954,11 +902,9 @@ namespace Figlotech.BDados
                                 Object v = r.Field<Object>(p.Name);
                                 if (v == null) {
                                     p.SetValue(newval, null);
-                                }
-                                else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
+                                } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
                                     p.SetValue(newval, r.Field<Object>(p.Name));
-                                }
-                                else {
+                                } else {
                                     p.SetValue(newval, Convert.ChangeType(r.Field<Object>(p.Name), p.PropertyType));
                                 }
                             } catch (Exception x) {
@@ -967,8 +913,7 @@ namespace Figlotech.BDados
                         }
                         retv.Add(newval);
                     }
-                }
-                finally {
+                } finally {
                     Close();
                 }
             }
@@ -1005,6 +950,7 @@ namespace Figlotech.BDados
                 var infoField = field.GetCustomAttribute<AggregateFieldAttribute>();
                 var infoObj = field.GetCustomAttribute<AggregateObjectAttribute>();
                 String childAlias;
+                Type childType = null;
 
                 // This inversion principle might be fucktastic.
                 if (infoField != null) {
@@ -1014,15 +960,17 @@ namespace Figlotech.BDados
                         qjoins.First().Excludes.Remove(infoField?.RemoteField);
                         continue;
                     }
-                }
-                else {
+                    childType = infoField.RemoteObjectType;
+                } else {
                     childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
                 }
+                var rid = FTH.GetRidColumn(type);
+                var crid = FTH.GetRidColumn(childType??ReflectionTool.GetTypeOf(field));
 
-                String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
+                String OnClause = $"{thisAlias}.{key}={childAlias}.{crid}";
 
                 if (!ReflectionTool.TypeContains(theType, key)) {
-                    OnClause = $"{thisAlias}.RID={childAlias}.{key}";
+                    OnClause = $"{thisAlias}.{rid}={childAlias}.{key}";
                 }
                 var joh = reflectedJoinMethod.MakeGenericMethod(type).Invoke(
                     query,
@@ -1054,11 +1002,14 @@ namespace Figlotech.BDados
                 var qimediate = query.Joins.Where((j) => j.Alias == childAlias);
                 if (!qimediate.Any()) {
 
-                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.RID";
+                    var rid = FTH.GetRidColumn(theType);
+                    var crid = FTH.GetRidColumn(qimediate.First().ValueObject ?? ReflectionTool.GetTypeOf(field));
+
+                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.{crid}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(theType, info.ImediateKey)) {
-                        OnClause = $"{thisAlias}.RID={childAlias}.{info.ImediateKey}";
+                        OnClause = $"{thisAlias}.{rid}={childAlias}.{info.ImediateKey}";
                     }
                     if (query.Joins.Where((a) => a.Alias == childAlias).Any())
                         continue;
@@ -1080,13 +1031,16 @@ namespace Figlotech.BDados
                 if (qfar.Any()) {
                     qfar.First().Excludes.Remove(info.FarField);
                     continue;
-                }
-                else {
-                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.RID";
+                } else {
+                    var rid = FTH.GetRidColumn(theType);
+                    var frid = FTH.GetRidColumn(info.FarType ?? ReflectionTool.GetTypeOf(field));
+                    var crid = FTH.GetRidColumn(info.ImediateType ?? ReflectionTool.GetTypeOf(field));
+
+                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.{frid}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(info.ImediateType, info.FarKey)) {
-                        OnClause2 = $"{childAlias}.RID={farAlias}.{info.FarKey}";
+                        OnClause2 = $"{childAlias}.{crid}={farAlias}.{info.FarKey}";
                     }
 
                     var joh2 = reflectedJoinMethod.MakeGenericMethod(info.FarType).Invoke(
@@ -1112,14 +1066,20 @@ namespace Figlotech.BDados
             foreach (var field in membersOfT.Where(
                     (f) =>
                         f.GetCustomAttribute<AggregateListAttribute>() != null)) {
+
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
                 String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
 
-                String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.RID";
+                var childType = info.RemoteObjectType;
 
+                var rid = FTH.GetRidColumn(theType);
+                var crid = FTH.GetRidColumn(childType ?? ReflectionTool.GetTypeOf(field));
+
+                String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.{rid}";
+                // Yuck
                 if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
-                    OnClause = $"{childAlias}.RID={thisAlias}.{info.RemoteField}";
+                    OnClause = $"{childAlias}.{crid}={thisAlias}.{info.RemoteField}";
                 }
                 var joh = reflectedJoinMethod.MakeGenericMethod(info.RemoteObjectType).Invoke(
                     query,
@@ -1127,7 +1087,7 @@ namespace Figlotech.BDados
                     new Object[] { childAlias, OnClause, JoinType.RIGHT }
                 // ON CLAUSE
                 );
-
+                // The ultra supreme gimmick mode reigns supreme here.
                 joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
                 if (!Linear)
                     MakeQueryAggregations(ref query, info.RemoteObjectType, thisAlias, field.Name, prefixer);
@@ -1166,9 +1126,23 @@ namespace Figlotech.BDados
                 if (!Linear)
                     MakeBuildAggregations(ref build, ReflectionTool.GetTypeOf(field), thisAlias, field.Name, prefixer);
             }
-
+            // Iterating through ComputeFields
+            //foreach (var field in membersOfT.Where((f) => ReflectionTool.GetTypeOf(f) == typeof(ComputeField))) {
+            //    var memberType = ReflectionTool.GetTypeOf(field);
+            //    String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
+            //    if (field is FieldInfo) {
+            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((FieldInfo)field).GetValue(null));
+            //    }
+            //    if (field is PropertyInfo) {
+            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((PropertyInfo)field).GetValue(null));
+            //    }
+            //}
+            // We want to skip aggregate lists 
+            // When doing linear aggregate loads
+            // To avoid LIMIT ORDER BY MySQL dead-lock
             if (Linear)
                 return;
+            // Iterating through AggregateLists
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
@@ -1184,20 +1158,20 @@ namespace Figlotech.BDados
 
             var prefixer = new PrefixMaker();
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            bool needsAggregation = false;
+            bool proofproof = false;
             foreach (var a in Members) {
-                needsAggregation =
+                proofproof =
                     a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
                     a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (needsAggregation)
+                if (proofproof)
                     break;
             }
 
-            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {needsAggregation}.");
+            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {proofproof}.");
             // CLUMSY
-            if (needsAggregation) {
+            if (proofproof) {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
 
                 var join = MakeJoin(
@@ -1226,8 +1200,7 @@ namespace Figlotech.BDados
                 //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
                 //    retv.Add(list[i]);
                 //}
-            }
-            else {
+            } else {
                 Logger?.WriteLog(cnd?.ToString());
 
                 retv.AddRange(LoadAll<T>(new ConditionParser().ParseExpression<T>(cnd)
@@ -1246,8 +1219,8 @@ namespace Figlotech.BDados
             if (list == null)
                 return true;
 
-            var id = GetIdColumn<T>();
-            var rid = GetRidColumn<T>();
+            var id = FTH.GetIdColumn<T>();
+            var rid = FTH.GetRidColumn<T>();
             Access(
                 (bd) => {
                     var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
@@ -1259,7 +1232,7 @@ namespace Figlotech.BDados
                     if (list.Count > 0) {
                         query.Append($"AND {rid} NOT IN (");
                         for (var i = 0; i < list.Count; i++) {
-                            query.Append($"@{IntEx.GerarShortRID()}", list[i].RID);
+                            query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
                             if (i < list.Count - 1)
                                 query.Append(",");
                         }

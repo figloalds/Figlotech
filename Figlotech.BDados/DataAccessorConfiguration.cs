@@ -40,9 +40,7 @@ namespace Figlotech.BDados
             var autokryptex = new AutokryptexEncryptor(password);
             var encryptedBytes = autokryptex.Encrypt(bytes);
 
-            using (FileStream fs = File.Open(path, FileMode.Create)) {
-                fs.Write(encryptedBytes, 0, encryptedBytes.Length);
-            }
+            File.WriteAllBytes(path, encryptedBytes);
         }
         public static DataAccessorConfiguration LoadFromFile(String path, String password) {
             if(!File.Exists(path)) {
@@ -52,7 +50,7 @@ namespace Figlotech.BDados
             var bytes = File.ReadAllBytes(path);
             var autokryptex = new AutokryptexEncryptor(password);
             var decryptedBytes = autokryptex.Decrypt(bytes);
-            var json = Encoding.UTF8.GetString(bytes);
+            var json = Encoding.UTF8.GetString(decryptedBytes);
             var obj = JsonConvert.DeserializeObject<DataAccessorConfiguration>(json);
 
             return obj;

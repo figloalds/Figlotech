@@ -85,7 +85,7 @@ namespace Figlotech.BDados.Builders {
             return (QueryBuilder)Append(condition ? t(text) : new QueryBuilder());
         }
         public QueryBuilder v(object value) {
-            return (QueryBuilder)Append(new QueryBuilder($"@{IntEx.GerarShortRID()}", value));
+            return (QueryBuilder)Append(new QueryBuilder($"@{IntEx.GenerateShortRid()}", value));
         }
         public QueryBuilder vif(bool condition, string text) {
             return (QueryBuilder)Append(condition ? v(text) : new QueryBuilder());
@@ -184,6 +184,9 @@ namespace Figlotech.BDados.Builders {
         }
 
         public IQueryBuilder Append(String fragment, params object[] args) {
+            if(fragment == null) {
+                return this;
+            }
             if (!_conditionalEngaged || (_conditionalEngaged && _conditionalRetv)) {
                 if (_queryString.Length > 0 && !fragment.StartsWith(" "))
                     fragment = $" {fragment}";

@@ -143,10 +143,10 @@ namespace Figlotech.BDados.CustomForms {
                     retv.Append("WHERE");
                     for (var a = 0; a < validConditions.Count; a++) {
                         if(validConditions.ElementAt(a).Value is String) {
-                            retv.Append($"{validConditions.ElementAt(a).Key} LIKE CONCAT('%', @{IntEx.GerarShortRID()}, '%')", validConditions.ElementAt(a).Value);
+                            retv.Append($"{validConditions.ElementAt(a).Key} LIKE CONCAT('%', @{IntEx.GenerateShortRid()}, '%')", validConditions.ElementAt(a).Value);
                         }
                         else {
-                            retv.Append($"{validConditions.ElementAt(a).Key}=@{IntEx.GerarShortRID()}", validConditions.ElementAt(a).Value);
+                            retv.Append($"{validConditions.ElementAt(a).Key}=@{IntEx.GenerateShortRid()}", validConditions.ElementAt(a).Value);
                         }
                     }
                 }
@@ -203,9 +203,9 @@ namespace Figlotech.BDados.CustomForms {
             retv.Append(") VALUES (");
 
             for (var i = 0; i < form.Fields.Count; i++) {
-                retv.Append($"@{IntEx.GerarShortRID()},", o.Get(form.Fields[i].Name));
+                retv.Append($"@{IntEx.GenerateShortRid()},", o.Get(form.Fields[i].Name));
             }
-            retv.Append($"@{IntEx.GerarShortRID()})", IntEx.GerarUniqueRID());
+            retv.Append($"@{IntEx.GenerateShortRid()})", IntEx.GerarUniqueRID());
             return retv;
         }
 
@@ -217,16 +217,16 @@ namespace Figlotech.BDados.CustomForms {
             QueryBuilder retv = new QueryBuilder();
             retv.Append($"UPDATE {tableName} SET ");
             for (var i = 0; i < form.Fields.Count; i++) {
-                retv.Append($"{form.Fields[i].Name}=@{IntEx.GerarShortRID()}", o.Get(form.Fields[i].Name));
+                retv.Append($"{form.Fields[i].Name}=@{IntEx.GenerateShortRid()}", o.Get(form.Fields[i].Name));
             }
             /* LMAO GET RID */
             retv.If(o.Get("RID") != null).Then()
-                    .Append($"RID=@{IntEx.GerarShortRID()}", o.Get("RID"))
+                    .Append($"RID=@{IntEx.GenerateShortRid()}", o.Get("RID"))
                 .Else()
-                    .Append($"RID=@{IntEx.GerarShortRID()}", IntEx.GerarUniqueRID())
+                    .Append($"RID=@{IntEx.GenerateShortRid()}", IntEx.GerarUniqueRID())
                 .EndIf();
 
-            retv.Append($"WHERE Id=@{IntEx.GerarShortRID()};", o.Get("Id"));
+            retv.Append($"WHERE Id=@{IntEx.GenerateShortRid()};", o.Get("Id"));
 
             return retv;
         }

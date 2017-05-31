@@ -187,7 +187,7 @@ namespace Figlotech.BDados.Helpers {
                         strBuilder.Append("(");
                         strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
                         strBuilder.Append("LIKE");
-                        strBuilder.Append($"CONCAT('%', @{IntEx.GerarShortRID()}, '%')", GetValue(expr.Right));
+                        strBuilder.Append($"CONCAT('%', @{IntEx.GenerateShortRid()}, '%')", GetValue(expr.Right));
                         strBuilder.Append(")");
                     }
                 } else {
@@ -229,9 +229,9 @@ namespace Figlotech.BDados.Helpers {
                         // oh hell.
                         MemberInfo member;
                         if(expr.Expression is ParameterExpression) {
-                            member = (expr.Expression as ParameterExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name.Replace("_", ""));
+                            member = (expr.Expression as ParameterExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name);
                         } else {
-                            member = (expr.Expression as MemberExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name.Replace("_", ""));
+                            member = (expr.Expression as MemberExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name);
                         }
                         var info = ReflectionTool.GetAttributeFrom<AggregateFieldAttribute>(member);
                         if (info != null) {
@@ -246,7 +246,7 @@ namespace Figlotech.BDados.Helpers {
                                                                                              //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                 strBuilder.Append($"{prefix}.{info2.FarField}");
                             } else {
-                                var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name.Replace("_",""));
+                                var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name);
                                 var info3 = ReflectionTool.GetAttributeFrom<AggregateObjectAttribute>(mem);
                                 if (info3 != null) {
                                     var prefix = ForceAlias ?? GetPrefixOfAgObj(expr.Expression, info3); // prefixer.GetAliasFor("root", subexp.Type.Name);
@@ -264,12 +264,12 @@ namespace Figlotech.BDados.Helpers {
                 } else if (subexp is MethodCallExpression) {
                     strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions).GetCommandText()}.{expr.Member.Name}");
                 } else {
-                    strBuilder.Append($"@{IntEx.GerarShortRID()}", GetValue(expr));
+                    strBuilder.Append($"@{IntEx.GenerateShortRid()}", GetValue(expr));
                 }
             } else
             if (foofun is ConstantExpression) {
                 var expr = foofun as ConstantExpression;
-                strBuilder.Append($"@{IntEx.GerarShortRID()}", expr.Value);
+                strBuilder.Append($"@{IntEx.GenerateShortRid()}", expr.Value);
             } else
             if (foofun is UnaryExpression) {
                 var expr = foofun as UnaryExpression;

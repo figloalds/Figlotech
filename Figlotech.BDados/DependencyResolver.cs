@@ -87,8 +87,8 @@ namespace Figlotech.BDados {
             FactoryMap.Add(typeof(TDependency), function);
         }
 
-        public T Resolve<T>() {
-            return (T)Resolve(typeof(T));
+        public T Resolve<T>(bool ignoreErrors = false) {
+            return (T)Resolve(typeof(T), ignoreErrors);
         }
 
         /// <summary>
@@ -104,7 +104,7 @@ namespace Figlotech.BDados {
         /// </para>
         /// </summary>
         /// <param name="input">The object to be scanned and have its dependencies resolved</param>
-        public void SmartResolve(object input) {
+        public void SmartResolve(object input, bool ignoreErrors = false) {
             ObjectReflector rflx = new ObjectReflector(input);
             var t = input.GetType();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
@@ -112,17 +112,16 @@ namespace Figlotech.BDados {
             foreach(var member in members) {
                 var type = ReflectionTool.GetTypeOf(member);
                 if(type.IsInterface) {
-                    if(rflx[member] == null) {
-                        try {
-                            rflx[member] = Resolve(type);
-                        } catch (Exception) { }
+                    var resolution = Resolve(type, ignoreErrors);
+                    if(resolution != null) {
+                        rflx[member] = resolution;
                     }
                 }
             }
 
         }
 
-        internal object Resolve(Type t) {
+        internal object Resolve(Type t, bool ignoreErrors) {
             object value = FindInstance(t);
             if (value != null)
                 return value;
@@ -145,27 +144,29 @@ namespace Figlotech.BDados {
                     var resolutions = new List<object>();
                     foreach (var parameter in ctor.GetParameters()) {
                         try {
-                            object o = Resolve(parameter.ParameterType);
+                            object o = Resolve(parameter.ParameterType, ignoreErrors);
                             resolutions.Add(o);
                         } catch (Exception) {
                             continue;
                         }
                     }
-                    return Activator.CreateInstance(t, resolutions.ToArray());
+                    return Activator.CreateInstance(res, resolutions.ToArray());
                 }
 
                 if (hasParameterLessCtor) {
-                    return Activator.CreateInstance(t);
+                    return Activator.CreateInstance(res);
                 } else {
                     throw new BDadosException(String.Format(
                         FTH.Strings.BDIOC_CANNOT_RESOLVE_TYPE, t.Name
                     ));
                 }
             }
-
-            throw new BDadosException(String.Format(
-                FTH.Strings.BDIOC_CANNOT_RESOLVE_TYPE, t.Name
-            ));
+            if(!ignoreErrors) {
+                throw new BDadosException(String.Format(
+                    FTH.Strings.BDIOC_CANNOT_RESOLVE_TYPE, t.Name
+                ));
+            }
+            return null;
         }
     }
 }

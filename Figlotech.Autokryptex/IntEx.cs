@@ -105,7 +105,7 @@ namespace Figlotech.Core
             return final.Length <= 64? final : final.Substring(0, 64);
         }
         private static IntEx progRids = 42;
-        public static String GerarShortRID() {
+        public static String GenerateShortRid() {
             progRids += 7;
             return progRids.ToString(IntEx.Base36);
         }

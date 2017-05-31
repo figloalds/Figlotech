@@ -12,11 +12,19 @@ namespace Figlotech.BDados.Helpers
         public ObjectReflector() {
         }
         public ObjectReflector(object o) {
+            if (o == null) {
+                throw new ArgumentNullException("Object Reflector needs a non-null object to work with.");
+            }
             target = o;
+            members = ReflectionTool.FieldsAndPropertiesOf(target.GetType()).ToArray();
         }
 
         public void Slot(object anObject) {
+            if(anObject == null) {
+                throw new ArgumentNullException("Object Reflector needs a non-null object to work with.");
+            }
             target = anObject;
+            members = ReflectionTool.FieldsAndPropertiesOf(target.GetType()).ToArray();
         }
         public object Retrieve() {
             return target;
@@ -33,18 +41,36 @@ namespace Figlotech.BDados.Helpers
                 return ReflectionTool.GetMemberValue(key, target);
             }
             set {
-                ReflectionTool.SetMemberValue(key, target, value);
+                var cvType = Nullable.GetUnderlyingType(ReflectionTool.GetTypeOf(key)) ?? ReflectionTool.GetTypeOf(key);
+                var o = value;
+                if(o != null) {
+                    if (ReflectionTool.GetTypeOf(key).IsAssignableFrom(o?.GetType())) {
+                        ReflectionTool.SetMemberValue(key, target, o);
+                        return;
+                    }
+                }
+                var val = o == null ? null : Convert.ChangeType(o, cvType);
+                ReflectionTool.SetMemberValue(key, target, val);
             }
         }
 
         public object this[String key] {
             get {
-                return ReflectionTool.GetValue(target, key);
+                var member = members.FirstOrDefault(m => m.Name == key);
+                if (member != null) {
+                    return this[member];
+                }
+                return null;
             }
             set {
-                ReflectionTool.SetValue(target, key, value);
+                var member = members.FirstOrDefault(m => m.Name == key);
+                if(member != null) {
+                    this[member] = value;
+                }
             }
         }
+
+        MemberInfo[] members = new MemberInfo[0];
 
         public static object Build(Type input, Action<ObjectReflector> workAction) {
             ObjectReflector manipulator = new ObjectReflector();

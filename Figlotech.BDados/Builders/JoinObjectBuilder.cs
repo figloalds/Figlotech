@@ -93,28 +93,29 @@ namespace Figlotech.BDados.Builders
             var Relacoes = _join.Relations;
             String Prefix = _join.Joins[thisIndex].Prefix;
             String parentPrefix = _join.Joins[parentIndex].Prefix;
+            string rid = FTH.GetRidColumn(type);
             List<DataRow> rs = new List<DataRow>();
-            List<String> ids = new List<String>();
+            List<object> ids = new List<object>();
             for (int i = 0; i < dt.Rows.Count; i++) {
                 // 
                 Object val = dt.Rows[i].Field<Object>(Prefix + "_" + relation.ChildKey);
                 if (val != null && val.ToString() == ParentVal.ToString()) {
-                    String RID = dt.Rows[i].Field<String>(Prefix + "_RID");
+                    object RID = dt.Rows[i].Field<object>(Prefix + $"_{rid}");
                     if (!ids.Contains(RID)) {
                         rs.Add(dt.Rows[i]);
                         ids.Add(RID);
                     }
                 }
             }
+            MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
+                .Where(at =>
+                    at.GetCustomAttribute<FieldAttribute>() != null
+                )
+                .ToArray();
             foreach (DataRow dr in rs) {
                 T thisObject = new T();
                 var objBuilder = new ObjectReflector(thisObject);
                 // -- Add aggregate values
-                MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
-                    .Where(at =>
-                        at.GetCustomAttribute<FieldAttribute>() != null
-                    )
-                    .ToArray();
                 for (int i = 0; i < fields.Length; i++) {
                     if (_join.Joins[thisIndex].Excludes.Contains(fields[i].Name))
                         continue;
@@ -219,18 +220,18 @@ namespace Figlotech.BDados.Builders
                 String ChaveA = m.Groups["KeyA"].Value;
                 String ChaveB = m.Groups["KeyB"].Value;
                 if (ChaveA == null || ChaveB == null) {
-                    throw new BDadosException(String.Format("Relacao invalida {0}", _join.Joins[i].Args));
+                    throw new BDadosException(String.Format("Invalid Relation {0}", _join.Joins[i].Args));
                 }
                 if (!FTH.FindColumn(ChaveA, _join.Joins[IndexA].ValueObject) || !FTH.FindColumn(ChaveB, _join.Joins[IndexB].ValueObject)) {
                     _join.Relations.Clear();
-                    throw new BDadosException(String.Format("A coluna {0} especificada não existe na tabela '{1} AS {2}'", ChaveA, _join.Joins[i].TableName, _join.Joins[i].Prefix));
+                    throw new BDadosException(String.Format("Column {0} specified doesn't exist in '{1} AS {2}'", ChaveA, _join.Joins[i].TableName, _join.Joins[i].Prefix));
                 }
             }
             for (int i = 0; i < _join.Relations.Count; i++) {
                 if (_join.Relations[i].ParentIndex < 0 || _join.Relations[i].ParentIndex > _join.Joins.Count - 1)
-                    throw new BDadosException(String.Format("Uma das Relacoes especificadas não é valida."));
+                    throw new BDadosException(String.Format("One of the specified relations is not valid."));
                 if (_join.Relations[i].ChildIndex < 0 || _join.Relations[i].ChildIndex > _join.Joins.Count - 1)
-                    throw new BDadosException(String.Format("Uma das Relacoes especificadas não é valida."));
+                    throw new BDadosException(String.Format("One of the specified relations is not valid."));
             }
             return _join.Relations;
         }
@@ -261,7 +262,8 @@ namespace Figlotech.BDados.Builders
             var rs = new List<DataRow>();
             foreach (DataRow dr in dt.Rows)
                 rs.Add(dr);
-            rs = rs.GroupBy(c => c.Field<String>(Prefix + "_RID")).Select(grp => grp.First()).ToList();
+            string rid = FTH.GetRidColumn(typeof(T));
+            rs = rs.GroupBy(c => c.Field<object>(Prefix + $"_{rid}")).Select(grp => grp.First()).ToList();
             // This says: Foreach datarow at the 
             // "grouped by the Aggregate Root RID"
             foreach (DataRow dr in rs) {
@@ -278,9 +280,9 @@ namespace Figlotech.BDados.Builders
                         continue;
                     var colName = Prefix + "_" + fields[i].Name;
                     if (!dt.Columns.Contains(colName)) continue;
-                    var o = dr.Field<Object>(colName);
+                    var o = dr.Field<object>(colName);
 
-                    objBuilder[fields[i].Name] = o;
+                    objBuilder[fields[i]] = o;
                 }
                 // -- Find all relations where current table is 'parent'.
                 var relations = (from a in Relations where a.ParentIndex == TopLevel select a);
@@ -317,6 +319,9 @@ namespace Figlotech.BDados.Builders
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
+                                if (objBuilder[fieldAlias] == null) {
+                                    objBuilder[fieldAlias] = Activator.CreateInstance(objectType);
+                                }
                                 foreach (var a in newList) {
                                     var inVal = Convert.ChangeType(a, ulType);
                                     addMethod.Invoke(objBuilder[fieldAlias], new object[] { inVal });

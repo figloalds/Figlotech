@@ -64,6 +64,37 @@ namespace Figlotech.BDados {
             return retv;
         }
 
+        public static String GetRidColumn<T>() where T : IDataObject, new() { return GetRidColumn(typeof(T)); }
+        public static String GetRidColumn(Type type) {
+            var fields = new List<FieldInfo>();
+            do {
+                fields.AddRange(type.GetFields());
+                type = type.BaseType;
+            } while (type != null);
+
+            var retv = fields
+                .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
+                .FirstOrDefault()
+                ?.Name
+                ?? "RID";
+            return retv;
+        }
+        public static String GetIdColumn<T>() where T : IDataObject, new() { return GetIdColumn(typeof(T)); }
+        public static String GetIdColumn(Type type) {
+            var fields = new List<FieldInfo>();
+            do {
+                fields.AddRange(type.GetFields());
+                type = type.BaseType;
+            } while (type != null);
+
+            var retv = fields
+                .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
+                .FirstOrDefault()
+                ?.Name
+                ?? "Id";
+            return retv;
+        }
+
         public static void Map<T>(IList<T> input, DataTable dt) where T : new() {
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -849,7 +880,7 @@ namespace Figlotech.BDados {
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder(
-                        $"@{IntEx.GerarShortRID()}",
+                        $"@{IntEx.GenerateShortRid()}",
                         set[i].RID
                     )
                 );
@@ -907,7 +938,7 @@ Refer to the source code for more info
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder(
-                        $"@{IntEx.GerarShortRID()}",
+                        $"@{IntEx.GenerateShortRid()}",
                         set[i].Id
                     )
                 );

@@ -23,7 +23,7 @@ namespace Figlotech.BDados.Builders {
         int i;
         String RandomId {
             get {
-                String s = IntEx.GerarShortRID();
+                String s = IntEx.GenerateShortRid();
                 return $"{s}{i++}";
             }
         }

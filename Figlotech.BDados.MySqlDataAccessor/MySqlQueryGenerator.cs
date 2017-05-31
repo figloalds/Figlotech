@@ -119,7 +119,7 @@ namespace Figlotech.BDados.Builders
             if (condicoesRoot == null)
                 condicoesRoot = new QueryBuilder("true");
             if (juncaoInput.Joins.Count < 1)
-                throw new BDadosException("Essa junção precisa de 1 ou mais tabelas.");
+                throw new BDadosException("This join needs 1 or more tables.");
 
             List<Type> Tabelas = (from a in juncaoInput.Joins select a.ValueObject).ToList();
             List<String> tableNames = (from a in juncaoInput.Joins select a.ValueObject.Name.ToLower()).ToList();
@@ -143,7 +143,7 @@ namespace Figlotech.BDados.Builders
                 if (capturedInSub.Contains(i)) {
                     continue;
                 }
-                Query.Append($"\t-- Tabela {tableNames[i]}\n");
+                Query.Append($"\t-- Table {tableNames[i]}\n");
                 var fields = ReflectionTool.FieldsAndPropertiesOf(
                     Tabelas[i])
                     .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
@@ -163,7 +163,7 @@ namespace Figlotech.BDados.Builders
                 if (!capturedInSub.Contains(i)) {
                     continue;
                 }
-                Query.Append($"\t\t-- Tabela {tableNames[i]}\n");
+                Query.Append($"\t\t-- Table {tableNames[i]}\n");
                 var fields = ReflectionTool.FieldsAndPropertiesOf(
                     Tabelas[i])
                     .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
@@ -284,7 +284,7 @@ namespace Figlotech.BDados.Builders
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var id = MySqlDataAccessor.GetIdColumn(tabelaInput.GetType());
+            var id = FTH.GetIdColumn(tabelaInput.GetType());
             QueryBuilder Query = new QueryBuilder(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GerarParamsValoresUpdate(tabelaInput));
@@ -312,7 +312,7 @@ namespace Figlotech.BDados.Builders
         }
 
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput) {
-            var cod = IntEx.GerarShortRID();
+            var cod = IntEx.GenerateShortRid();
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
             fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
@@ -331,7 +331,7 @@ namespace Figlotech.BDados.Builders
             // -- 
             RecordSet<T> workingSet = new RecordSet<T>(inputRecordset.DataAccessor);
 
-            var id = MySqlDataAccessor.GetIdColumn<T>();
+            var id = FTH.GetIdColumn<T>();
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
@@ -349,7 +349,7 @@ namespace Figlotech.BDados.Builders
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
-                    string sid = IntEx.GerarShortRID();
+                    string sid = IntEx.GenerateShortRid();
                     Query.Append($"WHEN {id}=@{sid}{x++} THEN @{sid}{x++}", a.Id, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
