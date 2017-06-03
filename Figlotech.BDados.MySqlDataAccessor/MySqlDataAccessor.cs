@@ -292,11 +292,12 @@ namespace Figlotech.BDados
             if (retv && !input.IsPersisted) {
                 long retvId = 0;
                 var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-                if (ridAtt.Any()) {
+                var idAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+                if (ridAtt.Any() && id != rid) {
                     DataTable dt = Query($"SELECT {id} FROM " + input.GetType().Name + $" WHERE {rid}=@1", input.RID);
                     retvId = dt.Rows[0].Field<long>(id);
                 } else {
-                    retvId = (int)ScalarQuery($"SELECT last_insert_id();");
+                    retvId =(long) (ulong) ScalarQuery($"SELECT last_insert_id();");
                 }
                 if (retvId > 0) {
                     input.ForceId(retvId);
@@ -343,11 +344,7 @@ namespace Figlotech.BDados
                 return retv;
             }
             var name = FTH.GetIdColumn<T>();
-
-            // Cria uma instancia Dummy só pra poder pegar o reflector da classe usada como T.
-            T dummy = (T)Activator.CreateInstance(typeof(T));
-            BaseDataObject dummy2 = (BaseDataObject)(object)dummy;
-
+            
             // Usando o dummy2 eu consigo puxar uma query de select baseada nos campos da classe filha
             DataTable dt = Query(GetQueryGenerator().GenerateSelect<T>(new ConditionParametrizer($"{name}=@1", Id)));
             int i = 0;
@@ -361,6 +358,7 @@ namespace Figlotech.BDados
                         if (!dt.Columns.Contains(col.Name)) continue;
                         var typeofCol = ReflectionTool.GetTypeOf(col);
                         Type t = typeofCol;
+
                         Object o = dt.Rows[i].Field<Object>(col.Name);
                         objBuilder[col] = o;
                     } catch (Exception) { }
