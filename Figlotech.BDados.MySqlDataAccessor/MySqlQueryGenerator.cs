@@ -49,47 +49,21 @@ namespace Figlotech.BDados.Builders
         public IQueryBuilder GetCreationCommand(Type t) {
             String objectName = t.Name.ToLower();
 
-            List<MemberInfo> lifi = new List<MemberInfo>();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
-            foreach (var fi in members
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-                .ToArray()) {
-                if (fi.GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
-                    continue;
-                foreach (var at in fi.CustomAttributes) {
-                    if (at.AttributeType == typeof(FieldAttribute)) {
-                        lifi.Add(fi);
-                    }
-                }
-            }
-            if (lifi.Count == 0)
-                return null;
+            members.RemoveAll(
+                (m) => m?.GetCustomAttribute<FieldAttribute>() == null);
             if (objectName == null || objectName.Length == 0)
                 return null;
-            //ForeignKeys = ObterForeignKeys();
             QueryBuilder CreateTable = new QueryBuilder($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
-            for (int i = 0; i < lifi.Count; i++) {
-                var info = lifi[i].GetCustomAttribute<FieldAttribute>();
-                CreateTable.Append($"{lifi[i].Name}");
+            for (int i = 0; i < members.Count; i++) {
+                var info = members[i].GetCustomAttribute<FieldAttribute>();
+                CreateTable.Append(FTH.GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
-                CreateTable.Append(info.Type);
-                CreateTable.Append(" ");
-                CreateTable.Append(info.Options);
-                if (i != lifi.Count - 1) {
+                CreateTable.Append(info.Options ?? "");
+                if (i != members.Count - 1) {
                     CreateTable.Append(", \n");
                 }
             }
-            var ChavePrimaria = lifi.Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null).FirstOrDefault();
-            if (ChavePrimaria != null) {
-                CreateTable.Append($"CONSTRAINT PK_{objectName} PRIMARY KEY ({ChavePrimaria.Name} ASC),\n");
-            }
-            //FieldInfo[] ForeignKeys = columns.Where((f) => f.GetCustomAttribute<ForeignKeyAttribute>() != null).ToArray();
-            //for (int i = 0; i < ForeignKeys.Length; i++) {
-            //    var fk = ForeignKeys[i].GetCustomAttribute<ForeignKeyAttribute>();
-            //    CreateTable.Append($"CONSTRAINT FK_{objectName}_{ForeignKeys[i].Name}_{fk.referencedType}_{fk.referencedColumn} FOREIGN KEY ({ForeignKeys[i].Name}) REFERENCES {fk.referencedType} ({fk.referencedColumn})");
-            //    if (i < ForeignKeys.Length - 1)
-            //        CreateTable.Append(",\n");
-            //}
             CreateTable.Append(" );");
             return CreateTable;
         }

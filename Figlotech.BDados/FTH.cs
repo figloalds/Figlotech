@@ -996,11 +996,12 @@ Refer to the source code for more info
         /// <param name="field"></param>
         /// <param name="info"></param>
         /// <returns></returns>
-        private static String GetColumnDefinition(FieldInfo field, FieldAttribute info = null) {
+        public static String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
             if (info == null)
                 info = field.GetCustomAttribute<FieldAttribute>();
             if (info == null)
                 return "VARCHAR(128)";
+            var typeOfField = ReflectionTool.GetTypeOf(field);
             var nome = field.Name;
             String tipo = GetDatabaseType(field, info);
             if (info.Type != null && info.Type.Length > 0)
@@ -1011,7 +1012,7 @@ Refer to the source code for more info
             } else {
                 if (!info.AllowNull) {
                     options += " NOT NULL";
-                } else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
+                } else if (Nullable.GetUnderlyingType(typeOfField) == null && typeOfField.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
                 }
                 if (info.Unique)
@@ -1033,7 +1034,7 @@ Refer to the source code for more info
         /// <param name="field"></param>
         /// <param name="info"></param>
         /// <returns></returns>
-        private static String GetDatabaseType(FieldInfo field, FieldAttribute info = null) {
+        private static String GetDatabaseType(MemberInfo field, FieldAttribute info = null) {
             if (info == null)
                 foreach (var att in field.GetCustomAttributes())
                     if (att is FieldAttribute) {
@@ -1041,25 +1042,22 @@ Refer to the source code for more info
                     }
             if (info == null)
                 return "VARCHAR(100)";
-
-            string dataType;
-            if (Nullable.GetUnderlyingType(field.FieldType) != null)
-                dataType = Nullable.GetUnderlyingType(field.FieldType).Name;
+            var typeOfField = ReflectionTool.GetTypeOf(field);
+            string tipoDados;
+            if (Nullable.GetUnderlyingType(typeOfField) != null)
+                tipoDados = Nullable.GetUnderlyingType(typeOfField).Name;
             else
-                dataType = field.FieldType.Name;
-            if (field.FieldType.IsEnum) {
+                tipoDados = typeOfField.Name;
+            if (typeOfField.IsEnum) {
                 return "INT";
             }
             String type = "VARCHAR(20)";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
-                switch (dataType.ToLower()) {
+                switch (tipoDados.ToLower()) {
                     case "string":
                         type = $"VARCHAR({info.Size})";
-                        break;
-                    case "RID":
-                        type = $"VARCHAR(64)";
                         break;
                     case "int":
                     case "int32":

@@ -103,14 +103,13 @@ namespace Figlotech.BDados.Authentication {
             return loadedUser;
         }
 
-        public IUserSession Login<T>(Expression<Func<T, bool>> fetchUserFunction, string password) where T : IUser, new()
+        public IUserSession Login(IUser user, string password)
         {
-            var user = DataAccessor.LoadAll<T>(fetchUserFunction).FirstOrDefault();
             if (user == null) {
                 //TrackAttempt(user?.RID, false);
                 throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
             }
-            user = (T) CheckLogin((IUser) user, password);
+            user = CheckLogin(user, password);
             if (user != null) {
                 var sess = new TSession {
                     User = user.RID,

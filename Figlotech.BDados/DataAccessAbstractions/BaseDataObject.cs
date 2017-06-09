@@ -17,7 +17,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public BaseDataObject() {
-            DS.Default.SmartResolve(this);
+            DS.Default.SmartResolve(this, true);
         }
 
         public abstract long Id { get; set; }

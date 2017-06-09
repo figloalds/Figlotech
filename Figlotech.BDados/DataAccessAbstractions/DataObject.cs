@@ -31,12 +31,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override bool IsActive { get; set; }
 
-
-
         public DataObject() { }
-        public DataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) : base (dataAccessor, ctxProvider) {
-
-        }
 
         public virtual List<IValidationRule<T>> ValidationRules { get; set; } = new List<IValidationRule<T>>();
 

@@ -16,7 +16,7 @@ namespace Figlotech.BDados.Authentication
         /// <param name="userName">Self explanatory: Username</param>
         /// <param name="password">Self explanatory: Password</param>
         /// <returns></returns>
-        IUserSession Login<T>(Expression<Func<T,bool>> fetchUserFunction, string password) where T:IUser,new();
+        IUserSession Login(IUser user, string password);
         /// <summary>
         /// This is supposed to log the user off, destroy the token do whatever
         /// but not allow that token to access again.
