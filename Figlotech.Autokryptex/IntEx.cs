@@ -17,8 +17,8 @@ namespace Figlotech.Core
 {
     public struct IntEx
     {
-        private List<byte> Digitos;
-        private bool Negativo;
+        private List<byte> digits;
+        private bool isNegative;
         public const int BaseSize = 256;
         public const string Binary = "01";
         public const string Octal = "01234567";
@@ -32,37 +32,37 @@ namespace Figlotech.Core
 
         public static int rtProgression;
 
-        public IntEx(long NumeroInicial)
+        public IntEx(long number)
         {
-            Digitos = new List<byte> {
+            digits = new List<byte> {
                 (byte)0
             };
-            Negativo = NumeroInicial < 0;
-            if (Negativo)
-                NumeroInicial = -NumeroInicial;
-            Set(NumeroInicial);
+            isNegative = number < 0;
+            if (isNegative)
+                number = -number;
+            Set(number);
         }
-        public IntEx(string Numero, string Base)
+        public IntEx(string number, string Base)
         {
-            Digitos = new List<byte> {
+            digits = new List<byte> {
                 (byte)0
             };
-            Negativo = Numero.StartsWith("-");
-            if (Negativo)
-                Numero = new string(Numero.Skip(1).ToArray());
-            List<char> DigNumero = new List<char>();
-            DigNumero.AddRange(Numero.ToCharArray());
-            DigNumero.Reverse();
+            isNegative = number.StartsWith("-");
+            if (isNegative)
+                number = new string(number.Skip(1).ToArray());
+            List<char> inputDigits = new List<char>();
+            inputDigits.AddRange(number.ToCharArray());
+            inputDigits.Reverse();
             IntEx retv = 0;
             IntEx multi = 1;
-            for (int i = 0; i < DigNumero.Count; i++)
+            for (int i = 0; i < inputDigits.Count; i++)
             {
-                if (!Base.Contains(DigNumero[i]))
+                if (!Base.Contains(inputDigits[i]))
                     continue;
-                retv += Base.IndexOf(DigNumero[i]) * multi;
+                retv += Base.IndexOf(inputDigits[i]) * multi;
                 multi *= Base.Length;
             }
-            Digitos = retv.Digitos;
+            digits = retv.digits;
         }
         private static int sequentia = 0;
         private static int _runtimeHash = -1;
@@ -85,7 +85,7 @@ namespace Figlotech.Core
             }
         }
         private static Random r = new Random();
-        public static String GerarUniqueRID() {
+        public static String GenerateUniqueRID() {
             IntEx i = new IntEx();
             i = DateTime.Now.Ticks;
             sequentia++;
@@ -130,8 +130,8 @@ namespace Figlotech.Core
         {
             if (b == 0) return 0;
             a.Mult(b);
-            if (a.Negativo ^ b < 0) {
-                a.Negativo = true;
+            if (a.isNegative ^ b < 0) {
+                a.isNegative = true;
             }
             return a;
         }
@@ -152,32 +152,32 @@ namespace Figlotech.Core
             return new IntEx(Number, DefaultInputBase);
         }
         
-        private void Mult(long Numero)
+        private void Mult(long number)
         {
-            Mult(new IntEx(Numero));
+            Mult(new IntEx(number));
         }
 
-        private void Mult(IntEx Numero)
+        private void Mult(IntEx numero)
         {
             List<IntEx> MultiParts = new List<IntEx>();
-            for (int i = 0; i < Digitos.Count; i++)
+            for (int i = 0; i < digits.Count; i++)
             {
                 IntEx ThisPart = new IntEx() {
-                    Digitos = new List<byte>()
+                    digits = new List<byte>()
                 };
                 for (int k = 0; k < i; k++)
-                    ThisPart.Digitos.Add((byte)0);
-                int Leftovers = 0;
-                for (int j = 0; j < Numero.Digitos.Count; j++)
+                    ThisPart.digits.Add((byte)0);
+                int leftovers = 0;
+                for (int j = 0; j < numero.digits.Count; j++)
                 {
-                    int MultiFragment = (byte) Digitos[i] * (byte) Numero.Digitos[j] + Leftovers;
-                    Leftovers = MultiFragment / BaseSize;
-                    ThisPart.Digitos.Add((byte)(MultiFragment % BaseSize));
+                    int MultiFragment = (byte) digits[i] * (byte) numero.digits[j] + leftovers;
+                    leftovers = MultiFragment / BaseSize;
+                    ThisPart.digits.Add((byte)(MultiFragment % BaseSize));
                 }
-                while (Leftovers > 0)
+                while (leftovers > 0)
                 {
-                    ThisPart.Digitos.Add((byte)(Leftovers % BaseSize));
-                    Leftovers = Leftovers / BaseSize;
+                    ThisPart.digits.Add((byte)(leftovers % BaseSize));
+                    leftovers = leftovers / BaseSize;
                 }
                 MultiParts.Add(ThisPart);
             }
@@ -186,7 +186,7 @@ namespace Figlotech.Core
             {
                 Novo += MultiParts[i];
             }
-            Digitos = Novo.Digitos;
+            digits = Novo.digits;
         }
 
         private void Add(long Number)
@@ -196,36 +196,36 @@ namespace Figlotech.Core
 
         private void Add(IntEx Number)
         {
-            IntEx Maior = Number.Digitos.Count > Digitos.Count ? Number : this;
-            IntEx Menor = Number.Digitos.Count < Digitos.Count ? Number : this;
-            int Leftovers = 0;
-            List<byte> Resultado = new List<byte>();
-            for (int i = 0; i < Maior.Digitos.Count || Leftovers > 0; i++)
+            IntEx greater = Number.digits.Count > digits.Count ? Number : this;
+            IntEx lesser = Number.digits.Count < digits.Count ? Number : this;
+            int leftover = 0;
+            List<byte> result = new List<byte>();
+            for (int i = 0; i < greater.digits.Count || leftover > 0; i++)
             {
-                int Soma;
-                if (i >= Maior.Digitos.Count)
-                    Soma = Leftovers;
-                else if(i >= Menor.Digitos.Count)
-                    Soma = Leftovers + Maior.Digitos[i];
+                int sum;
+                if (i >= greater.digits.Count)
+                    sum = leftover;
+                else if(i >= lesser.digits.Count)
+                    sum = leftover + greater.digits[i];
                 else
-                    Soma = Digitos[i] + Number.Digitos[i] + Leftovers;
-                Leftovers = 0;
-                if (Soma > BaseSize-1)
+                    sum = digits[i] + Number.digits[i] + leftover;
+                leftover = 0;
+                if (sum > BaseSize-1)
                 {
-                    while (Soma > BaseSize-1)
+                    while (sum > BaseSize-1)
                     {
-                        Soma -= BaseSize;
-                        Leftovers += 1;
+                        sum -= BaseSize;
+                        leftover += 1;
                     }
-                    Resultado.Add((byte)Soma);
+                    result.Add((byte)sum);
                 }
                 else
                 {
-                    Resultado.Add((byte)Soma);
-                    Leftovers = 0;
+                    result.Add((byte)sum);
+                    leftover = 0;
                 }
             }
-            Digitos = Resultado;
+            digits = result;
         }
 
         private int Dif(int a, int b)
@@ -237,95 +237,95 @@ namespace Figlotech.Core
 
         public void Set(long Number)
         {
-            Digitos = new List<byte>();
+            digits = new List<byte>();
             long Backup = Number;
             do
             {
                 int Indice = (int)(Backup % BaseSize);
-                Digitos.Add((byte)Indice);
+                digits.Add((byte)Indice);
                 Backup = Backup / BaseSize;
             } while ((Backup) > 0);
         }
 
         public long ToLong()
         {
-            int Posicao = 0;
+            int position = 0;
             long Multi = 1;
-            long Retorno = 0;
-            if (Digitos.Count == 0) return 0;
-            if (Digitos.Count > 16) throw new Exception("The number within IntEx class is too big to fit into an long");
+            long retv = 0;
+            if (digits.Count == 0) return 0;
+            if (digits.Count > 16) throw new Exception("The number within IntEx class is too big to fit into an long");
             do
             {
-                Retorno += Digitos.ElementAt(Posicao) * Multi;
+                retv += digits.ElementAt(position) * Multi;
                 Multi *= BaseSize;
-                Posicao++;
-            } while (Posicao < Digitos.Count);
-            return Retorno;
+                position++;
+            } while (position < digits.Count);
+            return retv;
         }
         
-        public static long BaseConvert(string Numero, string Base)
+        public static long BaseConvert(string number, string Base)
         {
-            bool negativo = Numero.StartsWith("-");
-            Numero = Numero.Replace("-", "");
+            bool negative = number.StartsWith("-");
+            number = number.Replace("-", "");
             List<char> Digitos = new List<char>();
-            Digitos.AddRange(Numero.ToCharArray());
+            Digitos.AddRange(number.ToCharArray());
             Digitos.Reverse();
             long Retorno = 0;
             long Multi = 1;
             char[] CharsBase = Base.ToCharArray();
-            for (int i = 0; i < Numero.Length; i++) {
+            for (int i = 0; i < number.Length; i++) {
                 int t = Base.IndexOf(Digitos[i]);
                 Retorno += Base.IndexOf(Digitos[i]) * Multi;
                 Multi *= Base.Length;
             }
-            if (negativo)
+            if (negative)
                 Retorno = -Retorno;
             return Retorno;
         }
 
-        public static string BaseConvert(long Numero, string Base)
+        public static string BaseConvert(long number, string baseStr)
         {
-            List<char> Retv = new List<char>();
+            List<char> retv = new List<char>();
             bool negativo = false;
-            long Backup = Numero;
+            long Backup = number;
             if (negativo = (Backup < 0))
                 Backup = -Backup;
-            char[] CharsBase = Base.ToCharArray();
+            char[] CharsBase = baseStr.ToCharArray();
             do {
-                int Indice = (int)(Backup % Base.Length);
-                Retv.Add(Base[Indice]);
-                Backup = Backup / Base.Length;
+                int Indice = (int)(Backup % baseStr.Length);
+                retv.Add(baseStr[Indice]);
+                Backup = Backup / baseStr.Length;
             } while ((Backup) > 0);
             if (negativo)
-                Retv.Add('-');
-            Retv.Reverse();
-            return new string(Retv.ToArray());
+                retv.Add('-');
+            retv.Reverse();
+            return new string(retv.ToArray());
         }
-        public static string BaseMult(string a, string b, string Base)
+        public static string BaseMult(string a, string b, string baseStr)
         {
-            List<string> MultiParts = new List<string>();
+            List<string> multiParts = new List<string>();
             a = new string(a.Reverse().ToArray());
             b = new string(b.Reverse().ToArray());
             for (int i = 0; i < a.Length; i++) {
-                List<char> ThisPart = new List<char>();
+                List<char> thisPart = new List<char>();
                 for (int k = 0; k < i; k++)
-                    ThisPart.Add(Base[0]);
-                int Leftovers = 0;
+                    thisPart.Add(baseStr[0]);
+                int leftovers = 0;
                 for (int j = 0; j < b.Length; j++) {
-                    int MultiFragment = Base.IndexOf(a[i]) * Base.IndexOf(b[j]) + Leftovers;
-                    Leftovers = MultiFragment / Base.Length;
-                    ThisPart.Add(Base[MultiFragment % Base.Length]);
+                    int MultiFragment = baseStr.IndexOf(a[i]) * baseStr.IndexOf(b[j]) + leftovers;
+                    leftovers = MultiFragment / baseStr.Length;
+                    thisPart.Add(baseStr[MultiFragment % baseStr.Length]);
                 }
-                while (Leftovers > 0) {
-                    ThisPart.Add(Base[Leftovers % Base.Length]);
-                    Leftovers = Leftovers / Base.Length;
+                while (leftovers > 0) {
+                    thisPart.Add(baseStr[leftovers % baseStr.Length]);
+                    leftovers = leftovers / baseStr.Length;
                 }
-                ThisPart.Reverse();
-                MultiParts.Add(new string(ThisPart.ToArray()));
+                thisPart.Reverse();
+                multiParts.Add(new string(thisPart.ToArray()));
             }
-            string Retorno = Base[0] + "";
-            for (int i = 0; i < MultiParts.Count; i++) {
-                Retorno = BaseSum(Retorno, MultiParts[i], Base);
+            string Retorno = baseStr[0] + "";
+            for (int i = 0; i < multiParts.Count; i++) {
+                Retorno = BaseSum(Retorno, multiParts[i], baseStr);
             }
             return Retorno;
         }
@@ -336,27 +336,27 @@ namespace Figlotech.Core
             b = new string(b.Reverse().ToArray());
             string Maior = a.Length > b.Length ? a : b;
             string Menor = a.Length < b.Length ? a : b;
-            int Leftovers = 0;
+            int leftovers = 0;
             List<char> Resultado = new List<char>();
-            for (int i = 0; i < Maior.Length || Leftovers > 0; i++) {
+            for (int i = 0; i < Maior.Length || leftovers > 0; i++) {
                 int Soma;
                 if (i >= Maior.Length)
-                    Soma = Leftovers;
+                    Soma = leftovers;
                 else if (i >= Menor.Length)
-                    Soma = Leftovers + Base.IndexOf(Maior[i]);
+                    Soma = leftovers + Base.IndexOf(Maior[i]);
                 else
-                    Soma = Base.IndexOf(a[i]) + Base.IndexOf(b[i]) + Leftovers;
-                Leftovers = 0;
+                    Soma = Base.IndexOf(a[i]) + Base.IndexOf(b[i]) + leftovers;
+                leftovers = 0;
                 if (Soma > Base.Length - 1) {
                     while (Soma > Base.Length - 1) {
                         Soma -= Base.Length;
-                        Leftovers += 1;
+                        leftovers += 1;
                     }
                     Resultado.Add(Base[Soma]);
                 }
                 else {
                     Resultado.Add(Base[Soma]);
-                    Leftovers = 0;
+                    leftovers = 0;
                 }
             }
             Resultado.Reverse();
@@ -365,7 +365,7 @@ namespace Figlotech.Core
 
         public string ToString(string Base = Decimal)
         {
-            if(Digitos == null) {
+            if(digits == null) {
                 return null;
             }
             List<char> Retorno = new List<char>();
@@ -374,9 +374,9 @@ namespace Figlotech.Core
             string Resultado = Base[0] + "";
             string Multi = Base[1] + "";
             string BaseLength = BaseConvert(BaseSize, Base);
-            for (int i = 0; i < Digitos.Count; i++)
+            for (int i = 0; i < digits.Count; i++)
             {
-                string ThisByte = BaseConvert((long)Digitos[i], Base);
+                string ThisByte = BaseConvert((long)digits[i], Base);
                 string Next = BaseMult(ThisByte, Multi, Base);
                 Resultado = BaseSum(Resultado, Next, Base);
                 Multi = BaseMult(Multi, BaseLength, Base);

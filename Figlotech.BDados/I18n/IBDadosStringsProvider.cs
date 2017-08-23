@@ -15,5 +15,6 @@ namespace Figlotech.BDados.I18n
         string AUTH_USER_ALREADY_EXISTS { get; }
         string BDIOC_CANNOT_RESOLVE_TYPE { get; }
         string SCOPY_ACCESSORS_CANNOT_BE_SAME { get; }
+        string ERROR_IN_STRUCTURE_CHECK { get; }
     }
 }

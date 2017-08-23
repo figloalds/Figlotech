@@ -52,8 +52,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     WorkOnColumns(columns, keys);
                 } catch (Exception x) {
-                    Console.Write(x.Message);
-                    Console.Write(x.StackTrace);
+                    FTH.Write(x.Message);
+                    FTH.Write(x.StackTrace);
                 }
 
                 // Re read keys here because work on tables and columns
@@ -65,7 +65,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ReKeys(keys);
 
             }, (x) => {
-                Console.WriteLine(x);
+                FTH.WriteLine(FTH.Strings.ERROR_IN_STRUCTURE_CHECK);
+                FTH.WriteLine(x.Message);
+                FTH.WriteLine(x.StackTrace);
             });
             Benchmarker.TotalMark();
         }
@@ -333,6 +335,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 switch (dataType.ToLower()) {
                     case "rid":
                         type = $"VARCHAR(64)";
+                        break;
+                    case "byte[]":
+                    case "byte":
+                        type = $"BINARY({info.Size})";
                         break;
                     case "string":
                         type = $"VARCHAR({info.Size})";

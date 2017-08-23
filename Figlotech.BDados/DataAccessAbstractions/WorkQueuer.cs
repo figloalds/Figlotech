@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Figlotech.BDados;
+using Figlotech.BDados.FileAcessAbstractions;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -21,7 +23,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public DateTime Start;
         public WorkQueuer Parent;
 
-        public WorkSchedule(WorkQueuer parent, Action act, Action finished, Action<Exception> handle, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
+        public WorkSchedule(WorkQueuer parent, Action<JobProgress> act, Action finished, Action<Exception> handle, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
             Job = new WorkJob(parent, act, finished, handle);
             Parent = parent;
             Start = start;
@@ -31,22 +33,35 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     }
 
+    public class JobProgress {
+        public String Status;
+        public int TotalSteps;
+        public int CompletedSteps;
+    }
+
     public class WorkJob {
-        public Action action;
+        public int id = ++idGen;
+        private static int idGen = 0;
+        public Action<JobProgress> action;
         public Action finished;
         public Action<Exception> handling;
         public WorkQueuer queuer;
         public WorkJobStatus status;
+        public JobProgress Progress = new JobProgress();
+        public DateTime? enqueued = DateTime.Now;
+        public DateTime? dequeued;
+        public DateTime? completed;
 
 #if DEBUG
         public StackFrame[] ContextStack;
 #endif
 
-        public WorkJob(WorkQueuer parent, Action method, Action actionWhenFinished, Action<Exception> errorHandling) {
+        public WorkJob(WorkQueuer parent, Action<JobProgress> method, Action actionWhenFinished, Action<Exception> errorHandling) {
             queuer = parent;
             action = method;
             finished = actionWhenFinished;
             handling = errorHandling;
+
 #if DEBUG
             StackTrace stackTrace = new StackTrace();   // get call stack
             ContextStack = stackTrace.GetFrames();      // get method calls (frames)
@@ -60,16 +75,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
-        String Name;
+        public String Name;
         Queue<WorkJob> work = new Queue<WorkJob>();
         List<WorkSchedule> schedules = new List<WorkSchedule>();
         Queue<Thread> workers = new Queue<Thread>();
         Thread SchedulesThread;
         private bool run = false;
         private bool isRunning = false;
-        public static int DefaultSleepInterval = 10;
+        public static int DefaultSleepInterval = 50;
 
-        public bool Run { get { return run; } }
+        internal bool Run { get { return run; } }
+        public bool IsClosed { get { return closed; } }
         public bool IsRunning { get { return isRunning; } }
         private bool isPaused = false;
 
@@ -78,8 +94,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static List<WorkQueuer> WorldQueuers = new List<WorkQueuer>();
 
         public WorkQueuer(String name, int maxThreads = -1, bool init_started = false) {
-            if(maxThreads <= 0) {
-                maxThreads = Environment.ProcessorCount-1;
+            if (maxThreads <= 0) {
+                maxThreads = Environment.ProcessorCount - 1;
             }
             maxThreads = Math.Max(1, maxThreads);
             parallelSize = maxThreads;
@@ -109,12 +125,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             try {
                 SchedulesThread.Join();
-            } catch(Exception x) { }
+            } catch (Exception x) { }
             //while(work.Count > 0) {
-            //    Console.WriteLine($"bug {work.Count}");
+            //    FTH.WriteLine($"bug {work.Count}");
             //}
             isRunning = false;
         }
+
+        public TimeSpan TimeIdle {
+            get {
+                if (WentIdle > DateTime.UtcNow) {
+                    return TimeSpan.FromMilliseconds(0);
+                }
+                return (DateTime.UtcNow - WentIdle);
+            }
+        }
+
+        bool closed = false;
 
         private void WorkersJob() {
             int i = 1;
@@ -126,7 +153,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 List<Exception> exes = new List<Exception>();
                 WorkJob job = null;
                 lock (work) {
-                    while(run && work.Count < 1) {
+                    if (work.Count == 0 && (!run || closed)) {
+                        isRunning = false;
+                        run = false;
+                        return;
+                    }
+                    if (work.Count == 0 && WentIdle == DateTime.MaxValue) {
+                        WentIdle = DateTime.UtcNow;
+                    }
+                    if (work.Count > 0 && WentIdle != DateTime.MaxValue) {
+                        WentIdle = DateTime.MaxValue;
+                    }
+                    while (run && work.Count < 1) {
                         Thread.Sleep(DefaultSleepInterval);
                     }
                     try {
@@ -134,7 +172,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         job.status = WorkJobStatus.Running;
                     } catch (Exception x) {
                     }
-                    //Console.WriteLine(x.Message);
+                    //FTH.WriteLine(x.Message);
                 }
                 if (job == null) {
                     if (!run && work.Count == 0) {
@@ -145,19 +183,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Thread.Sleep(w);
                     continue;
                 }
+                job.dequeued = DateTime.Now;
+                if (this != FTH.GlobalQueuer)
+                    FTH.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
                 w = DefaultSleepInterval;
 
                 try {
-                    job?.action?.Invoke();
+
+                    job?.action?.Invoke(job?.Progress);
                     job.status = WorkJobStatus.Finished;
                     job?.finished?.Invoke();
+                    job.completed = DateTime.Now;
+                    if (this != FTH.GlobalQueuer)
+                        FTH.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                 } catch (Exception x) {
-                    Console.WriteLine($"WQ({QID}): {x.Message}");
+                    job.completed = DateTime.Now;
+                    if (this != FTH.GlobalQueuer)
+                        FTH.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
                     job?.handling?.Invoke(x);
                 }
                 job.status = WorkJobStatus.Finished;
-
+                WorkDone++;
             }
+        }
+
+        public void Close() {
+            closed = true;
         }
 
         public void Start() {
@@ -166,20 +217,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             run = true;
             while (workers.Count < parallelSize) {
                 var th = new Thread(WorkersJob);
-                th.Name = $"QU{QID}({Name})_WT{workers.Count + 1}";
+                th.Name = $"{Name}({QID})_{workers.Count + 1}";
                 workers.Enqueue(th);
                 th.Priority = ThreadPriority.Lowest;
                 th.Start();
             }
             SchedulesThread = new Thread(() => {
-                while(Run) {
+                while (Run) {
                     lock (schedules) {
-                        for (int x = 0; x < schedules.Count; x++) {
+                        for (int x = schedules.Count - 1; x >= 0; x--) {
                             if (schedules[x].Start < DateTime.UtcNow) {
                                 var sched = schedules[x];
                                 schedules.RemoveAt(x);
                                 this.Enqueue(sched.Job.action, () => {
-                                    if(sched.Repeat) {
+                                    if (sched.Repeat) {
                                         sched.Start += sched.Interval;
                                         schedules.Add(sched);
                                     }
@@ -192,7 +243,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Thread.Sleep(1000);
                 }
             });
-            SchedulesThread.Name = $"WQ{QID}_{Name}_Scheduler";
+            SchedulesThread.Name = $"{Name}({QID})_sched";
             SchedulesThread.Start();
             isRunning = true;
         }
@@ -205,8 +256,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             act(queuer);
             queuer.Stop();
         }
-
-        public void AccompanyJob(Action a, Action f = null, Action<Exception> e = null) {
+        Logger logger = new Logger(new FileAccessor("Logs/BackgroundWork"));
+        public void AccompanyJob(Action<JobProgress> a, Action f = null, Action<Exception> e = null) {
             var wj = Enqueue(a, f, e);
             wj.Accompany();
         }
@@ -226,25 +277,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public WorkSchedule OneTimeSched(DateTime dt, Action a, Action finished = null, Action<Exception> handler = null) {
-            lock(schedules) {
+        public WorkSchedule OneTimeSched(DateTime dt, Action<JobProgress> a, Action finished = null, Action<Exception> handler = null) {
+            lock (schedules) {
                 var sched = new WorkSchedule(this, a, finished, handler, dt);
                 schedules.Add(sched);
 
                 return sched;
             }
         }
-        public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Action a, Action finished = null, Action<Exception> handler = null) {
-            lock(schedules) {
+        public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Action<JobProgress> a, Action finished = null, Action<Exception> handler = null) {
+            lock (schedules) {
                 var sched = new WorkSchedule(this, a, finished, handler, dt, true, interval);
                 schedules.Add(sched);
 
                 return sched;
             }
         }
+        private DateTime WentIdle = DateTime.UtcNow;
 
-        public WorkJob Enqueue(Action a, Action finished = null, Action<Exception> exceptionHandler = null) {
-            var retv = new DataAccessAbstractions.WorkJob(this, a, finished, exceptionHandler);
+        public int TotalWork = 0;
+        public int WorkDone = 0;
+
+        public WorkJob Enqueue(Action<JobProgress> a, Action finished = null, Action<Exception> exceptionHandler = null) {
+            TotalWork++;
+            var retv = new WorkJob(this, a, finished, exceptionHandler);
+            if (this != FTH.GlobalQueuer)
+                FTH.WriteLine($"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
             work.Enqueue(retv);
             retv.status = WorkJobStatus.Queued;
 

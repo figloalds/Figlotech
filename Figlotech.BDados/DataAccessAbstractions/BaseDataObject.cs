@@ -73,6 +73,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public virtual void OnAfterPersist() { }
 
+        public virtual void OnAfterLoad() { }
+
         public virtual void Init() { }
     }
 }

@@ -106,7 +106,7 @@ namespace Figlotech.BDados.Authentication {
         public IUserSession Login(IUser user, string password)
         {
             if (user == null) {
-                //TrackAttempt(user?.RID, false);
+                // TrackAttempt(user?.RID, false);
                 throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
             }
             user = CheckLogin(user, password);
@@ -149,7 +149,7 @@ namespace Figlotech.BDados.Authentication {
             if (v.Any())
                 return v.First().Session;
             else {
-                var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token.Equals(Token));
+                var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token.Equals(Token), null, null);
                 if (fetchSession.Any()) {
                     var User = DataAccessor.LoadByRid<TUser>(fetchSession.First().User);
                     UserSession sess = new UserSession(this);

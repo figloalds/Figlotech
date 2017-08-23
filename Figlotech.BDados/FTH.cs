@@ -15,6 +15,7 @@ using Figlotech.Autokryptex;
 using Figlotech.BDados.Authentication;
 using Figlotech.BDados.I18n;
 using System.Threading.Tasks;
+using Figlotech.BDados.Interfaces;
 
 namespace Figlotech.BDados {
     public delegate dynamic ComputeField(dynamic o);
@@ -29,6 +30,20 @@ namespace Figlotech.BDados {
     public static class FTH {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
+        public static ILogger ApiLogger;
+
+        public static bool EnableStdoutLogs { get; set; } = false;
+
+        public static void Write(String s = "") {
+            if (!EnableStdoutLogs)
+                return;
+            Console.Write(s);
+        }
+        public static void WriteLine(String s = "") {
+            if (!EnableStdoutLogs)
+                return;
+            Console.WriteLine(s);
+        }
 
         public static T Map<T>(DataRow dr, DataColumnCollection columns) where T : new() {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -106,7 +121,7 @@ namespace Figlotech.BDados {
                     input.Add(val);
                 }
             });
-            Console.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
+            FTH.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
         }
 
         public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(()=> new BDadosEnglishStringsProvider());
@@ -778,7 +793,7 @@ namespace Figlotech.BDados {
                 var retv = Activator.CreateInstance(typeof(RecordSet<>).MakeGenericType(t), da);
                 return retv;
             } catch (Exception x) {
-                //Console.WriteLine(x.Message);
+                //FTH.WriteLine(x.Message);
             }
             return null;
         }
@@ -786,7 +801,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetMethod("Limit").Invoke(o, new object[] { val });
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
         }
 
@@ -794,7 +809,7 @@ namespace Figlotech.BDados {
             try {
                 return (int)o.GetType().GetProperties().Where((p) => p.Name == "Count").FirstOrDefault().GetValue(o);
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
             return -1;
         }
@@ -802,7 +817,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetProperties().Where((p) => p.Name == "DataAccessor").FirstOrDefault().SetValue(o, da);
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
         }
 
@@ -823,7 +838,7 @@ namespace Figlotech.BDados {
                 return finalMethod?.Invoke(da, new object[] { null, p, limit });
                 //o.GetType().GetMethod("LoadAll").Invoke(o, new object[] { null, p });
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
             return null;
         }
@@ -866,7 +881,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetMethod("Save").Invoke(o, new object[1]);
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
         }
         public class CopyProgressReport {
@@ -975,8 +990,8 @@ Refer to the source code for more info
         }
 
         internal static bool FindColumn(string ChaveA, Type type) {
-            FieldInfo[] fields = type.GetFields();
-            return fields.Where((f) => f.GetCustomAttribute<FieldAttribute>() != null && f.Name == ChaveA).Any();
+            var members = ReflectionTool.FieldsAndPropertiesOf(type);
+            return members.Any((f) => f.GetCustomAttribute<FieldAttribute>() != null && f.Name == ChaveA);
         }
 
         const int keySize = 16;

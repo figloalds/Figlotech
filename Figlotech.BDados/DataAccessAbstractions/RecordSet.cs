@@ -93,6 +93,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Clear();
             var transport = DataAccessor.AggregateLoad<T>(cnd, LimitResults, page, PageSize, OrderingMember, Ordering, LinearLoad);
             foreach(var i in transport) {
+                if(i is IBusinessObject bo) {
+                    bo.OnAfterLoad();
+                }
                 this.Add(i);
             }
             transport = null;

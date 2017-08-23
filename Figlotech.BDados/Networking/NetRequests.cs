@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Net;
 using System.IO;
 using Newtonsoft.Json;
+using Figlotech.BDados;
 
 namespace Figlotech.Networking
 {
@@ -48,14 +49,14 @@ namespace Figlotech.Networking
                 }
                 catch (Exception)
                 {
-                    Console.WriteLine("FALHA!");
-                    Console.WriteLine("Tentando novamente em dentro de 3s.");
+                    FTH.WriteLine("FALHA!");
+                    FTH.WriteLine("Tentando novamente em dentro de 3s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 1);
-                    Console.WriteLine("Tentando novamente em dentro de 2s.");
+                    FTH.WriteLine("Tentando novamente em dentro de 2s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 1);
-                    Console.WriteLine("Tentando novamente em dentro de 1s.");
+                    FTH.WriteLine("Tentando novamente em dentro de 1s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 2);
                 }
@@ -78,18 +79,18 @@ namespace Figlotech.Networking
                     String buffer = stIn2.ReadToEnd();
                     stIn2.Close();
                     return buffer;
-                    //Console.WriteLine(url);
+                    //FTH.WriteLine(url);
                 }
                 catch (Exception)
                 {
-                    Console.WriteLine("FALHA!");
-                    Console.WriteLine("Tentando novamente em dentro de 3s.");
+                    FTH.WriteLine("FALHA!");
+                    FTH.WriteLine("Tentando novamente em dentro de 3s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 1);
-                    Console.WriteLine("Tentando novamente em dentro de 2s.");
+                    FTH.WriteLine("Tentando novamente em dentro de 2s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 1);
-                    Console.WriteLine("Tentando novamente em dentro de 1s.");
+                    FTH.WriteLine("Tentando novamente em dentro de 1s.");
                     System.Threading.Thread.Sleep(1000);
                     Console.SetCursorPosition(0, Console.CursorTop - 2);
                 }

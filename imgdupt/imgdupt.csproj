@@ -19,4 +19,8 @@
     <OutputPath>bin\Release\net462\</OutputPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />
+  </ItemGroup>
+
 </Project>

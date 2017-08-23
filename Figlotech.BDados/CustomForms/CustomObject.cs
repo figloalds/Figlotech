@@ -14,7 +14,7 @@ namespace Figlotech.BDados.CustomForms {
         IRdbmsDataAccessor DataAccessor;
         private IDictionary<String, Object> Object = new Dictionary<String, Object>();
         public CustomObject() {
-            Set("RID", IntEx.GerarUniqueRID());
+            Set("RID", IntEx.GenerateUniqueRID());
         }
         public CustomObject(Object input) {
             if(input is JObject) {
@@ -26,7 +26,7 @@ namespace Figlotech.BDados.CustomForms {
                 }
             }
             if(Get("RID") == null) {
-                Set("RID", IntEx.GerarUniqueRID());
+                Set("RID", IntEx.GenerateUniqueRID());
             }
         }
 

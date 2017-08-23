@@ -1,11 +1,7 @@
-﻿using Figlotech.BDados.Builders;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.Interfaces;
+using Figlotech.BDados.Helpers;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IJoinBuilder {

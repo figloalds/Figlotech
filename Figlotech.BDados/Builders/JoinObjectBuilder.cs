@@ -222,6 +222,7 @@ namespace Figlotech.BDados.Builders
                 if (ChaveA == null || ChaveB == null) {
                     throw new BDadosException(String.Format("Invalid Relation {0}", _join.Joins[i].Args));
                 }
+
                 if (!FTH.FindColumn(ChaveA, _join.Joins[IndexA].ValueObject) || !FTH.FindColumn(ChaveB, _join.Joins[IndexB].ValueObject)) {
                     _join.Relations.Clear();
                     throw new BDadosException(String.Format("Column {0} specified doesn't exist in '{1} AS {2}'", ChaveA, _join.Joins[i].TableName, _join.Joins[i].Prefix));

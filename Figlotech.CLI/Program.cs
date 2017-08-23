@@ -1,4 +1,5 @@
 ﻿using Figlotech.Autokryptex.EncryptMethods;
+using Figlotech.BDados;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,22 +26,22 @@ namespace Figlotech.CLI
                     try {
                         Exec(cmd, typeof(Toolset));
                     } catch (Exception x) {
-                        Console.WriteLine("Script execution failed");
+                        FTH.ApiLogger?.WriteLog("Script execution failed");
                         Environment.Exit(1);
                         return;
                     }
                 }
                 //File.Delete("script.esl");
-                Console.WriteLine("Script Executed OK");
+                FTH.ApiLogger?.WriteLog("Script Executed OK");
                 Environment.Exit(0);
                 return;
             }
             if (args.Contains("-b"))
                 batchMode = true;
             var ver = Assembly.GetExecutingAssembly().GetName().Version;
-            Console.WriteLine($"------------------------------------------------");
-            Console.WriteLine($"-- FIGLOTECH CLI v{ver.Major}.{ver.Minor}.{ver.Build}");
-            Console.WriteLine($"------------------------------------------------");
+            FTH.ApiLogger?.WriteLog($"------------------------------------------------");
+            FTH.ApiLogger?.WriteLog($"-- FIGLOTECH CLI v{ver.Major}.{ver.Minor}.{ver.Build}");
+            FTH.ApiLogger?.WriteLog($"------------------------------------------------");
             MainLoop();
         }
 
@@ -50,7 +51,7 @@ namespace Figlotech.CLI
             String[] cmds = CmdStringToArray(Commands);
             var method = toolsetType.GetMethods().Where(m=>m.Name == cmds[0]).FirstOrDefault();
             if (null == method) {
-                Console.WriteLine("Command not found");
+                FTH.ApiLogger?.WriteLog("Command not found");
                 return;
             }
             var args = cmds.Skip(1).ToArray();
@@ -68,15 +69,15 @@ namespace Figlotech.CLI
                             Thread.Sleep(TimeSpan.FromMilliseconds(20));
                         }
                     }).Start();
-                    Console.Write("FTH> ");
+                    FTH.Write("FTH> ");
                     String Commands = Console.ReadLine();
                     Exec(Commands, toolsetType);
                 } catch (Exception x) {
                     var ex = x.InnerException;
                     int maxRec = 10;
                     while (ex != null && maxRec-- > 0) {
-                        Console.WriteLine(ex.Message);
-                        Console.WriteLine(ex.StackTrace);
+                        FTH.ApiLogger?.WriteLog(ex.Message);
+                        FTH.ApiLogger?.WriteLog(ex.StackTrace);
                         ex = ex.InnerException;
                     }
                 }

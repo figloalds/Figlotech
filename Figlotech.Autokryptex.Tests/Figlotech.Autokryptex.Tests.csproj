@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
+    <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />
   </ItemGroup>
 
   <ItemGroup>

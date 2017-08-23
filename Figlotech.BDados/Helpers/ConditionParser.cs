@@ -238,7 +238,7 @@ namespace Figlotech.BDados.Helpers {
                             var prefix = ForceAlias ?? GetPrefixOfAgField(expr, info); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
-                            Console.WriteLine(info.ToString());
+                            FTH.WriteLine(info.ToString());
                         } else {
                             var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
@@ -252,7 +252,7 @@ namespace Figlotech.BDados.Helpers {
                                     var prefix = ForceAlias ?? GetPrefixOfAgObj(expr.Expression, info3); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                                                                                                                                  //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");
-                                    Console.WriteLine(info3.ToString());
+                                    FTH.WriteLine(info3.ToString());
                                 } else {
                                     var prefix = GetPrefixOf(expr.Expression);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");
@@ -314,7 +314,7 @@ namespace Figlotech.BDados.Helpers {
                     }
                 }
             } else {
-                Console.WriteLine(foofun.GetType());
+
             }
             if (fullConditions) {
                 return strBuilder;

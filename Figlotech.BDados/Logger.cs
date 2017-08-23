@@ -41,9 +41,9 @@ namespace Figlotech.BDados {
                 return;
             try {
 
-                FTH.GlobalQueuer.Enqueue(() => {
+                FTH.GlobalQueuer.Enqueue((p) => {
                     if (EnableConsoleLogging)
-                        Console.WriteLine(log);
+                        FTH.WriteLine(log);
                     log = Regex.Replace(log, @"\s+", " ");
                     lock ("BDADOS_LOG_LOCK") {
                         String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
@@ -80,14 +80,14 @@ namespace Figlotech.BDados {
                 return;
             try {
 
-                FTH.GlobalQueuer.Enqueue(() => {
+                FTH.GlobalQueuer.Enqueue((p) => {
 
                     lock ("BDADOS_LOG_LOCK") {
 
                         var y = x;
                         while (y != null) {
                             if (EnableConsoleLogging)
-                                Console.WriteLine(y.Message);
+                                FTH.WriteLine(y.Message);
                             y = y.InnerException;
                         }
                         try {

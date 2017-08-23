@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 
-namespace Iaetec.Captcha {
+namespace Figlotech.Captcha {
     public class CaptchaStore
     {
         public String Codigo;
@@ -12,8 +12,8 @@ namespace Iaetec.Captcha {
     }
 
     public class Captcha {
-        public String Codigo;
-        public String Solucao;
+        public String Code;
+        public String Solution;
         public Image Imagem;
         public static int _sizeofCaptcha = 6;
         public static Size _captchaSize = new Size(600, 200);
@@ -22,17 +22,19 @@ namespace Iaetec.Captcha {
         public static float UsableWidth { get { return _captchaSize.Width - (paddings * 2); } }
         public static float VerticalMid { get { return (_captchaSize.Height / 2)-(fontSize/2); } }
         public static int fontSize = 79;
+        public static int fontSizeVariation = 16;
+        public static int v_fontSize => fontSize + (fontSizeVariation - (r.Next(fontSizeVariation * 2)));
         public const String captchaChars = "ABCDEFGHJKMNPRSTUVWXYZ23456789";
         public static List<CaptchaStore> _memCaptchas = new List<CaptchaStore>();
-        private static Font[] _rFonts = new Font[] {
-            new Font(FontFamily.GenericMonospace, fontSize),
-            new Font(FontFamily.GenericSansSerif, fontSize),
+        private static Font[] _rFonts => new Font[] {
+            new Font(FontFamily.GenericMonospace, v_fontSize),
+            new Font(FontFamily.GenericSansSerif, v_fontSize),
             //new Font(FontFamily.GenericSerif, fontSize),
-            new Font(FontFamily.GenericMonospace, fontSize),
-            new Font(FontFamily.GenericSansSerif, fontSize),
+            new Font(FontFamily.GenericMonospace, v_fontSize),
+            new Font(FontFamily.GenericSansSerif, v_fontSize),
             //new Font(FontFamily.GenericSerif, fontSize),
-            new Font(FontFamily.GenericMonospace, fontSize, FontStyle.Bold),
-            new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold),
+            new Font(FontFamily.GenericMonospace, v_fontSize, FontStyle.Bold),
+            new Font(FontFamily.GenericSansSerif, v_fontSize, FontStyle.Bold),
             //new Font(FontFamily.GenericSerif, fontSize, FontStyle.Bold),
         };
         private static Color SRandyColor {
@@ -108,7 +110,7 @@ namespace Iaetec.Captcha {
         }
 
         internal Captcha() {
-            Codigo = GerarCodigo();
+            Code = GenerateCode();
         }
         private static Color noiseColor(Color c, float pct) {
             var retv = Color.FromArgb(
@@ -133,7 +135,7 @@ namespace Iaetec.Captcha {
             return find != null;
         }
 
-        public static Image GerarImg(String Solucao) {
+        public static Image GenerateImg(String solution) {
             Bitmap retvImg = new Bitmap(_captchaSize.Width, _captchaSize.Height);
             //for (int x = 0; x < retvImg.Width; x++)
             //{
@@ -195,7 +197,7 @@ namespace Iaetec.Captcha {
             //    }
             //};
 
-            for (int i = 0; i < Solucao.Length; i++)
+            for (int i = 0; i < solution.Length; i++)
             {
                 g.RotateTransform(-2 + r.Next(4));
                 var font = _rFonts[r.Next(_rFonts.Length)];
@@ -207,7 +209,7 @@ namespace Iaetec.Captcha {
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(LRandyColor), new PointF(0, 0));
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(LRandyColor), new PointF(0, 0));
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(LRandyColor), new PointF(0, 0));
-                g.DrawString(Solucao[i].ToString(), font, new SolidBrush(Color.Black), new PointF(0, 0));
+                g.DrawString(solution[i].ToString(), font, new SolidBrush(Color.Black), new PointF(0, 0));
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(RandyInvColor), new PointF(noiseNumber(5, 50), noiseNumber(5, 50)));
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(RandyInvColor), new PointF(noiseNumber(5, 50), noiseNumber(5, 50)));
                 //g.DrawString(Solucao[i].ToString(), font, new SolidBrush(LRandyColor), new PointF(noiseNumber(5, 50), noiseNumber(5, 50)));
@@ -372,12 +374,12 @@ namespace Iaetec.Captcha {
             for(int i = 0; i < novaRes.Length; i++) {
                 novaRes[i] = captchaChars[r.Next(captchaChars.Length)];
             }
-            retv.Solucao = new String(novaRes);
-            retv.Imagem = GerarImg(retv.Solucao);
+            retv.Solution = new String(novaRes);
+            retv.Imagem = GenerateImg(retv.Solution);
             return retv;
         }
 
-        private String GerarCodigo() {
+        private String GenerateCode() {
             IntEx codigo = new IntEx(DateTime.Now.Ticks);
             codigo *= 1000000;
             codigo += new Random().Next(1000000);

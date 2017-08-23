@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.Builders;
+using Figlotech.BDados.Interfaces;
 using System;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -7,6 +8,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IDataAccessor
     {
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
+
+        ILogger Logger { get; set; }
 
         RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
 

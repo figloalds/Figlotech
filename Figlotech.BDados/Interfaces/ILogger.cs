@@ -8,5 +8,6 @@ namespace Figlotech.BDados.Interfaces {
         IFileAccessor FileAccessor { get; set; }
 
         bool Enabled { get; set; }
+        
     }
 }

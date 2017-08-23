@@ -10,6 +10,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         void OnBeforePersist();
 
         void OnAfterPersist();
+
+        void OnAfterLoad();
     }
 	
     public interface IBusinessObject<T> : IDataObject, IBusinessObject where T : IDataObject,new() {

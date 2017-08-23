@@ -1,11 +1,9 @@
-﻿using System;
+﻿using Figlotech.BDados.Helpers;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
-     
+
     public class Benchmarker : IBenchmarker {
         private class TimeMark {
             public DateTime Timestamp;
@@ -25,47 +23,47 @@ namespace Figlotech.BDados.Helpers {
         }
 
         public bool WriteToStdout { get; set; } = true;
+        public bool Active { get; set; } = true;
 
         public double Mark(String txt) {
-            if(marks.Count == 0) {
-                marks.Add(new TimeMark(myName));
-            }
+            if (!Active)
+                return 0;
             marks.Add(new TimeMark(txt));
             var retv = marks[marks.Count - 1]
                 .Timestamp.Subtract(marks[marks.Count - 2].Timestamp).TotalMilliseconds;
             var name = marks[marks.Count - 2].Name;
             //if (log) {
-            //    Console.WriteLine($"{name}: {retv}ms");
+            //    FTH.WriteLine($"{name}: {retv}ms");
             //}
             return retv;
         }
 
         public double TotalMark() {
+            if (!Active)
+                return 0;
             var mark = DateTime.UtcNow;
             marks.Add(new TimeMark(myName));
             var retv = marks[marks.Count - 1].Timestamp
                 .Subtract(marks[0].Timestamp).TotalMilliseconds;
             if (WriteToStdout) {
-                Console.WriteLine($"-- PERFORMANCE -----------");
-                Console.WriteLine($"{myName}");
-                Console.WriteLine($"--------------------------");
+                FTH.WriteLine($"-- PERFORMANCE -----------");
+                FTH.WriteLine($"{myName}");
+                FTH.WriteLine($"--------------------------");
                 double line = 0;
-                Console.WriteLine($" | 0ms ");
-                for (int i = 1; i < marks.Count-1; i++) {
+                FTH.WriteLine($" | 0ms ");
+                for (int i = 1; i < marks.Count - 1; i++) {
                     var time = marks[i]
                         .Timestamp.Subtract(marks[i - 1].Timestamp).TotalMilliseconds;
-                    var time2 = marks[i+1]
+                    var time2 = marks[i + 1]
                         .Timestamp.Subtract(marks[i].Timestamp).TotalMilliseconds;
                     line += time;
                     var name = marks[i - 1].Name;
-                    Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
+                    FTH.WriteLine($" | {line}ms -> {name} ({time2}ms)");
                 }
-                Console.WriteLine($" v {retv}ms");
-                Console.WriteLine($"--------------------------");
-                Console.WriteLine($"Total: {retv}ms");
+                FTH.WriteLine($" v {retv}ms");
+                FTH.WriteLine($"--------------------------");
+                FTH.WriteLine($"Total: {retv}ms");
             }
-
-            marks.Clear();
             return retv;
         }
     }

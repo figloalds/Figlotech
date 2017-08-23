@@ -11,5 +11,7 @@ namespace Figlotech.BDados {
         public string AUTH_USER_ALREADY_EXISTS => "User already exists";
         public string BDIOC_CANNOT_RESOLVE_TYPE => "Could not resolve implementation for type '{0}'.";
         public string SCOPY_ACCESSORS_CANNOT_BE_SAME => "SmartCopy cannot copy from a repository back to itself";
+
+        public string ERROR_IN_STRUCTURE_CHECK => "Error occured during structure check";
     }
 }

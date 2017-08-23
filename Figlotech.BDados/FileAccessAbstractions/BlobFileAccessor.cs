@@ -138,7 +138,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                     .Where((a) => a.Count((b) => b == '/') == 0)
                     .GroupBy((a) => a)
                     .First();
-                //Console.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
+                //FTH.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
                 Parallel.ForEach(list, (a) => { 
                     try {
                         execFunc(a);
@@ -161,7 +161,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                     .Where((a) => a.Count((b) => b == '/') == 0)
                     .GroupBy((a) => a)
                     .First();
-                //Console.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
+                //FTH.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
                 foreach (var a in list) {
                     try {
                         execFunc(a);
@@ -275,7 +275,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public bool Delete(String relative) {
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue(() => {
+            FTH.GlobalQueuer.Enqueue((p) => {
                 blob.Delete();
             });
             
@@ -298,7 +298,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public void AppendAllLines(String relative, IEnumerable<string> content) {
             var blob = BlobContainer.GetAppendBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue(() => {
+            FTH.GlobalQueuer.Enqueue((p) => {
                 blob.AppendText(String.Join("\n", content), Encoding.UTF8);
             });
 
@@ -308,7 +308,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             var blob = BlobContainer.GetAppendBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue(() => {
+            FTH.GlobalQueuer.Enqueue((p) => {
                 blob.AppendText(String.Join("\n", content), Encoding.UTF8);
             });
 

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.BDados;
+using System;
 using System.IO;
 
 namespace imgdupt
@@ -7,25 +8,25 @@ namespace imgdupt
     {
 
         static void Usage() {
-            Console.WriteLine("Usage: imgdupt <directory_path> <options>");
-            Console.WriteLine("Options:");
-            Console.WriteLine("\t-sz <size:int> :");
-            Console.WriteLine("\t\tSets the precision, higher value means more accurate but slower comparison");
-            Console.WriteLine("\t-mindiff <mindiff:int> :");
-            Console.WriteLine("\t\tSets the minimum difference between images (in %) for the comparator to consider them different");
-            Console.WriteLine("\t-tol <tolerance:int> :");
-            Console.WriteLine("\t\tSets the pixel tolerance, low values may cause the comparator to see 2 apparently equal images as different because of differing artifact/quality");
-            Console.WriteLine("");
-            Console.WriteLine("The comparator is able to read any GDI+ compliant format and even compare images of different extensions, it will always give preference for larger images when finding duplicates.");
+            FTH.WriteLine("Usage: imgdupt <directory_path> <options>");
+            FTH.WriteLine("Options:");
+            FTH.WriteLine("\t-sz <size:int> :");
+            FTH.WriteLine("\t\tSets the precision, higher value means more accurate but slower comparison");
+            FTH.WriteLine("\t-mindiff <mindiff:int> :");
+            FTH.WriteLine("\t\tSets the minimum difference between images (in %) for the comparator to consider them different");
+            FTH.WriteLine("\t-tol <tolerance:int> :");
+            FTH.WriteLine("\t\tSets the pixel tolerance, low values may cause the comparator to see 2 apparently equal images as different because of differing artifact/quality");
+            FTH.WriteLine("");
+            FTH.WriteLine("The comparator is able to read any GDI+ compliant format and even compare images of different extensions, it will always give preference for larger images when finding duplicates.");
             return;
         }
 
         static void Main(string[] args) {
-            Console.WriteLine("------------------------------------------------");
-            Console.WriteLine("-- Figlotech Tools");
-            Console.WriteLine("-- imgdupt");
-            Console.WriteLine("-- Scans a folder and separates duplicate images");
-            Console.WriteLine("------------------------------------------------");
+            FTH.WriteLine("------------------------------------------------");
+            FTH.WriteLine("-- Figlotech Tools");
+            FTH.WriteLine("-- imgdupt");
+            FTH.WriteLine("-- Scans a folder and separates duplicate images");
+            FTH.WriteLine("------------------------------------------------");
             if (args.Length == 1) {
                 Usage();
                 return;
@@ -53,7 +54,7 @@ namespace imgdupt
                 }
             }
             if(!Directory.Exists(args[0])) {
-                Console.WriteLine($"Directory does not exist {args[0]}");
+                FTH.WriteLine($"Directory does not exist {args[0]}");
                 return;
             }
 

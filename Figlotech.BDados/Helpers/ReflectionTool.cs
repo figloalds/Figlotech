@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
     public class ReflectionTool {
-
+        public static bool StrictMode { get; set; } = false;
         public static List<MemberInfo> FieldsAndPropertiesOf(Type type) {
             var members = new List<MemberInfo>();
             members.AddRange(type.GetFields());
@@ -23,11 +23,11 @@ namespace Figlotech.BDados.Helpers {
             object retv = null;
             var methods = input.GetType().GetMethods().Where(
                 (m) => m.Name == methodName);
-            foreach(var a in methods) {
+            foreach (var a in methods) {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
                 } catch (Exception x) {
-                    Console.WriteLine(x.Message);
+                    FTH.WriteLine(x.Message);
                 }
             }
             return null;
@@ -43,14 +43,28 @@ namespace Figlotech.BDados.Helpers {
 
         public static bool SetValue(Object target, String fieldName, Object value) {
             try {
+                MemberInfo member = ((MemberInfo)
                 target.GetType()
                     .GetFields()
                     .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault()?.SetValue(target, value);
+                    .FirstOrDefault()) ?? ((MemberInfo)
                 target.GetType()
                     .GetProperties()
                     .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault()?.SetValue(target, value);
+                    .FirstOrDefault());
+                if (member == null) {
+                    return false;
+                }
+                var t = GetTypeOf(member);
+                t = Nullable.GetUnderlyingType(t) ?? t;
+                if (value != null) {
+                    if (t.IsEnum && value.GetType().IsAssignableFrom(typeof(Int32))) {
+                        value = Enum.ToObject(t, (int)value);
+                    } else {
+                        value = Convert.ChangeType(value, t);
+                    }
+                }
+                SetMemberValue(member, target, value);
                 return true;
             } catch (Exception) {
             }
@@ -72,11 +86,17 @@ namespace Figlotech.BDados.Helpers {
             return null;
         }
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
-            if (member is PropertyInfo) {
-                ((PropertyInfo)member).SetValue(target, value);
-            }                                            
-            if (member is FieldInfo) {                   
-                ((FieldInfo)member).SetValue(target, value);
+            try {
+                if (member is PropertyInfo) {
+                    ((PropertyInfo)member).SetValue(target, value);
+                }
+                if (member is FieldInfo) {
+                    ((FieldInfo)member).SetValue(target, value);
+                }
+            } catch (Exception x) {
+                if (StrictMode) {
+                    throw x;
+                }
             }
         }
 
@@ -112,7 +132,7 @@ namespace Figlotech.BDados.Helpers {
                     .GetFields()
                     .Where((field) => field.Name == fieldName)
                     .FirstOrDefault()?.GetValue(target);
-                if(retv == null) {
+                if (retv == null) {
                     retv = target.GetType()
                     .GetProperties()
                     .Where((field) => field.Name == fieldName)

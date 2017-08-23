@@ -86,7 +86,7 @@ namespace Figlotech.BDados.CustomForms {
                 }
                 co.Set("RID", results.Rows[i].Field<String>("RID"));
                 if (co.Get("RID") == null) {
-                    co.Set("RID", IntEx.GerarUniqueRID());
+                    co.Set("RID", IntEx.GenerateUniqueRID());
                 }
 
                 return co.Refine();
@@ -112,7 +112,7 @@ namespace Figlotech.BDados.CustomForms {
                 }
                 co.Set("RID", results.Rows[i].Field<String>("RID"));
                 if (co.Get("RID") == null) {
-                    co.Set("RID", IntEx.GerarUniqueRID());
+                    co.Set("RID", IntEx.GenerateUniqueRID());
                 }
 
                 retv.Add(co);
@@ -205,7 +205,7 @@ namespace Figlotech.BDados.CustomForms {
             for (var i = 0; i < form.Fields.Count; i++) {
                 retv.Append($"@{IntEx.GenerateShortRid()},", o.Get(form.Fields[i].Name));
             }
-            retv.Append($"@{IntEx.GenerateShortRid()})", IntEx.GerarUniqueRID());
+            retv.Append($"@{IntEx.GenerateShortRid()})", IntEx.GenerateUniqueRID());
             return retv;
         }
 
@@ -223,7 +223,7 @@ namespace Figlotech.BDados.CustomForms {
             retv.If(o.Get("RID") != null).Then()
                     .Append($"RID=@{IntEx.GenerateShortRid()}", o.Get("RID"))
                 .Else()
-                    .Append($"RID=@{IntEx.GenerateShortRid()}", IntEx.GerarUniqueRID())
+                    .Append($"RID=@{IntEx.GenerateShortRid()}", IntEx.GenerateUniqueRID())
                 .EndIf();
 
             retv.Append($"WHERE Id=@{IntEx.GenerateShortRid()};", o.Get("Id"));

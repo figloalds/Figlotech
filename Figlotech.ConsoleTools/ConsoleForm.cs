@@ -11,8 +11,8 @@ namespace Figlotech.ConsoleUtils
 
         private static void WriteAt(int left, int top, string txt) {
             lock ("CONSOLE_WRITE") {
-                System.Console.SetCursorPosition(left, top);
-                System.Console.Write(txt);
+                Console.SetCursorPosition(left, top);
+                Console.Write(txt);
             }
         }
     }

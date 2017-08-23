@@ -49,7 +49,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             try {
                 Directory.CreateDirectory(dir);
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                FTH.WriteLine(x.Message);
             }
         }
 
@@ -393,7 +393,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             RelToFs(ref relative);
-            FTH.GlobalQueuer.Enqueue(() => {
+            FTH.GlobalQueuer.Enqueue((p) => {
                 var WorkingDirectory = Path.Combine(RootDirectory, relative);
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                     absMkDirs(Path.GetDirectoryName(WorkingDirectory));
