@@ -12,7 +12,7 @@ namespace Figlotech.BDados.Tests {
         {
             DependencyResolver resolver = new DependencyResolver();
             resolver.AddInstance<IFileAccessor>(new FileAccessor("C:\\teste"));
-            resolver.AddFactory<ISmartCopyOptions>(() => new SmartCopyOptions());
+            resolver.AddFactory<SmartCopyOptions>(() => new SmartCopyOptions());
             resolver.AddAbstract<ILogger, Logger>();
             resolver.AddAbstract<SmartCopy, SmartCopy>();
             var sc = new MySqlDataAccessor(new DataAccessorConfiguration());

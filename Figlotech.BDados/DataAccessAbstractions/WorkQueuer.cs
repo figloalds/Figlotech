@@ -116,19 +116,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         }
 
-        public void Stop() {
+        public void Stop(bool wait = true) {
             run = false;
-            while (workers.Count > 0) {
+            if (wait) {
+                while (workers.Count > 0) {
+                    try {
+                        workers.Dequeue().Join();
+                    } catch (Exception) { }
+                }
                 try {
-                    workers.Dequeue().Join();
-                } catch (Exception) { }
+                    SchedulesThread.Join();
+                } catch (Exception x) { }
             }
-            try {
-                SchedulesThread.Join();
-            } catch (Exception x) { }
-            //while(work.Count > 0) {
-            //    FTH.WriteLine($"bug {work.Count}");
-            //}
             isRunning = false;
         }
 

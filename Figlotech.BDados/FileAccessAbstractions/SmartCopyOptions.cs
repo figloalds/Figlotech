@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.FileAcessAbstractions {
-    public class SmartCopyOptions : ISmartCopyOptions
+    public class SmartCopyOptions
     {
         /// <summary>
         /// If set to true (default), the comparator will calculate the file hash to determine
@@ -47,5 +47,11 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// Default is 4MB
         /// </summary>
         public long BufferSize { get; set; } = 4 * 1024 * 1024;
+        /// <summary>
+        /// Number of bytes to use as memory buffer when copying
+        /// This total buffer will be shared between the copy workers.
+        /// Default is 4MB
+        /// </summary>
+        public bool UseGZip { get; set; } = false;
     }
 }

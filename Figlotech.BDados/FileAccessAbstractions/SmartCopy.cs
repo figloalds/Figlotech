@@ -9,12 +9,13 @@ using System;
 using System.Collections.Generic;
 
 using System.IO;
-
+using System.IO.Compression;
 using System.Linq;
 
 using System.Security.Cryptography;
 
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.FileAcessAbstractions {
 
@@ -48,7 +49,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         IFileAccessor remote;
 
-        ISmartCopyOptions options;
+        SmartCopyOptions options;
 
 
 
@@ -60,7 +61,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         /// <param name="localAccessor">"Local" or "Origin" accessor</param>
 
-        public SmartCopy(IFileAccessor localAccessor, ISmartCopyOptions copyOptions) {
+        public SmartCopy(IFileAccessor localAccessor, SmartCopyOptions copyOptions) {
 
             local = localAccessor;
 
@@ -68,7 +69,20 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         }
 
+        public List<String> Excludes = new List<String>();
 
+        private string WildcardToRegex(String input) {
+            input.Replace("*", "////WCASTER////");
+            input.Replace("%", "////WCPCT////");
+            var escaped = Regex.Escape(input);
+            escaped.Replace("////WCASTER////", "[.]{0,}");
+            escaped.Replace("////WCPCT////", "[.]{0,1}");
+            return escaped;
+        }
+
+        private bool CheckMatch(string file, string criteria) {
+            return Regex.Match(file, WildcardToRegex(criteria), RegexOptions.IgnoreCase).Success;
+        }
 
         /// <summary>
 
@@ -96,20 +110,15 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         }
 
-
-
         private String GetHash(IFileAccessor fa, String path) {
 
             string hash = "";
 
             fa.Read(path, (stream) => {
-
                 hash = GetHash(stream);
-
             });
 
             return hash;
-
         }
 
 
@@ -128,7 +137,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
 
-            Mirror(local, remote, path);
+            Mirror(local, remote, path, MirrorWay.Up);
 
         }
 
@@ -154,7 +163,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                 OnReportTotalFilesCount?.Invoke(totalFilesCount);
 
-                Mirror(remote, local, path);
+                Mirror(remote, local, path, MirrorWay.Down);
 
             }
 
@@ -259,9 +268,9 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                 if (match != null) {
 
                     if (hash != match.Hash) {
-
                         return true;
-
+                    } else {
+                        return false;
                     }
 
                 } else {
@@ -339,6 +348,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
 
         private void MirrorFromList(string path) {
+            GetHashList(remote);
 
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
 
@@ -356,7 +366,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                 wq.Enqueue((p) => {
 
-                    var hash = "";
+                    string hash = "";
 
                     local.Read(a.RelativePath, (stream) => {
 
@@ -366,20 +376,28 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                     var processed = false;
 
-                    if (a.Hash != hash) {
+                    var gzSuffix = "";
+                    if (options.UseGZip)
+                        gzSuffix = GZIP_FILE_SUFFIX;
+
+                    if (a.Hash != hash || !local.Exists(a.RelativePath)) {
 
                         processed = true;
 
-                        if (remote.Exists(a.RelativePath)) {
+                        if (remote.Exists(a.RelativePath + gzSuffix)) {
 
-                            remote.Read(a.RelativePath, (downStream) => {
+                            remote.Read(a.RelativePath + gzSuffix, (downStream) => {
 
                                 local.Delete(a.RelativePath);
 
                                 local.Write(a.RelativePath, (fileStream) => {
-
-                                    downStream.CopyTo(fileStream, bufferSize);
-
+                                    if (options.UseGZip) {
+                                        using (var gzipIn = new GZipStream(downStream, CompressionMode.Decompress)) {
+                                            gzipIn.CopyTo(fileStream);
+                                        }
+                                    } else {
+                                        downStream.CopyTo(fileStream, bufferSize);
+                                    }
                                 });
 
                             });
@@ -390,6 +408,10 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
 
+                }, () => {
+
+                }, (ex) => {
+                    FTH.WriteLine(ex.Message);
                 });
 
             }
@@ -403,10 +425,25 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
 
         int workedFiles = 0;
+        private const string GZIP_FILE_SUFFIX = ".gz";
 
-        private void Mirror(IFileAccessor origin, IFileAccessor destination, string path, WorkQueuer wq = null) {
+        private enum MirrorWay {
+            Up,
+            Down
+        }
 
-            bool rec = wq == null;
+        private void GetHashList(IFileAccessor destination) {
+            try {
+                var txt = destination.ReadAllText("$fth-hashlist.json");
+                HashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
+            } catch (Exception) {
+
+            }
+        }
+
+        private void Mirror(IFileAccessor origin, IFileAccessor destination, string path, MirrorWay way, WorkQueuer wq = null) {
+
+            bool isRecursing = wq != null;
 
             if (wq == null) {
 
@@ -416,31 +453,26 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
             }
 
-            if (options.UseHashList) {
-
-                try {
-
-                    var txt = destination.ReadAllText(".fth-hashlist");
-
-                    HashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
-
-                } catch (Exception) {
-
-                }
-
+            if (!isRecursing && options.UseHashList) {
+                GetHashList(destination);
             }
 
             workedFiles = 0;
 
             origin.ForFilesIn(path, (f) => {
-
+                if (f == "$fth-hashlist.json") {
+                    return;
+                }
+                if (Excludes.Any(excl => CheckMatch(f, excl))) {
+                    return;
+                }
                 wq.Enqueue((p) => {
 
                     try {
 
                         OnFileStaged?.Invoke(f);
 
-                    } catch (Exception) {
+                    } catch (Exception x) {
 
                         return;
 
@@ -453,9 +485,12 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                         Changed(origin, destination, f);
 
                     if (changed) {
-
-                        processFile(origin, destination, f);
-
+                        if (way == MirrorWay.Up) {
+                            processFileUp(origin, destination, f);
+                        }
+                        if (way == MirrorWay.Down) {
+                            processFileDown(origin, destination, f);
+                        }
                     }
 
                     OnReportProcessedFile?.Invoke(changed, f);
@@ -484,54 +519,53 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                     destination.MkDirs(dir);
 
-                    Mirror(origin, destination, dir, wq);
+                    Mirror(origin, destination, dir, way, wq);
 
                 });
 
             }
 
-            if (rec) {
+            if (!isRecursing) {
 
                 wq.Start();
+                wq.Stop();
 
-            }
 
-            if (options.UseHashList) {
+                if (options.UseHashList) {
 
-                HashList.RemoveAll((f) =>
+                    HashList.RemoveAll((f) =>
 
-                    !origin.Exists(path)
+                        !origin.Exists(f.RelativePath)
 
-                    );
+                        );
 
-                if (HashList.Count > 0) {
+                    if (HashList.Count > 0) {
 
-                    destination.Write($"$index.info", (stream) => {
+                        destination.Write($"$fth-hashlist.json", (stream) => {
 
-                        string text = JsonConvert.SerializeObject(HashList);
+                            string text = JsonConvert.SerializeObject(HashList);
 
-                        byte[] writev = Encoding.UTF8.GetBytes(text);
+                            byte[] writev = Encoding.UTF8.GetBytes(text);
 
-                        stream.Write(writev, 0, writev.Length);
+                            stream.Write(writev, 0, writev.Length);
 
-                    });
+                        });
 
-                    origin.Write($"$index.info", (stream) => {
+                        origin.Write($"$fth-hashlist.json", (stream) => {
 
-                        string text = JsonConvert.SerializeObject(HashList);
+                            string text = JsonConvert.SerializeObject(HashList);
 
-                        byte[] writev = Encoding.UTF8.GetBytes(text);
+                            byte[] writev = Encoding.UTF8.GetBytes(text);
 
-                        stream.Write(writev, 0, writev.Length);
+                            stream.Write(writev, 0, writev.Length);
 
-                    });
+                        });
+
+                    }
 
                 }
 
             }
-
-            wq.Stop();
-
         }
 
 
@@ -549,10 +583,13 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         }
 
 
-
-        private void processFile(IFileAccessor origin, IFileAccessor destination, string workingFile) {
+        private void processFileUp(IFileAccessor origin, IFileAccessor destination, string workingFile) {
 
             workingFile = ProcessPath(workingFile);
+
+            var outPostFix = "";
+            if (options.UseGZip)
+                outPostFix = GZIP_FILE_SUFFIX;
 
             origin.Read(workingFile, (input) => {
 
@@ -560,14 +597,44 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
                 if (bufferSize < 0) bufferSize = Int32.MaxValue;
 
-                destination.Write(workingFile, (output) => {
-
-                    input.CopyTo(output, bufferSize);
-
+                destination.Write(workingFile + outPostFix, (output) => {
+                    if (options.UseGZip) {
+                        using (var gzipOut = new GZipStream(output, CompressionLevel.Optimal)) {
+                            input.CopyTo(gzipOut);
+                        }
+                    } else {
+                        input.CopyTo(output, bufferSize);
+                    }
                 });
 
             });
+        }
 
+        private void processFileDown(IFileAccessor origin, IFileAccessor destination, string workingFile) {
+
+            workingFile = ProcessPath(workingFile);
+
+            var outPostFix = "";
+            if (options.UseGZip)
+                outPostFix = GZIP_FILE_SUFFIX;
+
+            origin.Read(workingFile + outPostFix, (input) => {
+
+                var bufferSize = (int)options.BufferSize / options.NumWorkers;
+
+                if (bufferSize < 0) bufferSize = Int32.MaxValue;
+
+                destination.Write(workingFile, (output) => {
+                    if (options.UseGZip) {
+                        using (var gzipOut = new GZipStream(input, CompressionMode.Decompress)) {
+                            gzipOut.CopyTo(output);
+                        }
+                    } else {
+                        input.CopyTo(output, bufferSize);
+                    }
+                });
+
+            });
         }
 
 

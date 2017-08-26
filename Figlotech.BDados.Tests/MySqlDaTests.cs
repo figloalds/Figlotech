@@ -32,7 +32,7 @@ namespace Figlotech.BDados.Tests
                     Host = "localhost",
                     Database = "sistema",
                     User = "root",
-                    Password = "asdafe1025",
+                    Password = "",
                 }
             );
             comanda comanda = new comanda() {
