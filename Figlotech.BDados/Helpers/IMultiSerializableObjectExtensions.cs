@@ -80,10 +80,11 @@ namespace Figlotech.BDados.Helpers {
                     var xml = "";
 
                     using (var sww = new StringWriter()) {
+
                         using (XmlWriter writer = XmlWriter.Create(sww)) {
                             xsSubmit.Serialize(writer, obj);
                             xml = sww.ToString();
-                            using (var sw = new StreamWriter(usableStream)) {
+                            using (var sw = new StreamWriter(usableStream, Encoding.UTF8)) {
                                 sw.Write(xml);
                             }
                         }
@@ -108,9 +109,12 @@ namespace Figlotech.BDados.Helpers {
                 .Process(rawStream, (usableStream) => {
 
                     var serializer = new XmlSerializer(obj.GetType());
-                    var retv = serializer.Deserialize(usableStream);
+                    // this is necessary because XML Deserializer is a bitch
 
-                    FTH.MemberwiseCopy(retv, obj);
+                    using (StreamReader reader = new StreamReader(usableStream, Encoding.UTF8)) {
+                        var retv = serializer.Deserialize(reader);
+                        FTH.MemberwiseCopy(retv, obj);
+                    }
                 });
         }
 
