@@ -204,7 +204,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {
-                wq.Enqueue((p) => {
+                wq.Enqueue(() => {
                     string hash = "";
                     local.Read(a.RelativePath, (stream) => {
                         hash = GetHash(stream);
@@ -283,7 +283,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
                     return;
                 }
 
-                wq.Enqueue((p) => {
+                wq.Enqueue(() => {
                     try {
                         OnFileStaged?.Invoke(f);
                     } catch (Exception x) {

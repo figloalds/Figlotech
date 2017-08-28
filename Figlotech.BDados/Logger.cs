@@ -41,7 +41,7 @@ namespace Figlotech.BDados {
                 return;
             try {
 
-                FTH.GlobalQueuer.Enqueue((p) => {
+                FTH.GlobalQueuer.Enqueue(() => {
                     if (EnableConsoleLogging)
                         FTH.WriteLine(log);
                     log = Regex.Replace(log, @"\s+", " ");
@@ -80,7 +80,7 @@ namespace Figlotech.BDados {
                 return;
             try {
 
-                FTH.GlobalQueuer.Enqueue((p) => {
+                FTH.GlobalQueuer.Enqueue(() => {
 
                     lock ("BDADOS_LOG_LOCK") {
 

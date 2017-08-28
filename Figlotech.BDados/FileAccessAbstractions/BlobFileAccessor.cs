@@ -275,7 +275,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public bool Delete(String relative) {
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue((p) => {
+            FTH.GlobalQueuer.Enqueue(() => {
                 blob.Delete();
             });
             
@@ -298,7 +298,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public void AppendAllLines(String relative, IEnumerable<string> content) {
             var blob = BlobContainer.GetAppendBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue((p) => {
+            FTH.GlobalQueuer.Enqueue(() => {
                 blob.AppendText(String.Join("\n", content), Encoding.UTF8);
             });
 
@@ -308,7 +308,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             var blob = BlobContainer.GetAppendBlobReference(relative);
 
-            FTH.GlobalQueuer.Enqueue((p) => {
+            FTH.GlobalQueuer.Enqueue(() => {
                 blob.AppendText(String.Join("\n", content), Encoding.UTF8);
             });
 

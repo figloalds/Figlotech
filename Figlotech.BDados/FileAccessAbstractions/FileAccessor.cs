@@ -393,7 +393,7 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             RelToFs(ref relative);
-            FTH.GlobalQueuer.Enqueue((p) => {
+            FTH.GlobalQueuer.Enqueue(() => {
                 var WorkingDirectory = Path.Combine(RootDirectory, relative);
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                     absMkDirs(Path.GetDirectoryName(WorkingDirectory));

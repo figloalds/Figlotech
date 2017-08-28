@@ -212,7 +212,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             WorkQueuer.Live((queuer) => {
                 foreach (var a in cache.Cache) {
                     var input = a;
-                    queuer.Enqueue((pg) => {
+                    queuer.Enqueue(() => {
                         var b = Decorate((T)input);
                         if (cnd == null || (cnd?.Compile()?.Invoke(b) ?? true)) {
                             retv.Add(b);
@@ -239,7 +239,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             WorkQueuer.Live((queuer) => {
                 for (int i = 0; i < retv.Count; i++) {
-                    queuer.Enqueue((pg) => {
+                    queuer.Enqueue(() => {
                         retv[i] = Decorate((T)retv[i]);
                     });
                 }

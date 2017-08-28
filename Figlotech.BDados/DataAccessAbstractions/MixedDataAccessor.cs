@@ -87,16 +87,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             WorkingTypes = types;
             bool release = false;
             Queuer.Start();
-            Queuer.Enqueue((pg) => {
-                while (Queuer.Run) {
+            Queuer.Enqueue(() => {
+                while (Queuer.Active) {
                     List<WorkJob> jobs = new List<WorkJob>();
                     foreach (var ty in WorkingTypes) {
                         jobs.Add(
-                            Queuer.Enqueue((p) => {
+                            Queuer.Enqueue(() => {
                                 SyncDown(ty);
                             }));
                         jobs.Add(
-                            Queuer.Enqueue((p) => {
+                            Queuer.Enqueue(() => {
                                 SyncUp(ty);
                             }));
                     }
@@ -180,7 +180,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool SaveItem(IDataObject objeto, Action funcaoPosSalvar = null) {
             var retv = UsableAccessor.SaveItem(objeto, funcaoPosSalvar);
             if(UsableAccessor != PersistenceAccessor) {
-                Queuer.Enqueue((p) => {
+                Queuer.Enqueue(() => {
                     PersistenceAccessor.SaveItem(objeto, null);
                 });
             }
@@ -188,7 +188,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         
         public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
-            Queuer.Enqueue((p) => {
+            Queuer.Enqueue(() => {
                 SecondaryAccessor.SaveRecordSet(rs);
             });
             return UsableAccessor.SaveRecordSet<T>(rs);
