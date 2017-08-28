@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <Compile Remove="Helpers\GzipStreamProcessor.cs" />
-    <Compile Remove="Helpers\IStreamProcessor.cs" />
   </ItemGroup>
 
   <ItemGroup>
