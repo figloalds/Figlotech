@@ -9,8 +9,8 @@ namespace Figlotech.BDados.Tests {
         public void ItShouldWork()
         {
             FileAccessor fa1 = new FileAccessor("C:\\smartCopyOut");
-            //FileAccessor fa2 = new FileAccessor("C:\\smartCopyOut");
-            var fa2 = new BlobFileAccessor("felyper", "VaKDbICKepMsYKYQ6i01B12AeBPmo4MCq7plnDlVrlLiFGAzwaJ7PAFNDmJUKzmktKdykT/bRVW+5x7PfDFKAQ==", "erpslv2");
+            FileAccessor fa2 = new FileAccessor("C:\\smartCopyOut");
+            //var fa2 = new BlobFileAccessor("felyper", "VaKDbICKepMsYKYQ6i01B12AeBPmo4MCq7plnDlVrlLiFGAzwaJ7PAFNDmJUKzmktKdykT/bRVW+5x7PfDFKAQ==", "erpslv2");
 
             var copy = new SmartCopy(fa1, new SmartCopyOptions() {
                 UseGZip = true,

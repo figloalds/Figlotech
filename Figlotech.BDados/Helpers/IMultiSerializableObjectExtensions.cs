@@ -13,6 +13,7 @@ using System.Xml.Serialization;
 namespace Figlotech.BDados.Helpers {
     public class FTHSerializableOptions {
         public bool UseGzip { get; set; }
+        public bool Formatted { get; set; }
     }
 
     public static class IMultiSerializableObjectExtensions {
@@ -25,7 +26,7 @@ namespace Figlotech.BDados.Helpers {
             StreamOptions
                 .Process(rawStream, (usableStream) => {
 
-                    var json = JsonConvert.SerializeObject(obj);
+                    var json = JsonConvert.SerializeObject(obj, options.Formatted? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
                     using (var writter = new StreamWriter(usableStream, Encoding.UTF8)) {
                         writter.Write(json);
                     }
@@ -81,7 +82,11 @@ namespace Figlotech.BDados.Helpers {
 
                     using (var sww = new StringWriter()) {
 
-                        using (XmlWriter writer = XmlWriter.Create(sww)) {
+                        using (XmlTextWriter writer = new XmlTextWriter(sww)) {
+                            if(options.Formatted) {
+                                writer.Formatting = System.Xml.Formatting.Indented;
+                                writer.Indentation = 4;
+                            }
                             xsSubmit.Serialize(writer, obj);
                             xml = sww.ToString();
                             using (var sw = new StreamWriter(usableStream, Encoding.UTF8)) {

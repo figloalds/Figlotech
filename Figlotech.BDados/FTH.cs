@@ -7,7 +7,6 @@ using Figlotech.BDados.Builders;
 using System.Reflection;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Management;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Newtonsoft.Json;
@@ -16,6 +15,7 @@ using Figlotech.BDados.Authentication;
 using Figlotech.BDados.I18n;
 using System.Threading.Tasks;
 using Figlotech.BDados.Interfaces;
+using System.Diagnostics;
 
 namespace Figlotech.BDados {
     public delegate dynamic ComputeField(dynamic o);
@@ -35,26 +35,49 @@ namespace Figlotech.BDados {
         public static bool EnableStdoutLogs { get; set; } = false;
 
         public static void Write(String s = "") {
+            if (Debugger.IsAttached)
+                Debug.Write(s);
             if (!EnableStdoutLogs)
                 return;
             Console.Write(s);
         }
         public static void WriteLine(String s = "") {
+            if (Debugger.IsAttached)
+                Debug.WriteLine(s);
             if (!EnableStdoutLogs)
                 return;
             Console.WriteLine(s);
         }
 
+        public static T Field<T>(this DataRow dr, int index) {
+            object o = dr.ItemArray[index];
+            return (T)o;
+        }
+        public static T Field<T>(this DataRow dr, String name) {
+            var dt = dr.Table;
+            List<DataColumn> properColumns = new List<DataColumn>();
+            foreach (DataColumn column in dt.Columns)
+                properColumns.Add(column);
+
+            var properCol = properColumns.FirstOrDefault((c) => c.ColumnName == name);
+            if (properCol == null) return default(T);
+            var properColIndex = properColumns.IndexOf(properCol);
+            object o = dr.ItemArray[properColIndex];
+            return (T)o;
+        }
+
         public static T Map<T>(DataRow dr, DataColumnCollection columns) where T : new() {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
+            List<DataColumn> properColumns = new List<DataColumn>();
+            foreach (DataColumn column in columns)
+                properColumns.Add(column);
             var retv = new T();
             objBuilder.Slot(retv);
             foreach (var col in fields) {
                 if (!columns.Contains(col.Name)) continue;
                 var typeofCol = ReflectionTool.GetTypeOf(col);
-
-                object o = dr.Field<object>(col.Name);
+                object o = dr.Field<Object>(col.Name);
                 var tocUlType = Nullable.GetUnderlyingType(typeofCol);
                 if (typeofCol.IsValueType && o == null) {
                     continue;
@@ -1102,26 +1125,6 @@ Refer to the source code for more info
             }
             return type;
         }
-
-        public static String _cpuid = null;
-        public static String CpuId {
-            get {
-                if (_cpuid != null)
-                    return _cpuid;
-                else {
-                    try {
-                        ManagementClass managClass = new ManagementClass("win32_processor");
-                        ManagementObjectCollection managCollec = managClass.GetInstances();
-
-                        foreach (ManagementObject managObj in managCollec) {
-                            return managObj.Properties["processorID"].Value.ToString();
-                        }
-                    } catch (Exception) { }
-                    return _cpuid = "0F0F0F0F0F0F0F0F";
-                }
-            }
-        }
-
 
         public static byte[] GenerateKey(string Str) {
             Random random = new Random(FTH.IntSeedFromString(Str));

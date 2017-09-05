@@ -9,6 +9,8 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Imaging;
 using Figlotech.BDados;
+using System.Security.Cryptography;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace imgdupt {
     class ImageComparator {
@@ -53,6 +55,10 @@ namespace imgdupt {
             int GreenOffset = ComparatorSize * ComparatorSize;
             int BlueOffset = ComparatorSize * ComparatorSize * 2;
             int CurrentByte = 0;
+
+            String fileName ="";
+
+
             using (Bitmap Image32 = new Bitmap(InputImage, ComparatorSize, ComparatorSize)) {
                 for (int x = 0; x < Image32.Width; x++) {
                     for (int y = 0; y < Image32.Height; y++) {

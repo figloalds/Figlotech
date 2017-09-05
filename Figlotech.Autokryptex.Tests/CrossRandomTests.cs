@@ -31,31 +31,31 @@ namespace Figlotech.Autokryptex.Tests
             }
         }
 
-        [TestMethod]
-        public void CrossRandomShouldMakeABeautifulImg() {
-            Bitmap bmp = new Bitmap(500,500);
-            CrossRandom cr = new CrossRandom(12345678);
-            CrossRandom.UseAppSecret("Using an App secret for a change can help");
+        //[TestMethod]
+        //public void CrossRandomShouldMakeABeautifulImg() {
+        //    Bitmap bmp = new Bitmap(500,500);
+        //    CrossRandom cr = new CrossRandom(12345678);
+        //    CrossRandom.UseAppSecret("Using an App secret for a change can help");
 
-            cr.UseInstanceSecret("ASDFASDF");
-            for (int x = 0; x < bmp.Width; x++) {
-                for (int y = 0; y< bmp.Width; y++) {
-                    int r = cr.Next(256);
-                    int g = cr.Next(256);
-                    int b = cr.Next(256);
-                    bmp.SetPixel(x, y, Color.FromArgb(r, g, b));
-                }
-            }
+        //    cr.UseInstanceSecret("ASDFASDF");
+        //    for (int x = 0; x < bmp.Width; x++) {
+        //        for (int y = 0; y< bmp.Width; y++) {
+        //            int r = cr.Next(256);
+        //            int g = cr.Next(256);
+        //            int b = cr.Next(256);
+        //            bmp.SetPixel(x, y, Color.FromArgb(r, g, b));
+        //        }
+        //    }
 
-            bmp.Save("CRYPTRANDOM.bmp");
+        //    bmp.Save("CRYPTRANDOM.bmp");
 
-            // I don't think its possible to assert anything here.
-            // The human necessary validation is: 
-            // The image MUST be very noisy.
-            // And it CANNOT CONTAIN ANY PATTERN.
-            // Because patterns in the image are indicators period,
-            // and our pseudo-random algorithm can't have a period.
+        //    // I don't think its possible to assert anything here.
+        //    // The human necessary validation is: 
+        //    // The image MUST be very noisy.
+        //    // And it CANNOT CONTAIN ANY PATTERN.
+        //    // Because patterns in the image are indicators period,
+        //    // and our pseudo-random algorithm can't have a period.
 
-        }
+        //}
     }
 }

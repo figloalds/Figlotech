@@ -41,7 +41,7 @@ namespace Figlotech.BDados.DataAccessAbstractions
             IntEx i = new IntEx((DateTime.Now.Ticks * 10000) + (sequentia++ % 10000));
             i *= 100000000;
             i *= r.Next(100000000);
-            i *= new IntEx(FTH.CpuId, IntEx.Hexadecimal);
+            //i *= new IntEx(FTH.CpuId, IntEx.Hexadecimal);
             //i += cpuhash;
             return FillBlanks((String)i.ToString(IntEx.Base36));
         }

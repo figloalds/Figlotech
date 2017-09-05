@@ -80,6 +80,9 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// Uploads data from the local to the remote accessor
         /// </summary>
         public void MirrorUp(string path = "") {
+            if (remote == null) {
+                throw new NullReferenceException("The Remote server was not specified, do call SetRemote(IFileAccessor) to specify it.");
+            }
             var totalFilesCount = CountFiles(local, path);
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
             Mirror(local, remote, path, MirrorWay.Up);
@@ -90,6 +93,9 @@ namespace Figlotech.BDados.FileAcessAbstractions {
         /// Downloads data from the remote to the local accessor
         /// </summary>
         public void MirrorDown(string path = "") {
+            if(remote == null) {
+                throw new NullReferenceException("The Remote server was not specified, do call SetRemote(IFileAccessor) to specify it.");
+            }
             if (options.UseHashList) {
                 MirrorFromList(path);
             } else {

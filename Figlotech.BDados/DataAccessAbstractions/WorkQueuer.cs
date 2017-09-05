@@ -141,6 +141,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         bool closed = false;
 
+        public void SetThreadsPriority(ThreadPriority priority) {
+            foreach(var a in workers) {
+                a.Priority = priority;
+            }
+        }
+
         private void WorkersJob() {
             int i = 1;
             int w = 100;
@@ -172,6 +178,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     //FTH.WriteLine(x.Message);
                 }
+
                 if (job == null) {
                     if (!Active && work.Count == 0) {
                         return;
@@ -181,6 +188,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Thread.Sleep(w);
                     continue;
                 }
+
                 job.dequeued = DateTime.Now;
                 if (this != FTH.GlobalQueuer)
                     FTH.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
@@ -217,7 +225,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var th = new Thread(WorkersJob);
                 th.Name = $"{Name}({QID})_{workers.Count + 1}";
                 workers.Enqueue(th);
-                th.Priority = ThreadPriority.Lowest;
+                th.Priority = ThreadPriority.Normal;
                 th.Start();
             }
             SchedulesThread = new Thread(() => {
