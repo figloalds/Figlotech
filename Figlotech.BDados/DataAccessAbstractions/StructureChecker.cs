@@ -81,9 +81,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private void ClearKeys(DataTable keys) {
             for (int i = 0; i < keys.Rows.Count; i++) {
                 bool found = false;
-                var colName = keys.Rows[i].Field<String>("COLUMN_NAME");
-                var refColName = keys.Rows[i].Field<String>("REFERENCED_COLUMN_NAME");
-                var refTablName = keys.Rows[i].Field<String>("REFERENCED_TABLE_NAME");
+                var colName = (string) keys.Rows[i]["COLUMN_NAME"];
+                var refColName = (string) keys.Rows[i]["REFERENCED_COLUMN_NAME"];
+                var refTablName = (string) keys.Rows[i]["REFERENCED_TABLE_NAME"];
                 if (refColName == null) continue;
                 foreach (var type in workingTypes) {
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
@@ -102,8 +102,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
                 if (!found) {
-                    var target = keys.Rows[i].Field<String>("TABLE_NAME");
-                    var constraint = keys.Rows[i].Field<String>("CONSTRAINT_NAME");
+                    var target = (string) keys.Rows[i]["TABLE_NAME"];
+                    var constraint = (string)keys.Rows[i]["CONSTRAINT_NAME"];
                     Exec(DataAccessor.QueryGenerator.DropForeignKey(target, constraint));
                 }
             }
@@ -118,10 +118,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         continue;
                     bool found = false;
                     for (int i = 0; i < keys.Rows.Count; i++) {
-                        var tableName = keys.Rows[i].Field<String>("TABLE_NAME");
-                        var colName = keys.Rows[i].Field<String>("COLUMN_NAME");
-                        var refTablName = keys.Rows[i].Field<String>("REFERENCED_TABLE_NAME");
-                        var refColName = keys.Rows[i].Field<String>("REFERENCED_COLUMN_NAME");
+                        var tableName = (string) keys.Rows[i]["TABLE_NAME"];
+                        var colName = (string) keys.Rows[i]["COLUMN_NAME"];
+                        var refTablName = (string) keys.Rows[i]["REFERENCED_TABLE_NAME"];
+                        var refColName = (string) keys.Rows[i]["REFERENCED_COLUMN_NAME"];
                         if (
                             type.Name.ToLower() == tableName.ToLower() &&
                             field.Name == colName &&
@@ -149,10 +149,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private void DekeyTable(String tableName, DataTable keys) {
             for (int i = 0; i < keys.Rows.Count; i++) {
-                var refTableName = keys.Rows[i].Field<String>("REFERENCED_TABLE_NAME");
+                var refTableName = (string) keys.Rows[i]["REFERENCED_TABLE_NAME"];
                 if (refTableName == tableName) {
-                    var target = keys.Rows[i].Field<String>("TABLE_NAME");
-                    var constraint = keys.Rows[i].Field<String>("CONSTRAINT_NAME");
+                    var target = (string) keys.Rows[i]["TABLE_NAME"];
+                    var constraint = (string) keys.Rows[i]["CONSTRAINT_NAME"];
                     Benchmarker.Mark($"Dekey Table {target} from {constraint} references {refTableName}");
                     Exec(
                             DataAccessor.QueryGenerator.DropForeignKey(target, constraint)
@@ -163,11 +163,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private void DekeyColumn(String tableName, String columnName, DataTable keys) {
             for (int i = 0; i < keys.Rows.Count; i++) {
-                var refColName = keys.Rows[i].Field<String>("REFERENCED_COLUMN_NAME");
-                var refTablName = keys.Rows[i].Field<String>("REFERENCED_TABLE_NAME");
+                var refColName = (string) keys.Rows[i]["REFERENCED_COLUMN_NAME"];
+                var refTablName = (string) keys.Rows[i]["REFERENCED_TABLE_NAME"];
                 if (refTablName == tableName && refColName == columnName) {
-                    var target = keys.Rows[i].Field<String>("TABLE_NAME");
-                    var constraint = keys.Rows[i].Field<String>("CONSTRAINT_NAME");
+                    var target = (string) keys.Rows[i]["TABLE_NAME"];
+                    var constraint = (string) keys.Rows[i]["CONSTRAINT_NAME"];
                     Benchmarker.Mark($"Dekey Table {target} from {constraint} references {refTablName}/{refColName}");
                     Exec(
                             DataAccessor.QueryGenerator.DropForeignKey(target, constraint)
@@ -179,7 +179,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private bool WorkOnTables(DataTable tables, DataTable keys) {
             Dictionary<string, string> oldNames = new Dictionary<string, string>();
             foreach (DataRow a in tables.Rows) {
-                var tabName = a.Field<String>("TABLE_NAME");
+                var tabName = (string) a["TABLE_NAME"];
                 foreach (var type in workingTypes) {
                     var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
                     if (oldNameAtt != null) {
@@ -192,7 +192,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var type in workingTypes) {
                 var found = false;
                 foreach (DataRow a in tables.Rows) {
-                    var tabName = a.Field<String>("TABLE_NAME");
+                    var tabName = (string) a["TABLE_NAME"];
                     if (tabName.ToLower() == type.Name.ToLower()) {
                         found = true;
                     }
@@ -218,8 +218,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private bool WorkOnColumns(DataTable columns, DataTable keys) {
             Benchmarker.Mark("Find renamed columns");
             foreach (DataRow a in columns.Rows) {
-                var tablName = a.Field<String>("TABLE_NAME");
-                var colName = a.Field<String>("COLUMN_NAME");
+                var tablName = (string) a["TABLE_NAME"];
+                var colName = (string) a["COLUMN_NAME"];
                 foreach (var type in workingTypes) {
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
@@ -236,7 +236,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     foreach (var field in fields) {
                         var found = false;
                         for (int i = 0; i < columns.Rows.Count; i++) {
-                            var colName2 = columns.Rows[i].Field<String>("COLUMN_NAME");
+                            var colName2 = columns.Rows[i]["COLUMN_NAME"];
                             if (colName2 == field.Name) {
                                 found = true;
                                 break;
@@ -270,17 +270,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             columns = DataAccessor.Query(DataAccessor.QueryGenerator.InformationSchemaQueryColumns(DataAccessor.SchemaName));
             for (int i = 0; i < columns.Rows.Count; i++) {
                 foreach (var type in workingTypes) {
-                    var tableName = columns.Rows[i].Field<string>("TABLE_NAME");
+                    var tableName = (string) columns.Rows[i]["TABLE_NAME"];
                     if (tableName.ToLower() != type.Name.ToLower()) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                         .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
                     foreach (var field in fields) {
-                        var columnName = columns.Rows[i].Field<string>("COLUMN_NAME");
+                        var columnName = columns.Rows[i]["COLUMN_NAME"];
                         if (field.Name != columnName) continue;
                         // Found columns, check definitions
-                        var columnIsNullable = columns.Rows[i].Field<String>("IS_NULLABLE").ToUpper() == "YES";
-                        var length = columns.Rows[i].Field<ulong?>("CHARACTER_MAXIMUM_LENGTH");
-                        var datatype = columns.Rows[i].Field<String>("DATA_TYPE").ToUpper();
+                        var columnIsNullable = ((string) columns.Rows[i]["IS_NULLABLE"]).ToUpper() == "YES";
+                        var length = columns.Rows[i]["CHARACTER_MAXIMUM_LENGTH"];
+                        var datatype = ((string) columns.Rows[i]["DATA_TYPE"]).ToUpper();
                         var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
                         if (fieldAtt == null) continue;
                         var dbdef = GetDatabaseType(field, fieldAtt);

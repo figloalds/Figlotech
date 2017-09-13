@@ -32,7 +32,7 @@ namespace Figlotech.BDados.CustomForms {
                     bool exists = false;
                     int cIndex = -1;
                     for(var c = 0; c < columnsInfo.Rows.Count; c++) { // C++!!!
-                        if(columnsInfo.Rows[c].Field<String>("COLUMN_NAME") == form.Fields[i].Name) {
+                        if(columnsInfo.Rows[c]["COLUMN_NAME"] == form.Fields[i].Name) {
                             exists = true;
                             cIndex = c;
                             break;
@@ -41,8 +41,8 @@ namespace Figlotech.BDados.CustomForms {
                     if(!exists) {
                         da.Execute($"ALTER TABLE {tableName} ADD COLUMN {SqlType(form.Fields[i])} DEFAULT NULL;");
                     } else {
-                        ulong? sz = columnsInfo.Rows[cIndex].Field<ulong?>("CHARACTER_MAXIMUM_LENGTH");
-                        String dbtype = columnsInfo.Rows[cIndex].Field<String>("DATA_TYPE");
+                        ulong? sz = (ulong?) columnsInfo.Rows[cIndex]["CHARACTER_MAXIMUM_LENGTH"];
+                        String dbtype = (String) columnsInfo.Rows[cIndex]["DATA_TYPE"];
                         if (dbtype.ToLower() == "varchar" && sz != (ulong) form.Fields[i].Size) {
                             da.Execute($"ALTER TABLE {tableName} CHANGE COLUMN {form.Fields[i].Name} {form.Fields[i].Name} {SqlType(form.Fields[i])} DEFAULT NULL");
                         }
@@ -80,11 +80,11 @@ namespace Figlotech.BDados.CustomForms {
             var retv = new List<CustomObject>();
             for (var i = 0; i < results.Rows.Count; i++) {
                 CustomObject co = new CustomObject();
-                co.Set("Id", results.Rows[i].Field<long>("Id"));
+                co.Set("Id", results.Rows[i]["Id"]);
                 for (var a = 0; a < cf.Fields.Count; a++) {
-                    co.Set(cf.Fields[a].Name, results.Rows[i].Field<object>(cf.Fields[a].Name));
+                    co.Set(cf.Fields[a].Name, results.Rows[i][cf.Fields[a].Name]);
                 }
-                co.Set("RID", results.Rows[i].Field<String>("RID"));
+                co.Set("RID", results.Rows[i]["RID"]);
                 if (co.Get("RID") == null) {
                     co.Set("RID", IntEx.GenerateUniqueRID());
                 }
@@ -106,11 +106,11 @@ namespace Figlotech.BDados.CustomForms {
             var retv = new List<CustomObject>();
             for (var i = 0; i < results.Rows.Count; i++) {
                 CustomObject co = new CustomObject();
-                co.Set("Id", results.Rows[i].Field<long>("Id"));
+                co.Set("Id", results.Rows[i]["Id"]);
                 for (var a = 0; a < cf.Fields.Count; a++) {
-                    co.Set(cf.Fields[a].Name, results.Rows[i].Field<object>(cf.Fields[a].Name));
+                    co.Set(cf.Fields[a].Name, results.Rows[i][cf.Fields[a].Name]);
                 }
-                co.Set("RID", results.Rows[i].Field<String>("RID"));
+                co.Set("RID", results.Rows[i]["RID"]);
                 if (co.Get("RID") == null) {
                     co.Set("RID", IntEx.GenerateUniqueRID());
                 }

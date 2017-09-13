@@ -98,9 +98,9 @@ namespace Figlotech.BDados.Builders
             List<object> ids = new List<object>();
             for (int i = 0; i < dt.Rows.Count; i++) {
                 // 
-                Object val = dt.Rows[i].Field<Object>(Prefix + "_" + relation.ChildKey);
+                Object val = dt.Rows[i][Prefix + "_" + relation.ChildKey];
                 if (val != null && val.ToString() == ParentVal.ToString()) {
-                    object RID = dt.Rows[i].Field<object>(Prefix + $"_{rid}");
+                    object RID = dt.Rows[i][Prefix + $"_{rid}"];
                     if (!ids.Contains(RID)) {
                         rs.Add(dt.Rows[i]);
                         ids.Add(RID);
@@ -121,7 +121,7 @@ namespace Figlotech.BDados.Builders
                         continue;
                     var colName = Prefix + "_" + fields[i].Name;
                     if (!dt.Columns.Contains(colName)) continue;
-                    var o = dr.Field<Object>(colName);
+                    var o = dr[colName];
 
                     objBuilder[fields[i].Name] = o;
                 }
@@ -132,9 +132,9 @@ namespace Figlotech.BDados.Builders
                         case AggregateBuildOptions.AggregateField: {
 
                                 String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
-                                var value = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
+                                var value = dr[childPrefix + "_" + rel.Fields[0]];
                                 String fieldName = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                objBuilder[fieldName] = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
+                                objBuilder[fieldName] = dr[childPrefix + "_" + rel.Fields[0]];
 
                                 break;
                             }
@@ -153,7 +153,7 @@ namespace Figlotech.BDados.Builders
                                     .Where(m => m.Name == "Add")
                                     .FirstOrDefault();
 
-                                Object parentRid = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
+                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
@@ -176,7 +176,7 @@ namespace Figlotech.BDados.Builders
                                 if (objectType == null) {
                                     continue;
                                 }
-                                Object parentRid = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
+                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
 
                                 var newObject = BuildAggregateList(type, parentRid, rel, dt).FirstOrDefault();
                                 objBuilder[fieldAlias] = newObject;
@@ -264,7 +264,7 @@ namespace Figlotech.BDados.Builders
             foreach (DataRow dr in dt.Rows)
                 rs.Add(dr);
             string rid = FTH.GetRidColumn(typeof(T));
-            rs = rs.GroupBy(c => c.Field<object>(Prefix + $"_{rid}")).Select(grp => grp.First()).ToList();
+            rs = rs.GroupBy(c => c[Prefix + $"_{rid}"]).Select(grp => grp.First()).ToList();
             // This says: Foreach datarow at the 
             // "grouped by the Aggregate Root RID"
             foreach (DataRow dr in rs) {
@@ -281,7 +281,7 @@ namespace Figlotech.BDados.Builders
                         continue;
                     var colName = Prefix + "_" + fields[i].Name;
                     if (!dt.Columns.Contains(colName)) continue;
-                    var o = dr.Field<object>(colName);
+                    var o = dr[colName];
 
                     objBuilder[fields[i]] = o;
                 }
@@ -293,9 +293,9 @@ namespace Figlotech.BDados.Builders
                         case AggregateBuildOptions.AggregateField: {
 
                                 String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
-                                var value = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
+                                var value = dr[childPrefix + "_" + rel.Fields[0]];
                                 String nome = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                objBuilder[nome] = dr.Field<Object>(childPrefix + "_" + rel.Fields[0]);
+                                objBuilder[nome] = dr[childPrefix + "_" + rel.Fields[0]];
 
                                 break;
                             }
@@ -316,7 +316,7 @@ namespace Figlotech.BDados.Builders
                                     .Where(m => m.Name == "Add")
                                     .FirstOrDefault();
 
-                                Object parentRid = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
+                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
@@ -340,7 +340,7 @@ namespace Figlotech.BDados.Builders
                                 if (objectType == null) {
                                     continue;
                                 }
-                                Object parentValue = dr.Field<Object>(_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey);
+                                Object parentValue = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
                                 if (parentValue == null) {
                                     continue;
                                 }

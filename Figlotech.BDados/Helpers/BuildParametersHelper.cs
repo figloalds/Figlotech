@@ -56,15 +56,15 @@ namespace Figlotech.BDados.Helpers {
                 foreach (DataRow dr in _dataTable.Rows)
                     rows.Add(dr);
                 rows = rows.Where((a) => {
-                    int? id = a.Field<int?>(_join.Joins[myIndex].Prefix + "_" + childKey);
+                    int? id = (int?) a[_join.Joins[myIndex].Prefix + "_" + childKey];
                     return id.ToString() == parentId.ToString();
                 })
-                    .GroupBy(c => c.Field<long>(_join.Joins[myIndex].Prefix + "_id")).Select(grp => grp.First()).ToList();
+                    .GroupBy(c => c[_join.Joins[myIndex].Prefix + "_id"]).Select(grp => grp.First()).ToList();
                 foreach (DataRow dr in rows) {
                     var newInstance = Activator.CreateInstance(typeof(T));
                     T thisValue = (T)newInstance;
                     foreach (var f in newInstance.GetType().GetFields()) {
-                        f.SetValue(thisValue, dr.Field<Object>(_join.Joins[myIndex].Prefix + "_" + f.Name));
+                        f.SetValue(thisValue, dr[_join.Joins[myIndex].Prefix + "_" + f.Name]);
                     }
                     tabs.Add(thisValue);
                 }

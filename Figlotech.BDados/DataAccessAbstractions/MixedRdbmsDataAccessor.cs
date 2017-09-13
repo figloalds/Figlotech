@@ -53,10 +53,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return RdbmsAccessor.ForceExist<T>(Default, query, args);
         }
 
-        public IQueryBuilder GetPreferredQueryBuilder() {
-            return RdbmsAccessor.GetPreferredQueryBuilder();
-        }
-
         public IQueryGenerator GetQueryGenerator() {
             return RdbmsAccessor.QueryGenerator;
         }

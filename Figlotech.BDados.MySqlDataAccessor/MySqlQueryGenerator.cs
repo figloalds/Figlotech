@@ -22,11 +22,12 @@ using Figlotech.BDados.Helpers;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using System.Text.RegularExpressions;
+using Figlotech.BDados.Builders;
 
-namespace Figlotech.BDados.Builders
-{
+namespace Figlotech.BDados.MySqlDataAccessor {
     public class MySqlQueryGenerator : IQueryGenerator
     {
+
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             QueryBuilder query = new QueryBuilder($"INSERT INTO {inputObject.GetType().Name}");
@@ -431,6 +432,16 @@ namespace Figlotech.BDados.Builders
                 }
             }
             return lifi;
+        }
+
+        public IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new() {
+            return new QueryBuilder("SELECT last_insert_id()");
+        }
+
+        public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
+            var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+            return new QueryBuilder($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", rid);
         }
     }
 }

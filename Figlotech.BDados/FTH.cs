@@ -49,22 +49,23 @@ namespace Figlotech.BDados {
             Console.WriteLine(s);
         }
 
-        public static T Field<T>(this DataRow dr, int index) {
-            object o = dr.ItemArray[index];
-            return (T)o;
-        }
-        public static T Field<T>(this DataRow dr, String name) {
-            var dt = dr.Table;
-            List<DataColumn> properColumns = new List<DataColumn>();
-            foreach (DataColumn column in dt.Columns)
-                properColumns.Add(column);
+        //public static T Field<T>(this DataRow dr, int index) {
+        //    object o = dr.ItemArray[index];
+        //    return (T)o;
+        //}
 
-            var properCol = properColumns.FirstOrDefault((c) => c.ColumnName == name);
-            if (properCol == null) return default(T);
-            var properColIndex = properColumns.IndexOf(properCol);
-            object o = dr.ItemArray[properColIndex];
-            return (T)o;
-        }
+        //public static T Field<T>(this DataRow dr, String name) {
+        //    var dt = dr.Table;
+        //    List<DataColumn> properColumns = new List<DataColumn>();
+        //    foreach (DataColumn column in dt.Columns)
+        //        properColumns.Add(column);
+
+        //    var properCol = properColumns.FirstOrDefault((c) => c.ColumnName == name);
+        //    if (properCol == null) return default(T);
+        //    var properColIndex = properColumns.IndexOf(properCol);
+        //    object o = dr.ItemArray[properColIndex];
+        //    return (T)o;
+        //}
 
         public static T Map<T>(DataRow dr, DataColumnCollection columns) where T : new() {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -77,7 +78,7 @@ namespace Figlotech.BDados {
             foreach (var col in fields) {
                 if (!columns.Contains(col.Name)) continue;
                 var typeofCol = ReflectionTool.GetTypeOf(col);
-                object o = dr.Field<Object>(col.Name);
+                object o = dr[col.Name];
                 var tocUlType = Nullable.GetUnderlyingType(typeofCol);
                 if (typeofCol.IsValueType && o == null) {
                     continue;

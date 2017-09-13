@@ -23,6 +23,8 @@ namespace Figlotech.BDados.FileAcessAbstractions {
 
         void WriteAllBytes(string relative, byte[] content);
 
+        Stream Open(String relative, FileMode fileMode);
+
         DateTime? GetLastFileWrite(string relative);
         long GetSize(string relative);
         void SetLastModified(String relative, DateTime dt);

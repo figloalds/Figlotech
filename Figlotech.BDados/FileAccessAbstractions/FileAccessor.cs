@@ -406,5 +406,15 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             });
 
         }
+
+        public Stream Open(string relative, FileMode fileMode) {
+            RelToFs(ref relative);
+            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
+                absMkDirs(Path.GetDirectoryName(WorkingDirectory));
+            }
+
+            return File.Open(WorkingDirectory, fileMode);
+        }
     }
 }

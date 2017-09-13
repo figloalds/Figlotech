@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.MySqlDataAccessor;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SoftLeader.Sistema.Models;
 using System;
@@ -7,34 +8,34 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.BDados.Tests
-{
+namespace Figlotech.BDados.Tests {
     [TestClass]
     public class MySqlDaTests {
         [TestMethod]
         public void StructureCheckShouldWork() {
             var types = new Type[] { typeof(client) };
-            var da = new MySqlDataAccessor(
-                new DataAccessorConfiguration {
-                    Host = "localhost",
-                    Database = "fth_tests",
-                    User = "root",
-                    Password = "",
-                }
+            var da = new RdbmsDataAccessor(
+                new MySqlPlugin(
+                    new DataAccessorConfiguration {
+                        Host = "localhost",
+                        Database = "fth_tests",
+                        User = "root",
+                        Password = "",
+                    })
             );
             da.CheckStructure(types);
         }
 
         [TestMethod]
         public void LoadAllShouldWork() {
-            var da = new MySqlDataAccessor(
-                new DataAccessorConfiguration {
-                    Host = "localhost",
-                    Database = "sistema",
-                    User = "root",
-                    Password = "",
-                }
-            );
+            var da = new RdbmsDataAccessor(
+                new MySqlPlugin(
+                    new DataAccessorConfiguration {
+                        Host = "localhost",
+                        Database = "fth_tests",
+                        User = "root",
+                        Password = "",
+                    }));
             comanda comanda = new comanda() {
                 cm_cartao = "asdf",
                 cm_status = "A",

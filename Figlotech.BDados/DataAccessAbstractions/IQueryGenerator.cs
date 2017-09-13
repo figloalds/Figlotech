@@ -30,5 +30,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn);
         IQueryBuilder RenameColumn(string table, string column, string newName);
         IQueryBuilder Purge(string table, string column, string refTable, string refColumn);
+        IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new();
+        IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
     }
 }

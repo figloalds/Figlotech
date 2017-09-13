@@ -130,6 +130,10 @@ namespace Figlotech.BDados.FileAcessAbstractions {
             });
         }
 
+        public Stream Open(string relative, FileMode fileMode) {
+            throw new NotImplementedException();
+        }
+
         public bool Read(string relative, Action<Stream> func) {
             foreach(var a in accessors) {
                 if(a.Exists(relative)) {

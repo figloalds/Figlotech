@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Figlotech.BDados.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.Interfaces;
+using Figlotech.BDados.MySqlDataAccessor;
 
 namespace Figlotech.BDados.Tests {
     [TestClass]
@@ -15,7 +16,7 @@ namespace Figlotech.BDados.Tests {
             resolver.AddFactory<SmartCopyOptions>(() => new SmartCopyOptions());
             resolver.AddAbstract<ILogger, Logger>();
             resolver.AddAbstract<SmartCopy, SmartCopy>();
-            var sc = new MySqlDataAccessor(new DataAccessorConfiguration());
+            var sc = new RdbmsDataAccessor<MySqlPlugin>(new DataAccessorConfiguration());
             resolver.SmartResolve(sc);
             Assert.IsNotNull(sc.Logger);
         }

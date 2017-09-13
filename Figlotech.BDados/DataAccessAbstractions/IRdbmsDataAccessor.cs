@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor
     {
-        IQueryGenerator QueryGenerator { get; }
 
         Object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null);
 
@@ -28,10 +27,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         String SchemaName { get; }
 
-        IJoinBuilder MakeJoin(Action<JoinDefinition> fn);
+        IQueryGenerator QueryGenerator { get; }
 
-        IQueryBuilder GetPreferredQueryBuilder();
-        IQueryGenerator GetQueryGenerator();
+        IJoinBuilder MakeJoin(Action<JoinDefinition> fn);
 
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
