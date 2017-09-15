@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -74,7 +75,7 @@ namespace Figlotech.BDados.Authentication {
             }
             if (atts.Any()) {
                 if (atts.Count() >= Attempt.maxAttemptsToLock) {
-                    throw new ValidationException(String.Format(FTH.Strings.AUTH_USER_MAX_ATTEMPTS_EXCEEDED, Attempt.maxAttemptsToLock));
+                    throw new ValidationException(String.Format(Fi.Tech.GetStrings().AUTH_USER_MAX_ATTEMPTS_EXCEEDED, Attempt.maxAttemptsToLock));
                 }
             }
         }
@@ -84,7 +85,6 @@ namespace Figlotech.BDados.Authentication {
             s.Token = Token;
             s.UserRID = User.RID;
             s.Session = Session;
-            s.Permissions = User.GetPermissionsContainer();
             Sessions.Add(s);
             return s.Token;
         }
@@ -94,11 +94,11 @@ namespace Figlotech.BDados.Authentication {
             String criptPass = AuthenticationUtils.HashPass(password, loadedUser.RID);
             if(loadedUser.Password != criptPass) {
                 TrackAttempt(loadedUser?.RID, false);
-                throw new ValidationException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_PASSWORD_INCORRECT);
             }
             if (!loadedUser.isActive) {
                 TrackAttempt(loadedUser?.RID, false);
-                throw new ValidationException(FTH.Strings.AUTH_USER_BLOCKED);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_USER_BLOCKED);
             }
             return loadedUser;
         }
@@ -107,17 +107,16 @@ namespace Figlotech.BDados.Authentication {
         {
             if (user == null) {
                 // TrackAttempt(user?.RID, false);
-                throw new ValidationException(FTH.Strings.AUTH_USER_NOT_FOUND);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_USER_NOT_FOUND);
             }
             user = CheckLogin(user, password);
             if (user != null) {
                 var sess = new TSession {
                     User = user.RID,
                     isActive = true,
-                    Token = FTH.GenerateIdString($"Login:{user.Username};"),
+                    Token = Fi.Tech.GenerateIdString($"Login:{user.Username};"),
                     StartTime = DateTime.UtcNow,
                     EndTime = null,
-                    Permission = user.GetPermissionsContainer()
                 };
                 if (DataAccessor.SaveItem(sess)) {
                     return sess;
@@ -156,9 +155,7 @@ namespace Figlotech.BDados.Authentication {
                     sess.Token = Token;
                     sess.UserRID = User.RID;
                     sess.Session = fetchSession.First();
-                    sess.Permissions = User.GetPermissionsContainer();
                     var retv = fetchSession.FirstOrDefault();
-                    retv.Permission = User.GetPermissionsContainer();
                     Sessions.Add(sess);
                     return fetchSession.FirstOrDefault();
                 }
@@ -220,13 +217,13 @@ namespace Figlotech.BDados.Authentication {
             retv.Username = userName;
             retv.Password = AuthenticationUtils.HashPass(password, retv.RID);
             if(!DataAccessor.SaveItem(retv)) {
-                throw new ValidationException(FTH.Strings.AUTH_USER_ALREADY_EXISTS);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_USER_ALREADY_EXISTS);
             }
             return retv;
         }
         public IUser CreateUserSecure(string userName, string password, string confirmPassword) {
             if (password != confirmPassword) {
-                throw new ValidationException(FTH.Strings.AUTH_PASSWORDS_MUST_MATCH);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_PASSWORDS_MUST_MATCH);
             }
             return ForceCreateUser(userName, password);
         }
@@ -239,10 +236,10 @@ namespace Figlotech.BDados.Authentication {
 
         public bool ChangeUserPasswordSecure(IUser user, string oldPassword, string newPassword, string newPasswordConfirmation) {
             if(user.Password != AuthenticationUtils.HashPass(oldPassword, user.RID)) {
-                throw new ValidationException(FTH.Strings.AUTH_PASSWORD_INCORRECT);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_PASSWORD_INCORRECT);
             }
             if (newPassword != newPasswordConfirmation) {
-                throw new ValidationException(FTH.Strings.AUTH_PASSWORDS_MUST_MATCH);
+                throw new ValidationException(Fi.Tech.GetStrings().AUTH_PASSWORDS_MUST_MATCH);
             }
             return ForcePassword(user, newPassword);
         }

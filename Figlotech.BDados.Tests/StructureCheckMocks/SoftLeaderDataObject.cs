@@ -1,6 +1,7 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;

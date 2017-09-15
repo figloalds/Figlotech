@@ -1,22 +1,5 @@
-﻿using Figlotech;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Reflection;
+﻿using System;
 using System.Text;
-using System.Threading.Tasks;
-using Figlotech.BDados;
-using Figlotech.Autokryptex;
-using System.Data;
-using System.Text.RegularExpressions;
-using Figlotech.BDados.Interfaces;
-using System.Globalization;
 using Figlotech.Autokryptex.EncryptMethods;
 
 namespace Figlotech.BDados.Authentication {

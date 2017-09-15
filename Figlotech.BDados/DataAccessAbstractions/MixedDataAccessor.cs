@@ -1,4 +1,4 @@
-﻿using Figlotech.BDados.Interfaces;
+﻿using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Threading;
 using System.Data;
 using System.Diagnostics;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
@@ -61,10 +62,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             mdauts = typesynctimes.FirstOrDefault(s => s.Type == t);
             var moment = DateTime.UtcNow.Ticks;
-            var rs = FTH.LoadAllOfByUpdateTime(t, PersistenceAccessor, mdauts.LastSyncDown, 1, null);
+            var rs = Fi.Tech.LoadAllOfByUpdateTime(t, PersistenceAccessor, mdauts.LastSyncDown, 1, null);
             mdauts.LastSyncDown = moment;
-            FTH.SetAccessorOfRecordSet(rs, MainAccessor);
-            FTH.SaveRecordSet(rs);
+            Fi.Tech.SetAccessorOfRecordSet(rs, MainAccessor);
+            Fi.Tech.SaveRecordSet(rs);
         }
 
         public void SyncUp(Type t) {
@@ -76,10 +77,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             mdauts = typesynctimes.FirstOrDefault(s => s.Type == t);
             var moment = DateTime.UtcNow.Ticks;
-            var rs = FTH.LoadAllOfByUpdateTime(t, MainAccessor, mdauts.LastSyncDown, 1, null);
+            var rs = Fi.Tech.LoadAllOfByUpdateTime(t, MainAccessor, mdauts.LastSyncDown, 1, null);
             mdauts.LastSyncUp = moment;
-            FTH.SetAccessorOfRecordSet(rs, PersistenceAccessor);
-            FTH.SaveRecordSet(rs);
+            Fi.Tech.SetAccessorOfRecordSet(rs, PersistenceAccessor);
+            Fi.Tech.SaveRecordSet(rs);
         }
 
         public void Init(Type[] types, Action finished = null) {

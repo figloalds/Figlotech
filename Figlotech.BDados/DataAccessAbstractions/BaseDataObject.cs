@@ -1,11 +1,8 @@
 ﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core;
+using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public abstract class BaseDataObject : 

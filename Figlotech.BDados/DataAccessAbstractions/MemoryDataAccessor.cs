@@ -1,4 +1,4 @@
-﻿using Figlotech.BDados.Interfaces;
+﻿using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +10,8 @@ using Figlotech.BDados.Helpers;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Builders;
 using System.Threading;
+using Figlotech.Core.Helpers;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 

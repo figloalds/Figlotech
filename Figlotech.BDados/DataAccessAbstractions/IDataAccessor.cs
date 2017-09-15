@@ -1,5 +1,5 @@
 ﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Linq.Expressions;
 using System.Reflection;

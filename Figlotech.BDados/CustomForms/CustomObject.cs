@@ -1,12 +1,13 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.Interfaces;
-using Figlotech.Core;
+using Figlotech.Core.Interfaces;
+using Figlotech.BDados;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Linq;
 using System.Threading.Tasks;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.CustomForms {
     public class CustomObject

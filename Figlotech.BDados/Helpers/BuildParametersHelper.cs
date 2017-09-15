@@ -1,28 +1,24 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
     public class ObjectHoningOption {
         public String Alias;
         public String OldField;
         public String NewField;
-        public ComputeField Function;
+        private ComputeField function;
         public ObjectHoningOption(String alias, String oldAntigo, String newCampo, ComputeField function) {
             Alias = alias;
             OldField = oldAntigo;
             NewField = newCampo;
             Function = function;
         }
+
+        public ComputeField Function { get => function; set => function = value; }
     }
 
     public class BuildParametersHelper {

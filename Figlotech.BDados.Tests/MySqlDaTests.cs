@@ -20,7 +20,7 @@ namespace Figlotech.BDados.Tests {
                         Host = "localhost",
                         Database = "fth_tests",
                         User = "root",
-                        Password = "",
+                        Password = "asdafe1025",
                     })
             );
             da.CheckStructure(types);
@@ -34,7 +34,7 @@ namespace Figlotech.BDados.Tests {
                         Host = "localhost",
                         Database = "fth_tests",
                         User = "root",
-                        Password = "",
+                        Password = "asdafe1025",
                     }));
             comanda comanda = new comanda() {
                 cm_cartao = "asdf",

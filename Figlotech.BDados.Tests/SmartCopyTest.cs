@@ -1,5 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Figlotech.BDados.FileAcessAbstractions;
+using Figlotech.Core.FileAcessAbstractions;
 
 namespace Figlotech.BDados.Tests {
     [TestClass]

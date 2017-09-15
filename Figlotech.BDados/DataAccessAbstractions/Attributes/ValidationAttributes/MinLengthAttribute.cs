@@ -2,6 +2,7 @@
 
 
 using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core;
 using Newtonsoft.Json;
 /**
 * Figlotech::Database::Entity::FieldAttribute
@@ -32,10 +33,10 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
 
         public override ValidationErrors Validate(MemberInfo member, object value) {
             ValidationErrors retv = new ValidationErrors();
-            FTH.As<string>(value, (str) => {
+            if(value is String str) {
                 if (str.Length > MinLength)
                     retv.Add(member.Name, $"{member.Name} should contain at least {MinLength}");
-            });
+            }
             return retv;
         }
 

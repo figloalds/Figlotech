@@ -1,5 +1,6 @@
 ﻿using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -87,11 +88,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     String keyA = m.Groups["KeyA"].Value;
                     String keyB = m.Groups["KeyB"].Value;
-                    if (!FTH.FindColumn(keyA, Joins[IndexA].ValueObject)) {
+                    if (!Fi.Tech.FindColumn(keyA, Joins[IndexA].ValueObject)) {
                         Relations.Clear();
                         throw new BDadosException($"Field {keyA} does not exist on '{Joins[IndexA].TableName} AS {Joins[IndexA].Prefix}'");
                     }
-                    if (!FTH.FindColumn(keyB, Joins[IndexB].ValueObject)) {
+                    if (!Fi.Tech.FindColumn(keyB, Joins[IndexB].ValueObject)) {
                         Relations.Clear();
                         throw new BDadosException($"Field {keyB} does not exist on '{Joins[IndexB].TableName} AS {Joins[IndexB].Prefix}'");
                     }

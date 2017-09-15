@@ -8,10 +8,12 @@ using System.Reflection;
 using System.Linq;
 using System.Linq.Expressions;
 using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core.Interfaces;
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
+using Figlotech.BDados;
+using Figlotech.Core.Helpers;
 using Figlotech.Core;
 
 namespace Figlotech.BDados {
@@ -314,7 +316,7 @@ namespace Figlotech.BDados {
             }
             var retv = new List<T>();
             DataTable resultado = Query(query);
-            FTH.Map<T>(retv, resultado);
+            Fi.Tech.Map<T>(retv, resultado);
             return retv;
         }
 
@@ -457,7 +459,7 @@ namespace Figlotech.BDados {
 
                 var objBuilder = new ObjectReflector();
                 for (int i = 0; i < dt.Rows.Count; i++) {
-                    T add = FTH.Map<T>(dt.Rows[i], dt.Columns);
+                    T add = Fi.Tech.Map<T>(dt.Rows[i], dt.Columns);
                     retv.Add(add);
                 }
                 Bench.Mark("Build RecordSet");
@@ -565,12 +567,12 @@ namespace Figlotech.BDados {
                     String Tabela = (string)t.Rows[i]["TABLE_NAME"];
                     List<String> lines = new List<String>();
                     lines.Add($"// --------------------------------------------------");
-                    lines.Add($"// BDados v{FTH.Version}");
+                    lines.Add($"// BDados v{Fi.Tech.GetVersion()}");
                     lines.Add($"// Arquivo gerado automaticamente.");
                     lines.Add($"// --------------------------------------------------");
                     lines.Add("using System;");
                     lines.Add("using Figlotech.BDados.Attributes;");
-                    lines.Add("using Figlotech.BDados.Interfaces;");
+                    lines.Add("using Figlotech.Core.Interfaces;");
                     lines.Add("using Figlotech.BDados.Entity;");
                     lines.Add("");
                     lines.Add($"// ------------------------------------------");
@@ -588,8 +590,8 @@ namespace Figlotech.BDados {
                         StringBuilder attLineOptions = new StringBuilder();
                         List<String> lineOptions = new List<String>();
                         //for(int x = 0; x < cols.Columns.Count; x++) {
-                        //    FTH.Write(thisCol[x]);
-                        //    FTH.Write("|");
+                        //    Fi.Tech.Write(thisCol[x]);
+                        //    Fi.Tech.Write("|");
                         //}
                         //Logger?.WriteLog();
                         lines.Add("");
@@ -681,7 +683,7 @@ namespace Figlotech.BDados {
                     ex = ex.InnerException;
                 }
                 //if (WorkingTypes.Length > 0)
-                //    //FTH.AsyncOp(() => {
+                //    //Fi.Tech.AsyncOp(() => {
                 //    Access((bd) => {
                 //        bd.CheckStructure(WorkingTypes, false);
                 //    });

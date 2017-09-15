@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Data;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core.Interfaces;
 using Figlotech.BDados.Helpers;
 
 namespace Figlotech.BDados.DataAccessAbstractions {

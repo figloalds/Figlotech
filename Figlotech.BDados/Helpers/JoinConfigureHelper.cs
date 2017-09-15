@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,7 +42,7 @@ namespace Figlotech.BDados.Helpers
                     if(expression is UnaryExpression)
                         exclude = ((expression as UnaryExpression).Operand as MemberExpression).Member.Name;
                     if (exclude == null) continue;
-                    if (FTH.GetFieldNames(_join.Joins[_index].ValueObject).Contains(exclude)) {
+                    if (Fi.Tech.GetFieldNames(_join.Joins[_index].ValueObject).Contains(exclude)) {
                         _join.Joins[_index].Excludes.Add(exclude);
                     }
                     continue;

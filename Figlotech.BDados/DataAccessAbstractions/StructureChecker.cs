@@ -1,5 +1,7 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -52,8 +54,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     WorkOnColumns(columns, keys);
                 } catch (Exception x) {
-                    FTH.Write(x.Message);
-                    FTH.Write(x.StackTrace);
+                    Fi.Tech.Write(x.Message);
+                    Fi.Tech.Write(x.StackTrace);
                 }
 
                 // Re read keys here because work on tables and columns
@@ -65,9 +67,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ReKeys(keys);
 
             }, (x) => {
-                FTH.WriteLine(FTH.Strings.ERROR_IN_STRUCTURE_CHECK);
-                FTH.WriteLine(x.Message);
-                FTH.WriteLine(x.StackTrace);
+                Fi.Tech.WriteLine(Fi.Tech.GetStrings().ERROR_IN_STRUCTURE_CHECK);
+                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine(x.StackTrace);
             });
             Benchmarker.TotalMark();
         }

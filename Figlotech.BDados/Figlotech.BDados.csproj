@@ -9,23 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="FunctionalExtension\**" />
-    <Compile Remove="Interfaces\Extensions\**" />
-    <Compile Remove="Tools\**" />
-    <EmbeddedResource Remove="FunctionalExtension\**" />
-    <EmbeddedResource Remove="Interfaces\Extensions\**" />
-    <EmbeddedResource Remove="Tools\**" />
-    <None Remove="FunctionalExtension\**" />
-    <None Remove="Interfaces\Extensions\**" />
-    <None Remove="Tools\**" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
     <PackageReference Include="WindowsAzure.Storage" Version="8.4.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
+    <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
   </ItemGroup>
 
 </Project>

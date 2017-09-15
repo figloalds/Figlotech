@@ -2,7 +2,7 @@
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
-using Figlotech.Core;
+using Figlotech.BDados;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +10,8 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.Helpers {
     public class ConditionParser {
@@ -238,7 +240,7 @@ namespace Figlotech.BDados.Helpers {
                             var prefix = ForceAlias ?? GetPrefixOfAgField(expr, info); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
-                            FTH.WriteLine(info.ToString());
+                            Fi.Tech.WriteLine(info.ToString());
                         } else {
                             var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
@@ -252,7 +254,7 @@ namespace Figlotech.BDados.Helpers {
                                     var prefix = ForceAlias ?? GetPrefixOfAgObj(expr.Expression, info3); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                                                                                                                                  //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");
-                                    FTH.WriteLine(info3.ToString());
+                                    Fi.Tech.WriteLine(info3.ToString());
                                 } else {
                                     var prefix = GetPrefixOf(expr.Expression);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");

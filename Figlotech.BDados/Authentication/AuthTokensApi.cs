@@ -1,4 +1,5 @@
 ﻿using Figlotech.Autokryptex;
+using Figlotech.BDados;
 using Figlotech.Core;
 using System;
 using System.Collections.Generic;
@@ -40,7 +41,7 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public static String NewToken() {
-            String Auth = FTH.GenerateIdString("UserCreation", 128);
+            String Auth = Fi.Tech.GenerateIdString("UserCreation", 128);
             AuthTokens.Add(new AuthToken(Auth, DateTime.Now));
             return Auth;
         }

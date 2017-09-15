@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.Core;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,19 +10,19 @@ namespace Figlotech.BDados.Authentication
     public static class IPermissionsContainerExtensions {
 
         public static bool CanCreate(this IPermissionsContainer input, int permission) {
-            return FTH.CheckForPermission(input.Buffer, Acl.Create, permission);
+            return Fi.Tech.CheckForPermission(input.Buffer, Acl.Create, permission);
         }
         public static bool CanRead(this IPermissionsContainer input, int permission) {
-            return FTH.CheckForPermission(input.Buffer, Acl.Read, permission);
+            return Fi.Tech.CheckForPermission(input.Buffer, Acl.Read, permission);
         }
         public static bool CanUpdate (this IPermissionsContainer input, int permission) {
-            return FTH.CheckForPermission(input.Buffer, Acl.Update, permission);
+            return Fi.Tech.CheckForPermission(input.Buffer, Acl.Update, permission);
         }
         public static bool CanDelete (this IPermissionsContainer input, int permission) {
-            return FTH.CheckForPermission(input.Buffer, Acl.Delete, permission);
+            return Fi.Tech.CheckForPermission(input.Buffer, Acl.Delete, permission);
         }
         public static bool CanAuthorize (this IPermissionsContainer input, int permission) {
-            return FTH.CheckForPermission(input.Buffer, Acl.Authorize, permission);
+            return Fi.Tech.CheckForPermission(input.Buffer, Acl.Authorize, permission);
         }
 
         public static byte[] Overlap(this IPermissionsContainer input, IPermissionsContainer other) {

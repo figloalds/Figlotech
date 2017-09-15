@@ -16,12 +16,13 @@ using System.Text.RegularExpressions;
 
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados.FileAcessAbstractions;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
+using Figlotech.Core;
+using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
 
-namespace Figlotech.BDados.Builders
-{
+namespace Figlotech.BDados.Builders {
     public class JoinObjectBuilder : IJoinBuilder
     {
         private JoinDefinition _join = new JoinDefinition();
@@ -33,7 +34,7 @@ namespace Figlotech.BDados.Builders
         ILogger _logger;
         ILogger Logger {
             get {
-                return _logger = (_logger = new Logger(new FileAccessor(FTH.DefaultLogRepository)));
+                return _logger = (_logger = new Logger(new FileAccessor("Logs")));
             }
         }
 
@@ -93,7 +94,7 @@ namespace Figlotech.BDados.Builders
             var Relacoes = _join.Relations;
             String Prefix = _join.Joins[thisIndex].Prefix;
             String parentPrefix = _join.Joins[parentIndex].Prefix;
-            string rid = FTH.GetRidColumn(type);
+            string rid = Fi.Tech.GetRidColumn(type);
             List<DataRow> rs = new List<DataRow>();
             List<object> ids = new List<object>();
             for (int i = 0; i < dt.Rows.Count; i++) {
@@ -223,7 +224,7 @@ namespace Figlotech.BDados.Builders
                     throw new BDadosException(String.Format("Invalid Relation {0}", _join.Joins[i].Args));
                 }
 
-                if (!FTH.FindColumn(ChaveA, _join.Joins[IndexA].ValueObject) || !FTH.FindColumn(ChaveB, _join.Joins[IndexB].ValueObject)) {
+                if (!Fi.Tech.FindColumn(ChaveA, _join.Joins[IndexA].ValueObject) || !Fi.Tech.FindColumn(ChaveB, _join.Joins[IndexB].ValueObject)) {
                     _join.Relations.Clear();
                     throw new BDadosException(String.Format("Column {0} specified doesn't exist in '{1} AS {2}'", ChaveA, _join.Joins[i].TableName, _join.Joins[i].Prefix));
                 }
@@ -263,7 +264,7 @@ namespace Figlotech.BDados.Builders
             var rs = new List<DataRow>();
             foreach (DataRow dr in dt.Rows)
                 rs.Add(dr);
-            string rid = FTH.GetRidColumn(typeof(T));
+            string rid = Fi.Tech.GetRidColumn(typeof(T));
             rs = rs.GroupBy(c => c[Prefix + $"_{rid}"]).Select(grp => grp.First()).ToList();
             // This says: Foreach datarow at the 
             // "grouped by the Aggregate Root RID"

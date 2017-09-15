@@ -1,8 +1,9 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Figlotech.BDados.FileAcessAbstractions;
+using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core.Interfaces;
 using Figlotech.BDados.MySqlDataAccessor;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.Tests {
     [TestClass]

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26730.12
+VisualStudioVersion = 15.0.26730.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Autokryptex", "Figlotech.Autokryptex\Figlotech.Autokryptex.csproj", "{D3271F01-7EE7-4A6F-A085-4E310EB001F6}"
 EndProject
@@ -20,6 +20,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.Tests", "Figlotech.BDados.Tests\Figlotech.BDados.Tests.csproj", "{6B2F8679-65AC-47F7-9269-A7B9FCA397F7}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.CLI", "Figlotech.CLI\Figlotech.CLI.csproj", "{79ED2919-65CF-4C5F-AE3F-AC9AFFCB80E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -63,6 +65,10 @@ Global
 		{79ED2919-65CF-4C5F-AE3F-AC9AFFCB80E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{79ED2919-65CF-4C5F-AE3F-AC9AFFCB80E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{79ED2919-65CF-4C5F-AE3F-AC9AFFCB80E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

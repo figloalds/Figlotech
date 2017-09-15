@@ -1,6 +1,6 @@
 ﻿
 using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core;
+using Figlotech.BDados;
 /**
 * Figlotech.BDados.Builders.ConditionParametrizer
 * Extra Implementation for IQueryBuilder
@@ -16,6 +16,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.Builders {
     public class ConditionParametrizer : QueryBuilder {

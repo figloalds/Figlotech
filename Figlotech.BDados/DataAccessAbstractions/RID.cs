@@ -1,4 +1,5 @@
-﻿using Figlotech.Core;
+﻿using Figlotech.BDados;
+using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,13 +42,13 @@ namespace Figlotech.BDados.DataAccessAbstractions
             IntEx i = new IntEx((DateTime.Now.Ticks * 10000) + (sequentia++ % 10000));
             i *= 100000000;
             i *= r.Next(100000000);
-            //i *= new IntEx(FTH.CpuId, IntEx.Hexadecimal);
+            //i *= new IntEx(Fi.Tech.CpuId, IntEx.Hexadecimal);
             //i += cpuhash;
             return FillBlanks((String)i.ToString(IntEx.Base36));
         }
         private static string FillBlanks(String rid) {
             var c = 64 - rid.Length;
-            return FTH.GenerateIdString(rid, c) + rid;
+            return Fi.Tech.GenerateIdString(rid, c) + rid;
         }
     }
 }

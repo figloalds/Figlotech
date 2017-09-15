@@ -1,12 +1,14 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados.Interfaces;
-using Figlotech.Core;
+using Figlotech.Core.Interfaces;
+using Figlotech.BDados;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Reflection;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class DataObject<T> : BaseDataObject, IBusinessObject<T> where T : IDataObject, new() {
@@ -75,7 +77,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override bool Load(Action fn = null) {
             if(this.Id > 0) {
-                FTH.MemberwiseCopy(
+                Fi.Tech.MemberwiseCopy(
                     DataAccessor.LoadByRid<T>(this.RID), this);
                 return true;
             } else {

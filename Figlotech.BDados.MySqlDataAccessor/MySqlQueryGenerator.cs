@@ -15,7 +15,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.Interfaces;
+using Figlotech.Core.Interfaces;
 using System.Reflection;
 using System.Linq.Expressions;
 using Figlotech.BDados.Helpers;
@@ -23,6 +23,7 @@ using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using System.Text.RegularExpressions;
 using Figlotech.BDados.Builders;
+using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public class MySqlQueryGenerator : IQueryGenerator
@@ -58,7 +59,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             QueryBuilder CreateTable = new QueryBuilder($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
             for (int i = 0; i < members.Count; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
-                CreateTable.Append(FTH.GetColumnDefinition(members[i], info));
+                CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options ?? "");
                 if (i != members.Count - 1) {
@@ -259,7 +260,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var id = FTH.GetIdColumn(tabelaInput.GetType());
+            var id = Fi.Tech.GetIdColumn(tabelaInput.GetType());
             QueryBuilder Query = new QueryBuilder(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GerarParamsValoresUpdate(tabelaInput));
@@ -306,7 +307,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             // -- 
             RecordSet<T> workingSet = new RecordSet<T>(inputRecordset.DataAccessor);
 
-            var id = FTH.GetIdColumn<T>();
+            var id = Fi.Tech.GetIdColumn<T>();
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
@@ -334,7 +335,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"WHERE {id} IN (")
-                .Append(FTH.ListIds(workingSet))
+                .Append(Fi.Tech.ListIds(workingSet))
                 .Append(");");
             // --
             return Query;
