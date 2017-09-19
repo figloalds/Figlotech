@@ -11,7 +11,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor
     {
 
-        Object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null);
+        Object Access(Action funcaoAcessar, Action<Exception> trataErros = null);
 
         RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
         RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new();

@@ -48,9 +48,9 @@ namespace Figlotech.Core {
         public DateTime? dequeued;
         public DateTime? completed;
 
-#if DEBUG
-        public StackFrame[] ContextStack;
-#endif
+//#if DEBUG
+//        public StackFrame[] ContextStack;
+//#endif
 
         public WorkJob(WorkQueuer parent, Action method, Action actionWhenFinished, Action<Exception> errorHandling) {
             queuer = parent;
@@ -58,10 +58,10 @@ namespace Figlotech.Core {
             finished = actionWhenFinished;
             handling = errorHandling;
 
-#if DEBUG
-            StackTrace stackTrace = new StackTrace();   // get call stack
-            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
-#endif
+//#if DEBUG
+//            StackTrace stackTrace = new StackTrace();   // get call stack
+//            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
+//#endif
         }
 
         public void Accompany() {

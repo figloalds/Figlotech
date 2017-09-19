@@ -33,7 +33,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public object Access(Action<IRdbmsDataAccessor> funcaoAcessar, Action<Exception> trataErros = null) {
+        public object Access(Action funcaoAcessar, Action<Exception> trataErros = null) {
             return RdbmsAccessor.Access(funcaoAcessar, trataErros);
         }
 

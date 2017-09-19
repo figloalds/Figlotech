@@ -17,7 +17,7 @@ using Figlotech.Core.Helpers;
 using Figlotech.Core;
 
 namespace Figlotech.BDados {
-    public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T: IRdbmsPluginAdapter, new() {
+    public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T : IRdbmsPluginAdapter, new() {
         public RdbmsDataAccessor(DataAccessorConfiguration config) : base(new T()) {
             Plugin.Config = config;
         }
@@ -100,7 +100,7 @@ namespace Figlotech.BDados {
 
         public bool Test() {
             bool result = false;
-            Access((bd) => {
+            Access(() => {
                 Query("SELECT 1");
                 result = true;
             });
@@ -272,22 +272,24 @@ namespace Figlotech.BDados {
             if (retv && !input.IsPersisted) {
                 long retvId = 0;
                 var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-                if (ridAtt.Any()) {
-                    var query = (IQueryBuilder)Plugin.QueryGenerator
-                        .GetType()
-                        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                        .MakeGenericMethod(input.GetType())
-                        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                    DataTable dt = Query(query);
-                    retvId = (long)dt.Rows[0][id];
-                } else {
+                //if (ridAtt.Any()) {
+                //    var query = (IQueryBuilder)Plugin.QueryGenerator
+                //        .GetType()
+                //        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
+                //        .MakeGenericMethod(input.GetType())
+                //        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
+                //    DataTable dt = Query(query);
+                //    retvId = (long)dt.Rows[0][id];
+                //} else {
+                try {
                     var query = (IQueryBuilder)Plugin.QueryGenerator
                         .GetType()
                         .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
                         .MakeGenericMethod(input.GetType())
                         .Invoke(Plugin.QueryGenerator, new Object[0]);
-                    retvId = (int)ScalarQuery(query);
-                }
+                    retvId = ((long?)ScalarQuery(query)) ?? 0;
+                } catch(Exception x) { }
+                //}
                 if (retvId > 0) {
                     input.ForceId(retvId);
                 }
@@ -300,7 +302,7 @@ namespace Figlotech.BDados {
 
         //public List<T> Load<T>(string Consulta, params object[] args) {
         //    List<T> retv = new List<T>();
-        //    Access((bd) => {
+        //    Access(() => {
 
         //        return Query(Consulta, args);
         //    });retv;
@@ -431,22 +433,22 @@ namespace Figlotech.BDados {
         public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
             RecordSet<T> retv = new RecordSet<T>(this);
 
-            Bench.Mark("--");
 
             if (condicoes == null) {
                 condicoes = new QueryBuilder("TRUE");
             }
             // Cria uma instancia Dummy só pra poder pegar o reflector da classe usada como T.
-            T dummy = (T)Activator.CreateInstance(typeof(T));
-            BaseDataObject dummy2 = (BaseDataObject)(object)dummy;
             // Usando o dummy2 eu consigo puxar uma query de select baseada nos campos da classe filha
             DataTable dt = null;
-            Access((bd) => {
-                Bench.Mark("Data Load ---");
+            Access(() => {
+
+                Bench?.Mark("--");
+
+                Bench?.Mark("Data Load ---");
                 var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes);
-                Bench.Mark("Generate SELECT");
+                Bench?.Mark("Generate SELECT");
                 dt = Query(selectQuery);
-                Bench.Mark("Execute SELECT");
+                Bench?.Mark("Execute SELECT");
                 if (dt == null)
                     return;
                 if (dt.Rows.Count < 1) {
@@ -459,14 +461,14 @@ namespace Figlotech.BDados {
 
                 var objBuilder = new ObjectReflector();
                 for (int i = 0; i < dt.Rows.Count; i++) {
-                    T add = Fi.Tech.Map<T>(dt.Rows[i], dt.Columns);
+                    T add = Fi.Tech.Map<T>(dt.Rows[i]);
                     retv.Add(add);
                 }
-                Bench.Mark("Build RecordSet");
+                Bench?.Mark("Build RecordSet");
             }, (x) => {
                 Logger?.WriteLog(x.Message);
                 Logger?.WriteLog(x.StackTrace);
-                Bench.Mark("Build RecordSet");
+                Bench?.Mark("Build RecordSet");
             });
             return retv;
         }
@@ -522,6 +524,7 @@ namespace Figlotech.BDados {
                 ConnectionHandle.Open();
             }
         }
+
         public bool TryOpen() {
             try {
                 Open();
@@ -560,7 +563,7 @@ namespace Figlotech.BDados {
         public IQueryGenerator QueryGenerator => Plugin.QueryGenerator;
 
         public void GenerateValueObjectDefinitions(String defaultNamespace, String baseDir) {
-            Access((bd) => {
+            Access(() => {
                 DataTable t = Query("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", this.Plugin.Config.Database);
                 DataTable cols = Query("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1", this.Plugin.Config.Database);
                 for (int i = 0; i < t.Rows.Count; i++) {
@@ -659,7 +662,10 @@ namespace Figlotech.BDados {
 
         int accessId = 0;
 
-        public Object Access(Action<IRdbmsDataAccessor> functions, Action<Exception> handler = null) {
+        public Object Access(Action functions, Action<Exception> handler = null) {
+            if (ConnectionHandle != null && ConnectionHandle.State == ConnectionState.Open) {
+                functions?.Invoke();
+            }
             int aid = accessId;
             try {
                 aid = ++accessId;
@@ -668,7 +674,8 @@ namespace Figlotech.BDados {
                     Bench.WriteToStdout = showPerformanceLogs;
                 }
                 UseConnection(() => {
-                    functions.Invoke(this);
+                    using (ConnectionHandle)
+                        functions.Invoke();
                 });
                 var total = Bench?.TotalMark();
                 Logger?.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
@@ -684,7 +691,7 @@ namespace Figlotech.BDados {
                 }
                 //if (WorkingTypes.Length > 0)
                 //    //Fi.Tech.AsyncOp(() => {
-                //    Access((bd) => {
+                //    Access(() => {
                 //        bd.CheckStructure(WorkingTypes, false);
                 //    });
                 ////});
@@ -712,7 +719,7 @@ namespace Figlotech.BDados {
             DateTime Inicio = DateTime.Now;
             String QueryText = query.GetCommandText();
             DataTable retv = new DataTable();
-            UseConnection(() => {
+            Access(() => {
                 using (var command = ConnectionHandle.CreateCommand()) {
                     command.CommandText = QueryText;
                     command.CommandTimeout = Plugin.Config.Timeout;
@@ -754,6 +761,7 @@ namespace Figlotech.BDados {
                         command.Dispose();
                         Logger?.WriteLog("------------------------------------");
                     }
+
                 }
             });
             return retv;
@@ -764,12 +772,15 @@ namespace Figlotech.BDados {
         }
 
         public int Execute(IQueryBuilder query) {
+
             if (query == null)
                 return 0;
-
-            Bench.Mark("--");
             int result = -1;
-            UseConnection(() => {
+
+            Access(() => {
+
+                Bench?.Mark("--");
+
                 Logger?.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.Config.Timeout}s timeout]");
                 foreach (var param in query.GetParameters()) {
                     Logger?.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
@@ -785,12 +796,12 @@ namespace Figlotech.BDados {
                         }
                         command.CommandTimeout = Plugin.Config.Timeout;
                         Logger?.WriteLog(command.CommandText);
-                        Bench.Mark("Prepared Statement");
+                        Bench?.Mark("Prepared Statement");
                         result = command.ExecuteNonQuery();
-                        var elaps = Bench.Mark("Executed Statement");
+                        var elaps = Bench?.Mark("Executed Statement");
                         Logger?.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                     } catch (Exception x) {
-                        Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench.Mark("Error")} ms]");
+                        Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
                         Logger?.WriteLog(x.Message);
                         Logger?.WriteLog(x.StackTrace);
                         Logger?.WriteLog($"BDados Execute: {x.Message}");
@@ -815,18 +826,11 @@ namespace Figlotech.BDados {
             }
         }
 
-        bool rec = false;
         private void UseConnection(Action func) {
-            if (rec) {
-                func?.Invoke();
-                return;
-            }
-            rec = true;
-
             TryOpen();
-            lock (ConnectionHandle)
-                using (ConnectionHandle)
-                    func?.Invoke();
+            lock (ConnectionHandle) {
+                func?.Invoke();
+            }
         }
 
         public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
@@ -834,7 +838,7 @@ namespace Figlotech.BDados {
             List<T> retv = new List<T>();
             Logger?.WriteLog($"[{accessId}] Exec procedure -- ");
 
-            UseConnection(() => {
+            Access(() => {
                 try {
                     QueryBuilder query = (QueryBuilder)Plugin.QueryGenerator.GenerateCallProcedure(typeof(T).Name, args);
                     DataTable dt = Query(query);
@@ -1159,8 +1163,7 @@ namespace Figlotech.BDados {
 
             var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
-            Access(
-                (bd) => {
+            Access(() => {
                     var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
                     if (cnd != null) {
                         query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name.ToLower()} AS a WHERE ");

@@ -28,20 +28,25 @@ namespace Figlotech.BDados.Tests {
 
         [TestMethod]
         public void LoadAllShouldWork() {
-            var da = new RdbmsDataAccessor(
-                new MySqlPlugin(
+            var types = new Type[] { typeof(comanda) };
+            var da = new RdbmsDataAccessor<MySqlPlugin>(
                     new DataAccessorConfiguration {
                         Host = "localhost",
                         Database = "fth_tests",
                         User = "root",
                         Password = "asdafe1025",
-                    }));
+                    });
+            //da.CheckStructure(types);
             comanda comanda = new comanda() {
                 cm_cartao = "asdf",
                 cm_status = "A",
                 cm_abertura = DateTime.Now
             };
             da.SaveItem(comanda);
+
+            da.LoadAll<comanda>();
+            da.LoadAll<comanda>();
+            da.LoadAll<comanda>();
 
         }
     }

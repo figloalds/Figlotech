@@ -131,8 +131,8 @@ namespace Figlotech.BDados.Authentication {
 
         public void Logoff(IUserSession s) {
             Sessions.RemoveAll(a=> a.Token == s.Token);
-            if(DataAccessor is IRdbmsDataAccessor) {
-                (DataAccessor as IRdbmsDataAccessor).Access((bd) => {
+            if(DataAccessor is IRdbmsDataAccessor bd) {
+                bd.Access(() => {
                     // DID ANYONE SAY DRAGONS?!
                     (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Active=0 WHERE Token=@1", s);
                 });
@@ -203,9 +203,8 @@ namespace Figlotech.BDados.Authentication {
                 }
             }
             // Here be DRAGONS!!
-            if(DataAccessor is IRdbmsDataAccessor) {
-                (DataAccessor as IRdbmsDataAccessor).Access(
-                    (bd) => {
+            if(DataAccessor is IRdbmsDataAccessor bd) {
+                bd.Access(() => {
                         (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Ativo=b'0' WHERE Token=@1;", Token);
                     }
                 );

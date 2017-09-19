@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core.Helpers;
 /**
 * Iaetec.BDados.Builders.QueryBuilder
 * Default implementation for IQueryBuilder
@@ -65,23 +66,23 @@ namespace Figlotech.BDados.Builders {
             return this;
         }
 
-        //public IQueryBuilder Append(dynamic b) {
-        //    ObjectReflector or = new ObjectReflector(b);
-        //    var members = ReflectionTool.FieldsAndPropertiesOf(b.GetType());
-        //    var g = new QueryBuilder();
-        //    for (int i = 0; i < members.Count; i++) {
-        //        g.Append($"@{l}", or[members[i]]);
-        //        if (i < members.Count - 1) {
-        //            g.Append(",");
-        //        }
-        //    }
+        public IQueryBuilder Append(dynamic b) {
+            ObjectReflector or = new ObjectReflector(b);
+            var members = ReflectionTool.FieldsAndPropertiesOf(b.GetType());
+            var g = new QueryBuilder();
+            for (int i = 0; i < members.Count; i++) {
+                g.Append($"@{l}", or[members[i]]);
+                if (i < members.Count - 1) {
+                    g.Append(",");
+                }
+            }
 
-        //    return this.Append(g);
-        //}
+            return this.Append(g);
+        }
 
-        //public static QueryBuilder operator +(QueryBuilder a, dynamic b) {
-        //    return (QueryBuilder)a.Append(b);
-        //}
+        public static QueryBuilder operator +(QueryBuilder a, dynamic b) {
+            return (QueryBuilder)a.Append(b);
+        }
 
         public static QueryBuilder operator +(QueryBuilder a, QueryBuilder b) {
             return (QueryBuilder)a.Append(b);

@@ -18,7 +18,7 @@ namespace Figlotech.Core {
             Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
     }
 
-    public static class FiTechCoreExtensions { 
+    public static class FiTechCoreExtensions {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
         public static ILogger ApiLogger;
@@ -26,7 +26,7 @@ namespace Figlotech.Core {
         public static bool EnableStdoutLogs { get; set; } = false;
 
         public static void Write(this Fi _selfie, String s = "") {
-            
+
             if (Debugger.IsAttached)
                 Debug.Write(s);
             if (!EnableStdoutLogs)
@@ -60,8 +60,9 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        public static T Map<T>(this Fi _selfie, DataRow dr, DataColumnCollection columns) where T : new() {
+        public static T Map<T>(this Fi _selfie, DataRow dr) where T : new() {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
+            DataColumnCollection columns = dr.Table.Columns;
             var objBuilder = new ObjectReflector();
             List<DataColumn> properColumns = new List<DataColumn>();
             foreach (DataColumn column in columns)
@@ -76,21 +77,24 @@ namespace Figlotech.Core {
                 if (typeofCol.IsValueType && o == null) {
                     continue;
                 }
-                if (tocUlType != null) {
-                    typeofCol = Nullable.GetUnderlyingType(typeofCol);
-                }
-                else {
-                }
+                if (o == null || o.GetType() == typeof(DBNull)) {
+                    objBuilder[col] = null;
+                } else {
 
-                if (typeofCol.IsEnum) {
-                    objBuilder[col] = Enum.ToObject(typeofCol, o);
-                }
-                else
-                if (o != null && o.GetType() != typeofCol) {
-                    objBuilder[col] = Convert.ChangeType(o, typeofCol);
-                }
-                else {
-                    objBuilder[col] = o;
+                    if (tocUlType != null) {
+                        typeofCol = Nullable.GetUnderlyingType(typeofCol);
+                    } else {
+                    }
+
+                    if (typeofCol.IsEnum) {
+                        objBuilder[col] = Enum.ToObject(typeofCol, o);
+                        continue;
+                    } else
+                    if (o != null && o.GetType() != typeofCol) {
+                        objBuilder[col] = Convert.ChangeType(o, typeofCol);
+                    } else {
+                        objBuilder[col] = o;
+                    }
                 }
             }
             return retv;
@@ -100,9 +104,8 @@ namespace Figlotech.Core {
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
-            Parallel.For(0, dt.Rows.Count, (i) =>
-            {
-                var val = Fi.Tech.Map<T>(dt.Rows[i], dt.Columns);
+            Parallel.For(0, dt.Rows.Count, (i) => {
+                var val = Fi.Tech.Map<T>(dt.Rows[i]);
                 lock (input) {
                     input.Add(val);
                 }
@@ -110,10 +113,10 @@ namespace Figlotech.Core {
             Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
         }
 
-        public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(()=> new BDadosEnglishStringsProvider());
-        public static IBDadosStringsProvider Strings { get => _strings.Value; set { _strings = new Lazy<IBDadosStringsProvider>(()=>value); } }
+        public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
+        public static IBDadosStringsProvider Strings { get => _strings.Value; set { _strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
-        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(()=> new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
+        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
         public static int currentBDadosConnections = 0;
@@ -129,7 +132,7 @@ namespace Figlotech.Core {
                 return Assembly.GetExecutingAssembly().GetName().Version.ToString();
             }
         }
-        
+
         public static String GetVersion(this Fi _selfie) {
             return Version;
         }
@@ -146,6 +149,9 @@ namespace Figlotech.Core {
 
         public static IBDadosStringsProvider GetStrings(this Fi _selfie) {
             return Strings;
+        }
+        public static void SetStrings(this Fi _selfie, IBDadosStringsProvider provider) {
+            Strings = provider;
         }
 
         private static IDictionary<string, string> _mappings = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase) {
@@ -739,7 +745,7 @@ namespace Figlotech.Core {
         public static int IntSeedFromString(this Fi _selfie, String SeedStr) {
             int Seed = 0;
             for (int i = 0; i < SeedStr.Length; i++) {
-                Seed ^= SeedStr[i] * (int) MathUtils.PrimeNumbers().ElementAt(1477);
+                Seed ^= SeedStr[i] * (int)MathUtils.PrimeNumbers().ElementAt(1477);
             }
             return Seed;
         }
@@ -767,7 +773,7 @@ namespace Figlotech.Core {
             ObjectReflector.Open(origin, (objA) => {
                 var members = ReflectionTool.FieldsAndPropertiesOf(origin.GetType());
                 ObjectReflector.Open(destination, (objB) => {
-                    foreach(var field in members) {
+                    foreach (var field in members) {
                         objB[field.Name] = objA[field];
                     }
                 });

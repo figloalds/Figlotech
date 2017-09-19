@@ -17,6 +17,7 @@ namespace Figlotech.Core {
     /// for the rest of Figlotech Tools to operate
     /// </summary>
     public class Fi {
+
         public static Fi Tech = new Fi();
     }
 }

@@ -62,8 +62,8 @@ namespace Figlotech.BDados.Builders {
         public DataTable GenerateDataTable(IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) {
             QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, p, limit, conditionsRoot);
             DataTable dt = null;
-            _dataAccessor.Access((bd) => {
-                dt = bd.Query(query);
+            _dataAccessor.Access(() => {
+                dt = _dataAccessor.Query(query);
             }, (x) => {
                 Logger.WriteLog("-- Failed to generate DataTable in JoinBuilder, verify your ON and WHERE clauses.");
                 throw x;
