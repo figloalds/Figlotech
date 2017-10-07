@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using Figlotech.Autokryptex.EncryptMethods;
 using System.Drawing;
+using Figlotech.Core;
 
 namespace Figlotech.Autokryptex.Tests
 {

@@ -17,6 +17,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public bool UseCriptography;
 
         public String RootDirectory { get; set; }
+        public int StreamBufferLength { get; set; } = 32 * 1024 * 1024;
 
         public String FixRel(ref string relative) {
             return relative = relative.Replace('\\', '/');
@@ -67,10 +68,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             LockRegion(WorkingDirectory, () => {
                 using (FileStream fs = new FileStream(WorkingDirectory, FileMode.OpenOrCreate, FileAccess.Write)) {
-                    try {
-                        func(fs);
-                    } catch (Exception) { }
-                    fs.Flush();
+                    func(fs);
                 }
             });
         }
@@ -124,14 +122,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
 
-        public DateTime? GetLastFileWrite(string relative) {
+        public DateTime? GetLastModified(string relative) {
             RelToFs(ref relative);
             if (Exists(relative)) {
                 return new FileInfo(Path.Combine(RootDirectory, relative)).LastWriteTimeUtc;
             }
             return DateTime.MinValue;
         }
-        
+        public DateTime? GetLastAccess(string relative) {
+            RelToFs(ref relative);
+            if (Exists(relative)) {
+                return new FileInfo(Path.Combine(RootDirectory, relative)).LastAccessTimeUtc;
+            }
+            return DateTime.MinValue;
+        }
+
         public long GetSize(string relative) {
             RelToFs(ref relative);
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
@@ -242,16 +247,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public bool Read(String relative, Action<Stream> func) {
             RelToFs(ref relative);
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
-            // Metodo 1: Convencional File System:
-            if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
-                absMkDirs(Path.GetDirectoryName(WorkingDirectory));
-            }
             if (!File.Exists(WorkingDirectory)) {
                 return false;
             }
             return LockRegion(WorkingDirectory, () => {
                 using (FileStream fs = new FileStream(WorkingDirectory, FileMode.Open)) {
-                    if (!fs.CanRead) return false;
                     func(fs);
                 }
                 return true;
@@ -262,6 +262,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             RelToFs(ref relative);
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
             File.SetLastWriteTimeUtc(WorkingDirectory, dt);
+        }
+        public void SetLastAccess(String relative, DateTime dt) {
+            RelToFs(ref relative);
+            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            File.SetLastAccessTimeUtc(WorkingDirectory, dt);
         }
 
         public String ReadAllText(String relative) {
@@ -407,14 +412,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         }
 
-        public Stream Open(string relative, FileMode fileMode) {
+        public Stream Open(string relative, FileMode fileMode, FileAccess fileAccess) {
             RelToFs(ref relative);
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
 
-            return File.Open(WorkingDirectory, fileMode);
+            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, StreamBufferLength);
         }
     }
 }

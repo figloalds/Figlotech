@@ -9,7 +9,5 @@ namespace Figlotech.BDados.Authentication
         bool isActive { get; set; }
         DateTime StartTime { get; set; }
         DateTime? EndTime { get; set; }
-
-        IPermissionsContainer Permission { get; set; }
     }
 }

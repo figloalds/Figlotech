@@ -24,10 +24,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         [Field(Type = "TIMESTAMP", AllowNull = false, DefaultValue = "CURRENT_TIMESTAMP")]
         public override DateTime CreatedTime { get; set; } = DateTime.UtcNow;
 
-        private Lazy<RID> _rid = new Lazy<RID>(() => new RID());
+        private String _rid = null;
+
         [ReliableId]
         [Field(Size = 64, AllowNull = false, Unique = true)]
-        public override String RID { get { return _rid.Value.ToString(); } set { _rid = new Lazy<RID>(() => value); } }
+        public override String RID {
+            get {
+                if (_rid != null)
+                    return _rid;
+                return _rid = new RID().ToString();
+            }
+            set {
+                _rid = value;
+            }
+        }
 
         public override bool IsPersisted { get { return Id > 0; } }
 
@@ -45,8 +55,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             myValues.AddRange(this.GetType().GetFields());
             myValues.AddRange(this.GetType().GetProperties());
 
-            foreach(var a in ValidationRules) {
-                foreach(var err in a.Validate(this, new ValidationErrors())) {
+            foreach (var a in ValidationRules) {
+                foreach (var err in a.Validate(this, new ValidationErrors())) {
                     ve.Add(err);
                 }
             }
@@ -54,7 +64,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var reflector = new ObjectReflector(this);
             foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
                 var info = field.GetCustomAttribute<ValidationAttribute>();
-                foreach(var error in info.Validate(field, reflector[field])) {
+                foreach (var error in info.Validate(field, reflector[field])) {
                     ve.Add(error);
                 }
             }
@@ -63,7 +73,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
                 var vAttribute = field.GetCustomAttribute<ValidationAttribute>();
                 if (vAttribute != null) {
-                    foreach(var a in vAttribute.Validate(field, ReflectionTool.GetMemberValue(field, this)))
+                    foreach (var a in vAttribute.Validate(field, ReflectionTool.GetMemberValue(field, this)))
                         ve.Add(a);
                 }
             }
@@ -76,11 +86,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override bool Load(Action fn = null) {
-            if(this.Id > 0) {
+            if (this.Id > 0) {
                 Fi.Tech.MemberwiseCopy(
                     DataAccessor.LoadByRid<T>(this.RID), this);
                 return true;
-            } else {
+            }
+            else {
                 return false;
             }
         }
@@ -111,7 +122,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     T workObject = ((T)workingValue);
                     process(workObject);
-                } catch (Exception) { }
+                }
+                catch (Exception) { }
             }
         }
 

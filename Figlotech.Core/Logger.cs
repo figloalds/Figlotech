@@ -40,7 +40,7 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             try {
-
+                Debug.WriteLine(log);
                 Fi.Tech.RunAndForget(() => {
                     if (EnableConsoleLogging)
                         Fi.Tech.WriteLine(log);

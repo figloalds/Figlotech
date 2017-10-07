@@ -33,9 +33,9 @@ namespace Figlotech.BDados.Authentication
         IUserSession GetSession(String token);
 
 
-        IUser ForceCreateUser(string userName, string password);
+        IUser ForceCreateUser<TUser>(string userName, string password, Action<TUser> a = null) where TUser : IUser, new();
 
-        IUser CreateUserSecure(string userName, string password, string confirmPassword);
+        IUser CreateUserSecure<TUser>(string userName, string password, string confirmPassword, Action<TUser> a = null) where TUser : IUser, new();
 
         bool ForcePassword(IUser user, string newPassword);
 

@@ -44,7 +44,16 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     query.Append(",");
                 }
             }
-            query.Append(");");
+            query.Append(") ON DUPLICATE KEY UPDATE ");
+            var Fields = GetMembers(inputObject.GetType());
+            for (int i = 0; i < Fields.Count; ++i) {
+                if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                    continue;
+                query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
+                if (i < Fields.Count - 1) {
+                    query.Append(",");
+                }
+            }
             return query;
         }
 
@@ -442,7 +451,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-            return new QueryBuilder($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", rid);
+            return new QueryBuilder($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
         }
     }
 }

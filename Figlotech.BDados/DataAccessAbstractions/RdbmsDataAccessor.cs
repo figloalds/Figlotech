@@ -7,16 +7,14 @@ using System.IO;
 using System.Reflection;
 using System.Linq;
 using System.Linq.Expressions;
-using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core.Interfaces;
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
-using Figlotech.BDados;
 using Figlotech.Core.Helpers;
 using Figlotech.Core;
 
-namespace Figlotech.BDados {
+namespace Figlotech.BDados.DataAccessAbstractions {
     public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T : IRdbmsPluginAdapter, new() {
         public RdbmsDataAccessor(DataAccessorConfiguration config) : base(new T()) {
             Plugin.Config = config;
@@ -69,7 +67,8 @@ namespace Figlotech.BDados {
             var f = LoadAll<T>(qb.Append("LIMIT 1"));
             if (f.Any()) {
                 return f.First();
-            } else {
+            }
+            else {
                 T quickSave = Default();
                 quickSave.RID = new T().RID;
                 SaveItem(quickSave);
@@ -91,7 +90,8 @@ namespace Figlotech.BDados {
             var f = LoadAll<T>(qb, 1, 1);
             if (f.Any()) {
                 return f.First();
-            } else {
+            }
+            else {
                 T quickSave = Default();
                 SaveItem(quickSave);
                 return quickSave;
@@ -100,12 +100,14 @@ namespace Figlotech.BDados {
 
         public bool Test() {
             bool result = false;
-            Access(() => {
+            try {
                 Query("SELECT 1");
                 result = true;
-            });
+            }
+            catch (Exception) { }
             return result;
         }
+
         #endregion ***************************
 
         public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
@@ -132,7 +134,8 @@ namespace Figlotech.BDados {
             String type = "VARCHAR(20)";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
-            } else {
+            }
+            else {
                 switch (tipoDados.ToLower()) {
                     case "string":
                         type = $"VARCHAR({info.Size})";
@@ -190,10 +193,12 @@ namespace Figlotech.BDados {
             var options = "";
             if (info.Options != null && info.Options.Length > 0) {
                 options = info.Options;
-            } else {
+            }
+            else {
                 if (!info.AllowNull) {
                     options += " NOT NULL";
-                } else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
+                }
+                else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
                 }
                 //if (info.Unique)
@@ -266,7 +271,7 @@ namespace Figlotech.BDados {
 
             rs = Execute(Plugin.QueryGenerator.GenerateInsertQuery(input));
             if (rs == 0) {
-                Logger?.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
+                this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
             retv = rs > 0;
             if (retv && !input.IsPersisted) {
@@ -281,17 +286,37 @@ namespace Figlotech.BDados {
                 //    DataTable dt = Query(query);
                 //    retvId = (long)dt.Rows[0][id];
                 //} else {
-                try {
+
+
+                if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
+
                     var query = (IQueryBuilder)Plugin.QueryGenerator
                         .GetType()
-                        .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
+                        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
                         .MakeGenericMethod(input.GetType())
-                        .Invoke(Plugin.QueryGenerator, new Object[0]);
+                        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
                     retvId = ((long?)ScalarQuery(query)) ?? 0;
-                } catch(Exception x) { }
+                }
+
+                if (retvId <= 0) {
+                    try {
+                        var query = (IQueryBuilder)Plugin.QueryGenerator
+                            .GetType()
+                            .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
+                            .MakeGenericMethod(input.GetType())
+                            .Invoke(Plugin.QueryGenerator, new Object[0]);
+                        retvId = ((long?)ScalarQuery(query)) ?? 0;
+                    }
+                    catch (Exception x) {
+
+                    }
+                }
+
                 //}
                 if (retvId > 0) {
                     input.ForceId(retvId);
+                }
+                else {
                 }
                 if (fn != null)
                     fn.Invoke();
@@ -363,11 +388,7 @@ namespace Figlotech.BDados {
 
             var name = GetIdColumn<T>();
 
-            // Cria uma instancia Dummy só pra poder pegar o reflector da classe usada como T.
-            T dummy = (T)Activator.CreateInstance(typeof(T));
-            BaseDataObject dummy2 = (BaseDataObject)(object)dummy;
 
-            // Usando o dummy2 eu consigo puxar uma query de select baseada nos campos da classe filha
             DataTable dt = Query(Plugin.QueryGenerator.GenerateSelect<T>(new ConditionParametrizer($"{name}=@1", Id)));
             int i = 0;
             if (dt.Rows.Count > 0) {
@@ -382,7 +403,8 @@ namespace Figlotech.BDados {
                         Type t = typeofCol;
                         Object o = dt.Rows[i][col.Name];
                         objBuilder[col] = o;
-                    } catch (Exception) { }
+                    }
+                    catch (Exception) { }
                 }
                 retv = add;
             }
@@ -391,6 +413,8 @@ namespace Figlotech.BDados {
         }
 
         public T LoadByRid<T>(String RID) where T : IDataObject, new() {
+            if (RID == null)
+                return default(T);
             T retv = new T();
 
             var rid = GetRidColumn<T>();
@@ -409,7 +433,8 @@ namespace Figlotech.BDados {
                     Object o = dt.Rows[i][col.Name];
                     objBuilder[col] = o;
                 }
-            } else {
+            }
+            else {
                 retv = default(T);
             }
             return retv;
@@ -433,7 +458,6 @@ namespace Figlotech.BDados {
         public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
             RecordSet<T> retv = new RecordSet<T>(this);
 
-
             if (condicoes == null) {
                 condicoes = new QueryBuilder("TRUE");
             }
@@ -452,22 +476,21 @@ namespace Figlotech.BDados {
                 if (dt == null)
                     return;
                 if (dt.Rows.Count < 1) {
-                    Logger?.WriteLog("Query returned no results.");
+                    this.WriteLog("Query returned no results.");
                     return;
                 }
                 var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                     .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
                     .ToList();
 
-                var objBuilder = new ObjectReflector();
                 for (int i = 0; i < dt.Rows.Count; i++) {
                     T add = Fi.Tech.Map<T>(dt.Rows[i]);
                     retv.Add(add);
                 }
                 Bench?.Mark("Build RecordSet");
             }, (x) => {
-                Logger?.WriteLog(x.Message);
-                Logger?.WriteLog(x.StackTrace);
+                this.WriteLog(x.Message);
+                this.WriteLog(x.StackTrace);
                 Bench?.Mark("Build RecordSet");
             });
             return retv;
@@ -528,7 +551,9 @@ namespace Figlotech.BDados {
         public bool TryOpen() {
             try {
                 Open();
-            } catch (Exception x) {
+            }
+            catch (Exception x) {
+                this.WriteLog(x.Message);
                 return false;
             }
             return true;
@@ -541,7 +566,8 @@ namespace Figlotech.BDados {
             Object retv = null;
             try {
                 retv = Query(qb).Rows[0][0];
-            } catch (Exception) {
+            }
+            catch (Exception) {
             }
             return retv;
         }
@@ -550,7 +576,8 @@ namespace Figlotech.BDados {
             T retv = default(T);
             try {
                 retv = (T)Query(query, args).Rows[0][0];
-            } catch (Exception) {
+            }
+            catch (Exception) {
             }
             return retv;
         }
@@ -596,7 +623,7 @@ namespace Figlotech.BDados {
                         //    Fi.Tech.Write(thisCol[x]);
                         //    Fi.Tech.Write("|");
                         //}
-                        //Logger?.WriteLog();
+                        //this.WriteLog();
                         lines.Add("");
                         if (thisCol["COLUMN_KEY"] == "PRI") {
                             lineOptions.Add("PrimaryKey=true");
@@ -678,15 +705,16 @@ namespace Figlotech.BDados {
                         functions.Invoke();
                 });
                 var total = Bench?.TotalMark();
-                Logger?.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
+                this.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
                 return null;
-            } catch (Exception x) {
+            }
+            catch (Exception x) {
                 var total = Bench?.TotalMark();
-                Logger?.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
+                this.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
                 var ex = x;
-                Logger?.WriteLog("Detalhes dessa exception:");
+                this.WriteLog("Detalhes dessa exception:");
                 while (ex != null && ex.InnerException != ex) {
-                    Logger?.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
+                    this.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
                     ex = ex.InnerException;
                 }
                 //if (WorkingTypes.Length > 0)
@@ -695,19 +723,20 @@ namespace Figlotech.BDados {
                 //        bd.CheckStructure(WorkingTypes, false);
                 //    });
                 ////});
-                if (this.RethrowExceptions) {
-                    throw x;
-                }
 
                 if (handler != null)
                     handler.Invoke(x);
+                else if (this.RethrowExceptions) {
+                    throw x;
+                }
                 return null;
-            } finally {
+            }
+            finally {
                 if (!Plugin.Config.ContinuousConnection) {
                     Close();
                 }
                 //var total = Bench?.TotalMark();
-                //Logger?.WriteLog(String.Format("(Total: {0,0} milis)", total));
+                //this.WriteLog(String.Format("(Total: {0,0} milis)", total));
             }
 
         }
@@ -724,9 +753,9 @@ namespace Figlotech.BDados {
                     command.CommandText = QueryText;
                     command.CommandTimeout = Plugin.Config.Timeout;
                     int i = 0;
-                    Logger?.WriteLog($"[{accessId}] -- Query: {QueryText}");
+                    this.WriteLog($"[{accessId}] -- Query: {QueryText}");
                     // Adiciona os parametros
-                    foreach (var param in query.GetParameters()) {
+                    foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                         var cmdParam = command.CreateParameter();
                         cmdParam.ParameterName = param.Key;
                         cmdParam.Value = param.Value;
@@ -736,7 +765,7 @@ namespace Figlotech.BDados {
                             pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
                             pval = $"'{pval}'";
                         }
-                        Logger?.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
+                        this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
                     }
                     // --
                     var adapter = Plugin.GetNewDataAdapter(command);
@@ -748,18 +777,20 @@ namespace Figlotech.BDados {
                             throw new BDadosException("Database did not return any table.");
                         }
                         resultados = ds.Tables[0].Rows.Count;
-                        Logger?.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                        this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                         retv = ds.Tables[0];
-                    } catch (Exception x) {
-                        Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                        Logger?.WriteLog(x.Message);
-                        Logger?.WriteLog(x.StackTrace);
+                    }
+                    catch (Exception x) {
+                        this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                        this.WriteLog(x.Message);
+                        this.WriteLog(x.StackTrace);
                         throw x;
-                    } finally {
+                    }
+                    finally {
                         if (adapter is IDisposable d)
                             d.Dispose();
                         command.Dispose();
-                        Logger?.WriteLog("------------------------------------");
+                        this.WriteLog("------------------------------------");
                     }
 
                 }
@@ -771,6 +802,11 @@ namespace Figlotech.BDados {
             return this.Query(new QueryBuilder(Query, args));
         }
 
+        public void WriteLog(String s) {
+            Logger?.WriteLog(s);
+            Fi.Tech.WriteLine(s);
+        }
+
         public int Execute(IQueryBuilder query) {
 
             if (query == null)
@@ -778,12 +814,10 @@ namespace Figlotech.BDados {
             int result = -1;
 
             Access(() => {
-
                 Bench?.Mark("--");
-
-                Logger?.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.Config.Timeout}s timeout]");
+                this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.Config.Timeout}s timeout]");
                 foreach (var param in query.GetParameters()) {
-                    Logger?.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
+                    this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
                 }
                 using (var command = ConnectionHandle.CreateCommand()) {
                     try {
@@ -795,19 +829,21 @@ namespace Figlotech.BDados {
                             command.Parameters.Add(cmdParam);
                         }
                         command.CommandTimeout = Plugin.Config.Timeout;
-                        Logger?.WriteLog(command.CommandText);
+                        this.WriteLog(command.CommandText);
                         Bench?.Mark("Prepared Statement");
                         result = command.ExecuteNonQuery();
                         var elaps = Bench?.Mark("Executed Statement");
-                        Logger?.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
-                    } catch (Exception x) {
-                        Logger?.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
-                        Logger?.WriteLog(x.Message);
-                        Logger?.WriteLog(x.StackTrace);
-                        Logger?.WriteLog($"BDados Execute: {x.Message}");
+                        this.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
+                    }
+                    catch (Exception x) {
+                        this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
+                        this.WriteLog(x.Message);
+                        this.WriteLog(x.StackTrace);
+                        this.WriteLog($"BDados Execute: {x.Message}");
                         throw x;
-                    } finally {
-                        Logger?.WriteLog("------------------------------------");
+                    }
+                    finally {
+                        this.WriteLog("------------------------------------");
                         command.Dispose();
                     }
                 }
@@ -821,8 +857,9 @@ namespace Figlotech.BDados {
         public void Close() {
             try {
                 ConnectionHandle.Close();
-            } catch (Exception x) {
-                Logger?.WriteLog($"[{accessId}] BDados Close: {x.Message}");
+            }
+            catch (Exception x) {
+                this.WriteLog($"[{accessId}] BDados Close: {x.Message}");
             }
         }
 
@@ -836,7 +873,7 @@ namespace Figlotech.BDados {
         public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
             DateTime inicio = DateTime.Now;
             List<T> retv = new List<T>();
-            Logger?.WriteLog($"[{accessId}] Exec procedure -- ");
+            this.WriteLog($"[{accessId}] Exec procedure -- ");
 
             Access(() => {
                 try {
@@ -849,10 +886,12 @@ namespace Figlotech.BDados {
                                 Object v = r[f.Name];
                                 if (v == null) {
                                     f.SetValue(newval, null);
-                                } else {
+                                }
+                                else {
                                     f.SetValue(newval, r[f.Name]);
                                 }
-                            } catch (Exception x) {
+                            }
+                            catch (Exception x) {
                                 throw x;
                             }
                         }
@@ -861,22 +900,26 @@ namespace Figlotech.BDados {
                                 Object v = r[p.Name];
                                 if (v == null) {
                                     p.SetValue(newval, null);
-                                } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
+                                }
+                                else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
                                     p.SetValue(newval, r[p.Name]);
-                                } else {
+                                }
+                                else {
                                     p.SetValue(newval, Convert.ChangeType(r[p.Name], p.PropertyType));
                                 }
-                            } catch (Exception x) {
+                            }
+                            catch (Exception x) {
                                 throw x;
                             }
                         }
                         retv.Add(newval);
                     }
-                } finally {
+                }
+                finally {
                     Close();
                 }
             });
-            Logger?.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
+            this.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
             return retv;
         }
 
@@ -918,7 +961,8 @@ namespace Figlotech.BDados {
                         qjoins.First().Excludes.Remove(infoField?.RemoteField);
                         continue;
                     }
-                } else {
+                }
+                else {
                     childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
                 }
 
@@ -983,7 +1027,8 @@ namespace Figlotech.BDados {
                 if (qfar.Any()) {
                     qfar.First().Excludes.Remove(info.FarField);
                     continue;
-                } else {
+                }
+                else {
                     String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.RID";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
@@ -1100,20 +1145,20 @@ namespace Figlotech.BDados {
 
             var prefixer = new PrefixMaker();
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            bool proofproof = false;
+            bool hasAnyAggregations = false;
             foreach (var a in Members) {
-                proofproof =
+                hasAnyAggregations =
                     a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
                     a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
                     a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (proofproof)
+                if (hasAnyAggregations)
                     break;
             }
 
-            Logger?.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {proofproof}.");
+            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {hasAnyAggregations}.");
             // CLUMSY
-            if (proofproof) {
+            if (hasAnyAggregations) {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
 
                 var join = MakeJoin(
@@ -1127,8 +1172,9 @@ namespace Figlotech.BDados {
                 builtConditions.If(OrderingType != null).Then()
                                     .Append($"ORDER BY a.{OrderingType?.Name} {Ordering.ToString().ToUpper()}")
                                 .EndIf();
-
-                builtConditions.EndIf();
+                if(limit != null) {
+                    builtConditions.Append($"LIMIT {page??0}, {limit}");
+                }
                 var dynamicJoinJumble = join.BuildObject<T>(
                         (build) => {
                             MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
@@ -1142,8 +1188,9 @@ namespace Figlotech.BDados {
                 //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
                 //    retv.Add(list[i]);
                 //}
-            } else {
-                Logger?.WriteLog(cnd?.ToString());
+            }
+            else {
+                this.WriteLog(cnd?.ToString());
 
                 retv.AddRange(LoadAll<T>(new ConditionParser().ParseExpression<T>(cnd)
                     .If(OrderingType != null).Then()
@@ -1164,23 +1211,23 @@ namespace Figlotech.BDados {
             var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
             Access(() => {
-                    var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
-                    if (cnd != null) {
-                        query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name.ToLower()} AS a WHERE ");
-                        query.Append(new ConditionParser().ParseExpression<T>(cnd));
-                        query.Append(") sub)");
-                    }
-                    if (list.Count > 0) {
-                        query.Append($"AND {rid} NOT IN (");
-                        for (var i = 0; i < list.Count; i++) {
-                            query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
-                            if (i < list.Count - 1)
-                                query.Append(",");
-                        }
-                        query.Append(")");
-                    }
-                    retv = Execute(query);
+                var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
+                if (cnd != null) {
+                    query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name.ToLower()} AS a WHERE ");
+                    query.Append(new ConditionParser().ParseExpression<T>(cnd));
+                    query.Append(") sub)");
                 }
+                if (list.Count > 0) {
+                    query.Append($"AND {rid} NOT IN (");
+                    for (var i = 0; i < list.Count; i++) {
+                        query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
+                        if (i < list.Count - 1)
+                            query.Append(",");
+                    }
+                    query.Append(")");
+                }
+                retv = Execute(query);
+            }
             );
             return retv > 0;
         }
@@ -1191,7 +1238,7 @@ namespace Figlotech.BDados {
                 return true;
             for (int it = 0; it < rs.Count; it++) {
                 if (rs[it].RID == null) {
-                    rs[it].RID = RID.GenerateRID();
+                    rs[it].RID = new RID().ToString();
                 }
             }
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))

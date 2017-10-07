@@ -10,6 +10,9 @@ using System.Diagnostics;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.I18n;
 using Figlotech.Core.Interfaces;
+using System.Security.Cryptography;
+using System.IO;
+using System.Threading;
 
 namespace Figlotech.Core {
     public delegate dynamic ComputeField(dynamic o);
@@ -25,6 +28,10 @@ namespace Figlotech.Core {
 
         public static bool EnableStdoutLogs { get; set; } = false;
 
+        public static void StdoutLogs(this Fi _selfie, bool status) {
+            EnableStdoutLogs = status;
+        }
+
         public static void Write(this Fi _selfie, String s = "") {
 
             if (Debugger.IsAttached)
@@ -35,11 +42,10 @@ namespace Figlotech.Core {
             Console.Write(s);
         }
         public static void WriteLine(this Fi _selfie, String s = "") {
+            if (EnableStdoutLogs)
+                Console.WriteLine(s);
             if (Debugger.IsAttached)
                 Debug.WriteLine(s);
-            if (!EnableStdoutLogs)
-                return;
-            Console.WriteLine(s);
         }
 
         //public static T Field<T>(this DataRow dr, int index) {
@@ -59,6 +65,12 @@ namespace Figlotech.Core {
         //    object o = dr.ItemArray[properColIndex];
         //    return (T)o;
         //}
+
+        public static String GetHashFromStream(this Fi _selfie, Stream stream) {
+            using (var md5 = MD5.Create()) {
+                return Convert.ToBase64String(md5.ComputeHash(stream));
+            }
+        }
 
         public static T Map<T>(this Fi _selfie, DataRow dr) where T : new() {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -123,7 +135,7 @@ namespace Figlotech.Core {
 
         public static List<string> RanChecks = new List<string>();
 
-        public static string DefaultLogRepository = "Logs\\FTHLogs";
+        public static string DefaultLogRepository = "Logs\\Fi.TechLogs";
 
         public static String DefaultBackupStore { get; set; } = "../Backups/";
 
@@ -137,7 +149,7 @@ namespace Figlotech.Core {
             return Version;
         }
 
-        public static void As<T>(object input, Action<T> act) {
+        public static void As<T>(this Fi _selfie, object input, Action<T> act) {
             if (
                 (typeof(T).IsInterface && input.GetType().GetInterfaces().Contains(typeof(T))) ||
                 input.GetType().IsAssignableFrom(typeof(T))
@@ -750,11 +762,30 @@ namespace Figlotech.Core {
             return Seed;
         }
 
-        public static void RunAndForget(this Fi _selfie, Action job) {
-            var wq = new WorkQueuer("FTH RunAndForget", 1);
-            wq.Enqueue(job);
+        internal static Thread MainThreadHandler;
+        public static void SetMainThread(this Fi _selfie) {
+            MainThreadHandler = Thread.CurrentThread;
+        }
+
+        public static void RunAndForget(this Fi _selfie, String name, Action job, Action then = null) {
+            var wq = new WorkQueuer(name, 1);
+            wq.Enqueue(job, then);
             wq.Stop(false);
         }
+        public static void RunAndForget(this Fi _selfie, Action job, Action then = null) {
+            RunAndForget(_selfie, "Anonymous_RunAndForget", job, then);
+        }
+
+        public static byte[] GenerateKey(this Fi _selfie, string Str) {
+            Random random = new Random(Fi.Tech.IntSeedFromString(Str));
+
+            byte[] numArray = new byte[16];
+
+            for (int index = 0; index < 16; ++index)
+                numArray[index] = (byte)random.Next(256);
+            return numArray;
+        }
+
 
         public static String GenerateIdString(this Fi _selfie, String uniqueId, int numDigits = 128) {
             char[] retval = new char[numDigits];

@@ -144,11 +144,15 @@ namespace Figlotech.BDados.Authentication {
         }
 
         public IUserSession GetSession(String Token) {
-            var v = (from a in Sessions where a.Token == Token select a);
+            if(Token == null) {
+                return null;
+            }
+            Sessions.RemoveAll(a => a == null);
+            var v = Sessions.Where(a=> a.Token == Token);
             if (v.Any())
                 return v.First().Session;
             else {
-                var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token.Equals(Token), null, null);
+                var fetchSession = DataAccessor.LoadAll<TSession>((us) => us.Token == Token, null, null);
                 if (fetchSession.Any()) {
                     var User = DataAccessor.LoadByRid<TUser>(fetchSession.First().User);
                     UserSession sess = new UserSession(this);
@@ -161,37 +165,6 @@ namespace Figlotech.BDados.Authentication {
                 }
             }
             return null;
-        }
-
-        public bool CanCreate(IUserSession Session, int permission) {
-            return Session?.CanCreate(permission) ?? false;
-        }
-        public bool CanRead(IUserSession Session, int permission) {
-            return Session?.CanRead(permission) ?? false;
-        }
-        public bool CanUpdate(IUserSession Session, int permission) {
-            return Session?.CanUpdate(permission) ?? false;
-        }
-        public bool CanDelete(IUserSession Session, int permission) {
-            return Session?.CanDelete(permission) ?? false;
-        }
-        public bool CanAuthorize(IUserSession Session, int permission) {
-            return Session?.CanAuthorize(permission) ?? false;
-        }
-        public bool CanCreate(String Token, int permission) {
-            return CanCreate(GetSession(Token), permission);
-        }
-        public bool CanRead(String Token, int permission) {
-            return CanRead(GetSession(Token), permission);
-        }
-        public bool CanUpdate(String Token, int permission) {
-            return CanUpdate(GetSession(Token), permission);
-        }
-        public bool CanDelete(String Token, int permission) {
-            return CanDelete(GetSession(Token), permission);
-        }
-        public bool CanAuthorize(String Token, int permission) {
-            return CanAuthorize(GetSession(Token), permission);
         }
 
         public void Remove(String Token) {
@@ -211,8 +184,9 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
-        public IUser ForceCreateUser(string userName, string password) {
+        public IUser ForceCreateUser<TUser>(string userName, string password, Action<TUser> a = null) where TUser : IUser, new() {
             TUser retv = new TUser();
+            a?.Invoke(retv);
             retv.Username = userName;
             retv.Password = AuthenticationUtils.HashPass(password, retv.RID);
             if(!DataAccessor.SaveItem(retv)) {
@@ -220,11 +194,12 @@ namespace Figlotech.BDados.Authentication {
             }
             return retv;
         }
-        public IUser CreateUserSecure(string userName, string password, string confirmPassword) {
+
+        public IUser CreateUserSecure<TUser>(string userName, string password, string confirmPassword, Action<TUser> a = null) where TUser: IUser, new() {
             if (password != confirmPassword) {
                 throw new ValidationException(Fi.Tech.GetStrings().AUTH_PASSWORDS_MUST_MATCH);
             }
-            return ForceCreateUser(userName, password);
+            return ForceCreateUser(userName, password, a);
         }
 
         public bool ForcePassword(IUser user, string newPassword) {

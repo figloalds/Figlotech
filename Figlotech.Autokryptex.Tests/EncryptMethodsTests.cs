@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using Figlotech.Autokryptex.EncryptMethods;
 using Figlotech.BDados;
+using Figlotech.Core;
 
 namespace Figlotech.Autokryptex.Tests
 {
@@ -17,7 +18,7 @@ namespace Figlotech.Autokryptex.Tests
 
             var encryptedBytes = c1.Encrypt(bytes);
 
-            FTH.WriteLine(Encoding.UTF8.GetString(encryptedBytes));
+            Fi.Tech.WriteLine(Encoding.UTF8.GetString(encryptedBytes));
 
             var decryptedBytes = c1.Decrypt(encryptedBytes);
 

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Figlotech.Core.Helpers;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -156,16 +157,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 var hash = GetHash(o, f);
                 if (match != null) {
                     if (hash != match.Hash) {
+                        Fi.Tech.WriteLine($"SmartCopy: Hash Changed: {f} ({hash}) ({match.Hash})");
+                        var idx = HashList.IndexOf(match);
+                        HashList[idx].Hash = hash;
                         return true;
                     } else {
+                        Fi.Tech.WriteLine($"SmartCopy: Hash unchanged: {f} ({hash})");
                         return false;
                     }
                 } else {
+                    Fi.Tech.WriteLine($"SmartCopy: New File: {f} ({hash})");
                     HashList.Add(
                         new FileData {
                             RelativePath = f,
                             Hash = hash,
-                            Date = o.GetLastFileWrite(f)?.Ticks ?? 0,
+                            Date = o.GetLastModified(f)?.Ticks ?? 0,
                             Length = o.GetSize(f)
                         });
                     return true;
@@ -188,8 +194,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     return false;
                 }
             } else {
-                var originDate = o.GetLastFileWrite(f);
-                var destinationDate = d.GetLastFileWrite(f);
+                var originDate = o.GetLastModified(f);
+                var destinationDate = d.GetLastModified(f);
                 changed = (
                     (originDate > destinationDate) ||
                     (
@@ -259,9 +265,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             Down
         }
 
+        const string HASHLIST_FILENAME = ".hashlist.json";
+
         private void GetHashList(IFileAccessor destination) {
             try {
-                var txt = destination.ReadAllText("$fth-hashlist.json");
+                var txt = destination.ReadAllText(HASHLIST_FILENAME);
                 HashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
             } catch (Exception) {
 
@@ -281,7 +289,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             workedFiles = 0;
             origin.ForFilesIn(path, (f) => {
-                if (f == "$fth-hashlist.json") {
+                if (f == HASHLIST_FILENAME) {
                     return;
                 }
                 if (Excludes.Any(excl => CheckMatch(f, excl))) {
@@ -340,13 +348,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         );
 
                     if (HashList.Count > 0) {
-                        destination.Write($"$fth-hashlist.json", (stream) => {
+                        destination.Delete(HASHLIST_FILENAME);
+                        destination.Write(HASHLIST_FILENAME, (stream) => {
                             string text = JsonConvert.SerializeObject(HashList);
                             byte[] writev = Encoding.UTF8.GetBytes(text);
                             stream.Write(writev, 0, writev.Length);
                         });
 
-                        origin.Write($"$fth-hashlist.json", (stream) => {
+                        origin.Delete(HASHLIST_FILENAME);
+                        origin.Write(HASHLIST_FILENAME, (stream) => {
                             string text = JsonConvert.SerializeObject(HashList);
                             byte[] writev = Encoding.UTF8.GetBytes(text);
                             stream.Write(writev, 0, writev.Length);
@@ -373,13 +383,25 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             origin.Read(workingFile, (input) => {
                 var bufferSize = (int)options.BufferSize / options.NumWorkers;
-                if (bufferSize < 0) bufferSize = Int32.MaxValue;
+                if (bufferSize <= 0) bufferSize = Int32.MaxValue;
+               
 
                 destination.Write(workingFile + outPostFix, (output) => {
-                    if (options.UseGZip)
-                        output = new GZipStream(output, CompressionLevel.Optimal);
-                    
-                    input.CopyTo(output, bufferSize);
+                    //BatchStreamProcessor processor = new BatchStreamProcessor();
+                    //if (options.UseGZip) {
+                    //    processor.Add(new GzipCompressStreamProcessor(true));
+                    //}
+
+                    //processor.Process(input, (stream) => stream.CopyTo(output));
+
+                    if (options.UseGZip) {
+                        using (var realOut = new GZipStream(output, CompressionLevel.Optimal)) {
+                            input.CopyTo(realOut);
+                        }
+                    } else {
+                        input.CopyTo(output);
+                    }
+
                 });
             });
 

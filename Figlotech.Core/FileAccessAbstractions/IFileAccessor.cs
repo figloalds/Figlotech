@@ -23,11 +23,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         void WriteAllBytes(string relative, byte[] content);
 
-        Stream Open(String relative, FileMode fileMode);
+        Stream Open(String relative, FileMode fileMode, FileAccess fileAccess);
 
-        DateTime? GetLastFileWrite(string relative);
+        DateTime? GetLastModified(string relative);
+        DateTime? GetLastAccess(string relative);
+
         long GetSize(string relative);
+
         void SetLastModified(String relative, DateTime dt);
+        void SetLastAccess(String relative, DateTime dt);
 
         void Rename(string relative, string newName);
 

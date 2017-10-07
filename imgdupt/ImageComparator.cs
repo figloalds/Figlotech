@@ -11,6 +11,7 @@ using System.Drawing.Imaging;
 using Figlotech.BDados;
 using System.Security.Cryptography;
 using System.Runtime.Serialization.Formatters.Binary;
+using Figlotech.Core;
 
 namespace imgdupt {
     class ImageComparator {
@@ -134,7 +135,7 @@ namespace imgdupt {
             UniquesAreInitialized = true;
         }
         void GetUniquesData() {
-            FTH.WriteLine("Iniciando separador de imagens...");
+            Fi.Tech.WriteLine("Iniciando separador de imagens...");
             String[] Uniques = Directory.GetFiles(UniquesDir);
             foreach (var UniqueFile in Uniques) {
                 using (FileStream fs = new FileStream(UniqueFile, FileMode.Open)) {
@@ -148,7 +149,7 @@ namespace imgdupt {
                     Unique.Dispose();
                 }
             };
-            FTH.WriteLine("Separador inicializado.");
+            Fi.Tech.WriteLine("Separador inicializado.");
         }
         public void RunDuplicateTester() {
             List<String> ImagesToCheck = new List<String>();
@@ -175,7 +176,7 @@ namespace imgdupt {
                                 if (Difference < MinDiff) {
                                     IsUnique = false;
                                     FoundUnique = Unique;
-                                    FTH.WriteLine($"Repetida {Path.GetFileName(ImagemAtual)}");
+                                    Fi.Tech.WriteLine($"Repetida {Path.GetFileName(ImagemAtual)}");
                                     ImagesToCheck.Remove(ImagemAtual);
                                     break;
                                 }
@@ -254,7 +255,7 @@ namespace imgdupt {
                             if (Difference < MinDiff) {
                                 IsUnique = false;
                                 FoundUnique = Unique;
-                                FTH.WriteLine($"Repetida {Path.GetFileName(ImagemAtual)}");
+                                Fi.Tech.WriteLine($"Repetida {Path.GetFileName(ImagemAtual)}");
                                 return;
                             }
                         });
@@ -294,7 +295,7 @@ namespace imgdupt {
                     }
                 }
                 catch (Exception e) {
-                    FTH.WriteLine(e.Message);
+                    Fi.Tech.WriteLine(e.Message);
                 }
             }
             foreach (String Arq in DuplicatesFiles) {

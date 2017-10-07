@@ -1,5 +1,6 @@
-﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados.Helpers;
+﻿
+
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using System;
@@ -7,12 +8,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class StructureChecker {
-        IEnumerable<Type> workingTypes;
+        List<Type> workingTypes;
         IRdbmsDataAccessor DataAccessor;
 
         // "Mirror, mirror on the wall, who's code is the shittiest of them all?"
@@ -23,6 +22,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         Benchmarker Benchmarker;
 
+        public bool IsDataObject(Type t) {
+            if (t == null) return false;
+            if (t == typeof(Object)) return false;
+            var ifaces = t.GetTypeInfo().GetInterfaces();
+            var isDo = ifaces.Any(a => a == typeof(IDataObject));
+            return
+                isDo
+                || IsDataObject(t.BaseType);
+        }
+
         public void CheckStructure(IEnumerable<Type> types) {
             Benchmarker = new Benchmarker("Check Structure");
             DataAccessor.Access(() => {
@@ -30,9 +39,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Benchmarker.WriteToStdout = true;
                 workingTypes = types
                     .Where((t) =>
-                        t.GetInterfaces().Contains(typeof(IDataObject)) &&
-                        t.GetCustomAttribute<ViewOnlyAttribute>() == null
-                    );
+                        IsDataObject(t) 
+                        //&&
+                        //t.GetCustomAttribute<ViewOnlyAttribute>() == null
+                    ).ToList();
 
                 var dbName = DataAccessor.SchemaName;
                 DataTable tables = DataAccessor.Query(
@@ -51,12 +61,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Benchmarker.Mark("Work Columns");
                 DataTable columns = DataAccessor.Query(
                     DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName));
-                try {
-                    WorkOnColumns(columns, keys);
-                } catch (Exception x) {
-                    Fi.Tech.Write(x.Message);
-                    Fi.Tech.Write(x.StackTrace);
-                }
+
+                WorkOnColumns(columns, keys);
 
                 // Re read keys here because work on tables and columns
                 // probably changed this too much
@@ -137,13 +143,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     if (!found) {
-                        Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
-                        Exec(
-                            DataAccessor.QueryGenerator.Purge(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
+                        try {
+                            Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
+                            Exec(
+                                DataAccessor.QueryGenerator.Purge(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
 
-                        Benchmarker.Mark($"Create Constraint FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
-                        Exec(
-                            DataAccessor.QueryGenerator.AddForeignKey(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
+                            Benchmarker.Mark($"Create Constraint FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
+                            Exec(
+                                DataAccessor.QueryGenerator.AddForeignKey(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
+                        } catch(Exception x) {
+                            Fi.Tech.WriteLine(x.Message);
+                        }
                     }
                 }
             }
@@ -191,7 +201,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            foreach (var type in workingTypes) {
+
+            foreach(var type in workingTypes) {
+
                 var found = false;
                 foreach (DataRow a in tables.Rows) {
                     var tabName = a["TABLE_NAME"] as String;
@@ -214,6 +226,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
+            
             return true;
         }
 
@@ -225,6 +238,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 foreach (var type in workingTypes) {
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
+
                     if (tablName.ToLower() != type.Name.ToLower()) continue;
 
                     var oldNames = new Dictionary<string, string>();
@@ -236,10 +250,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     foreach (var field in fields) {
+
                         var found = false;
                         for (int i = 0; i < columns.Rows.Count; i++) {
                             var colName2 = columns.Rows[i]["COLUMN_NAME"] as String;
-                            if (colName2 == field.Name) {
+                            var tablName2 = columns.Rows[i]["TABLE_NAME"] as String;
+
+                            if (tablName2.ToLower() != type.Name.ToLower()) continue;
+
+                            if (colName2 == field.Name 
+                                && type.Name.ToLower() == tablName2.ToLower()
+                                ) {
                                 found = true;
                                 break;
                             }
@@ -248,7 +269,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (!found) {
                             bool renamed = false;
                             foreach (var old in oldNames) {
-                                if (old.Key == field.Name) {
+                                if (old.Key == field.Name
+                                    && type.Name.ToLower() == tablName.ToLower()
+                                    ) {
                                     Benchmarker.Mark($"ACTION: Rename {old.Value} to {field.Name}");
                                     DekeyColumn(type.Name.ToLower(), old.Value, keys);
                                     Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name.ToLower(), old.Value, GetColumnDefinition(field)));
@@ -281,7 +304,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (field.Name != columnName) continue;
                         // Found columns, check definitions
                         var columnIsNullable = (columns.Rows[i]["IS_NULLABLE"] as String)?.ToUpper() == "YES";
-                        var length = columns.Rows[i]["CHARACTER_MAXIMUM_LENGTH"];
+                        var length = columns.Rows[i]["CHARACTER_MAXIMUM_LENGTH"] as int?;
                         var datatype = (columns.Rows[i]["DATA_TYPE"] as String)?.ToUpper();
                         var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
                         if (fieldAtt == null) continue;
@@ -289,7 +312,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                         if (
                             columnIsNullable != fieldAtt.AllowNull ||
-                            (int)(length ?? 0) != fieldAtt.Size ||
+                            (length ?? 0) != fieldAtt.Size ||
                             datatype != dbDefinition
                             ) {
                             Benchmarker.Mark($"ACTION: Alter Column {type.Name.ToLower()}/{field.Name}");

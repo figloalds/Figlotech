@@ -98,10 +98,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return retv;
         }
 
-        public DateTime? GetLastFileWrite(string relative) {
+        public DateTime? GetLastModified(string relative) {
             var fws = new List<DateTime?>();
             Parallel.ForEach(accessors, (a) => {
-                fws.Add(a.GetLastFileWrite(relative));
+                fws.Add(a.GetLastModified(relative));
+            });
+
+            return fws.Where((a) => a != null).OrderByDescending((a) => a.Value.Ticks).FirstOrDefault();
+        }
+        public DateTime? GetLastAccess(string relative) {
+            var fws = new List<DateTime?>();
+            Parallel.ForEach(accessors, (a) => {
+                fws.Add(a.GetLastAccess(relative));
             });
 
             return fws.Where((a) => a != null).OrderByDescending((a) => a.Value.Ticks).FirstOrDefault();
@@ -130,7 +138,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
 
-        public Stream Open(string relative, FileMode fileMode) {
+        public Stream Open(string relative, FileMode fileMode, FileAccess fileAccess) {
             throw new NotImplementedException();
         }
 
@@ -179,6 +187,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public void SetLastModified(string relative, DateTime dt) {
             Parallel.ForEach(accessors, (a) => {
                 a.SetLastModified(relative, dt);
+            });
+        }
+        public void SetLastAccess(string relative, DateTime dt) {
+            Parallel.ForEach(accessors, (a) => {
+                a.SetLastAccess(relative, dt);
             });
         }
 

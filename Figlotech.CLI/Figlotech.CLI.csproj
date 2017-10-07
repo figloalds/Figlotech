@@ -9,7 +9,6 @@
     <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
     <ProjectReference Include="..\Figlotech.BDados.MySqlDataAccessor\Figlotech.BDados.MySqlDataAccessor.csproj" />
     <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />
-    <ProjectReference Include="..\Figlotech.ConsoleTools\Figlotech.Console.csproj" />
   </ItemGroup>
 
 </Project>

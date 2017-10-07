@@ -376,7 +376,7 @@ namespace Figlotech.BDados.Builders {
                 retv.Add(thisObject);
             }
             //});
-            Logger.WriteLog($"FTH JoinBuilder has built the output object in {DateTime.Now.Subtract(start).TotalMilliseconds}ms");
+            Logger.WriteLog($"Fi.Tech JoinBuilder has built the output object in {DateTime.Now.Subtract(start).TotalMilliseconds}ms");
             return retv;
         }
     }

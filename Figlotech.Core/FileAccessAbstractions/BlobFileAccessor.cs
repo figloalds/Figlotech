@@ -26,14 +26,22 @@ namespace Figlotech.Core.FileAcessAbstractions {
         String ContainerName { get; set; }
         CloudBlobContainer BlobContainer;
 
-        public BlobFileAccessor(string storageAccountName, string storageAccountKey, string containerName) {
-            AccountName = storageAccountName;
-            AccountKey = storageAccountKey;
+        public void InitBlobFileAccessor(string host, string accountName, string containerName, string accountKey) {
+
+            AccountName = accountName;
+            AccountKey = containerName;
             ContainerName = containerName;
 
-            string connectionString = string.Format(
-                @"DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
-                storageAccountName, storageAccountKey);
+            string connectionString =
+                (host != null ?
+                    "UseDevelopmentStorage=true;" +
+                    $"BlobEndpoint=http://{host}/{accountName};" 
+                    :
+                    (accountName != null ? $"AccountName={accountName};" : "") +
+                    "DefaultEndpointsProtocol=https;"
+                ) +
+                (accountKey != null ? $"AccountKey={accountKey};" : "");
+
             CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(connectionString);
 
             CloudBlobClient cloudBlobClient = cloudStorageAccount.CreateCloudBlobClient();
@@ -41,6 +49,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             BlobContainer = cloudBlobClient.GetContainerReference(containerName);
 
             BlobContainer.CreateIfNotExistsAsync().Wait();
+
+        }
+
+        public BlobFileAccessor(string host, string storageAccountName, string containerName, string storageAccountKey) {
+            InitBlobFileAccessor(host, storageAccountName, containerName, storageAccountKey);
+        }
+        public BlobFileAccessor(string storageAccountName, string storageAccountKey, string containerName) {
+            InitBlobFileAccessor(null, storageAccountName, containerName, storageAccountKey);
         }
 
         private void AbsMkDirs(string dir) {
@@ -96,7 +112,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         }
 
-        public DateTime? GetLastFileWrite(string relative) {
+        public DateTime? GetLastModified(string relative) {
             CloudBlob blob = BlobContainer.GetBlobReference(relative);
             if (!blob.ExistsAsync().Result) {
                 return DateTime.MinValue;
@@ -106,6 +122,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             var dt = blob.Properties.LastModified ?? DateTime.MinValue;
             return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, DateTimeKind.Utc);
+        }
+        public DateTime? GetLastAccess(string relative) {
+            return GetLastModified(relative);
         }
 
         public long GetSize(string relative) {
@@ -120,6 +139,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public void SetLastModified(String relative, DateTime dt) {
+        }
+        public void SetLastAccess(String relative, DateTime dt) {
         }
 
         public void ParallelForFilesIn(String relative, Action<String> execFunc) {
@@ -269,6 +290,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public bool Delete(String relative) {
+            if (!Exists(relative))
+                return true;
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
 
             blob.DeleteAsync().Wait();
@@ -300,7 +323,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             await blob.AppendTextAsync(String.Join("\n", content));
         }
 
-        public Stream Open(String relative, FileMode fileMode) {
+        public Stream Open(String relative, FileMode fileMode, FileAccess fileAccess) {
             var blob = BlobContainer.GetAppendBlobReference(relative);
             if(
                 fileMode == FileMode.Append

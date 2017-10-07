@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core.FileAcessAbstractions;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -10,23 +11,6 @@ namespace Figlotech.Core {
         Queued,
         Running,
         Finished
-    }
-
-    public class WorkSchedule {
-        public WorkJob Job;
-        public bool Repeat = false;
-        public TimeSpan Interval;
-        public DateTime Start;
-        public WorkQueuer Parent;
-
-        public WorkSchedule(WorkQueuer parent, Action act, Action finished, Action<Exception> handle, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
-            Job = new WorkJob(parent, act, finished, handle);
-            Parent = parent;
-            Start = start;
-            Interval = interval;
-            Repeat = repeat;
-        }
-
     }
 
     public class JobProgress {
@@ -48,9 +32,9 @@ namespace Figlotech.Core {
         public DateTime? dequeued;
         public DateTime? completed;
 
-//#if DEBUG
-//        public StackFrame[] ContextStack;
-//#endif
+        //#if DEBUG
+        //        public StackFrame[] ContextStack;
+        //#endif
 
         public WorkJob(WorkQueuer parent, Action method, Action actionWhenFinished, Action<Exception> errorHandling) {
             queuer = parent;
@@ -58,25 +42,35 @@ namespace Figlotech.Core {
             finished = actionWhenFinished;
             handling = errorHandling;
 
-//#if DEBUG
-//            StackTrace stackTrace = new StackTrace();   // get call stack
-//            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
-//#endif
+            //#if DEBUG
+            //            StackTrace stackTrace = new StackTrace();   // get call stack
+            //            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
+            //#endif
         }
 
         public void Accompany() {
             WorkQueuer.AccompanyJob(this);
         }
     }
-    public class WorkQueuer : IDisposable {
+    public class WorkQueuer : IContinuousExecutor, IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
         public String Name;
         Queue<WorkJob> work = new Queue<WorkJob>();
-        List<WorkSchedule> schedules = new List<WorkSchedule>();
         Queue<Thread> workers = new Queue<Thread>();
-        Thread SchedulesThread;
-        public bool Active { get; private set; } = false;
+
+        private bool _active = false;
+        public bool Active {
+            get {
+                if (FiTechCoreExtensions.MainThreadHandler != null) {
+                    return _active && (FiTechCoreExtensions.MainThreadHandler.ThreadState == ThreadState.Running);
+                }
+                return _active;
+            }
+            private set {
+                _active = value;
+            }
+        }
         private bool isRunning = false;
         public static int DefaultSleepInterval = 50;
 
@@ -86,7 +80,7 @@ namespace Figlotech.Core {
 
         int parallelSize = 1;
 
-        public static List<WorkQueuer> WorldQueuers = new List<WorkQueuer>();
+        public static List<IContinuousExecutor> WorldQueuers = new List<IContinuousExecutor>();
 
         public WorkQueuer(String name, int maxThreads = -1, bool init_started = false) {
             if (maxThreads <= 0) {
@@ -102,7 +96,7 @@ namespace Figlotech.Core {
 
         public static void StopAllQueuers() {
             Parallel.ForEach(WorldQueuers, a => {
-                a.Stop();
+                a.Stop(true);
             });
             //WorldQueuers.Clear();
         }
@@ -117,11 +111,9 @@ namespace Figlotech.Core {
                 while (workers.Count > 0) {
                     try {
                         workers.Dequeue().Join();
-                    } catch (Exception) { }
+                    }
+                    catch (Exception) { }
                 }
-                try {
-                    SchedulesThread.Join();
-                } catch (Exception x) { }
             }
             isRunning = false;
         }
@@ -170,7 +162,8 @@ namespace Figlotech.Core {
                     try {
                         job = work.Dequeue();
                         job.status = WorkJobStatus.Running;
-                    } catch (Exception x) {
+                    }
+                    catch (Exception x) {
                     }
                     //Fi.Tech.WriteLine(x.Message);
                 }
@@ -196,7 +189,8 @@ namespace Figlotech.Core {
                     job?.finished?.Invoke();
                     job.completed = DateTime.Now;
                     Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
-                } catch (Exception x) {
+                }
+                catch (Exception x) {
                     job.completed = DateTime.Now;
                     Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
                     job?.handling?.Invoke(x);
@@ -221,29 +215,6 @@ namespace Figlotech.Core {
                 th.Priority = ThreadPriority.Normal;
                 th.Start();
             }
-            SchedulesThread = new Thread(() => {
-                while (Active) {
-                    lock (schedules) {
-                        for (int x = schedules.Count - 1; x >= 0; x--) {
-                            if (schedules[x].Start < DateTime.UtcNow) {
-                                var sched = schedules[x];
-                                schedules.RemoveAt(x);
-                                this.Enqueue(sched.Job.action, () => {
-                                    if (sched.Repeat) {
-                                        sched.Start += sched.Interval;
-                                        schedules.Add(sched);
-                                    }
-                                    sched.Job.finished?.Invoke();
-                                });
-                                break;
-                            }
-                        }
-                    }
-                    Thread.Sleep(1000);
-                }
-            });
-            SchedulesThread.Name = $"{Name}({QID})_sched";
-            SchedulesThread.Start();
             isRunning = true;
         }
 
@@ -276,22 +247,6 @@ namespace Figlotech.Core {
             }
         }
 
-        public WorkSchedule OneTimeSched(DateTime dt, Action a, Action finished = null, Action<Exception> handler = null) {
-            lock (schedules) {
-                var sched = new WorkSchedule(this, a, finished, handler, dt);
-                schedules.Add(sched);
-
-                return sched;
-            }
-        }
-        public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Action a, Action finished = null, Action<Exception> handler = null) {
-            lock (schedules) {
-                var sched = new WorkSchedule(this, a, finished, handler, dt, true, interval);
-                schedules.Add(sched);
-
-                return sched;
-            }
-        }
         private DateTime WentIdle = DateTime.UtcNow;
 
         public int TotalWork = 0;

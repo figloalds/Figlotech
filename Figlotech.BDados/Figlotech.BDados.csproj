@@ -1,21 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net462</TargetFramework>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <OutputPath>..\.dist</OutputPath>
+    <OutputPath>..\.dist\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
     <PackageReference Include="WindowsAzure.Storage" Version="8.4.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Autokryptex\Figlotech.Autokryptex.csproj" />
     <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 
 </Project>

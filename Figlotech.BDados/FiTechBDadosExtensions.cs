@@ -61,7 +61,7 @@ namespace Figlotech.BDados {
 
         //        public static List<string> RanChecks = new List<string>();
 
-        //        public static string DefaultLogRepository = "Logs\\FTHLogs";
+        //        public static string DefaultLogRepository = "Logs\\Fi.TechLogs";
 
         //        public static String DefaultBackupStore { get; set; } = "../Backups/";
 
@@ -437,50 +437,5 @@ namespace Figlotech.BDados {
             return type;
         }
 
-        //        public static byte[] GenerateKey(string Str) {
-        //            Random random = new Random(Fi.Tech.IntSeedFromString(Str));
-        //            byte[] numArray = new byte[16];
-        //            for (int index = 0; index < 16; ++index)
-        //                numArray[index] = (byte)random.Next(256);
-        //            return numArray;
-        //        }
-
-
-        //        public static void MemberwiseCopy(this Fi _selfie, object origin, object destination) {
-        //            ObjectReflector.Open(origin, (objA) => {
-        //                var members = ReflectionTool.FieldsAndPropertiesOf(origin.GetType());
-        //                ObjectReflector.Open(destination, (objB) => {
-        //                    foreach(var field in members) {
-        //                        objB[field.Name] = objA[field];
-        //                    }
-        //                });
-        //            });
-        //        }
-
-        //        private static String GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
-        //            char[] vector = new char[numDigits];
-        //            List<char> map = new List<char>();
-        //            String numbers = "0123456789";
-        //            String digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        //            map.AddRange(numbers.ToCharArray());
-        //            Random rng = new Random();
-        //            if (useLetters) {
-        //                map.AddRange(digits.ToUpper().ToCharArray());
-        //                map.AddRange(digits.ToLower().ToCharArray());
-        //            }
-        //            char[] secondMap = map.ToArray();
-        //            for (int i = 0; i < secondMap.Length; i++) {
-        //                int next = rng.Next(0, secondMap.Length);
-        //                char old = secondMap[i];
-        //                secondMap[i] = secondMap[next];
-        //                secondMap[next] = old;
-        //            }
-        //            for (int i = 0; i < numDigits; i++) {
-        //                int randomDigit = rng.Next(0, secondMap.Length);
-        //                vector[i] = secondMap[randomDigit];
-        //            }
-        //            return new String(vector);
-        //        }
-        //    }
     }
 }

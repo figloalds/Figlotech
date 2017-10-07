@@ -16,11 +16,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Service Include="{82a7f48d-3b50-4b1e-b82e-3ada8210c358}" />
+    <Reference Include="ErpSoftLeader.Business">
+      <HintPath>..\..\ErpSoftLeader\ErpSoftLeader.Business\bin\Debug\net462\ErpSoftLeader.Business.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="NovaPasta\" />
+    <Service Include="{82a7f48d-3b50-4b1e-b82e-3ada8210c358}" />
   </ItemGroup>
 
 </Project>
