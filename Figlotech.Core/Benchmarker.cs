@@ -33,7 +33,7 @@ namespace Figlotech.Core.Helpers {
                 .Timestamp.Subtract(marks[marks.Count - 2].Timestamp).TotalMilliseconds;
             var name = marks[marks.Count - 2].Name;
             //if (log) {
-            //    Fi.Tech.WriteLine($"{name}: {retv}ms");
+            //    Console.WriteLine($"{name}: {retv}ms");
             //}
             return retv;
         }
@@ -46,11 +46,11 @@ namespace Figlotech.Core.Helpers {
             var retv = marks[marks.Count - 1].Timestamp
                 .Subtract(marks[0].Timestamp).TotalMilliseconds;
             if (WriteToStdout) {
-                Fi.Tech.WriteLine($"-- PERFORMANCE -----------");
-                Fi.Tech.WriteLine($"{myName}");
-                Fi.Tech.WriteLine($"--------------------------");
+                Console.WriteLine($"-- PERFORMANCE -----------");
+                Console.WriteLine($"{myName}");
+                Console.WriteLine($"--------------------------");
                 double line = 0;
-                Fi.Tech.WriteLine($" | 0ms ");
+                Console.WriteLine($" | 0ms ");
                 for (int i = 1; i < marks.Count - 1; i++) {
                     var time = marks[i]
                         .Timestamp.Subtract(marks[i - 1].Timestamp).TotalMilliseconds;
@@ -58,11 +58,11 @@ namespace Figlotech.Core.Helpers {
                         .Timestamp.Subtract(marks[i].Timestamp).TotalMilliseconds;
                     line += time;
                     var name = marks[i - 1].Name;
-                    Fi.Tech.WriteLine($" | {line}ms -> {name} ({time2}ms)");
+                    Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
                 }
-                Fi.Tech.WriteLine($" v {retv}ms");
-                Fi.Tech.WriteLine($"--------------------------");
-                Fi.Tech.WriteLine($"Total: {retv}ms");
+                Console.WriteLine($" v {retv}ms");
+                Console.WriteLine($"--------------------------");
+                Console.WriteLine($"Total: {retv}ms");
             }
             return retv;
         }

@@ -153,7 +153,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private bool Changed(IFileAccessor o, IFileAccessor d, String f) {
             if (options.UseHashList) {
-                var match = HashList.FirstOrDefault(fd => fd.RelativePath == f);
+                FileData match;
+                lock(HashList) 
+                    match = HashList.FirstOrDefault(fd => fd.RelativePath == f);
                 var hash = GetHash(o, f);
                 if (match != null) {
                     if (hash != match.Hash) {
@@ -167,13 +169,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                 } else {
                     Fi.Tech.WriteLine($"SmartCopy: New File: {f} ({hash})");
-                    HashList.Add(
-                        new FileData {
-                            RelativePath = f,
-                            Hash = hash,
-                            Date = o.GetLastModified(f)?.Ticks ?? 0,
-                            Length = o.GetSize(f)
-                        });
+                    lock(HashList) {
+                        HashList.Add(
+                            new FileData {
+                                RelativePath = f,
+                                Hash = hash,
+                                Date = o.GetLastModified(f)?.Ticks ?? 0,
+                                Length = o.GetSize(f)
+                            });
+                    }
                     return true;
                 }
             }
@@ -315,10 +319,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
                             processFileDown(origin, destination, f);
                         }
                     }
-
                     OnReportProcessedFile?.Invoke(changed, f);
+                }, ()=> {
+                }, (x) => {
+                    Console.WriteLine(x.Message);
                 });
-
             });
 
             if (options.AllowDelete) {
@@ -340,11 +345,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!isRecursing) {
 
                 wq.Start();
-                wq.Stop();
+                wq.Stop(true);
 
                 if (options.UseHashList) {
                     HashList.RemoveAll((f) =>
-                        !origin.Exists(f.RelativePath)
+                        !origin.Exists(f?.RelativePath)
                         );
 
                     if (HashList.Count > 0) {

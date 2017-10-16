@@ -44,8 +44,8 @@ namespace Figlotech.Core {
         public static void WriteLine(this Fi _selfie, String s = "") {
             if (EnableStdoutLogs)
                 Console.WriteLine(s);
-            if (Debugger.IsAttached)
-                Debug.WriteLine(s);
+            //if (Debugger.IsAttached)
+            //    Debug.WriteLine(s);
         }
 
         //public static T Field<T>(this DataRow dr, int index) {

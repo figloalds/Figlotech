@@ -15,7 +15,7 @@ namespace Figlotech.Core {
         public WorkScheduler Parent;
 
         public WorkSchedule(WorkScheduler parent, Action act, Action finished, Action<Exception> handle, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
-            Job = new WorkJob(null, act, finished, handle);
+            Job = new WorkJob(act, finished, handle);
             Parent = parent;
             Start = start;
             Interval = interval;
@@ -97,6 +97,8 @@ namespace Figlotech.Core {
                 }
             });
             SchedulesThread.Name = $"{Name}({QID})_sched";
+            SchedulesThread.IsBackground = true;
+            SchedulesThread.Priority = ThreadPriority.BelowNormal;
             SchedulesThread.Start();
             isRunning = true;
         }

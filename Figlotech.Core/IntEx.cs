@@ -30,7 +30,9 @@ namespace Figlotech.Core {
         public static int rtProgression;
 
         public IntEx(byte[] number) {
-            digits = new List<byte>(number);
+            var pre = new byte[number.Length];
+            number.CopyTo(pre, 0);
+            digits = new List<byte>(pre);
             isNegative = false;
         }
 
@@ -366,5 +368,6 @@ namespace Figlotech.Core {
             ++rtProgression;
             return new IntEx((DateTime.UtcNow.Ticks * 100000) + (rtProgression % 100000)).ToString(Base36);
         }
+
     }
 }

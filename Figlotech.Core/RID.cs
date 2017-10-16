@@ -14,40 +14,38 @@ namespace Figlotech.Core {
         // Random initializer + sequential number
         uint Gamma;
 
-        static uint gammaGen = (uint)rng.Next(0, Int32.MaxValue) / 11;
+        static uint gammaseq = 0;
+        static uint gammaGen = (uint) (rng.Next(0, Int32.MaxValue)) + (uint) (rng.Next(0, Int32.MaxValue));
 
-        public String Value64 {
+        public String AsBase64 {
             get {
                 var val = this.ToString();
                 return val;
             }
         }
-        public String Value36 {
+        public String AsBase36 {
             get {
                 var val = this.ToBase36();
                 return val;
             }
         }
+        public ulong AsULong {
+            get {
+                var a = ((UInt64) Alpha & 0xFFFFFFFFFFFF0000);
+                var c = (UInt16) (Gamma & 0x0000FFFF);
+                return a + c;
+            }
+        }
+
         public RID() {
             NewRid();
         }
 
         private void NewRid() {
-            Alpha = DateTime.UtcNow.Ticks;
-            Beta = (uint)rng.Next(0, Int32.MaxValue) + (uint)rng.Next(0, Int32.MaxValue);
-            Gamma = gammaGen + 11;
-        }
-
-        public RID(String a) {
-            try {
-                byte[] barr = Convert.FromBase64String(a);
-                using (var ms = new MemoryStream(barr)) {
-                    Alpha = FiStreamExtensions.Read<Int64>(ms);
-                    Beta = FiStreamExtensions.Read<UInt32>(ms);
-                    Gamma = FiStreamExtensions.Read<UInt32>(ms);
-                }
-            } catch(Exception x) {
-                NewRid(); 
+            lock("GLOBAL_RID_GENERATION") {
+                Alpha = DateTime.UtcNow.Ticks;
+                Beta = (uint)rng.Next(0, Int32.MaxValue) + (uint)rng.Next(0, Int32.MaxValue);
+                Gamma = gammaGen + ++gammaseq;
             }
         }
 
@@ -79,13 +77,9 @@ namespace Figlotech.Core {
 
             return barr;
         }
-
-        public static implicit operator RID(String a) {
-            return new RID(a);
-        }
-
+        
         public static implicit operator String(RID a) {
-            return a.Value64;
+            return a.AsBase64;
         }
 
     }

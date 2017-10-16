@@ -17,7 +17,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public bool UseCriptography;
 
         public String RootDirectory { get; set; }
-        public int StreamBufferLength { get; set; } = 32 * 1024 * 1024;
+        public int MaxStreamBufferLength { get; set; } = 64 * 1024 * 1024;
 
         public String FixRel(ref string relative) {
             return relative = relative.Replace('\\', '/');
@@ -198,7 +198,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return new string[0];
             }
             return Directory.GetFiles(WorkingDirectory).Select(
-                (a) => FixRel(ref a));
+                (a) => {
+                    var s = a.Substring(RootDirectory.Length);
+                    if (s.StartsWith("\\")) {
+                        s = s.Substring(1);
+                    }
+                    return FixRel(ref s);
+                });
         }
 
         public void ParallelForDirectoriesIn(String relative, Action<String> execFunc) {
@@ -418,8 +424,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
+            var bufferLength = new FileInfo(WorkingDirectory).Length * 1.5;
+            bufferLength = Math.Max(256 * 1024, bufferLength);
+            bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 
-            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, StreamBufferLength);
+            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int) bufferLength);
         }
     }
 }

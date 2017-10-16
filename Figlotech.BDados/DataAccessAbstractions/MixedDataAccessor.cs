@@ -102,7 +102,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }));
                     }
                     foreach (var a in jobs) {
-                        a.Accompany();
+                        a.Await();
                     }
                     if (BypassMode) {
                         BypassMode = false;

@@ -17,7 +17,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Captcha", "Figlot
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.Tests", "Figlotech.BDados.Tests\Figlotech.BDados.Tests.csproj", "{6B2F8679-65AC-47F7-9269-A7B9FCA397F7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "test", "test\test.csproj", "{8D913CD4-5C2D-402B-AFD6-B5F442054512}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -57,6 +59,10 @@ Global
 		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D913CD4-5C2D-402B-AFD6-B5F442054512}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D913CD4-5C2D-402B-AFD6-B5F442054512}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D913CD4-5C2D-402B-AFD6-B5F442054512}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D913CD4-5C2D-402B-AFD6-B5F442054512}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

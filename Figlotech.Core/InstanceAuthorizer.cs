@@ -10,7 +10,7 @@ namespace Figlotech.Core
     {
         List<string> auths = new List<string>();
         public String GenerateAuthorization() {
-            var value = new RID().Value64;
+            var value = new RID().AsBase64;
             auths.Add(value);
             return value;
         }
