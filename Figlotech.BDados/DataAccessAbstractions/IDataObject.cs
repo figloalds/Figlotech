@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Interfaces;
+﻿using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Interfaces;
 using System;
 
 namespace Figlotech.BDados.DataAccessAbstractions {

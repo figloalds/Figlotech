@@ -33,7 +33,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #region **** Global Declaration ****
         protected IRdbmsPluginAdapter Plugin;
-        public bool RethrowExceptions = true;
+        public bool RethrowExceptions { get; set; } = true;
 
         //private DataAccessorPlugin.Config Plugin.Config;
         private int _simmultaneousConnections;
@@ -67,8 +67,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var f = LoadAll<T>(qb.Append("LIMIT 1"));
             if (f.Any()) {
                 return f.First();
-            }
-            else {
+            } else {
                 T quickSave = Default();
                 quickSave.RID = new T().RID;
                 SaveItem(quickSave);
@@ -90,8 +89,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var f = LoadAll<T>(qb, 1, 1);
             if (f.Any()) {
                 return f.First();
-            }
-            else {
+            } else {
                 T quickSave = Default();
                 SaveItem(quickSave);
                 return quickSave;
@@ -103,8 +101,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 Query("SELECT 1");
                 result = true;
-            }
-            catch (Exception) { }
+            } catch (Exception) { }
             return result;
         }
 
@@ -134,8 +131,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             String type = "VARCHAR(20)";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
-            }
-            else {
+            } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
                         type = $"VARCHAR({info.Size})";
@@ -193,12 +189,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var options = "";
             if (info.Options != null && info.Options.Length > 0) {
                 options = info.Options;
-            }
-            else {
+            } else {
                 if (!info.AllowNull) {
                     options += " NOT NULL";
-                }
-                else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
+                } else if (Nullable.GetUnderlyingType(field.GetType()) == null && field.FieldType.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
                 }
                 //if (info.Unique)
@@ -289,13 +283,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
 
                 if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
-
-                    var query = (IQueryBuilder)Plugin.QueryGenerator
-                        .GetType()
-                        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                        .MakeGenericMethod(input.GetType())
-                        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                    retvId = ((long?)ScalarQuery(query)) ?? 0;
+                    try {
+                        var query = (IQueryBuilder)Plugin.QueryGenerator
+                            .GetType()
+                            .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
+                            .MakeGenericMethod(input.GetType())
+                            .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
+                        var gid = ScalarQuery(query);
+                        if (gid is long l)
+                            retvId = l;
+                        if (gid is string s) {
+                            if(Int64.TryParse(s, out retvId)) {
+                            }
+                        }
+                    } catch(Exception x) {
+                        Fi.Tech.WriteLine(x.Message);
+                    }
                 }
 
                 if (retvId <= 0) {
@@ -306,8 +309,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .MakeGenericMethod(input.GetType())
                             .Invoke(Plugin.QueryGenerator, new Object[0]);
                         retvId = ((long?)ScalarQuery(query)) ?? 0;
-                    }
-                    catch (Exception x) {
+                        var gid = ScalarQuery(query);
+                        if (gid is long l)
+                            retvId = l;
+                        if (gid is string s) {
+                            if (Int64.TryParse(s, out retvId)) {
+                            }
+                        }
+                    } catch (Exception x) {
 
                     }
                 }
@@ -315,8 +324,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 //}
                 if (retvId > 0) {
                     input.ForceId(retvId);
-                }
-                else {
+                } else {
                 }
                 if (fn != null)
                     fn.Invoke();
@@ -403,8 +411,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         Type t = typeofCol;
                         Object o = dt.Rows[i][col.Name];
                         objBuilder[col] = o;
-                    }
-                    catch (Exception) { }
+                    } catch (Exception) { }
                 }
                 retv = add;
             }
@@ -433,8 +440,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Object o = dt.Rows[i][col.Name];
                     objBuilder[col] = o;
                 }
-            }
-            else {
+            } else {
                 retv = default(T);
             }
             return retv;
@@ -483,14 +489,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
                     .ToList();
 
-                for (int i = 0; i < dt.Rows.Count; i++) {
-                    T add = Fi.Tech.Map<T>(dt.Rows[i]);
-                    retv.Add(add);
-                }
+
+                Fi.Tech.Map(retv, dt);
+
                 Bench?.Mark("Build RecordSet");
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
+                if (RethrowExceptions) throw x;
                 Bench?.Mark("Build RecordSet");
             });
             return retv;
@@ -551,10 +557,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool TryOpen() {
             try {
                 Open();
-            }
-            catch (Exception x) {
+            } catch (Exception x) {
                 this.WriteLog(x.Message);
-                return false;
+                throw new BDadosException(String.Format(Fi.Tech.GetStrings().RDBMS_CANNOT_CONNECT, x.Message));
             }
             return true;
         }
@@ -566,8 +571,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Object retv = null;
             try {
                 retv = Query(qb).Rows[0][0];
-            }
-            catch (Exception) {
+            } catch (Exception) {
             }
             return retv;
         }
@@ -576,8 +580,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             T retv = default(T);
             try {
                 retv = (T)Query(query, args).Rows[0][0];
-            }
-            catch (Exception) {
+            } catch (Exception) {
             }
             return retv;
         }
@@ -589,109 +592,117 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IQueryGenerator QueryGenerator => Plugin.QueryGenerator;
 
-        public void GenerateValueObjectDefinitions(String defaultNamespace, String baseDir) {
-            Access(() => {
-                DataTable t = Query("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", this.Plugin.Config.Database);
-                DataTable cols = Query("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1", this.Plugin.Config.Database);
-                for (int i = 0; i < t.Rows.Count; i++) {
-                    String Tabela = (string)t.Rows[i]["TABLE_NAME"];
-                    List<String> lines = new List<String>();
-                    lines.Add($"// --------------------------------------------------");
-                    lines.Add($"// BDados v{Fi.Tech.GetVersion()}");
-                    lines.Add($"// Arquivo gerado automaticamente.");
-                    lines.Add($"// --------------------------------------------------");
-                    lines.Add("using System;");
-                    lines.Add("using Figlotech.BDados.Attributes;");
-                    lines.Add("using Figlotech.Core.Interfaces;");
-                    lines.Add("using Figlotech.BDados.Entity;");
-                    lines.Add("");
-                    lines.Add($"// ------------------------------------------");
-                    lines.Add($"// Tabela {Tabela} ");
-                    lines.Add($"// ------------------------------------------");
-                    lines.Add($"namespace {defaultNamespace} {{");
-                    lines.Add($"\t public partial class {Tabela} : BaseDataObject " + "{");
-                    for (int c = 0; c < cols.Rows.Count; c++) {
-                        var thisCol = cols.Rows[c];
-                        if (thisCol["TABLE_NAME"] != Tabela)
-                            continue;
-                        if (thisCol["COLUMN_NAME"] == "Id" ||
-                            thisCol["COLUMN_NAME"] == "RID")
-                            continue;
-                        StringBuilder attLineOptions = new StringBuilder();
-                        List<String> lineOptions = new List<String>();
-                        //for(int x = 0; x < cols.Columns.Count; x++) {
-                        //    Fi.Tech.Write(thisCol[x]);
-                        //    Fi.Tech.Write("|");
-                        //}
-                        //this.WriteLog();
-                        lines.Add("");
-                        if (thisCol["COLUMN_KEY"] == "PRI") {
-                            lineOptions.Add("PrimaryKey=true");
-                            lines.Add("\t\t[PrimaryKey]");
-                        }
-                        ulong? l = (ulong?)thisCol["CHARACTER_MAXIMUM_LENGTH"];
-                        if (l != null && l > 0)
-                            lineOptions.Add($"Size={l}");
-                        if ("YES" == (thisCol["IS_NULLABLE"]))
-                            lineOptions.Add("AllowNull=true");
-                        if (thisCol["COLUMN_KEY"] == "UNI")
-                            lineOptions.Add("Unique=true");
-                        if (thisCol["COLUMN_DEFAULT"] != null) {
-                            Object defVal = thisCol["COLUMN_DEFAULT"];
-                            if (defVal is String)
-                                defVal = "\"" + defVal + "\"";
-                            else
-                                defVal = defVal.ToString().ToLower();
-                            lineOptions.Add($"DefaultValue={defVal}");
-                        }
-                        for (int a = 0; a < lineOptions.Count; a++) {
-                            attLineOptions.Append(lineOptions[a]);
-                            if (a < lineOptions.Count - 1)
-                                attLineOptions.Append(", ");
-                        }
-                        lines.Add($"\t\t[Field({attLineOptions.ToString()})]");
+        //public void GenerateValueObjectDefinitions(String defaultNamespace, String baseDir) {
+        //    Access(() => {
+        //        DataTable t = Query("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", this.Plugin.Config.Database);
+        //        DataTable cols = Query("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1", this.Plugin.Config.Database);
+        //        for (int i = 0; i < t.Rows.Count; i++) {
+        //            String Tabela = (string)t.Rows[i]["TABLE_NAME"];
+        //            List<String> lines = new List<String>();
+        //            lines.Add($"// --------------------------------------------------");
+        //            lines.Add($"// BDados v{Fi.Tech.GetVersion()}");
+        //            lines.Add($"// Arquivo gerado automaticamente.");
+        //            lines.Add($"// --------------------------------------------------");
+        //            lines.Add("using System;");
+        //            lines.Add("using Figlotech.BDados.Attributes;");
+        //            lines.Add("using Figlotech.Core.Interfaces;");
+        //            lines.Add("using Figlotech.BDados.Entity;");
+        //            lines.Add("");
+        //            lines.Add($"// ------------------------------------------");
+        //            lines.Add($"// Tabela {Tabela} ");
+        //            lines.Add($"// ------------------------------------------");
+        //            lines.Add($"namespace {defaultNamespace} {{");
+        //            lines.Add($"\t public partial class {Tabela} : BaseDataObject " + "{");
+        //            for (int c = 0; c < cols.Rows.Count; c++) {
+        //                var thisCol = cols.Rows[c];
+        //                if (thisCol["TABLE_NAME"] != Tabela)
+        //                    continue;
+        //                if (thisCol["COLUMN_NAME"] == "Id" ||
+        //                    thisCol["COLUMN_NAME"] == "RID")
+        //                    continue;
+        //                StringBuilder attLineOptions = new StringBuilder();
+        //                List<String> lineOptions = new List<String>();
+        //                //for(int x = 0; x < cols.Columns.Count; x++) {
+        //                //    Fi.Tech.Write(thisCol[x]);
+        //                //    Fi.Tech.Write("|");
+        //                //}
+        //                //this.WriteLog();
+        //                lines.Add("");
+        //                if (thisCol["COLUMN_KEY"] == "PRI") {
+        //                    lineOptions.Add("PrimaryKey=true");
+        //                    lines.Add("\t\t[PrimaryKey]");
+        //                }
+        //                ulong? l = (ulong?)thisCol["CHARACTER_MAXIMUM_LENGTH"];
+        //                if (l != null && l > 0)
+        //                    lineOptions.Add($"Size={l}");
+        //                if ("YES" == (thisCol["IS_NULLABLE"]))
+        //                    lineOptions.Add("AllowNull=true");
+        //                if (thisCol["COLUMN_KEY"] == "UNI")
+        //                    lineOptions.Add("Unique=true");
+        //                if (thisCol["COLUMN_DEFAULT"] != null) {
+        //                    Object defVal = thisCol["COLUMN_DEFAULT"];
+        //                    if (defVal is String)
+        //                        defVal = "\"" + defVal + "\"";
+        //                    else
+        //                        defVal = defVal.ToString().ToLower();
+        //                    lineOptions.Add($"DefaultValue={defVal}");
+        //                }
+        //                for (int a = 0; a < lineOptions.Count; a++) {
+        //                    attLineOptions.Append(lineOptions[a]);
+        //                    if (a < lineOptions.Count - 1)
+        //                        attLineOptions.Append(", ");
+        //                }
+        //                lines.Add($"\t\t[Field({attLineOptions.ToString()})]");
 
-                        String tipo = "String";
-                        bool usgn = ((string)thisCol["COLUMN_TYPE"]).ToLower().Contains("unsigned");
-                        switch (((string)thisCol["DATA_TYPE"]).ToUpper()) {
-                            case "VARCHAR":
-                            case "CHAR":
-                                tipo = "String"; break;
-                            case "BIT":
-                            case "TINYINT":
-                                tipo = "bool"; break;
-                            case "INT":
-                                tipo = (usgn ? "u" : "") + "int"; break;
-                            case "BIGINT":
-                                tipo = (usgn ? "u" : "") + "long"; break;
-                            case "SMALLINT":
-                                tipo = (usgn ? "u" : "") + "short"; break;
-                            case "FLOAT":
-                            case "SINGLE":
-                                tipo = "float"; break;
-                            case "DOUBLE":
-                                tipo = "double"; break;
-                            case "DATETIME":
-                            case "TIMESTAMP":
-                            case "DATE":
-                            case "TIME":
-                                tipo = "DateTime"; break;
-                        }
-                        var nable = tipo != "String" && "YES" == (thisCol["IS_NULLABLE"]) ? "?" : "";
-                        lines.Add($"\t\tpublic {tipo}{nable} {thisCol["COLUMN_NAME"]};");
-                    }
-                    lines.Add("\t}");
-                    lines.Add("}");
-                    File.WriteAllLines(Path.Combine(baseDir, Tabela + ".cs"), lines);
-                }
-            });
-        }
+        //                String tipo = "String";
+        //                bool usgn = ((string)thisCol["COLUMN_TYPE"]).ToLower().Contains("unsigned");
+        //                switch (((string)thisCol["DATA_TYPE"]).ToUpper()) {
+        //                    case "VARCHAR":
+        //                    case "CHAR":
+        //                        tipo = "String"; break;
+        //                    case "BIT":
+        //                    case "TINYINT":
+        //                        tipo = "bool"; break;
+        //                    case "INT":
+        //                        tipo = (usgn ? "u" : "") + "int"; break;
+        //                    case "BIGINT":
+        //                        tipo = (usgn ? "u" : "") + "long"; break;
+        //                    case "SMALLINT":
+        //                        tipo = (usgn ? "u" : "") + "short"; break;
+        //                    case "FLOAT":
+        //                    case "SINGLE":
+        //                        tipo = "float"; break;
+        //                    case "DOUBLE":
+        //                        tipo = "double"; break;
+        //                    case "DATETIME":
+        //                    case "TIMESTAMP":
+        //                    case "DATE":
+        //                    case "TIME":
+        //                        tipo = "DateTime"; break;
+        //                }
+        //                var nable = tipo != "String" && "YES" == (thisCol["IS_NULLABLE"]) ? "?" : "";
+        //                lines.Add($"\t\tpublic {tipo}{nable} {thisCol["COLUMN_NAME"]};");
+        //            }
+        //            lines.Add("\t}");
+        //            lines.Add("}");
+        //            File.WriteAllLines(Path.Combine(baseDir, Tabela + ".cs"), lines);
+        //        }
+        //    });
+        //}
 
         int accessId = 0;
 
-        public Object Access(Action functions, Action<Exception> handler = null) {
-            if (ConnectionHandle != null && ConnectionHandle.State == ConnectionState.Open) {
+        public void Access(Action functions, Action<Exception> handler = null) {
+            Access(() => {
                 functions?.Invoke();
+                return 0;
+            }, handler);
+        }
+
+        public T Access<T>(Func<T> functions, Action<Exception> handler = null) {
+            if (functions == null) return default(T);
+            if (ConnectionHandle != null && ConnectionHandle.State == ConnectionState.Open) {
+                return functions.Invoke();
             }
             int aid = accessId;
             try {
@@ -700,15 +711,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Bench = new Benchmarker($"---- Access [{++aid}]");
                     Bench.WriteToStdout = showPerformanceLogs;
                 }
-                UseConnection(() => {
-                    using (ConnectionHandle)
-                        functions.Invoke();
+                return UseConnection(() => {
+                    return functions.Invoke();
                 });
                 var total = Bench?.TotalMark();
                 this.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
-                return null;
-            }
-            catch (Exception x) {
+                return default(T);
+            } catch (Exception x) {
                 var total = Bench?.TotalMark();
                 this.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
                 var ex = x;
@@ -717,26 +726,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     this.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
                     ex = ex.InnerException;
                 }
-                //if (WorkingTypes.Length > 0)
-                //    //Fi.Tech.AsyncOp(() => {
-                //    Access(() => {
-                //        bd.CheckStructure(WorkingTypes, false);
-                //    });
-                ////});
 
                 if (handler != null)
                     handler.Invoke(x);
                 else if (this.RethrowExceptions) {
                     throw x;
                 }
-                return null;
-            }
-            finally {
+                return default(T);
+            } finally {
                 if (!Plugin.Config.ContinuousConnection) {
                     Close();
                 }
-                //var total = Bench?.TotalMark();
-                //this.WriteLog(String.Format("(Total: {0,0} milis)", total));
             }
 
         }
@@ -748,7 +748,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DateTime Inicio = DateTime.Now;
             String QueryText = query.GetCommandText();
             DataTable retv = new DataTable();
-            Access(() => {
+            return Access(() => {
                 using (var command = ConnectionHandle.CreateCommand()) {
                     command.CommandText = QueryText;
                     command.CommandTimeout = Plugin.Config.Timeout;
@@ -768,34 +768,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
                     }
                     // --
-                    var adapter = Plugin.GetNewDataAdapter(command);
-                    DataSet ds = new DataSet();
+                    DataSet ds = Plugin.GetDataSet(command);
                     try {
-                        adapter.Fill(ds);
                         int resultados = 0;
                         if (ds.Tables.Count < 1) {
                             throw new BDadosException("Database did not return any table.");
                         }
                         resultados = ds.Tables[0].Rows.Count;
                         this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                        retv = ds.Tables[0];
-                    }
-                    catch (Exception x) {
+                        return ds.Tables[0];
+                    } catch (Exception x) {
                         this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                         this.WriteLog(x.Message);
                         this.WriteLog(x.StackTrace);
                         throw x;
-                    }
-                    finally {
-                        if (adapter is IDisposable d)
-                            d.Dispose();
+                    } finally {
                         command.Dispose();
                         this.WriteLog("------------------------------------");
                     }
-
                 }
             });
-            return retv;
         }
 
         public DataTable Query(String Query, params Object[] args) {
@@ -834,15 +826,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         result = command.ExecuteNonQuery();
                         var elaps = Bench?.Mark("Executed Statement");
                         this.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
-                    }
-                    catch (Exception x) {
+                    } catch (Exception x) {
                         this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
                         this.WriteLog(x.Message);
                         this.WriteLog(x.StackTrace);
                         this.WriteLog($"BDados Execute: {x.Message}");
                         throw x;
-                    }
-                    finally {
+                    } finally {
                         this.WriteLog("------------------------------------");
                         command.Dispose();
                     }
@@ -857,17 +847,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public void Close() {
             try {
                 ConnectionHandle.Close();
-            }
-            catch (Exception x) {
+            } catch (Exception x) {
                 this.WriteLog($"[{accessId}] BDados Close: {x.Message}");
             }
         }
 
-        private void UseConnection(Action func) {
+        private T UseConnection<T>(Func<T> func) {
+            if (func == null) return default(T);
             TryOpen();
-            lock (ConnectionHandle) {
-                func?.Invoke();
-            }
+            lock (ConnectionHandle)
+                using (ConnectionHandle)
+                    return func.Invoke();
         }
 
         public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
@@ -886,12 +876,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 Object v = r[f.Name];
                                 if (v == null) {
                                     f.SetValue(newval, null);
-                                }
-                                else {
+                                } else {
                                     f.SetValue(newval, r[f.Name]);
                                 }
-                            }
-                            catch (Exception x) {
+                            } catch (Exception x) {
                                 throw x;
                             }
                         }
@@ -900,22 +888,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 Object v = r[p.Name];
                                 if (v == null) {
                                     p.SetValue(newval, null);
-                                }
-                                else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
+                                } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
                                     p.SetValue(newval, r[p.Name]);
-                                }
-                                else {
+                                } else {
                                     p.SetValue(newval, Convert.ChangeType(r[p.Name], p.PropertyType));
                                 }
-                            }
-                            catch (Exception x) {
+                            } catch (Exception x) {
                                 throw x;
                             }
                         }
                         retv.Add(newval);
                     }
-                }
-                finally {
+                } finally {
                     Close();
                 }
             });
@@ -961,8 +945,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         qjoins.First().Excludes.Remove(infoField?.RemoteField);
                         continue;
                     }
-                }
-                else {
+                } else {
                     childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
                 }
 
@@ -1027,8 +1010,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (qfar.Any()) {
                     qfar.First().Excludes.Remove(info.FarField);
                     continue;
-                }
-                else {
+                } else {
                     String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.RID";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
@@ -1172,8 +1154,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 builtConditions.If(OrderingType != null).Then()
                                     .Append($"ORDER BY a.{OrderingType?.Name} {Ordering.ToString().ToUpper()}")
                                 .EndIf();
-                if(limit != null) {
-                    builtConditions.Append($"LIMIT {page??0}, {limit}");
+                if (limit != null) {
+                    builtConditions.Append($"LIMIT {(page ?? 0) * limit}, {limit}");
                 }
                 var dynamicJoinJumble = join.BuildObject<T>(
                         (build) => {
@@ -1188,8 +1170,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
                 //    retv.Add(list[i]);
                 //}
-            }
-            else {
+            } else {
                 this.WriteLog(cnd?.ToString());
 
                 retv.AddRange(LoadAll<T>(new ConditionParser().ParseExpression<T>(cnd)

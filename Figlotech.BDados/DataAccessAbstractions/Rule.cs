@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.Core.BusinessModel;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,15 +7,15 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions
 {
-    public class Rule<T> : IValidationRule<T> where T : IDataObject, new()
+    public class Rule<T> : IValidationRule<T> where T : IBusinessObject, new()
     {
-        Func<IBusinessObject<T>, ValidationErrors, ValidationErrors> validationFunction;
+        Func<T, ValidationErrors, ValidationErrors> validationFunction;
 
-        public Rule(Func<IBusinessObject<T>, ValidationErrors, ValidationErrors> rule) {
+        public Rule(Func<T, ValidationErrors, ValidationErrors> rule) {
             validationFunction = rule;
         }
 
-        public ValidationErrors Validate(IBusinessObject<T> ObjectToValidate, ValidationErrors errs) {
+        public ValidationErrors Validate(T ObjectToValidate, ValidationErrors errs) {
             return validationFunction(ObjectToValidate, errs);
         }
     }

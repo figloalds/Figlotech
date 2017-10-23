@@ -1,17 +1,14 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados.Helpers;
-using Figlotech.Core.Interfaces;
-using Figlotech.BDados;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Reflection;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
+using Figlotech.Core.BusinessModel;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class DataObject<T> : BaseDataObject, IBusinessObject<T> where T : IDataObject, new() {
+    public abstract class DataObject<T> : BaseDataObject, IDataObject, IBusinessObject where T: IDataObject, IBusinessObject, new() {
 
         [PrimaryKey]
         [Field(Options = "NOT NULL AUTO_INCREMENT PRIMARY KEY")]
@@ -45,7 +42,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public DataObject() { }
 
-        public virtual List<IValidationRule<T>> ValidationRules { get; set; } = new List<IValidationRule<T>>();
+        protected abstract IEnumerable<IValidationRule<T>> ValidationRules();
 
         public override ValidationErrors Validate() {
             ValidationErrors ve = new ValidationErrors();
@@ -55,17 +52,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             myValues.AddRange(this.GetType().GetFields());
             myValues.AddRange(this.GetType().GetProperties());
 
-            foreach (var a in ValidationRules) {
-                foreach (var err in a.Validate(this, new ValidationErrors())) {
+            T obj = default(T);
+            Fi.Tech.MemberwiseCopy(this, obj);
+            foreach (var a in ValidationRules()) {
+                foreach (var err in a.Validate(obj, new ValidationErrors())) {
                     ve.Add(err);
-                }
-            }
-
-            var reflector = new ObjectReflector(this);
-            foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
-                var info = field.GetCustomAttribute<ValidationAttribute>();
-                foreach (var error in info.Validate(field, reflector[field])) {
-                    ve.Add(error);
                 }
             }
 
@@ -126,20 +117,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 catch (Exception) { }
             }
         }
+        InstanceAuthorizer ia = new InstanceAuthorizer();
+        public string RunValidations() {
 
-        public virtual bool CascadingSave(Action fn = null, List<Type> alreadyTreatedTypes = null) {
-            if (alreadyTreatedTypes == null) {
-                alreadyTreatedTypes = new List<Type>();
-            }
-            if (alreadyTreatedTypes.Contains(this.GetType())) {
-                return true;
-            }
-            alreadyTreatedTypes.Add(this.GetType());
             var errors = new ValidationErrors();
-
-            if (this.RID == null) {
-                this.Init();
-            }
 
             errors.Merge(this.Validate());
             errors.Merge(this.ValidateInput());
@@ -151,7 +132,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
 
             if (errors.Count > 0) {
-                throw new ValidationException(errors);
+                throw new BusinessValidationException(errors);
+            }
+
+            return ia.GenerateAuthorization();
+        }
+
+        public virtual bool ValidateAndPersist(String iaToken) {
+            if (!ia.CheckAuthorization(iaToken)) {
+                ValidateAndPersist(RunValidations());
             }
 
             if (null == DataAccessor) {

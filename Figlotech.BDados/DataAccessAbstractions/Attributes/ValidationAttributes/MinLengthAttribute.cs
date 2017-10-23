@@ -3,6 +3,7 @@
 
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
 using Newtonsoft.Json;
 /**
 * Figlotech::Database::Entity::FieldAttribute

@@ -1,9 +1,4 @@
-﻿
-
-
-using Figlotech.BDados.DataAccessAbstractions;
-using Newtonsoft.Json;
-/**
+﻿/**
 * Figlotech::Database::Entity::FieldAttribute
 * Fields marked with this attribute will be automatically assigned
 * at validation start according to their lambda function.
@@ -12,12 +7,9 @@ using Newtonsoft.Json;
 * August/2014
 * 
 **/
+using Figlotech.Core.BusinessModel;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>

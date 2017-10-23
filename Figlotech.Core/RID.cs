@@ -31,9 +31,14 @@ namespace Figlotech.Core {
         }
         public ulong AsULong {
             get {
-                var a = ((UInt64) Alpha & 0xFFFFFFFFFFFF0000);
-                var c = (UInt16) (Gamma & 0x0000FFFF);
-                return a + c;
+                var a = ((UInt64)Alpha & 0xFFFFFFFFFFFF0000);
+                var c = (UInt16)(Gamma & 0x0000FFFF);
+                return a | c;
+            }
+        }
+        public byte[] AsByteArray {
+            get {
+                return this.ToByteArray();
             }
         }
 

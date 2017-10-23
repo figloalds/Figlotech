@@ -13,5 +13,7 @@ namespace Figlotech.Core {
         public string SCOPY_ACCESSORS_CANNOT_BE_SAME => "SmartCopy não pode copiar de um repositório para ele mesmo.";
 
         public string ERROR_IN_STRUCTURE_CHECK => "Erro ao verificar a estrutura.";
+
+        public string RDBMS_CANNOT_CONNECT => "Não foi possivel conectar ao RDBMS: {0}";
     }
 }

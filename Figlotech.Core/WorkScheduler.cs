@@ -25,8 +25,7 @@ namespace Figlotech.Core {
     }
 
 
-    public class WorkScheduler : IContinuousExecutor
-    {
+    public class WorkScheduler : IContinuousExecutor {
         List<WorkSchedule> schedules = new List<WorkSchedule>();
         Thread SchedulesThread;
         private bool isRunning;
@@ -49,7 +48,7 @@ namespace Figlotech.Core {
 
         public WorkScheduler(String name, bool init_started = false) {
             Name = name;
-            WorkQueuer.WorldQueuers.Add(this);
+
             if (init_started)
                 Start();
         }
@@ -82,13 +81,16 @@ namespace Figlotech.Core {
                             if (schedules[x].Start < DateTime.UtcNow) {
                                 var sched = schedules[x];
                                 schedules.RemoveAt(x);
-                                Fi.Tech.RunAndForget(sched.Job.action, () => {
-                                    if (sched.Repeat) {
-                                        sched.Start += sched.Interval;
-                                        schedules.Add(sched);
-                                    }
-                                    sched.Job.finished?.Invoke();
-                                });
+                                Fi.Tech.RunAndForget(
+                                    sched.Job.action, (ex) => {
+
+                                    }, () => {
+                                        if (sched.Repeat) {
+                                            sched.Start += sched.Interval;
+                                            schedules.Add(sched);
+                                        }
+                                        sched.Job.finished?.Invoke();
+                                    });
                                 break;
                             }
                         }
@@ -109,7 +111,7 @@ namespace Figlotech.Core {
                 try {
                     SchedulesThread.Join();
                 }
-                catch (Exception x) { }
+                catch (Exception) { }
             }
             isRunning = false;
         }

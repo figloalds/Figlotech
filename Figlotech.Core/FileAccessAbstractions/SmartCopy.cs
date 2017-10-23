@@ -124,13 +124,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
         /// The copier triggers this event to notify when it finishes counting files.
         /// </summary>
         public event Action<int> OnReportTotalFilesCount;
-        
+
         /// <summary>
         /// The copier triggers this event to notify that it finished processing a file.
         /// The arguments are Boolean saying rather the file changed or not and String with the 
         /// relative file path.
         /// </summary>
         public event Action<bool, String> OnReportProcessedFile;
+        /// <summary>
+        /// The copier triggers this event to notify that it finished processing a file.
+        /// The arguments are Boolean saying rather the file changed or not and String with the 
+        /// relative file path.
+        /// </summary>
+        public event Action<Exception> OnFileCopyException;
 
         /// <summary>
         /// <para>
@@ -221,9 +227,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             foreach (var a in HashList) {
                 wq.Enqueue(() => {
                     string hash = "";
-                    local.Read(a.RelativePath, (stream) => {
-                        hash = GetHash(stream);
-                    });
+                    if(local.Exists(a.RelativePath)) {
+                        local.Read(a.RelativePath, (stream) => {
+                            hash = GetHash(stream);
+                        });
+                    }
 
                     var processed = false;
 
@@ -247,10 +255,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
 
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
+                }, (ex) => {
+                    OnFileCopyException?.Invoke(ex);
+                    Fi.Tech.WriteLine(ex.Message);
                 }, () => {
 
-                }, (ex) => {
-                    Fi.Tech.WriteLine(ex.Message);
                 });
 
             }
@@ -258,9 +267,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             wq.Start();
             wq.Stop();
         }
-
-
-
+        
         int workedFiles = 0;
         private const string GZIP_FILE_SUFFIX = ".gz";
 
@@ -320,9 +327,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         }
                     }
                     OnReportProcessedFile?.Invoke(changed, f);
-                }, ()=> {
                 }, (x) => {
+                    OnFileCopyException?.Invoke(x);
                     Console.WriteLine(x.Message);
+                }, ()=> {
                 });
             });
 

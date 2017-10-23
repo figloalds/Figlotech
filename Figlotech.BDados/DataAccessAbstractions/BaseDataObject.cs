@@ -1,12 +1,12 @@
 ﻿using Figlotech.BDados.Builders;
 using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public abstract class BaseDataObject : 
-        IDataObject, ISaveable, IBusinessObject {
+    public abstract class BaseDataObject : IDataObject, ISaveable {
 
         public BaseDataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) {
             DataAccessor = dataAccessor;
@@ -45,16 +45,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public abstract bool Save(Action fn = null);
         public abstract bool Load(Action fn = null);
-
-
-        public virtual IAggregateRoot AggregateLoadById(long id) {
-            throw new NotImplementedException();
-        }
-
-        public virtual IAggregateRoot AggregateLoadByRid(string rid) {
-            throw new NotImplementedException();
-        }
-
+        
         // Optional stuff, override it or don't.
         // The save method will attempt to use them though.
 

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Figlotech.BDados.DataAccessAbstractions {
+namespace Figlotech.Core.BusinessModel {
     public class ValidationError {
         public string Key;
         public string Message;

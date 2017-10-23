@@ -52,13 +52,17 @@ namespace Figlotech.Core.Helpers {
                 double line = 0;
                 Console.WriteLine($" | 0ms ");
                 for (int i = 1; i < marks.Count - 1; i++) {
-                    var time = marks[i]
-                        .Timestamp.Subtract(marks[i - 1].Timestamp).TotalMilliseconds;
-                    var time2 = marks[i + 1]
-                        .Timestamp.Subtract(marks[i].Timestamp).TotalMilliseconds;
-                    line += time;
-                    var name = marks[i - 1].Name;
-                    Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
+                    try {
+                        var time = marks[i]
+                            .Timestamp.Subtract(marks[i - 1].Timestamp).TotalMilliseconds;
+                        var time2 = marks[i + 1]
+                            .Timestamp.Subtract(marks[i].Timestamp).TotalMilliseconds;
+                        line += time;
+                        var name = marks[i - 1].Name;
+                        Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
+                    } catch(Exception) {
+
+                    }
                 }
                 Console.WriteLine($" v {retv}ms");
                 Console.WriteLine($"--------------------------");

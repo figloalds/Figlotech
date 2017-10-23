@@ -1,17 +1,12 @@
-﻿using AppRostoJovem.Backend.Models;
+﻿using ErpSoftLeader.Models;
 using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.MySqlDataAccessor;
 using Figlotech.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.BDados.Tests
-{
+namespace Figlotech.BDados.Tests {
 
     [TestClass]
     public class SelAlLTest {
@@ -24,14 +19,13 @@ namespace Figlotech.BDados.Tests
                     User = "root",
                     Password = "asdafe1025",
                 });
-
-            var retv = da.CheckStructure(typeof(Pessoas).Assembly);
-
-            Pessoas pe = new Pessoas {
-                Nome = "Figloald_"
-            };
-            da.SaveItem(pe);
-            Assert.IsTrue(retv);
+            var u = da.LoadAll<Usuarios>(a => a.Login == "suporte").FirstOrDefault();
+            var sess = new Sessoes();
+            sess.Usuario = u.RID;
+            sess.Token = new RID().AsBase36;
+            sess.Ip = "asdfasdf";
+            da.SaveItem(sess);
+            da.LoadAll<Permissoes>(p => p.Usuario == u.RID);
 
         }
 

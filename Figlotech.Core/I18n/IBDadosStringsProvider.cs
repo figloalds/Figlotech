@@ -16,5 +16,6 @@ namespace Figlotech.Core.I18n
         string BDIOC_CANNOT_RESOLVE_TYPE { get; }
         string SCOPY_ACCESSORS_CANNOT_BE_SAME { get; }
         string ERROR_IN_STRUCTURE_CHECK { get; }
+        string RDBMS_CANNOT_CONNECT { get; }
     }
 }

@@ -15,6 +15,16 @@ namespace Figlotech.Core.Helpers {
             return members;
         }
 
+        public static IEnumerable<Type> GetLoadableTypesFrom(Assembly assembly) {
+            // TODO: Argument validation
+            try {
+                return assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex) {
+                return ex.Types.Where(a => a != null);
+            }
+        }
+
         public static object RunGeneric(object input, MethodInfo method, Type type, params object[] args) {
             return method.MakeGenericMethod(type).Invoke(input, args);
         }

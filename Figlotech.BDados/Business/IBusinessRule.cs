@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core.BusinessModel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
