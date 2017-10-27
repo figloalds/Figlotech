@@ -14,7 +14,7 @@ namespace Figlotech.BDados.CustomForms {
 
         public CustomForm() { }
 
-        public static CustomForm LoadFromFile(IFileAccessor fa, String Relative) {
+        public static CustomForm LoadFromFile(IFileSystem fa, String Relative) {
             if (fa == null)
                 return null;
             try {

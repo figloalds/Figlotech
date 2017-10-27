@@ -9,10 +9,10 @@ using System.Threading.Tasks;
 namespace Figlotech.Core.Extensions
 {
     public static class IFileAccessorExtensions {
-        public static void Copy(this IFileAccessor me, string origin, string destination) {
+        public static void Copy(this IFileSystem me, string origin, string destination) {
             Copy(me, origin, me, destination);
         }
-        public static void Copy(this IFileAccessor me, string origin, IFileAccessor remote, string destination) {
+        public static void Copy(this IFileSystem me, string origin, IFileSystem remote, string destination) {
             if(me is FileAccessor && remote is FileAccessor) {
                 using (var inStream = me.Open(origin, System.IO.FileMode.Open, System.IO.FileAccess.Read)) {
                     using (var outStream = remote.Open(destination, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite)) {

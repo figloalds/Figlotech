@@ -1,4 +1,4 @@
-﻿using Figlotech.Autokryptex;
+﻿using Figlotech.Core.Autokryptex;
 using Figlotech.BDados;
 using Figlotech.Core;
 using System;

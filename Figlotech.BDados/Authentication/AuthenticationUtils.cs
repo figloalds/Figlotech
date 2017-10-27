@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Text;
-using Figlotech.Autokryptex.EncryptMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods;
 
 namespace Figlotech.BDados.Authentication {
 

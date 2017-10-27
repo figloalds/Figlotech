@@ -1,4 +1,6 @@
-﻿using Newtonsoft.Json;
+﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.FileAcessAbstractions;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,15 +16,15 @@ namespace Figlotech.Core.Helpers {
     public class FTHSerializableOptions {
         public bool UseGzip { get; set; }
         public bool Formatted { get; set; }
+        public IEncryptionMethod UseEncryption { get; set; }
     }
 
     public static class IMultiSerializableObjectExtensions {
         public static void ToJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
-            var StreamOptions = new BatchStreamProcessor();
-            StreamOptions.Add(new GzipCompressStreamProcessor(options?.UseGzip ?? false));
-            
+
+            var StreamOptions = GetSaveStreamOptions(options);
             StreamOptions
                 .Process(rawStream, (usableStream) => {
 
@@ -33,9 +35,12 @@ namespace Figlotech.Core.Helpers {
                 });
         }
 
-        public static void ToJsonFile(this IMultiSerializableObject obj, String fileName, FTHSerializableOptions options = null) {
-            using (var fs = File.Open(fileName, FileMode.OpenOrCreate)) {
-                obj.ToJson(fs, options);
+        public static void ToJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            lock(obj)
+            {
+                fs.Write(fileName, fstream => {
+                    obj.ToJson(fstream, options);
+                });
             }
         }
 
@@ -43,8 +48,7 @@ namespace Figlotech.Core.Helpers {
             if (obj == null)
                 return;
 
-            var StreamOptions = new BatchStreamProcessor();
-            StreamOptions.Add(new GzipDecompressStreamProcessor(options?.UseGzip ?? false));
+            var StreamOptions = GetOpenStreamOptions(options);
 
             StreamOptions
                 .Process(rawStream, (usableStream) => {
@@ -62,21 +66,49 @@ namespace Figlotech.Core.Helpers {
                 });
         }
 
-        public static void FromJsonFile(this IMultiSerializableObject obj, String fileName, FTHSerializableOptions options = null) {
-            obj.FromJson(File.Open(fileName, FileMode.Open), options);
+        public static void FromJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            lock(obj)
+            {
+                fs.Read(fileName, fstream => {
+                    obj.FromJson(fstream, options);
+                });
+            }
         }
 
+        private static IStreamProcessor GetSaveStreamOptions(FTHSerializableOptions options) {
+            var retv = new BatchStreamProcessor();
+            if (options?.UseEncryption != null)
+            {
+                retv.Add(new CypherStreamProcessor(options.UseEncryption));
+            }
+            if (options?.UseGzip ?? false)
+            {
+                retv.Add(new GzipCompressStreamProcessor());
+            }
+            return retv;
+        }
+        private static IStreamProcessor GetOpenStreamOptions(FTHSerializableOptions options) {
+            var retv = new BatchStreamProcessor();
+            if (options?.UseEncryption != null)
+            {
+                retv.Add(new DecypherStreamProcessor(options.UseEncryption));
+            }
+            if (options?.UseGzip ?? false)
+            {
+                retv.Add(new GzipDecompressStreamProcessor());
+            }
+            return retv;
+        }
 
         public static void ToXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
 
-            var StreamOptions = new BatchStreamProcessor();
-            StreamOptions.Add(new GzipCompressStreamProcessor(options?.UseGzip ?? false));
+            var StreamOptions = GetSaveStreamOptions(options);
 
             StreamOptions
                 .Process(rawStream, (usableStream) => {
-
+                    
                     XmlSerializer xsSubmit = new XmlSerializer(obj.GetType());
                     var xml = "";
 
@@ -97,18 +129,17 @@ namespace Figlotech.Core.Helpers {
                 });
         }
 
-        public static void ToXmlFile(this IMultiSerializableObject obj, String fileName, FTHSerializableOptions options = null) {
-            using (var fs = File.Open(fileName, FileMode.OpenOrCreate)) {
-                obj.ToXml(fs, options);
-            }
+        public static void ToXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            fs.Write(fileName, fstream => {
+                obj.ToXml(fstream, options);
+            });
         }
 
         public static void FromXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
 
-            var StreamOptions = new BatchStreamProcessor();
-            StreamOptions.Add(new GzipDecompressStreamProcessor(options?.UseGzip ?? false));
+            var StreamOptions = GetOpenStreamOptions(options);
 
             StreamOptions
                 .Process(rawStream, (usableStream) => {
@@ -123,8 +154,10 @@ namespace Figlotech.Core.Helpers {
                 });
         }
 
-        public static void FromXmlFile(this IMultiSerializableObject obj, String fileName, FTHSerializableOptions options = null) {
-            obj.FromXml(File.Open(fileName, FileMode.Open), options);
+        public static void FromXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            fs.Read(fileName, fstream => {
+                obj.FromXml(fstream, options);
+            });
         }
     }
 }

@@ -1,14 +1,18 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Dynamic;
 using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.Core.Helpers {
-    public class ObjectReflector {
+    public class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>> {
         private object target;
+
         public ObjectReflector() {
         }
+
         public ObjectReflector(object o) {
             target = o;
             if (o == null) {
@@ -71,6 +75,15 @@ namespace Figlotech.Core.Helpers {
             manipulator.Slot(input);
             workAction(manipulator);
             return manipulator.Retrieve();
+        }
+        public IEnumerator<KeyValuePair<MemberInfo, object>> GetEnumerator() {
+            foreach(var a in ReflectionTool.FieldsAndPropertiesOf(target.GetType())) {
+                yield return new KeyValuePair<MemberInfo, object>(a, ReflectionTool.GetMemberValue(a, target));
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() {
+            return GetEnumerator();
         }
     }
 }

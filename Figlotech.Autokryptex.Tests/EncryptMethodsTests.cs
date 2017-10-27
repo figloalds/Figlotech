@@ -1,11 +1,11 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
-using Figlotech.Autokryptex.EncryptMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods;
 using Figlotech.BDados;
 using Figlotech.Core;
 
-namespace Figlotech.Autokryptex.Tests
+namespace Figlotech.Core.Autokryptex.Tests
 {
     [TestClass]
     public class EncryptMethodsTests {

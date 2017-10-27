@@ -20,8 +20,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
 
-        List<T> Query<T>(IQueryBuilder Query) where T : new();
-        List<T> Query<T>(String Query, params object[] args) where T : new();
+        IEnumerable<T> Query<T>(IQueryBuilder Query) where T : new();
+        IEnumerable<T> Query<T>(String Query, params object[] args) where T : new();
 
         DataTable Query(IQueryBuilder Query);
         DataTable Query(String Query, params object[] args);

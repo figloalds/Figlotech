@@ -88,52 +88,52 @@ namespace Figlotech.Core {
             var retv = new T();
             var objBuilder = new ObjectReflector();
             objBuilder.Slot(retv);
-            foreach (var col in fields) {
-                if (!propercolumns.Any(c=> c.ColumnName == col.Name)) continue;
-                var typeofCol = ReflectionTool.GetTypeOf(col);
-                object o = dr[col.Name];
-                var tocUlType = Nullable.GetUnderlyingType(typeofCol);
-                if (typeofCol.IsValueType && o == null) {
-                    continue;
-                }
-                if (o == null || o.GetType() == typeof(DBNull)) {
-                    objBuilder[col] = null;
-                } else {
+            foreach (var col in propercolumns) {
+                var mi = fields.FirstOrDefault(f => f.Name == col.ColumnName);
+                var typeofCol = ReflectionTool.GetTypeOf(mi);
+                object o = dr[col.ColumnName];
+                objBuilder[mi] = o;
+                //var tocUlType = Nullable.GetUnderlyingType(typeofCol);
+                //if (typeofCol.IsValueType && o == null) {
+                //    continue;
+                //}
+                //if (o == null || o.GetType() == typeof(DBNull)) {
+                //    objBuilder[col] = null;
+                //} else {
 
-                    if (tocUlType != null) {
-                        typeofCol = Nullable.GetUnderlyingType(typeofCol);
-                    } else {
-                    }
+                //    if (tocUlType != null) {
+                //        typeofCol = Nullable.GetUnderlyingType(typeofCol);
+                //    } else {
+                //    }
 
-                    if (typeofCol.IsEnum) {
-                        Int32 valEnum = 0;
-                        if (o is Int32 i) valEnum = i;
-                        if (o is string s) valEnum = Int32.Parse(s);
-                        objBuilder[col] = Enum.ToObject(typeofCol, valEnum);
-                        continue;
-                    } else
-                    if (o != null && o.GetType() != typeofCol) {
-                        objBuilder[col] = Convert.ChangeType(o, typeofCol);
-                    } else {
-                        objBuilder[col] = o;
-                    }
-                }
+                //    if (typeofCol.IsEnum) {
+                //        Int32 valEnum = 0;
+                //        if (o is Int32 i) valEnum = i;
+                //        if (o is string s) valEnum = Int32.Parse(s);
+                //        objBuilder[col] = Enum.ToObject(typeofCol, valEnum);
+                //        continue;
+                //    } else
+                //    if (o != null && o.GetType() != typeofCol) {
+                //        objBuilder[col] = Convert.ChangeType(o, typeofCol);
+                //    } else {
+                //        objBuilder[col] = o;
+                //    }
+                //}
             }
             return retv;
         }
 
-        public static void Map<T>(this Fi _selfie, IList<T> input, DataTable dt) where T : new() {
-            if (dt.Rows.Count < 1) return;
+        public static IEnumerable<T> Map<T>(this Fi _selfie, DataTable dt) where T : new() {
+            if (dt.Rows.Count < 1) yield break;
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt.Rows[0]);
-            Parallel.For(0, dt.Rows.Count, (i) => {
+            WorkQueuer wq = new WorkQueuer("map_list", Environment.ProcessorCount, true);
+            for(int i = 0; i < dt.Rows.Count; i++) {
                 var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta);
-                lock (input) {
-                    input.Add(val);
-                }
-            });
+                yield return val;
+            }
             Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
         }
 

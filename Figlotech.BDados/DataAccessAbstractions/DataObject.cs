@@ -52,8 +52,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             myValues.AddRange(this.GetType().GetFields());
             myValues.AddRange(this.GetType().GetProperties());
 
-            T obj = default(T);
-            Fi.Tech.MemberwiseCopy(this, obj);
+            T obj = obj = (T)(IBusinessObject)this;
+
             foreach (var a in ValidationRules()) {
                 foreach (var err in a.Validate(obj, new ValidationErrors())) {
                     ve.Add(err);

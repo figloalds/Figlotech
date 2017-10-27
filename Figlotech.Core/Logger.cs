@@ -10,8 +10,8 @@ namespace Figlotech.Core {
         public static int gid = 0;
         private int myid = ++gid;
         private int writec = 0;
-        public bool Enabled { get; set; }
-        public IFileAccessor FileAccessor { get; set; }
+        public bool Enabled { get; set; } = true;
+        public IFileSystem FileAccessor { get; set; }
 
         public List<String> BDadosLogCache = new List<String>();
         private object BDLogLock = new Object();
@@ -19,7 +19,7 @@ namespace Figlotech.Core {
         public bool EnableConsoleLogging { get; set; } = true;
         
         public Logger() { }
-        public Logger(IFileAccessor Accessor) {
+        public Logger(IFileSystem Accessor) {
             FileAccessor = Accessor;
         }
 

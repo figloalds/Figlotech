@@ -9,6 +9,9 @@ namespace Figlotech.BDados.DataAccessAbstractions
         IDbConnection GetNewConnection();
         DataSet GetDataSet(IDbCommand command);
         IQueryGenerator QueryGenerator { get; }
-        DataAccessorConfiguration Config { get; set; }
+        void SetConfiguration(IDictionary<string, object> a);
+        bool ContinuousConnection { get; }
+        int CommandTimeout { get; }
+        string SchemaName { get; }
     }
 }

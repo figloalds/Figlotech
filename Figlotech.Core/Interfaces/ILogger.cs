@@ -5,7 +5,7 @@ namespace Figlotech.Core.Interfaces {
     public interface ILogger {
         void WriteLog(String log);
 
-        IFileAccessor FileAccessor { get; set; }
+        IFileSystem FileAccessor { get; set; }
 
         bool Enabled { get; set; }
         

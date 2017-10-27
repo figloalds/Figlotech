@@ -154,7 +154,7 @@ namespace Figlotech.BDados.Builders {
                                     .Where(m => m.Name == "Add")
                                     .FirstOrDefault();
 
-                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
+                                Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
@@ -177,7 +177,9 @@ namespace Figlotech.BDados.Builders {
                                 if (objectType == null) {
                                     continue;
                                 }
-                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
+                                Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
+                                if (parentRid == null)
+                                    continue;
 
                                 var newObject = BuildAggregateList(type, parentRid, rel, dt).FirstOrDefault();
                                 objBuilder[fieldAlias] = newObject;
@@ -317,7 +319,7 @@ namespace Figlotech.BDados.Builders {
                                     .Where(m => m.Name == "Add")
                                     .FirstOrDefault();
 
-                                Object parentRid = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
+                                Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
                                 var newList = BuildAggregateList(ulType, parentRid, rel, dt);
                                 if (addMethod == null)
                                     continue;
@@ -341,7 +343,7 @@ namespace Figlotech.BDados.Builders {
                                 if (objectType == null) {
                                     continue;
                                 }
-                                Object parentValue = dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey];
+                                object parentValue = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
                                 if (parentValue == null) {
                                     continue;
                                 }

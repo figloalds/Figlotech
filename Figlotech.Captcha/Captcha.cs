@@ -1,4 +1,4 @@
-﻿using Figlotech.Autokryptex;
+﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core;
 using System;
 using System.Collections.Generic;

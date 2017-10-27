@@ -16,13 +16,15 @@ using Figlotech.Core;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T : IRdbmsPluginAdapter, new() {
-        public RdbmsDataAccessor(DataAccessorConfiguration config) : base(new T()) {
-            Plugin.Config = config;
+        public RdbmsDataAccessor(IDictionary<String, object> Configuration) : base(new T()) {
+            Plugin = new T();
+            Plugin.SetConfiguration(Configuration);
         }
     }
     public class RdbmsDataAccessor : IRdbmsDataAccessor {
 
         public ILogger Logger { get; set; }
+
         public Type[] _workingTypes = new Type[0];
         public Type[] WorkingTypes {
             get { return _workingTypes; }
@@ -38,8 +40,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //private DataAccessorPlugin.Config Plugin.Config;
         private int _simmultaneousConnections;
         private bool _accessSwitch = false;
-        public String SchemaName { get { return Plugin.Config.Database; } }
-
+        public String SchemaName { get { return Plugin.SchemaName; } }
+        
         public IDbConnection ConnectionHandle;
 
         private static int counter = 0;
@@ -345,17 +347,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ConnectionHandle;
         }
 
-        public List<T> Query<T>(IQueryBuilder query) where T : new() {
+        public IEnumerable<T> Query<T>(IQueryBuilder query) where T : new() {
             if (query == null) {
                 return new List<T>();
             }
-            var retv = new List<T>();
             DataTable resultado = Query(query);
-            Fi.Tech.Map<T>(retv, resultado);
-            return retv;
+            return Fi.Tech.Map<T>(resultado);
         }
 
-        public List<T> Query<T>(string queryString, params object[] args) where T : new() {
+        public IEnumerable<T> Query<T>(string queryString, params object[] args) where T : new() {
             return Query<T>(new QueryBuilder(queryString, args));
         }
 
@@ -395,7 +395,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             T retv = default(T);
 
             var name = GetIdColumn<T>();
-
 
             DataTable dt = Query(Plugin.QueryGenerator.GenerateSelect<T>(new ConditionParametrizer($"{name}=@1", Id)));
             int i = 0;
@@ -489,8 +488,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
                     .ToList();
 
-
-                Fi.Tech.Map(retv, dt);
+                retv.AddRange(Fi.Tech.Map<T>(dt));
 
                 Bench?.Mark("Build RecordSet");
             }, (x) => {
@@ -550,6 +548,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ConnectionHandle = Plugin.GetNewConnection();
             }
             if (ConnectionHandle.State != ConnectionState.Open) {
+                ConnectionHandle = Plugin.GetNewConnection();
                 ConnectionHandle.Open();
             }
         }
@@ -734,7 +733,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 return default(T);
             } finally {
-                if (!Plugin.Config.ContinuousConnection) {
+                if (!Plugin.ContinuousConnection) {
                     Close();
                 }
             }
@@ -751,7 +750,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access(() => {
                 using (var command = ConnectionHandle.CreateCommand()) {
                     command.CommandText = QueryText;
-                    command.CommandTimeout = Plugin.Config.Timeout;
+                    command.CommandTimeout = Plugin.CommandTimeout;
                     int i = 0;
                     this.WriteLog($"[{accessId}] -- Query: {QueryText}");
                     // Adiciona os parametros
@@ -807,7 +806,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             Access(() => {
                 Bench?.Mark("--");
-                this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.Config.Timeout}s timeout]");
+                this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
                 foreach (var param in query.GetParameters()) {
                     this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
                 }
@@ -820,7 +819,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             cmdParam.Value = param.Value;
                             command.Parameters.Add(cmdParam);
                         }
-                        command.CommandTimeout = Plugin.Config.Timeout;
+                        command.CommandTimeout = Plugin.CommandTimeout;
                         this.WriteLog(command.CommandText);
                         Bench?.Mark("Prepared Statement");
                         result = command.ExecuteNonQuery();
@@ -834,7 +833,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         throw x;
                     } finally {
                         this.WriteLog("------------------------------------");
-                        command.Dispose();
                     }
                 }
             });

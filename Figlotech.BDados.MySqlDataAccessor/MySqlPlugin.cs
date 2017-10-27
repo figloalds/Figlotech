@@ -2,20 +2,31 @@
 using MySql.Data.MySqlClient;
 using System;
 using System.Data;
+using System.Collections.Generic;
+using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlPlugin : IRdbmsPluginAdapter {
-        public MySqlPlugin(DataAccessorConfiguration cfg) {
+    public class MySqlPlugin : IRdbmsPluginAdapter
+    {
+        public MySqlPlugin(MySqlPluginConfiguration cfg)
+        {
             Config = cfg;
         }
 
         public MySqlPlugin() {
+
         }
 
         IQueryGenerator queryGenerator = new MySqlQueryGenerator();
         public IQueryGenerator QueryGenerator => queryGenerator;
 
-        public DataAccessorConfiguration Config { get; set; }
+        public MySqlPluginConfiguration Config { get; set; }
+
+        public bool ContinuousConnection => Config.ContinuousConnection;
+
+        public int CommandTimeout => Config.Timeout;
+
+        public string SchemaName => Config.Database;
 
         public IDbConnection GetNewConnection() {
             return new MySqlConnection(Config.GetConnectionString());
@@ -44,6 +55,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 var ds = new DataSet();
                 ds.Tables.Add(dt);
                 return ds;
+            }
+        }
+
+        public void SetConfiguration(IDictionary<string, object> settings) {
+            Config = new MySqlPluginConfiguration();
+            ObjectReflector o = new ObjectReflector(Config);
+            foreach (var a in settings) {
+                o[a.Key] = a.Value;
             }
         }
     }

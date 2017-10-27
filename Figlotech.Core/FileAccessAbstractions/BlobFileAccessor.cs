@@ -16,7 +16,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public DateTime LastWrite;
     }
 
-    public class BlobFileAccessor : IFileAccessor {
+    public class BlobFileAccessor : IFileSystem {
 
         private static int gid = 0;
         private static int myid = ++gid;

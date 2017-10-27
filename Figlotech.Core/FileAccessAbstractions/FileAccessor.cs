@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public class FileAccessor : IFileAccessor {
+    public class FileAccessor : IFileSystem {
 
         private static int gid = 0;
         private static int myid = ++gid;
@@ -67,8 +67,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
             LockRegion(WorkingDirectory, () => {
-                using (FileStream fs = new FileStream(WorkingDirectory, FileMode.OpenOrCreate, FileAccess.Write)) {
+                if (!File.Exists(WorkingDirectory)) {
+                    using (var f = File.Create(WorkingDirectory)) { }
+                }
+                using (Stream fs = Open(relative, FileMode.Truncate, FileAccess.Write)) {
                     func(fs);
+                    fs.Close();
                 }
             });
         }
@@ -252,13 +256,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public bool Read(String relative, Action<Stream> func) {
             RelToFs(ref relative);
+            if(!Exists(relative)) {
+                return false;
+            }
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
             if (!File.Exists(WorkingDirectory)) {
                 return false;
             }
             return LockRegion(WorkingDirectory, () => {
-                using (FileStream fs = new FileStream(WorkingDirectory, FileMode.Open)) {
+                using (Stream fs = Open(relative, FileMode.Open, FileAccess.Read)) {
                     func(fs);
+                    fs.Close();
                 }
                 return true;
             });
@@ -320,7 +328,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         private void LockRegion(String wd, Action act) {
-            lock (wd) {
+            lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
                 act?.Invoke();
             }
         }

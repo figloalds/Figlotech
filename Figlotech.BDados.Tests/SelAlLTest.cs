@@ -1,23 +1,32 @@
 ﻿using ErpSoftLeader.Models;
+using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.MySqlDataAccessor;
 using Figlotech.Core;
+using Figlotech.Core.Autokryptex;
+using Figlotech.Core.FileAcessAbstractions;
+using Figlotech.Core.Helpers;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
-namespace Figlotech.BDados.Tests {
+namespace Figlotech.BDados.Tests
+{
 
     [TestClass]
-    public class SelAlLTest {
+    public class SelAlLTest
+    {
         [TestMethod]
-        public void TestShit() {
+        public void TestShit()
+        {
             var da = new RdbmsDataAccessor<MySqlPlugin>(
-                new DataAccessorConfiguration {
-                    Database = "erpsl",
-                    Host = "localhost",
-                    User = "root",
-                    Password = "asdafe1025",
+                new Settings {
+                    { "Database", "erpsl" },
+                    { "Host", "localhost" },
+                    { "User", "root" },
+                    { "Password", "asdafe1025" },
                 });
             var u = da.LoadAll<Usuarios>(a => a.Login == "suporte").FirstOrDefault();
             var sess = new Sessoes();
@@ -26,21 +35,131 @@ namespace Figlotech.BDados.Tests {
             sess.Ip = "asdfasdf";
             da.SaveItem(sess);
             da.LoadAll<Permissoes>(p => p.Usuario == u.RID);
+        }
+
+        [TestMethod]
+        public void fileAccessormustNotbeShit()
+        {
+            var fs = new FileAccessor(".");
+            var context = "a";
+            WorkQueuer wq = new WorkQueuer("Test", 4, true);
+            for (int i = 0; i < 10; i++)
+            {
+                wq.Enqueue(() =>
+                {
+                    fs.Write(".test.txt", (stream) =>
+                    {
+                        using (var sw = new StreamWriter(stream))
+                            sw.Write(context);
+                    });
+                });
+                wq.Enqueue(() =>
+                {
+                    fs.Read(".test.txt", (stream) =>
+                    {
+                        using (var sw = new StreamReader(stream))
+                            context = sw.ReadToEnd();
+                    });
+                });
+            }
+            wq.Stop();
+        }
+
+        class sc : IMultiSerializableObject
+        {
+            public int i = new Random().Next();
+        }
+
+        [TestMethod]
+        public void testmserializable()
+        {
+            var s = new sc();
+            var sVal = s.i;
+            s.ToJsonFile(new FileAccessor("."), "file.json", new FTHSerializableOptions
+            {
+                UseEncryption = new BinaryBlur(),
+                UseGzip = true
+            });
+            s.i = 1234;
+            s.FromJsonFile(new FileAccessor("."), "file.json", new FTHSerializableOptions
+            {
+                UseEncryption = new BinaryBlur(),
+                UseGzip = true
+            });
+
+            var nVal = s.i;
+            Assert.AreEqual(sVal, nVal);
+        }
+
+        [TestMethod]
+        public void daquerymustwork()
+        {
+            var da = new RdbmsDataAccessor<MySqlPlugin>(
+                   new Settings {
+                    { "Database", "erpsl" },
+                    { "Host", "localhost" },
+                    { "User", "root" },
+                    { "Password", "asdafe1025" },
+                   });
+            var li = da.Query<Terminais>("SELECT * FROM Terminais").ToList();
+
+            Assert.IsTrue(li.Count > 0);
+        }
+
+        [TestMethod]
+        public void daquerymustwork2()
+        {
+            var da = new RdbmsDataAccessor<MySqlPlugin>(
+                   new Settings {
+                    { "Database", "erpsl" },
+                    { "Host", "localhost" },
+                    { "User", "root" },
+                    { "Password", "asdafe1025" },
+                   });
+            var li = new RecordSet<Pessoas>(da).LoadAll(new Conditions<Pessoas>(p=> true), 1);
+            Console.WriteLine(li.Count);
+            Console.WriteLine(li.Count);
+
+            Console.WriteLine(li.Count);
+
+            Console.WriteLine(li.Count);
+            Console.WriteLine(li.Count);
+
 
         }
 
         [TestMethod]
-        public void RIDGeneratorMustWork() {
-            for (int i = 0; i < 10000; i++) {
+        public void StreamProcessorsShouldWork()
+        {
+            var pro = new BatchStreamProcessor();
+            var method = new BinaryScramble(451);
+            pro.Add(new CypherStreamProcessor(method));
+            pro.Add(new DecypherStreamProcessor(method));
+            byte[] bytes = new byte[] { 0x10, 0x20, 0x30, 0x40 };
+            MemoryStream ms = new MemoryStream(bytes);
+            MemoryStream output = new MemoryStream(bytes);
+            pro.Process(ms, input => input.CopyTo(output));
+
+            var outbytes = output.ToArray();
+            Assert.IsTrue(bytes.SequenceEqual(outbytes));
+        }
+
+        [TestMethod]
+        public void RIDGeneratorMustWork()
+        {
+            for (int i = 0; i < 10000; i++)
+            {
                 Console.WriteLine(new RID().ToString());
             }
         }
 
         [TestMethod]
-        public void WorkQueuerShouldWork() {
+        public void WorkQueuerShouldWork()
+        {
             int a = 0;
             WorkQueuer wq = new WorkQueuer("wq", Environment.ProcessorCount);
-            for (int i = 0; i < 10000; i++) {
+            for (int i = 0; i < 10000; i++)
+            {
                 wq.Enqueue(() => a++);
             }
             wq.Start();
@@ -50,14 +169,15 @@ namespace Figlotech.BDados.Tests {
 
 
         [TestMethod]
-        public void IntExReliability() {
+        public void IntExReliability()
+        {
             Random rng = new Random();
-            ulong a = (ulong) rng.Next();
-            var b36a = new IntEx((long) a).ToString(IntEx.Base36);
+            ulong a = (ulong)rng.Next();
+            var b36a = new IntEx((long)a).ToString(IntEx.Base36);
             ulong _a = (ulong)new IntEx(b36a, IntEx.Base36).ToLong();
             Assert.AreEqual(a, _a);
 
-            ulong b = (ulong) rng.Next();
+            ulong b = (ulong)rng.Next();
             var b36b = new IntEx(BitConverter.GetBytes(b)).ToString(IntEx.Base36);
             ulong _b = (ulong)new IntEx(b36b, IntEx.Base36).ToLong();
             Assert.AreEqual(b, _b);
@@ -65,14 +185,18 @@ namespace Figlotech.BDados.Tests {
 
 
         [TestMethod]
-        public void RIDGenerationShouldBeAwesome() {
+        public void RIDGenerationShouldBeAwesome()
+        {
             List<ulong> li = new List<ulong>();
-            for(int i = 0; i < 5000; i++) {
+            for (int i = 0; i < 5000; i++)
+            {
                 li.Add(new RID().AsULong);
             }
 
-            for(int i = li.Count-1; i > 0; i--) {
-                for(int j = i-1; j >= 0; j--) {
+            for (int i = li.Count - 1; i > 0; i--)
+            {
+                for (int j = i - 1; j >= 0; j--)
+                {
                     if (li[i] == li[j])
                         throw new Exception("RID GENERATOR IS DUPLICATING STUFF");
                 }

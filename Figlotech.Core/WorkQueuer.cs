@@ -56,7 +56,7 @@ namespace Figlotech.Core {
             //            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
             //#endif
         }
-        
+
     }
     public class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
@@ -101,7 +101,7 @@ namespace Figlotech.Core {
                     a.Priority = value;
             }
         }
-        
+
         public WorkQueuer(String name, int maxThreads = -1, bool init_started = true) {
             if (maxThreads <= 0) {
                 maxThreads = Environment.ProcessorCount - 1;
@@ -112,7 +112,7 @@ namespace Figlotech.Core {
             if (init_started)
                 Start();
         }
-        
+
         public void Pause() {
 
         }
@@ -121,7 +121,7 @@ namespace Figlotech.Core {
             Active = false;
             if (wait) {
                 _supervisor.Join();
-                while(workers.Count > 0) {
+                while (workers.Count > 0) {
                     workers[workers.Count - 1].Join();
                     workers.RemoveAt(workers.Count - 1);
                 }
@@ -148,26 +148,27 @@ namespace Figlotech.Core {
 
         private void SupervisorJob() {
             int wqc = 0;
+            int numWorkers = 0;
             var clearHolds = DateTime.UtcNow;
             while (Active || wqc > 0) {
-                lock(workers) {
-                    workers.RemoveAll(t => t.ThreadState != ThreadState.Running);
-                }
-                lock (workQueue) {
-                    wqc = workQueue.Count;
-                }
-                while (wqc > workers.Count && workers.Count < parallelSize) {
-                    lock(workers) {
-                        workers.Add(SpawnWorker());
+                lock (workers) {
+                    numWorkers = workers.Count;
+                    workers.RemoveAll(t => t.ThreadState == ThreadState.Stopped);
+                    workers.RemoveAll(t => t.ThreadState == ThreadState.Aborted);
+                    lock (workQueue) {
+                        wqc = workQueue.Count;
                     }
-                }
-                if(DateTime.UtcNow.Subtract(clearHolds) > TimeSpan.FromMilliseconds(GcInterval)) {
-                    lock(holdJobs) {
-                        holdJobs.Clear();
+                    while (wqc > workers.Count && workers.Count < parallelSize) {
+                        SpawnWorker();
                     }
-                    clearHolds = DateTime.UtcNow;
+                    if (DateTime.UtcNow.Subtract(clearHolds) > TimeSpan.FromMilliseconds(GcInterval)) {
+                        lock (holdJobs) {
+                            holdJobs.Clear();
+                        }
+                        clearHolds = DateTime.UtcNow;
+                    }
+                    Thread.Sleep(DefaultSleepInterval);
                 }
-                Thread.Sleep(DefaultSleepInterval);
             }
         }
 
@@ -176,11 +177,11 @@ namespace Figlotech.Core {
             DateTime lastJobProcessedStamp = DateTime.UtcNow;
             Thread workerThread = new Thread(() => {
                 WorkJob job;
-                int wqc = 9999;
-                while(true) {
+                int wqc = 1;
+                while (true) {
                     job = null;
                     lock (workQueue) {
-                        if(workQueue.Count > 0) {
+                        if (workQueue.Count > 0) {
                             job = workQueue.Dequeue();
                             // This is to prevent GC from spawning crazy during operations.
                             lock (holdJobs)
@@ -193,8 +194,7 @@ namespace Figlotech.Core {
                         var idleTime = DateTime.UtcNow.Subtract(lastJobProcessedStamp).TotalMilliseconds;
                         if (idleTime > WorkerIdleTimeout) {
                             return;
-                        }
-                        else {
+                        } else {
                             if (!Active)
                                 return;
                             Thread.Sleep(100);
@@ -203,7 +203,7 @@ namespace Figlotech.Core {
                     }
 
                     lock (job) {
-                        
+
                         job.dequeued = DateTime.Now;
                         Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
 
@@ -213,8 +213,7 @@ namespace Figlotech.Core {
                             job?.finished?.Invoke();
                             job.completed = DateTime.Now;
                             Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
-                        }
-                        catch (Exception x) {
+                        } catch (Exception x) {
                             job.completed = DateTime.Now;
                             Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
                             job?.handling?.Invoke(x);
@@ -227,8 +226,11 @@ namespace Figlotech.Core {
                 }
             });
             workerThread.Priority = DefaultWorkerPriority;
-            workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count+1}";
+            workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
             workerThread.Start();
+            lock (workers) {
+                workers.Add(workerThread);
+            }
             return workerThread;
         }
 
@@ -274,7 +276,7 @@ namespace Figlotech.Core {
             TotalWork++;
             var retv = new WorkJob(a, finished, exceptionHandler);
             Fi.Tech.WriteLine($"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
-            lock(workQueue) {
+            lock (workQueue) {
                 workQueue.Enqueue(retv);
             }
 

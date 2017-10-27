@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public interface IFileAccessor {
+    public interface IFileSystem {
 
         void Write(string relative, Action<Stream> func);
 

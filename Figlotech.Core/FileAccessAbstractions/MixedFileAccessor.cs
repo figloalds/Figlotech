@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using System.IO;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public class MixedFileAccessor : IFileAccessor {
+    public class MixedFileAccessor : IFileSystem {
 
         List<FileAccessor> accessors = new List<FileAccessor>();
         public MixedFileAccessor(params FileAccessor[] inputAccessors) {

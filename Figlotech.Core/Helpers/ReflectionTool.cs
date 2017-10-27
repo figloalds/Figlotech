@@ -19,8 +19,7 @@ namespace Figlotech.Core.Helpers {
             // TODO: Argument validation
             try {
                 return assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex) {
+            } catch (ReflectionTypeLoadException ex) {
                 return ex.Types.Where(a => a != null);
             }
         }
@@ -65,18 +64,12 @@ namespace Figlotech.Core.Helpers {
                 if (member == null) {
                     return false;
                 }
-                var t = GetTypeOf(member);
-                t = Nullable.GetUnderlyingType(t) ?? t;
-                if (value != null) {
-                    if (t.IsEnum && value.GetType().IsAssignableFrom(typeof(Int32))) {
-                        value = Enum.ToObject(t, (int)value);
-                    } else {
-                        value = Convert.ChangeType(value, t);
-                    }
-                }
                 SetMemberValue(member, target, value);
                 return true;
-            } catch (Exception) {
+            } catch (Exception x) {
+                if(StrictMode) {
+                    throw x;
+                }
             }
             return false;
         }
@@ -95,12 +88,58 @@ namespace Figlotech.Core.Helpers {
             }
             return null;
         }
+
+        static object ResolveEnum(Type t, object val) {
+            if (!t.IsEnum)
+                return val;
+            int v;
+            if (val is string s) {
+                if (Int32.TryParse(s, out v)) {
+                    return Enum.ToObject(t, v);
+                } else {
+                    return Enum.Parse(t, s);
+                }
+            }
+            return val;
+        }
+        static Type ToUnderlying(Type t) {
+            return Nullable.GetUnderlyingType(t) ?? t;
+        }
+
+        public static object DbEvalValue(object value, Type t) {
+            if (value is DBNull)
+                return null;
+            if (value == null)
+                return null;
+            t = ToUnderlying(t);
+            value = ResolveEnum(t, value);
+
+            return value;
+        }
+
+        public static object DbDeNull(object value) {
+            if (value is DBNull)
+                return null;
+            if (value == null)
+                return null;
+            return value;
+        }
+
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
-                if (member is PropertyInfo) {
+                var t = GetTypeOf(member);
+                value = DbEvalValue(value, t);
+                t = ToUnderlying(t);
+                if (value == null && t.IsValueType) {
+                    return;
+                }
+                if(value != null && !value.GetType().IsAssignableFrom(t)) {
+                    value = Convert.ChangeType(value, t);
+                }
+                if (member is PropertyInfo pi) {
                     ((PropertyInfo)member).SetValue(target, value);
                 }
-                if (member is FieldInfo) {
+                if (member is FieldInfo fi) {
                     ((FieldInfo)member).SetValue(target, value);
                 }
             } catch (Exception x) {

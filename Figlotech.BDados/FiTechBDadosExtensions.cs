@@ -11,10 +11,13 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Figlotech.BDados {
+    public class Settings : Dictionary<String, Object> { }
+
     /// <summary>
     /// This is an utilitarian class, it provides quick static logic 
     /// for the rest of BDados to operate
     /// </summary>
+    /// 
     public static partial class FiTechBDadosExtensions {
         //        private static Object _readLock = new Object();
         //        private static int _generalId = 0;
@@ -406,7 +409,7 @@ namespace Figlotech.BDados {
             } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
-                        type = $"VARCHAR({info.Size})";
+                        type = $"VARCHAR({(info.Size > 0? info.Size : 128)})";
                         break;
                     case "int":
                     case "int32":
