@@ -1,35 +1,34 @@
 # Figlotech
 
-This repository contains all of my handcrafted libraries and tools.
-These projects are in the .NET Core csproj version, but they're using NET462
-Some things in these projects use stuff that doesnt work out of the box on NETCOREAPP1.1
-but these projects might work on linux through Mono (I think)
+This repository contains my "top notch" set of personal gimmicks.
+This code is not good, and I'm aware.
+This contains a lot of stuff that is better implemented elsewhere, like Tasking.
+This code is not documented and written with the purpose of learning and exploring different ways to write less to achieve more.
 
-This code is not "good" for commercial use,
-I cannot guarantee that this stuff will work for anyone else's needs.
-Or that it will at all work.
-It's here just so that maybe people may bash my bad coding and maybe I learn something
-Or maybe people like something and suggest or find something interesting and use the ideas on new projects.
-And also, specially, it's here as a backup.
+# Figlotech.Core
 
-# Figlotech.Autokryptex
-Provides simple encryption algorithms for quick encrypting.
-There's something new and special about this lib, it generates keys using an unusual pseudo-random algorithm.
-Also, the generation algorithm allows the definition of a global "AppKey" (through calling static `CrossRandom.UseAppKey(String key)`)
-AND an instance key.
-You can call the UseInstanceKey multiple times and all of the keys will affect the final results of the overall generator.
-So if you set multiple strings as keys, you'll need to know all of them in the same order to achieve the same ordered results as the first time.
-Now, a disclaimer: I'm really bad at math and I don't really know if this is actually useful or way too rubbish. I mean, AES and RSA involve all of that crazy mathmagic I can't legitemately keep with. this is just: Take these primes and manipulate them arround;
-Objective: A simple algorithm able to encrypt stuff and keep this encrypted data safe even if everyone and their mom's know the code, requiring reverse engineering in the binary in order to find the real secret to decrypt it.
-Needs from NET462: 
-- System.Cryptography for Figlotech.Autokryptex.EncriptionMethods.AesEnkryptor
+Exposes basic interfacing concepts that can be used across several types of applications and which implementations can be easily replaced. I really believe in standardized contracts that could be used anywhere, these contracts should make classes that use them more resistant to refactoring, through the abstraction of implementations, for example: IFileSystem here represents "some thing that provides files and folders", it doesn't matter if its using System.IO, Blob Storage, In-Memory documents or other, the class using an IFileSystem only cares that the injected implementation provide files and folders. This makes it easier for me to switch gigantic processes from using local filesystem to cloud or vice-versa with two or so lines of code.
+In this assembly we have:
+ - The Fi Class, its an empty "utility" singleton, its whole static functionality rely on extension classes/methods.
+ - Object Extensions: 
+     - Provides easy To/From json to any object, powered by Newtonsoft.Json
+     - Provides easy To/From Dictionary<string, object>
+     - Provides easy access to ObjectReflector instance for treating runtime object as Dictionary without actually turning it into a Dictionary or using dynamic
+     - Provides easy CopyFrom class to copy values from another object (shallow memberwise copy.
+ - AutoKryptex: Basic 'cryptography', its really way too basic.
+ - FileAccessAbstractions
+     - Defines a model of IFileSystem that represents a repository able to provide files in folders.
+     - Contains SmartCopy class for mirroring folders (like Robocopy), its a bit clumsy still, but I already use it for update systems and it supports BlobFileAccessor, and GZip so uploading to azure is just easy.
+ - Helpers
+     - Tools for a step higher/easier reflecting through objects and types.
+ - Basic chronometer
+ - RID generation
+ - Basic other stuff.
+ - Crazy experimental stuff.
 
 # Figlotech.BDados
-Provides a structure for using rich decoupled data-capable business objects with some level of dependency injection
-Still needs a lot of work though, this project implements some DataAccessors, but the main RDBMS DataAccessors are implemented separetely.
-Needs from NET462: 
-- System.Management for FiglotechTools.BDados.FTH (used to get CPU_ID, hope to remove that need soon)
-- System.Data.DataSetExtensions (used for JoinGeneration and ObjectBuilding logic. IRDBMSDataAccessors in this lib use Ado.Net, IDK what's the Ado.Net substitute in NET CORE)
+
+It works almost like Dapper, but in my way. Its my personal way of wrapping the Ado .Net and its been working nicely since 2013. In spite of the ongoing breaking changes and refactorings.
 
 # imgdput
 This command line tool compares images in a folder and separates duplicate images from uniques
