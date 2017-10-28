@@ -26,6 +26,35 @@ namespace Figlotech.Core {
         private static int _generalId = 0;
         public static ILogger ApiLogger;
 
+        public static object Null(this Fi _selfie) {
+            return null;
+        }
+
+        private static bool CheckParams(IEnumerable<Type> types, IEnumerable<object> vals) {
+            var numitems = 0;
+            if ((numitems = types.Count()) != vals.Count())
+                return false;
+            IEnumerator<Type> et = types.GetEnumerator();
+            IEnumerator<object> ev = vals.GetEnumerator();
+            while (et.MoveNext()) {
+                ev.MoveNext();
+                if (ev.Current == null && et.Current.IsValueType)
+                    return false;
+                if (!et.Current.IsAssignableFrom(ev.Current.GetType()))
+                    return false;
+            }
+            return true;
+        }
+
+        public static T Invoke<T>(this Fi _selfie, Type staticType, string GenericMethodName, Type genericType, params object[] args) {
+            return (T)staticType
+                .GetMethods()
+                .Where(m => m.Name == (nameof(FiTechCoreExtensions.MapMeta)))
+                .FirstOrDefault(m => CheckParams(m.GetParameters().Select(p => p.GetType()), args))
+                .MakeGenericMethod(genericType)
+                .Invoke(null, args);
+        }
+
         public static bool EnableStdoutLogs { get; set; } = false;
 
         public static void StdoutLogs(this Fi _selfie, bool status) {
@@ -72,66 +101,54 @@ namespace Figlotech.Core {
             }
         }
 
-        public static Tuple<List<MemberInfo>, List<DataColumn>> MapMeta<T>(this Fi _selfie, DataRow dr) {
-            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            DataColumnCollection columns = dr.Table.Columns;
+        public static Tuple<List<MemberInfo>, List<DataColumn>> MapMeta(this Fi _selfie, Type t, DataTable dt) {
+            var fields = ReflectionTool.FieldsAndPropertiesOf(t);
+            DataColumnCollection columns = dt.Columns;
             List<DataColumn> properColumns = new List<DataColumn>();
             foreach (DataColumn column in columns)
                 properColumns.Add(column);
 
             return new Tuple<List<MemberInfo>, List<DataColumn>>(fields, properColumns);
         }
+        public static Tuple<List<MemberInfo>, List<DataColumn>> MapMeta<T>(this Fi _selfie, DataTable dt) {
+            return MapMeta(_selfie, typeof(T), dt);
+        }
 
-        public static T Map<T>(this Fi _selfie, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta) where T : new() {
+        public static void Map(this Fi _selfie, object retv, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta, Dictionary<string, string> mapReplacements = null) {
+            if(preMeta == null) {
+                preMeta = Fi.Tech.MapMeta(retv.GetType(), dr.Table);
+            }
             var fields = preMeta.Item1;
             var propercolumns = preMeta.Item2;
-            var retv = new T();
             var objBuilder = new ObjectReflector();
             objBuilder.Slot(retv);
             foreach (var col in propercolumns) {
-                var mi = fields.FirstOrDefault(f => f.Name == col.ColumnName);
-                var typeofCol = ReflectionTool.GetTypeOf(mi);
                 object o = dr[col.ColumnName];
-                objBuilder[mi] = o;
-                //var tocUlType = Nullable.GetUnderlyingType(typeofCol);
-                //if (typeofCol.IsValueType && o == null) {
-                //    continue;
-                //}
-                //if (o == null || o.GetType() == typeof(DBNull)) {
-                //    objBuilder[col] = null;
-                //} else {
-
-                //    if (tocUlType != null) {
-                //        typeofCol = Nullable.GetUnderlyingType(typeofCol);
-                //    } else {
-                //    }
-
-                //    if (typeofCol.IsEnum) {
-                //        Int32 valEnum = 0;
-                //        if (o is Int32 i) valEnum = i;
-                //        if (o is string s) valEnum = Int32.Parse(s);
-                //        objBuilder[col] = Enum.ToObject(typeofCol, valEnum);
-                //        continue;
-                //    } else
-                //    if (o != null && o.GetType() != typeofCol) {
-                //        objBuilder[col] = Convert.ChangeType(o, typeofCol);
-                //    } else {
-                //        objBuilder[col] = o;
-                //    }
-                //}
+                string objField;
+                if(mapReplacements != null && mapReplacements.ContainsKey(col.ColumnName)) {
+                    objField = mapReplacements[col.ColumnName];
+                } else {
+                    objField = col.ColumnName;
+                }
+                objBuilder[objField] = o;
             }
+        }
+
+        public static T Map<T>(this Fi _selfie, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta = null, Dictionary<string, string> mapReplacements = null) where T : new() {
+            var retv = new T();
+            Map(_selfie, retv, dr, preMeta, mapReplacements);
             return retv;
         }
 
-        public static IEnumerable<T> Map<T>(this Fi _selfie, DataTable dt) where T : new() {
+        public static IEnumerable<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
             if (dt.Rows.Count < 1) yield break;
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
-            var mapMeta = Fi.Tech.MapMeta<T>(dt.Rows[0]);
+            var mapMeta = Fi.Tech.MapMeta<T>(dt);
             WorkQueuer wq = new WorkQueuer("map_list", Environment.ProcessorCount, true);
             for(int i = 0; i < dt.Rows.Count; i++) {
-                var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta);
+                var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta, mapReplacements);
                 yield return val;
             }
             Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");

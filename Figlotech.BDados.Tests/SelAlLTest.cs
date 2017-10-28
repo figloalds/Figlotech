@@ -1,4 +1,5 @@
-﻿using ErpSoftLeader.Models;
+﻿using ErpSoftLeader;
+using ErpSoftLeader.Models;
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.MySqlDataAccessor;
@@ -11,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace Figlotech.BDados.Tests
 {
@@ -92,6 +94,20 @@ namespace Figlotech.BDados.Tests
         }
 
         [TestMethod]
+        public void StrucheckShouldGatherInfo() {
+            var da = new RdbmsDataAccessor<MySqlPlugin>(
+                   new Settings {
+                    { "Database", "erpsl" },
+                    { "Host", "localhost" },
+                    { "User", "root" },
+                    { "Password", "asdafe1025" },
+                   });
+            var NEA = new StructureChecker(da, typeof(GlobalBusiness).Assembly.GetTypes()).EvaluateNecessaryActions().ToList();
+            //new StructureChecker(da, typeof(GlobalBusiness).Assembly.GetTypes()).CheckStructure();
+            Assert.IsTrue(NEA.Count > 0);
+        }
+
+        [TestMethod]
         public void daquerymustwork()
         {
             var da = new RdbmsDataAccessor<MySqlPlugin>(
@@ -117,6 +133,7 @@ namespace Figlotech.BDados.Tests
                     { "Password", "asdafe1025" },
                    });
             var li = new RecordSet<Pessoas>(da).LoadAll(new Conditions<Pessoas>(p=> true), 1);
+            var objs = String.Join(";", li.Select(l => l.ToString()).ToArray());
             Console.WriteLine(li.Count);
             Console.WriteLine(li.Count);
 
@@ -157,12 +174,16 @@ namespace Figlotech.BDados.Tests
         public void WorkQueuerShouldWork()
         {
             int a = 0;
-            WorkQueuer wq = new WorkQueuer("wq", Environment.ProcessorCount);
-            for (int i = 0; i < 10000; i++)
-            {
-                wq.Enqueue(() => a++);
-            }
+            WorkQueuer wq = new WorkQueuer("wq", 4);
             wq.Start();
+            for (int i = 0; i < 1000000; i++)
+            {
+                wq.Enqueue(() => {
+                    Thread.Sleep(100);
+                }, (x)=> {
+                    throw x;
+                });
+            }
             wq.Stop();
             Assert.IsTrue(a > 9000);
         }

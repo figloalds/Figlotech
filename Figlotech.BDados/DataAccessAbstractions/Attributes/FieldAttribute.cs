@@ -22,17 +22,24 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// Tells BDados IRDBMS structure checkers that this field must be represented
     /// in the rdbms database, generally as a column.
     /// </summary>
-    public class FieldAttribute : Attribute
-    {
+    public class FieldAttribute : Attribute {
         public String Type { get; set; }
         public String Options { get; set; }
         public bool PrimaryKey { get; set; }
-        public int Size { get; set; }
+        public int Size { get; set; } = 128;
         public object DefaultValue { get; set; }
         public bool AllowNull { get; set; }
         public bool Unique { get; set; }
-
-        public FieldAttribute(String tipo, String opcoes)
+        // --
+        public string Table { get; set; }
+        public string Name { get; set; }
+        public string Precision { get; set; }
+        public string Charset { get; set; }
+        public string Collation { get; set; }
+        public string Comment { get; set; }
+        public string GenerationExpression { get; set; }
+        // --
+        public FieldAttribute(string tipo, string opcoes)
         {
             Type = tipo;
             Options = opcoes;

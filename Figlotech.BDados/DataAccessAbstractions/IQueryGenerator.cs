@@ -1,5 +1,6 @@
 ﻿using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +21,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> conjuntoInput) where T : IDataObject, new();
         IQueryBuilder GenerateMultiUpdate<T>(RecordSet<T> inputRecordset) where T : IDataObject, new();
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
-        IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder InformationSchemaQueryTables(string schema);
         IQueryBuilder InformationSchemaQueryColumns(string schema);
         IQueryBuilder InformationSchemaQueryKeys(string schema);
@@ -32,5 +32,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder Purge(string table, string column, string refTable, string refColumn);
         IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new();
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
+        IQueryBuilder GetCreationCommand(Type t);
+        IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd);
     }
 }

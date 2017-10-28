@@ -21,15 +21,20 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// have a foreign key attached to it referencing a field (column) of other
     /// valueobject (table)
     /// </summary>
-    public class ForeignKeyAttribute : Attribute
-    {
-        public Type referencedType;
-        public String referencedColumn;
+    public class ForeignKeyAttribute : Attribute {
+        public String Table { get; set; }
+        public String Column { get; set; }
+        public String RefTable { get; set; }
+        public String RefColumn { get; set; }
+        public String ConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}";
+        internal Type RefType { get; set; }
 
+        public ForeignKeyAttribute() { }
         public ForeignKeyAttribute(Type foreignType, String foreignColumn = "RID")
         {
-            referencedType = foreignType;
-            referencedColumn = foreignColumn;
+            RefType = foreignType;
+            RefTable = RefType.Name;
+            RefColumn = foreignColumn;
         }
     }
 }

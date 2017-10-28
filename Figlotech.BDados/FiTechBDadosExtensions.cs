@@ -182,7 +182,7 @@ namespace Figlotech.BDados {
             }
         }
 
-        public static Object LoadAllOfType(this Fi _selfie, IDataAccessor da, Type o, int p, int? limit) {
+        public static Object FindOfType(this Fi _selfie, IDataAccessor da, Type o, int p, int? limit) {
             try {
                 var type = da
                         .GetType();
@@ -190,25 +190,25 @@ namespace Figlotech.BDados {
                         .GetMethods();
                 var method = methods
                         .Where(
-                            (m) => m.Name == "LoadAll" && m.GetParameters().Count() == 3
+                            (m) => m.Name == "Find" && m.GetParameters().Count() == 3
                             && m.GetParameters()[1].ParameterType == typeof(int?) && m.GetParameters()[2].ParameterType == typeof(int?))
                         .FirstOrDefault();
                 var finalMethod =
                     method
                         .MakeGenericMethod(o);
                 return finalMethod?.Invoke(da, new object[] { null, p, limit });
-                //o.GetType().GetMethod("LoadAll").Invoke(o, new object[] { null, p });
+                //o.GetType().GetMethod("Find").Invoke(o, new object[] { null, p });
             } catch (Exception x) {
                 Fi.Tech.WriteLine(x.Message);
             }
             return null;
         }
 
-        public static RecordSet<T> LoadAllOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : IDataObject, new() {
+        public static RecordSet<T> FindOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : IDataObject, new() {
             return new RecordSet<T>(da);
         }
 
-        public static Object LoadAllOfByUpdateTime(this Fi _selfie, Type type, IDataAccessor da, long lastUpdate, int p, int? limit) {
+        public static Object FindOfByUpdateTime(this Fi _selfie, Type type, IDataAccessor da, long lastUpdate, int p, int? limit) {
             // Holy mother of Reflection!
             var updateTime = new DateTime(lastUpdate);
             var paramExpr = Expression.Parameter(type, "x");
@@ -227,12 +227,12 @@ namespace Figlotech.BDados {
                 typeof(Conditions<>).MakeGenericType(type)
                 , new object[] { expr });
 
-            var loadAllMethod = da.GetType().GetMethods().FirstOrDefault(
+            var FindMethod = da.GetType().GetMethods().FirstOrDefault(
                 m =>
-                    m.Name == "LoadAll" &&
+                    m.Name == "Find" &&
                     m.GetParameters().Length == 3)
                 .MakeGenericMethod(type);
-            var retv = loadAllMethod
+            var retv = FindMethod
                 .Invoke(da, new object[] { expr, 1, null });
             // IT FUCKING WORKS BIATCH YAY!
             return retv;

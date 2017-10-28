@@ -10,14 +10,42 @@ using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
+    public enum NecessaryActionType {
+        CreateTable,
+        CreateColumn,
+        RenameTable,
+        RenameColumn,
+        CreateForeignKey,
+        DropForeignKey,
+        AlterColumnDefinition,
+    }
+    public class StructureCheckNecessaryAction {
+        public NecessaryActionType ActionType { get; set; }
+        public Type TableType { get; set; }
+        public MemberInfo ColumnMember { get; set; }
+        public String Table { get; set; }
+        public String Column { get; set; }
+        public String RefTable { get; set; }
+        public String RefColumn { get; set; }
+        public String NewName { get; set; }
+        public String NewDefinition { get; set; }
+        public String DeleteConstraint { get; set; }
+    }
+
     public class StructureChecker {
         List<Type> workingTypes;
         IRdbmsDataAccessor DataAccessor;
 
         // "Mirror, mirror on the wall, who's code is the shittiest of them all?"
 
-        public StructureChecker(IRdbmsDataAccessor dataAccessor) {
+        public StructureChecker(IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
             DataAccessor = dataAccessor;
+            workingTypes = workingTypes = types
+                    .Where((t) =>
+                        IsDataObject(t) &&
+                        t.GetCustomAttribute<ViewOnlyAttribute>() == null &&
+                        !t.IsAbstract
+                    ).ToList();
         }
 
         Benchmarker Benchmarker;
@@ -32,17 +60,308 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 || IsDataObject(t.BaseType);
         }
 
-        public void CheckStructure(IEnumerable<Type> types) {
+        public IEnumerable<StructureCheckNecessaryAction> EvaluateLegacyKeys(List<ForeignKeyAttribute> keys) {
+            for (int i = 0; i < keys.Count; i++) {
+                if (keys[i].RefColumn == null) continue;
+                bool found = false;
+                var tablName = keys[i].Table;
+                var colName = keys[i].Column;
+                var refColName = keys[i].RefColumn;
+                var refTablName = keys[i].RefTable;
+                if (refColName == null) continue;
+                foreach (var type in workingTypes) {
+                    if (type.Name.ToLower() != tablName.ToLower()) continue;
+                    var fields = ReflectionTool.FieldsAndPropertiesOf(type)
+                        .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
+                    foreach (var field in fields) {
+                        var fkDef = field.GetCustomAttribute<ForeignKeyAttribute>();
+                        if (fkDef == null)
+                            continue;
+                        if (
+                            fkDef.RefColumn == refColName &&
+                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
+                            field.Name == colName) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    yield return new StructureCheckNecessaryAction {
+                        ActionType = NecessaryActionType.DropForeignKey,
+                        Table = tablName,
+                        Column = colName,
+                        RefTable = refTablName,
+                        RefColumn = refColName,
+                    };
+                }
+            }
+            yield break;
+        }
+
+        private IEnumerable<StructureCheckNecessaryAction> EvaluateForFullTableDekeyal(String target, List<String> tables, List<ForeignKeyAttribute> keys) {
+            for (int i = 0; i < keys.Count; i++) {
+                var refTableName = keys[i].RefTable;
+                if (refTableName == target) {
+                    var tableName = keys[i].Table;
+                    var columnName = keys[i].Column;
+                    var refColumnName = keys[i].RefColumn;
+                    var constraint = keys[i].ConstraintName;
+                    Benchmarker.Mark($"Dekey Table {tableName} from {constraint} references {refTableName}");
+                    yield return new StructureCheckNecessaryAction {
+                        ActionType = NecessaryActionType.DropForeignKey,
+                        Table = tableName,
+                        Column = columnName,
+                        RefTable = refTableName,
+                        RefColumn = refColumnName,
+                    };
+                }
+            }
+        }
+
+        private IEnumerable<StructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ForeignKeyAttribute> keys) {
+            Dictionary<string, string> oldNames = new Dictionary<string, string>();
+            foreach (String tableName in tables) {
+                foreach (var type in workingTypes) {
+                    var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
+                    if (oldNameAtt != null) {
+                        if (tableName.ToLower() == oldNameAtt.Name.ToLower()) {
+                            oldNames.Add(type.Name.ToLower(), oldNameAtt.Name.ToLower());
+                        }
+                    }
+                }
+            }
+
+            foreach (var type in workingTypes) {
+                var found = false;
+                foreach (String tableName in tables) {
+                    if (tableName.ToLower() == type.Name.ToLower()) {
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    bool renamed = false;
+                    foreach (var old in oldNames) {
+                        if (old.Key == type.Name.ToLower()) {
+                            foreach (var a in EvaluateForFullTableDekeyal(old.Value, tables, keys)) {
+                                yield return a;
+                            }
+                            yield return new StructureCheckNecessaryAction {
+                                ActionType = NecessaryActionType.RenameTable,
+                                Table = old.Value,
+                                NewName = old.Key,
+                            };
+                            renamed = true;
+                            break;
+                        }
+                    }
+                    if (!renamed) {
+                        yield return new StructureCheckNecessaryAction {
+                            ActionType = NecessaryActionType.CreateTable,
+                            TableType = type,
+                        };
+                    }
+                }
+            }
+
+            yield break;
+        }
+
+        private IEnumerable<StructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
+
+            foreach (var type in workingTypes) {
+                var fields = ReflectionTool.FieldsAndPropertiesOf(type);
+                foreach (var field in fields) {
+
+                    var fieldExists = false;
+                    foreach (var col in columns) {
+                        var colName = col.Name;
+                        if (field.Name == colName) {
+                            fieldExists = true;
+                        }
+                    }
+
+                    if (!fieldExists) {
+
+                        var oldExists = false;
+                        foreach (var col in columns) {
+                            var colName = col.Name;
+                            var ona = field.GetCustomAttribute<OldNameAttribute>();
+                            if (ona != null) {
+                                if (ona.Name == colName) {
+                                    yield return new StructureCheckNecessaryAction {
+                                        ActionType = NecessaryActionType.RenameColumn,
+                                        Table = type.Name,
+                                        Column = ona.Name,
+                                        ColumnMember = field,
+                                        NewName = field.Name,
+                                    };
+                                    oldExists = true;
+                                }
+                            }
+                        }
+
+                        if (!oldExists) {
+                            yield return new StructureCheckNecessaryAction {
+                                ActionType = NecessaryActionType.CreateColumn,
+                                TableType = type,
+                                ColumnMember = field,
+                            };
+                        }
+
+                    } else {
+
+                        foreach (var col in columns) {
+                            var tableName = col.Table;
+                            if (tableName.ToLower() != type.Name.ToLower()) continue;
+                            var columnName = col.Name;
+                            if (field.Name != columnName) continue;
+                            // Found columns, check definitions
+                            var columnIsNullable = col.AllowNull;
+                            var length = col.Size;
+                            var datatype = col.Type;
+                            var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
+                            if (fieldAtt == null) continue;
+                            var dbdef = GetDatabaseType(field, fieldAtt);
+                            var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
+                            if (
+                                columnIsNullable != fieldAtt.AllowNull ||
+                                length != fieldAtt.Size ||
+                                datatype != dbDefinition
+                                ) {
+                                yield return new StructureCheckNecessaryAction {
+                                    ActionType = NecessaryActionType.AlterColumnDefinition,
+                                    Table = type.Name,
+                                    Column = field.Name,
+                                    ColumnMember = field,
+                                    NewDefinition = GetColumnDefinition(field)
+                                };
+                            } else {
+
+                            }
+                        }
+
+                    }
+
+                }
+            }
+
+
+            yield break;
+        }
+
+        public int ExecuteNecessaryActions(IEnumerable<StructureCheckNecessaryAction> actions, Action<StructureCheckNecessaryAction, int> onActionExecuted) {
+            var enny = actions.GetEnumerator();
+            int retv = 0;
+            int went = 0;
+            WorkQueuer wq = new WorkQueuer("Strucheck Queuer");
+            var cliQ = new WorkQueuer("cli_q", 1);
+            while(enny.MoveNext()) {
+                var thisAction = enny.Current;
+                wq.Enqueue(() => {
+                    retv += Execute(thisAction);
+                    lock(wq) {
+                        int myWent = went++;
+                        cliQ.Enqueue(() => {
+                            onActionExecuted?.Invoke(thisAction, myWent);
+                        });
+                    }
+                });
+            }
+            wq.Stop();
+            cliQ.Stop();
+            return retv;
+        }
+
+        public IEnumerable<StructureCheckNecessaryAction> EvaluateNecessaryActions() {
+            var keys = GetInfoSchemaKeys();
+            var tables = GetInfoSchemaTables();
+            var columns = GetInfoSchemaColumns();
+            foreach (var a in EvaluateLegacyKeys(keys))
+                yield return a;
+            foreach (var a in EvaluateTableChanges(tables, keys))
+                yield return a;
+            foreach (var a in EvaluateColumnChanges(columns, keys))
+                yield return a;
+        }
+
+        private List<ForeignKeyAttribute> GetInfoSchemaKeys() {
+            var dbName = DataAccessor.SchemaName;
+            return DataAccessor.Query(
+                DataAccessor
+                    .QueryGenerator
+                    .InformationSchemaQueryKeys(dbName)
+            )
+            .Map<ForeignKeyAttribute>(new Dictionary<string, string> {
+                { "TABLE_NAME", nameof(ForeignKeyAttribute.Table) },
+                { "COLUMN_NAME", nameof(ForeignKeyAttribute.Column) },
+                { "REFERENCED_COLUMN_NAME", nameof(ForeignKeyAttribute.RefColumn) },
+                { "REFERENCED_TABLE_NAME", nameof(ForeignKeyAttribute.RefTable) },
+            }).ToList();
+        }
+        private List<String> GetInfoSchemaTables() {
+            var dbName = DataAccessor.SchemaName;
+            return
+                DataAccessor.Query(
+                    DataAccessor.QueryGenerator.InformationSchemaQueryTables(dbName)
+                )
+                .Columns["TABLE_NAME"]
+                .ToEnumerable<String>()
+                .ToList();
+        }
+        private List<FieldAttribute> GetInfoSchemaColumns() {
+            var dbName = DataAccessor.SchemaName;
+            return DataAccessor.Query(
+                    DataAccessor.QueryGenerator.InformationSchemaQueryTables(dbName)
+            )
+            .Map<FieldAttribute>(new Dictionary<string, string> {
+                { "TABLE_NAME", nameof(FieldAttribute.Table) },
+                { "COLUMN_NAME", nameof(FieldAttribute.Name) },
+                { "COLUMN_DEFAULT", nameof(FieldAttribute.DefaultValue) },
+                { "IS_NULLABLE", nameof(FieldAttribute.AllowNull) },
+                { "DATA_TYPE", nameof(FieldAttribute.Type) },
+                { "CHARACTER_MAXIMUM_LENGTH", nameof(FieldAttribute.Size) },
+                { "NUMERIC_PRECISION", nameof(FieldAttribute.Precision) },
+                { "CHARACTER_SET_NAME", nameof(FieldAttribute.Charset) },
+                { "COLLATION_NAME", nameof(FieldAttribute.Collation) },
+                { "COLUMN_COMMENT", nameof(FieldAttribute.Comment) },
+                { "GENERATION_EXPRESSION", nameof(FieldAttribute.GenerationExpression) },
+            }).ToList();
+        }
+
+        public int Execute(StructureCheckNecessaryAction scna) {
+            switch(scna.ActionType) {
+                case NecessaryActionType.DropForeignKey:
+                    return Exec(DataAccessor.QueryGenerator.DropForeignKey(
+                        scna.Table, scna.DeleteConstraint));
+                case NecessaryActionType.CreateForeignKey:
+                    return Exec(DataAccessor.QueryGenerator.AddForeignKey(
+                        scna.Table.ToLower(), scna.Column, scna.RefTable.ToLower(), scna.RefColumn));
+                case NecessaryActionType.CreateTable:
+                    return Exec(DataAccessor.QueryGenerator.GetCreationCommand(
+                        scna.TableType));
+                case NecessaryActionType.CreateColumn:
+                    return Exec(DataAccessor.QueryGenerator.AddColumn(scna.Table.ToLower(), GetColumnDefinition(scna.ColumnMember)));
+                case NecessaryActionType.RenameTable:
+                    return Exec(DataAccessor.QueryGenerator.RenameTable(
+                        scna.Table, scna.NewName));
+                case NecessaryActionType.RenameColumn:
+                    return Exec(DataAccessor.QueryGenerator.RenameColumn(
+                        scna.Table.ToLower(), scna.Column, GetColumnDefinition(scna.ColumnMember)));
+                case NecessaryActionType.AlterColumnDefinition:
+                    return Exec(DataAccessor.QueryGenerator.RenameColumn(
+                        scna.Table.ToLower(), scna.Column, GetColumnDefinition(scna.ColumnMember)));
+            }
+
+            return 0;
+        }
+
+        public void CheckStructure() {
             Benchmarker = new Benchmarker("Check Structure");
             DataAccessor.Access(() => {
 
                 Benchmarker.WriteToStdout = true;
-                workingTypes = types
-                    .Where((t) =>
-                        IsDataObject(t) 
-                        //&&
-                        //t.GetCustomAttribute<ViewOnlyAttribute>() == null
-                    ).ToList();
+
 
                 var dbName = DataAccessor.SchemaName;
                 DataTable tables = DataAccessor.Query(
@@ -50,6 +369,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 DataTable keys = DataAccessor.Query(
                     DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
+
                 Benchmarker.Mark("Clear Keys");
                 ClearKeys(keys);
 
@@ -80,10 +400,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Benchmarker.TotalMark();
         }
 
-        private void Exec(IQueryBuilder query) {
+        private int Exec(IQueryBuilder query) {
             try {
-                DataAccessor.Execute(query);
-            } catch (Exception) { }
+                return DataAccessor.Execute(query);
+            } catch (Exception) {
+
+            }
+            return 0;
         }
 
         private void ClearKeys(DataTable keys) {
@@ -101,8 +424,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (fkDef == null)
                             continue;
                         if (
-                            fkDef.referencedColumn == refColName &&
-                            fkDef.referencedType.Name.ToLower() == refTablName.ToLower() &&
+                            fkDef.RefColumn == refColName &&
+                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
                             field.Name == colName) {
                             found = true;
                             break;
@@ -110,12 +433,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
                 if (!found) {
-                    var target      = keys.Rows[i]["TABLE_NAME"] as String;
-                    var constraint  = keys.Rows[i]["CONSTRAINT_NAME"] as String;
+                    var target = keys.Rows[i]["TABLE_NAME"] as String;
+                    var constraint = keys.Rows[i]["CONSTRAINT_NAME"] as String;
                     Exec(DataAccessor.QueryGenerator.DropForeignKey(target, constraint));
                 }
             }
         }
+
         private void ReKeys(DataTable keys) {
             foreach (var type in workingTypes) {
                 var fields = ReflectionTool.FieldsAndPropertiesOf(type)
@@ -126,15 +450,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         continue;
                     bool found = false;
                     for (int i = 0; i < keys.Rows.Count; i++) {
-                        var tableName   = keys.Rows[i]["TABLE_NAME"] as String;
-                        var colName     = keys.Rows[i]["COLUMN_NAME"] as String;
+                        var tableName = keys.Rows[i]["TABLE_NAME"] as String;
+                        var colName = keys.Rows[i]["COLUMN_NAME"] as String;
                         var refTablName = keys.Rows[i]["REFERENCED_TABLE_NAME"] as String;
-                        var refColName  = keys.Rows[i]["REFERENCED_COLUMN_NAME"] as String;
+                        var refColName = keys.Rows[i]["REFERENCED_COLUMN_NAME"] as String;
                         if (
                             type.Name.ToLower() == tableName.ToLower() &&
                             field.Name == colName &&
-                            fkDef.referencedColumn == refColName &&
-                            fkDef.referencedType.Name.ToLower() == refTablName.ToLower()) {
+                            fkDef.RefColumn == refColName &&
+                            fkDef.RefTable.ToLower() == refTablName.ToLower()) {
                             found = true;
                             break;
                         } else {
@@ -144,14 +468,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     if (!found) {
                         try {
-                            Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
+                            Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name.ToLower()}/{field.Name} references {fkDef.RefTable.ToLower()}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.Purge(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
+                                DataAccessor.QueryGenerator.Purge(type.Name.ToLower(), field.Name, fkDef.RefTable.ToLower(), fkDef.RefColumn));
 
-                            Benchmarker.Mark($"Create Constraint FK {type.Name.ToLower()}/{field.Name} references {fkDef.referencedType.Name.ToLower()}/{fkDef.referencedColumn}");
+                            Benchmarker.Mark($"Create Constraint FK {type.Name.ToLower()}/{field.Name} references {fkDef.RefTable.ToLower()}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.AddForeignKey(type.Name.ToLower(), field.Name, fkDef.referencedType.Name.ToLower(), fkDef.referencedColumn));
-                        } catch(Exception x) {
+                                DataAccessor.QueryGenerator.AddForeignKey(type.Name.ToLower(), field.Name, fkDef.RefTable.ToLower(), fkDef.RefColumn));
+                        } catch (Exception x) {
                             Fi.Tech.WriteLine(x.Message);
                         }
                     }
@@ -202,7 +526,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
 
-            foreach(var type in workingTypes) {
+            foreach (var type in workingTypes) {
 
                 var found = false;
                 foreach (DataRow a in tables.Rows) {
@@ -226,7 +550,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            
+
             return true;
         }
 
@@ -258,7 +582,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                             if (tablName2.ToLower() != type.Name.ToLower()) continue;
 
-                            if (colName2 == field.Name 
+                            if (colName2 == field.Name
                                 && type.Name.ToLower() == tablName2.ToLower()
                                 ) {
                                 found = true;

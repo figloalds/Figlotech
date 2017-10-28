@@ -17,6 +17,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DS.Default.SmartResolve(this, true);
         }
 
+        public override string ToString() {
+
+            return RID;
+        }
+
         public abstract long Id { get; set; }
         public abstract DateTime? UpdatedTime { get; set; }
         public abstract DateTime CreatedTime { get; set; }

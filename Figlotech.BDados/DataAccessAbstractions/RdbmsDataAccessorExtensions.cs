@@ -17,8 +17,8 @@ namespace Figlotech.BDados.DataAccessAbstractions
             return CheckStructure(dataAccessor, ReflectionTool.GetLoadableTypesFrom(ass));
         }
         public static bool CheckStructure(this IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
-            var checker = new StructureChecker(dataAccessor);
-            checker.CheckStructure(types);
+            var checker = new StructureChecker(dataAccessor, types);
+            checker.CheckStructure();
             return true;
         }
 

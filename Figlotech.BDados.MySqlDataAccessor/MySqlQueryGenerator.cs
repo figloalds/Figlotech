@@ -453,5 +453,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
             return new QueryBuilder($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
         }
+
+        public IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd) {
+            var cname = $"fk_{fkd.Column}_{fkd.RefTable}_{fkd.RefColumn}";
+            String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
+            return new QueryBuilder(creationCommand);
+        }
     }
 }

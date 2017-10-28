@@ -123,7 +123,9 @@ namespace Figlotech.Core {
                 _supervisor.Join();
                 while (workers.Count > 0) {
                     workers[workers.Count - 1].Join();
-                    workers.RemoveAt(workers.Count - 1);
+                    lock(workers) {
+                        workers.RemoveAt(workers.Count - 1);
+                    }
                 }
             }
             isRunning = false;
@@ -150,6 +152,7 @@ namespace Figlotech.Core {
             int wqc = 0;
             int numWorkers = 0;
             var clearHolds = DateTime.UtcNow;
+            var lastSupervisorRun = DateTime.UtcNow;
             while (Active || wqc > 0) {
                 lock (workers) {
                     numWorkers = workers.Count;
@@ -157,8 +160,11 @@ namespace Figlotech.Core {
                     workers.RemoveAll(t => t.ThreadState == ThreadState.Aborted);
                     lock (workQueue) {
                         wqc = workQueue.Count;
+                        if (wqc > 0) {
+                            lastSupervisorRun = DateTime.UtcNow;
+                        }
                     }
-                    while (wqc > workers.Count && workers.Count < parallelSize) {
+                    if (wqc > workers.Count && workers.Count < parallelSize) {
                         SpawnWorker();
                     }
                     if (DateTime.UtcNow.Subtract(clearHolds) > TimeSpan.FromMilliseconds(GcInterval)) {
@@ -167,71 +173,88 @@ namespace Figlotech.Core {
                         }
                         clearHolds = DateTime.UtcNow;
                     }
-                    Thread.Sleep(DefaultSleepInterval);
+                    if (DateTime.UtcNow.Subtract(lastSupervisorRun) > TimeSpan.FromMilliseconds(ThreadsTimeout)) {
+                        return;
+                    }
                 }
+                Thread.Sleep(DefaultSleepInterval);
             }
         }
 
-        public int WorkerIdleTimeout { get; set; } = 3000;
-        private Thread SpawnWorker() {
-            DateTime lastJobProcessedStamp = DateTime.UtcNow;
-            Thread workerThread = new Thread(() => {
-                WorkJob job;
-                int wqc = 1;
-                while (true) {
-                    job = null;
-                    lock (workQueue) {
-                        if (workQueue.Count > 0) {
-                            job = workQueue.Dequeue();
-                            // This is to prevent GC from spawning crazy during operations.
-                            lock (holdJobs)
-                                holdJobs.Add(job);
-                        }
-                    }
-                    List<Exception> exes = new List<Exception>();
-
-                    if (job == null) {
-                        var idleTime = DateTime.UtcNow.Subtract(lastJobProcessedStamp).TotalMilliseconds;
-                        if (idleTime > WorkerIdleTimeout) {
-                            return;
-                        } else {
-                            if (!Active)
-                                return;
-                            Thread.Sleep(100);
-                            continue;
-                        }
-                    }
-
-                    lock (job) {
-
-                        job.dequeued = DateTime.Now;
-                        Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
-
-                        try {
-                            job?.action?.Invoke();
-                            job.status = WorkJobStatus.Finished;
-                            job?.finished?.Invoke();
-                            job.completed = DateTime.Now;
-                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
-                        } catch (Exception x) {
-                            job.completed = DateTime.Now;
-                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                            job?.handling?.Invoke(x);
-                        }
-                        job.status = WorkJobStatus.Finished;
-                        WorkDone++;
-                        lastJobProcessedStamp = DateTime.UtcNow;
-                    }
-                    job = null;
-                }
-            });
-            workerThread.Priority = DefaultWorkerPriority;
-            workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
-            workerThread.Start();
+        public int ThreadsTimeout { get; set; } = 7000;
+        private void SpawnWorker() {
             lock (workers) {
+                if (workers.Count >= parallelSize) {
+                    return;
+                }
+                DateTime lastJobProcessedStamp = DateTime.UtcNow;
+                Thread workerThread = new Thread(() => {
+                    //lock (workers) {
+                    //    workers.Add(Thread.CurrentThread);
+                    //}
+                    WorkJob job;
+                    int wqc = 1;
+                    while (true) {
+                        job = null;
+                        lock (workQueue) {
+                            if (workQueue.Count > 0) {
+                                job = workQueue.Dequeue();
+                                Thread.CurrentThread.IsBackground = false;
+                                // This is to prevent GC from spawning crazy during operations.
+                                lock (holdJobs)
+                                    holdJobs.Add(job);
+                            }
+                            if (workQueue.Count > workers.Count && workers.Count < parallelSize) {
+                                SpawnWorker();
+                            }
+                        }
+                        List<Exception> exes = new List<Exception>();
+
+                        if (job == null) {
+                            var idleTime = DateTime.UtcNow.Subtract(lastJobProcessedStamp).TotalMilliseconds;
+                            if (idleTime > ThreadsTimeout) {
+                                return;
+                            } else {
+                                Thread.CurrentThread.IsBackground = true;
+                                if (!Active) {
+                                    break;
+                                }
+                                Thread.Sleep(100);
+                                continue;
+                            }
+                        }
+
+                        lock (job) {
+
+                            job.dequeued = DateTime.Now;
+                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
+
+                            try {
+                                job?.action?.Invoke();
+                                job.status = WorkJobStatus.Finished;
+                                job?.finished?.Invoke();
+                                job.completed = DateTime.Now;
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
+                            } catch (Exception x) {
+                                job.completed = DateTime.Now;
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
+                                job?.handling?.Invoke(x);
+                            }
+                            job.status = WorkJobStatus.Finished;
+                            WorkDone++;
+                            lastJobProcessedStamp = DateTime.UtcNow;
+                        }
+                        job = null;
+                    }
+                    lock (workers) {
+                        workers.Remove(Thread.CurrentThread);
+                    }
+                });
+                workerThread.Priority = DefaultWorkerPriority;
+                workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
                 workers.Add(workerThread);
+                workerThread.Start();
             }
-            return workerThread;
         }
 
         public void Close() {
@@ -242,16 +265,25 @@ namespace Figlotech.Core {
             if (Active || isRunning)
                 return;
             Active = true;
-            workers.RemoveAll(w => w.ThreadState != ThreadState.Running);
+            workers.RemoveAll(w => w.ThreadState == ThreadState.Aborted);
+            workers.RemoveAll(w => w.ThreadState == ThreadState.Stopped);
             //while(workers.Count < parallelSize) {
             //    workers.Add(SpawnWorker());
             //}
-            _supervisor = new Thread(() => SupervisorJob());
-            _supervisor.Name = $"FTWQ_{Name}_supervisor";
-            _supervisor.IsBackground = true;
-            _supervisor.Priority = ThreadPriority.BelowNormal;
-            _supervisor.Start();
+            InitSupervisor();
             isRunning = true;
+        }
+
+        private void InitSupervisor() {
+            if (_supervisor == null ||
+               _supervisor.ThreadState == ThreadState.Aborted ||
+               _supervisor.ThreadState == ThreadState.Stopped) {
+                _supervisor = new Thread(() => SupervisorJob());
+                _supervisor.Name = $"FTWQ_{Name}_supervisor";
+                _supervisor.IsBackground = true;
+                _supervisor.Priority = ThreadPriority.BelowNormal;
+                _supervisor.Start();
+            }
         }
 
         public static void Live(Action<WorkQueuer> act, int parallelSize = -1) {
@@ -279,6 +311,8 @@ namespace Figlotech.Core {
             lock (workQueue) {
                 workQueue.Enqueue(retv);
             }
+            SpawnWorker();
+            InitSupervisor();
 
             return retv;
         }

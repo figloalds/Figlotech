@@ -256,12 +256,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         local.Read(a.RelativePath, (stream) => {
                             hash = GetHash(stream);
                         });
-                        if(a.Hash != hash) {
+                        if (a.Hash != hash) {
                             Console.Error.Write($"Hash Mismatch: {a.RelativePath}{a.Hash}/{hash}");
                         }
                     }
-
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
+
                 }, (ex) => {
                     OnFileCopyException?.Invoke(ex);
                     Fi.Tech.WriteLine(ex.Message);
@@ -326,7 +326,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         Changed(origin, destination, f);
 
                     if (changed) {
-                        lock(f) {
+                        lock (f) {
                             if (way == MirrorWay.Up) {
                                 processFileUp(origin, destination, f);
                             }
@@ -348,7 +348,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 destination.ForFilesIn(path, (f) => {
                     if (DeleteLimit < 1) return;
                     if (!origin.Exists(f)) {
-                        if (DeleteLimit --> 0) {
+                        if (DeleteLimit-- > 0) {
                             destination.Delete(f);
                             return;
                         }
@@ -459,7 +459,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         input.CopyTo(output, bufferSize);
                     }
                 });
-                
+
             });
 
         }

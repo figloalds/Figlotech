@@ -127,6 +127,7 @@ namespace Figlotech.Core.Helpers {
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
+
                 var t = GetTypeOf(member);
                 value = DbEvalValue(value, t);
                 t = ToUnderlying(t);
