@@ -136,7 +136,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         /// The arguments are Boolean saying rather the file changed or not and String with the 
         /// relative file path.
         /// </summary>
-        public event Action<Exception> OnFileCopyException;
+        public event Action<string, Exception> OnFileCopyException;
 
         /// <summary>
         /// <para>
@@ -263,7 +263,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
 
                 }, (ex) => {
-                    OnFileCopyException?.Invoke(ex);
+                    OnFileCopyException?.Invoke(a.RelativePath, ex);
                     Fi.Tech.WriteLine(ex.Message);
                 }, () => {
 
@@ -337,7 +337,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                     OnReportProcessedFile?.Invoke(changed, f);
                 }, (x) => {
-                    OnFileCopyException?.Invoke(x);
+                    OnFileCopyException?.Invoke(f, x);
                     Console.WriteLine(x.Message);
                 }, () => {
                 });

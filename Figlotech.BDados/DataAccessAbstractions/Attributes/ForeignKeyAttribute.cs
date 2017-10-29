@@ -26,7 +26,8 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public String Column { get; set; }
         public String RefTable { get; set; }
         public String RefColumn { get; set; }
-        public String ConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}";
+        public String ConstraintName { get; set; }
+        public String FTechConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}";
         internal Type RefType { get; set; }
 
         public ForeignKeyAttribute() { }

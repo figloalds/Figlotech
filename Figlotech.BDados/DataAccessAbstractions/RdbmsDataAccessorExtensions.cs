@@ -13,12 +13,12 @@ namespace Figlotech.BDados.DataAccessAbstractions
 {
     public static class RdbmsDataAccessorExtensions
     {
-        public static bool CheckStructure(this IRdbmsDataAccessor dataAccessor, Assembly ass) {
-            return CheckStructure(dataAccessor, ReflectionTool.GetLoadableTypesFrom(ass));
+        public static async Task<bool> CheckStructure(this IRdbmsDataAccessor dataAccessor, Assembly ass) {
+            return await CheckStructure(dataAccessor, ReflectionTool.GetLoadableTypesFrom(ass));
         }
-        public static bool CheckStructure(this IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
+        public static async Task<bool> CheckStructure(this IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
             var checker = new StructureChecker(dataAccessor, types);
-            checker.CheckStructure();
+            await checker.CheckStructureAsync();
             return true;
         }
 

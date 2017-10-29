@@ -59,7 +59,7 @@ namespace test
 
             copy.MirrorUp("");
 
-            Bench.TotalMark();
+            Bench.FinalMark();
             Console.WriteLine("UPLOAD OK");
             Console.WriteLine("INDEX OK");
             Console.WriteLine("CLEAR OK");

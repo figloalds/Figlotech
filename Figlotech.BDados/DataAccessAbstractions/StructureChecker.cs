@@ -8,28 +8,178 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public enum NecessaryActionType {
-        CreateTable,
-        CreateColumn,
-        RenameTable,
-        RenameColumn,
-        CreateForeignKey,
-        DropForeignKey,
-        AlterColumnDefinition,
+
+    public class DropKeyScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _constraint;
+
+        public DropKeyScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string constraint) : base(dataAccessor) {
+            _table = table;
+            _constraint = constraint;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.DropForeignKey(
+                    _table, _constraint));
+        }
+
+        public override string ToString() {
+            return $"Drop key {_table}.{_constraint}";
+        }
     }
-    public class StructureCheckNecessaryAction {
-        public NecessaryActionType ActionType { get; set; }
-        public Type TableType { get; set; }
-        public MemberInfo ColumnMember { get; set; }
-        public String Table { get; set; }
-        public String Column { get; set; }
-        public String RefTable { get; set; }
-        public String RefColumn { get; set; }
-        public String NewName { get; set; }
-        public String NewDefinition { get; set; }
-        public String DeleteConstraint { get; set; }
+    public class CreateForeignKeyScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        String _refTable;
+        String _refColumn;
+
+        public CreateForeignKeyScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string column, string refTable, string refColumn, MemberInfo columnMember) : base(dataAccessor) {
+            _table = table;
+            _column = column;
+            _refTable = refTable;
+            _refColumn = refColumn;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.AddForeignKey(
+                _table.ToLower(), _column, _refTable.ToLower(), _refColumn));
+        }
+
+        public override string ToString() {
+            return $"Create foreign key fk_{_column}_{_refTable}_{_refColumn}";
+        }
+    }
+
+    public class CreateColumnScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        MemberInfo _columnMember;
+
+        public CreateColumnScAction (
+            IRdbmsDataAccessor dataAccessor,
+            string table, string column, MemberInfo columnMember) : base(dataAccessor) {
+            _table = table;
+            _column = column;
+            _columnMember = columnMember;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.AddColumn(
+                _table.ToLower(), StructureChecker.GetColumnDefinition(_columnMember)));
+        }
+
+        public override string ToString() {
+            return $"Create column {_columnMember.Name}";
+        }
+    }
+
+    public class RenameTableScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _newName;
+
+        public RenameTableScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string newName) : base(dataAccessor) {
+            _table = table;
+            _newName = newName;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.RenameTable(
+                _table, _newName));
+        }
+
+        public override string ToString() {
+            return $"Rename {_table} to {_newName}";
+        }
+    }
+
+    public class RenameColumnScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        MemberInfo _columnMember;
+
+        public RenameColumnScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string column, MemberInfo columnMember) : base(dataAccessor) {
+            _table = table;
+            _column = column;
+            _columnMember = columnMember;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.RenameColumn(
+                _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
+        }
+
+        public override string ToString() {
+            return $"Rename {_table}.{_column} to {_columnMember.Name}";
+        }
+    }
+
+    public class AlterColumnDefinitionScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        MemberInfo _columnMember;
+
+        public AlterColumnDefinitionScAction(
+            IRdbmsDataAccessor dataAccessor, 
+            string table, string column, MemberInfo columnMember) : base(dataAccessor) {
+            _table = table;
+            _column = column;
+            _columnMember = columnMember;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.RenameColumn(
+                _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
+        }
+
+        public override string ToString() {
+            return $"Change column definition of {_columnMember.Name}";
+        }
+    }
+
+    public class CreateTableScAction : AbstractIStructureCheckNecessaryAction {
+        private Type _tableType;
+        public CreateTableScAction(IRdbmsDataAccessor dataAccessor, Type tableType) : base(dataAccessor) {
+            _tableType = tableType;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.GetCreationCommand(_tableType));
+        }
+
+        public override string ToString() {
+            return $"Create table {_tableType.Name}";
+        }
+    }
+
+    public abstract class AbstractIStructureCheckNecessaryAction : IStructureCheckNecessaryAction {
+        protected IRdbmsDataAccessor DataAccessor;
+        public AbstractIStructureCheckNecessaryAction(IRdbmsDataAccessor dataAccessor) {
+            DataAccessor = dataAccessor;
+        }
+
+        public abstract int Execute();
+
+        protected int Exec(IQueryBuilder query) {
+            try {
+                return DataAccessor.Execute(query);
+            } catch (Exception x) {
+                throw new BDadosException($"Error executing [{this.ToString()}]", x);
+            }
+        }
+    }
+    public interface IStructureCheckNecessaryAction {
+        int Execute();
     }
 
     public class StructureChecker {
@@ -60,7 +210,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 || IsDataObject(t.BaseType);
         }
 
-        public IEnumerable<StructureCheckNecessaryAction> EvaluateLegacyKeys(List<ForeignKeyAttribute> keys) {
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateLegacyKeys(List<ForeignKeyAttribute> keys) {
             for (int i = 0; i < keys.Count; i++) {
                 if (keys[i].RefColumn == null) continue;
                 bool found = false;
@@ -87,19 +237,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
                 if (!found) {
-                    yield return new StructureCheckNecessaryAction {
-                        ActionType = NecessaryActionType.DropForeignKey,
-                        Table = tablName,
-                        Column = colName,
-                        RefTable = refTablName,
-                        RefColumn = refColName,
-                    };
+                    yield return new DropKeyScAction(DataAccessor, tablName, keys[i].ConstraintName);
                 }
             }
             yield break;
         }
 
-        private IEnumerable<StructureCheckNecessaryAction> EvaluateForFullTableDekeyal(String target, List<String> tables, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateForFullTableDekeyal(String target, List<String> tables, List<ForeignKeyAttribute> keys) {
             for (int i = 0; i < keys.Count; i++) {
                 var refTableName = keys[i].RefTable;
                 if (refTableName == target) {
@@ -108,18 +252,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var refColumnName = keys[i].RefColumn;
                     var constraint = keys[i].ConstraintName;
                     Benchmarker.Mark($"Dekey Table {tableName} from {constraint} references {refTableName}");
-                    yield return new StructureCheckNecessaryAction {
-                        ActionType = NecessaryActionType.DropForeignKey,
-                        Table = tableName,
-                        Column = columnName,
-                        RefTable = refTableName,
-                        RefColumn = refColumnName,
-                    };
+                    yield return new DropKeyScAction(DataAccessor, tableName, keys[i].ConstraintName);
                 }
             }
         }
 
-        private IEnumerable<StructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ForeignKeyAttribute> keys) {
             Dictionary<string, string> oldNames = new Dictionary<string, string>();
             foreach (String tableName in tables) {
                 foreach (var type in workingTypes) {
@@ -146,20 +284,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             foreach (var a in EvaluateForFullTableDekeyal(old.Value, tables, keys)) {
                                 yield return a;
                             }
-                            yield return new StructureCheckNecessaryAction {
-                                ActionType = NecessaryActionType.RenameTable,
-                                Table = old.Value,
-                                NewName = old.Key,
-                            };
+                            yield return new RenameTableScAction(DataAccessor, old.Value, old.Key);
                             renamed = true;
                             break;
                         }
                     }
                     if (!renamed) {
-                        yield return new StructureCheckNecessaryAction {
-                            ActionType = NecessaryActionType.CreateTable,
-                            TableType = type,
-                        };
+                        yield return new CreateTableScAction(DataAccessor, type);
                     }
                 }
             }
@@ -167,14 +298,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
-        private IEnumerable<StructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
 
             foreach (var type in workingTypes) {
-                var fields = ReflectionTool.FieldsAndPropertiesOf(type);
+                var fields = ReflectionTool.FieldsAndPropertiesOf(type)
+                    .Where(f=> f.GetCustomAttribute<FieldAttribute>()!=null);
                 foreach (var field in fields) {
 
                     var fieldExists = false;
                     foreach (var col in columns) {
+                        if (type.Name.ToLower() != col.Table.ToLower())
+                            continue;
                         var colName = col.Name;
                         if (field.Name == colName) {
                             fieldExists = true;
@@ -185,28 +319,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                         var oldExists = false;
                         foreach (var col in columns) {
+                            if (col.Table.ToLower() != type.Name.ToLower()) continue;
                             var colName = col.Name;
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
-                                if (ona.Name == colName) {
-                                    yield return new StructureCheckNecessaryAction {
-                                        ActionType = NecessaryActionType.RenameColumn,
-                                        Table = type.Name,
-                                        Column = ona.Name,
-                                        ColumnMember = field,
-                                        NewName = field.Name,
-                                    };
+                                if (ona.Name == colName && ona.Name != col.Name) {
                                     oldExists = true;
+                                    yield return new RenameColumnScAction(DataAccessor, type.Name, ona.Name, field);
                                 }
                             }
                         }
 
                         if (!oldExists) {
-                            yield return new StructureCheckNecessaryAction {
-                                ActionType = NecessaryActionType.CreateColumn,
-                                TableType = type,
-                                ColumnMember = field,
-                            };
+                            yield return new CreateColumnScAction(DataAccessor, type.Name, field.Name, field);
                         }
 
                     } else {
@@ -222,20 +347,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var datatype = col.Type;
                             var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
                             if (fieldAtt == null) continue;
+                            var typesToCheckSize = new string[] {
+                                "VARCHAR", "VARBINARY"
+                            };
+                            var sizesMatch = !typesToCheckSize.Contains(datatype) || length == fieldAtt.Size;
                             var dbdef = GetDatabaseType(field, fieldAtt);
                             var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                             if (
                                 columnIsNullable != fieldAtt.AllowNull ||
-                                length != fieldAtt.Size ||
-                                datatype != dbDefinition
+                                !sizesMatch ||
+                                datatype.ToUpper() != dbDefinition.ToUpper()
                                 ) {
-                                yield return new StructureCheckNecessaryAction {
-                                    ActionType = NecessaryActionType.AlterColumnDefinition,
-                                    Table = type.Name,
-                                    Column = field.Name,
-                                    ColumnMember = field,
-                                    NewDefinition = GetColumnDefinition(field)
-                                };
+                                yield return new AlterColumnDefinitionScAction(DataAccessor, type.Name, field.Name, field);
                             } else {
 
                             }
@@ -250,30 +373,40 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
-        public int ExecuteNecessaryActions(IEnumerable<StructureCheckNecessaryAction> actions, Action<StructureCheckNecessaryAction, int> onActionExecuted) {
+        public int ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
             var enny = actions.GetEnumerator();
             int retv = 0;
             int went = 0;
             WorkQueuer wq = new WorkQueuer("Strucheck Queuer");
             var cliQ = new WorkQueuer("cli_q", 1);
+            List<Exception> exces = new List<Exception>();
             while(enny.MoveNext()) {
                 var thisAction = enny.Current;
                 wq.Enqueue(() => {
-                    retv += Execute(thisAction);
+                    retv += thisAction.Execute();
                     lock(wq) {
                         int myWent = went++;
                         cliQ.Enqueue(() => {
                             onActionExecuted?.Invoke(thisAction, myWent);
                         });
                     }
+                }, (x) => {
+                    if (handleException == null)
+                        lock (exces)
+                            exces.Add(x);
+                    else
+                        handleException.Invoke(x);
                 });
             }
             wq.Stop();
             cliQ.Stop();
+            if(exces.Any()) {
+                throw new AggregateException("There were errors executing actions", exces);
+            }
             return retv;
         }
 
-        public IEnumerable<StructureCheckNecessaryAction> EvaluateNecessaryActions() {
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
             var columns = GetInfoSchemaColumns();
@@ -297,6 +430,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 { "COLUMN_NAME", nameof(ForeignKeyAttribute.Column) },
                 { "REFERENCED_COLUMN_NAME", nameof(ForeignKeyAttribute.RefColumn) },
                 { "REFERENCED_TABLE_NAME", nameof(ForeignKeyAttribute.RefTable) },
+                { "CONSTRAINT_NAME", nameof(ForeignKeyAttribute.ConstraintName) },
             }).ToList();
         }
         private List<String> GetInfoSchemaTables() {
@@ -312,7 +446,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<FieldAttribute> GetInfoSchemaColumns() {
             var dbName = DataAccessor.SchemaName;
             return DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryTables(dbName)
+                    DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName)
             )
             .Map<FieldAttribute>(new Dictionary<string, string> {
                 { "TABLE_NAME", nameof(FieldAttribute.Table) },
@@ -328,77 +462,77 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 { "GENERATION_EXPRESSION", nameof(FieldAttribute.GenerationExpression) },
             }).ToList();
         }
+        
+        public async Task CheckStructureAsync(Func<IStructureCheckNecessaryAction,Task> onActionProcessed = null, Func<IStructureCheckNecessaryAction, Exception, Task> onError = null, Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null, Func<Task> onReportTotalTasks = null) {
+            var neededActions = EvaluateNecessaryActions();
+            var ortt = onReportTotalTasks?.Invoke();
 
-        public int Execute(StructureCheckNecessaryAction scna) {
-            switch(scna.ActionType) {
-                case NecessaryActionType.DropForeignKey:
-                    return Exec(DataAccessor.QueryGenerator.DropForeignKey(
-                        scna.Table, scna.DeleteConstraint));
-                case NecessaryActionType.CreateForeignKey:
-                    return Exec(DataAccessor.QueryGenerator.AddForeignKey(
-                        scna.Table.ToLower(), scna.Column, scna.RefTable.ToLower(), scna.RefColumn));
-                case NecessaryActionType.CreateTable:
-                    return Exec(DataAccessor.QueryGenerator.GetCreationCommand(
-                        scna.TableType));
-                case NecessaryActionType.CreateColumn:
-                    return Exec(DataAccessor.QueryGenerator.AddColumn(scna.Table.ToLower(), GetColumnDefinition(scna.ColumnMember)));
-                case NecessaryActionType.RenameTable:
-                    return Exec(DataAccessor.QueryGenerator.RenameTable(
-                        scna.Table, scna.NewName));
-                case NecessaryActionType.RenameColumn:
-                    return Exec(DataAccessor.QueryGenerator.RenameColumn(
-                        scna.Table.ToLower(), scna.Column, GetColumnDefinition(scna.ColumnMember)));
-                case NecessaryActionType.AlterColumnDefinition:
-                    return Exec(DataAccessor.QueryGenerator.RenameColumn(
-                        scna.Table.ToLower(), scna.Column, GetColumnDefinition(scna.ColumnMember)));
+            var enumerator = neededActions.GetEnumerator();
+            while(enumerator.MoveNext()) {
+                var action = enumerator.Current;
+                if (preAuthorizeAction != null)
+                    if (!await preAuthorizeAction(action))
+                        continue;
+
+                try {
+                    action.Execute();
+                    await onActionProcessed(action);
+                } catch(Exception x) {
+                    if (onError != null)
+                        await onError(action, x);
+                }
             }
 
-            return 0;
+            if (ortt != null) await ortt;
         }
 
-        public void CheckStructure() {
-            Benchmarker = new Benchmarker("Check Structure");
-            DataAccessor.Access(() => {
+        // This code is here so that I can
+        // finish the new SC method, it doesn't rekey yet.
+        // And it also needs some anti-repetition method.
+        //
+        //public void LegacyCheckStructure() {
+        //    Benchmarker = new Benchmarker("Check Structure");
+        //    DataAccessor.Access(() => {
 
-                Benchmarker.WriteToStdout = true;
+        //        Benchmarker.WriteToStdout = true;
 
 
-                var dbName = DataAccessor.SchemaName;
-                DataTable tables = DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryTables(dbName));
+        //        var dbName = DataAccessor.SchemaName;
+        //        DataTable tables = DataAccessor.Query(
+        //            DataAccessor.QueryGenerator.InformationSchemaQueryTables(dbName));
 
-                DataTable keys = DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
+        //        DataTable keys = DataAccessor.Query(
+        //            DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
 
-                Benchmarker.Mark("Clear Keys");
-                ClearKeys(keys);
+        //        Benchmarker.Mark("Clear Keys");
+        //        ClearKeys(keys);
 
-                Benchmarker.Mark("Work Tables");
-                keys = DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
-                WorkOnTables(tables, keys);
+        //        Benchmarker.Mark("Work Tables");
+        //        keys = DataAccessor.Query(
+        //            DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
+        //        WorkOnTables(tables, keys);
 
-                Benchmarker.Mark("Work Columns");
-                DataTable columns = DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName));
+        //        Benchmarker.Mark("Work Columns");
+        //        DataTable columns = DataAccessor.Query(
+        //            DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName));
 
-                WorkOnColumns(columns, keys);
+        //        WorkOnColumns(columns, keys);
 
-                // Re read keys here because work on tables and columns
-                // probably changed this too much
-                Benchmarker.Mark("Re Keys");
-                keys = DataAccessor.Query(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
+        //        // Re read keys here because work on tables and columns
+        //        // probably changed this too much
+        //        Benchmarker.Mark("Re Keys");
+        //        keys = DataAccessor.Query(
+        //            DataAccessor.QueryGenerator.InformationSchemaQueryKeys(dbName));
 
-                ReKeys(keys);
+        //        ReKeys(keys);
 
-            }, (x) => {
-                Fi.Tech.WriteLine(Fi.Tech.GetStrings().ERROR_IN_STRUCTURE_CHECK);
-                Fi.Tech.WriteLine(x.Message);
-                Fi.Tech.WriteLine(x.StackTrace);
-            });
-            Benchmarker.TotalMark();
-        }
+        //    }, (x) => {
+        //        Fi.Tech.WriteLine(Fi.Tech.GetStrings().ERROR_IN_STRUCTURE_CHECK);
+        //        Fi.Tech.WriteLine(x.Message);
+        //        Fi.Tech.WriteLine(x.StackTrace);
+        //    });
+        //    Benchmarker.FinalMark();
+        //}
 
         private int Exec(IQueryBuilder query) {
             try {
@@ -538,7 +672,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (!found) {
                     bool renamed = false;
                     foreach (var old in oldNames) {
-                        if (old.Key == type.Name.ToLower()) {
+                        if (old.Key.ToLower() == type.Name.ToLower() && old.Value.ToLower() != type.Name.ToLower()) {
                             DekeyTable(old.Value, keys);
                             Exec(DataAccessor.QueryGenerator.RenameTable(old.Value, old.Key));
                             renamed = true;
@@ -560,11 +694,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var tablName = a["TABLE_NAME"] as String;
                 var colName = a["COLUMN_NAME"] as String;
                 foreach (var type in workingTypes) {
+                    if (tablName.ToLower() != type.Name.ToLower()) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
-
-                    if (tablName.ToLower() != type.Name.ToLower()) continue;
-
+                    
                     var oldNames = new Dictionary<string, string>();
                     foreach (var field in fields) {
                         var oldNameAtt = field.GetCustomAttribute<OldNameAttribute>();
@@ -733,7 +866,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return type;
         }
 
-        private static String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
+        internal static String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
             if (info == null)
                 info = field.GetCustomAttribute<FieldAttribute>();
             if (info == null)

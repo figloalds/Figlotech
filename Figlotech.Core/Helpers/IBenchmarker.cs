@@ -6,6 +6,6 @@ namespace Figlotech.Core.Helpers
         bool WriteToStdout { get; set; }
 
         double Mark(String txt);
-        double TotalMark();
+        double FinalMark();
     }
 }

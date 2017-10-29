@@ -33,7 +33,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         // --
         public string Table { get; set; }
         public string Name { get; set; }
-        public string Precision { get; set; }
+        public int Precision { get; set; }
         public string Charset { get; set; }
         public string Collation { get; set; }
         public string Comment { get; set; }

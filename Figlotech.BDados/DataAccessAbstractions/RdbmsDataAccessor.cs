@@ -713,11 +713,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return UseConnection(() => {
                     return functions.Invoke();
                 });
-                var total = Bench?.TotalMark();
+                var total = Bench?.FinalMark();
                 this.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
                 return default(T);
             } catch (Exception x) {
-                var total = Bench?.TotalMark();
+                var total = Bench?.FinalMark();
                 this.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
                 var ex = x;
                 this.WriteLog("Detalhes dessa exception:");

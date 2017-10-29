@@ -67,7 +67,7 @@ namespace Figlotech.Core.Helpers {
                 SetMemberValue(member, target, value);
                 return true;
             } catch (Exception x) {
-                if(StrictMode) {
+                if (StrictMode) {
                     throw x;
                 }
             }
@@ -134,7 +134,15 @@ namespace Figlotech.Core.Helpers {
                 if (value == null && t.IsValueType) {
                     return;
                 }
-                if(value != null && !value.GetType().IsAssignableFrom(t)) {
+                if (t == typeof(bool) || t == typeof(Boolean)) {
+                    if (value is String str) {
+                        if (str.ToUpper() == "YES")
+                            value = true;
+                        if (str.ToUpper() == "NO")
+                            value = false;
+                    }
+                }
+                if (value != null && !value.GetType().IsAssignableFrom(t)) {
                     value = Convert.ChangeType(value, t);
                 }
                 if (member is PropertyInfo pi) {
@@ -190,6 +198,7 @@ namespace Figlotech.Core.Helpers {
                 }
                 return retv;
             } catch (Exception) {
+
             }
             return null;
         }

@@ -123,10 +123,8 @@ namespace Figlotech.Core {
                 _supervisor.Join();
                 while (workers.Count > 0) {
                     workers[workers.Count - 1].Join();
-                    lock(workers) {
-                        workers.RemoveAt(workers.Count - 1);
-                    }
                 }
+                workers.Clear();
             }
             isRunning = false;
         }

@@ -26,7 +26,6 @@
 
   <!-- NETSTANDARD REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.Data.SqlClient" Version="4.4.0-preview1-25305-02" />
   </ItemGroup>
   <!-- NET462 REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
