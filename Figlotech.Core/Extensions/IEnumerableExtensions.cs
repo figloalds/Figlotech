@@ -15,16 +15,17 @@ namespace Figlotech.Core.Extensions
             var enny = me.GetEnumerator();
             if (!enny.MoveNext())
                 return dt;
-            var refl = enny.Current.ToReflectable();
+            var refl = enny.Current.AsReflectable();
             foreach (var col in refl) {
                 dt.Columns.Add(col.Key.Name);
             }
             Tuple<List<MemberInfo>, List<DataColumn>> meta = Fi.Tech.MapMeta(typeof(T), dt);
             do {
                 var dr = dt.NewRow();
-                enny.Current.ToDataRow(dr, meta);
+                enny.Current.ValuesToDataRow(dr, meta);
             } while (enny.MoveNext());
             return dt;
         }
+
     }
 }

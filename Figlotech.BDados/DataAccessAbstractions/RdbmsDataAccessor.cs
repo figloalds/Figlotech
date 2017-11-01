@@ -35,7 +35,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #region **** Global Declaration ****
         protected IRdbmsPluginAdapter Plugin;
-        public bool RethrowExceptions { get; set; } = true;
 
         //private DataAccessorPlugin.Config Plugin.Config;
         private int _simmultaneousConnections;
@@ -319,7 +318,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
                     } catch (Exception x) {
-
+                        OnFailedSave?.Invoke(input?.GetType(), input, x);
                     }
                 }
 
@@ -494,8 +493,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
-                if (RethrowExceptions) throw x;
-                Bench?.Mark("Build RecordSet");
+                throw x;
             });
             return retv;
         }
@@ -691,6 +689,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         int accessId = 0;
 
+        public event Action<Type, IDataObject> OnSuccessfulSave;
+        public event Action<Type, IDataObject, Exception> OnFailedSave;
+
         public void Access(Action functions, Action<Exception> handler = null) {
             Access(() => {
                 functions?.Invoke();
@@ -713,26 +714,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return UseConnection(() => {
                     return functions.Invoke();
                 });
-                var total = Bench?.FinalMark();
-                this.WriteLog(String.Format("---- Access [{0}] returned OK: [{1} ms]", aid, total));
-                return default(T);
             } catch (Exception x) {
-                var total = Bench?.FinalMark();
-                this.WriteLog(String.Format("---- Access [{0}] returned WITH ERRORS: [{1} ms]", aid, total));
                 var ex = x;
-                this.WriteLog("Detalhes dessa exception:");
+                this.WriteLog("Exception Details:");
+                var depth = 1;
                 while (ex != null && ex.InnerException != ex) {
-                    this.WriteLog(String.Format("{0} - {1}", ex.Message, ex.StackTrace));
+                    this.WriteLog($"[{aid}]{new String('-', depth)} {ex.Message}");
+                    this.WriteLog($"[{aid}]{new String('-', depth)} {ex.StackTrace}");
+                    this.WriteLog($"{new String('-', depth)}>");
+                    depth++;
                     ex = ex.InnerException;
                 }
 
-                if (handler != null)
+                if (handler != null) {
                     handler.Invoke(x);
-                else if (this.RethrowExceptions) {
+                } else {
                     throw x;
                 }
                 return default(T);
             } finally {
+                var total = Bench?.FinalMark();
+                this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
                 if (!Plugin.ContinuousConnection) {
                     Close();
                 }

@@ -795,6 +795,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //         |...|
         //         |...|
         //         |...|
+        // Actually, these dragons should be refactored into IRdbmsAccessorPlugin
+        // Soon
         // Use safety gear when going down there.
         private static String GetDatabaseType(MemberInfo field, FieldAttribute info = null, bool size = true) {
             if (info == null)
