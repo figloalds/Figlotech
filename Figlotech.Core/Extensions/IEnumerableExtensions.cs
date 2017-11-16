@@ -26,5 +26,12 @@ namespace Figlotech.Core.Extensions
             } while (enny.MoveNext());
             return dt;
         }
+
+        public static void Iterate<T>(this IEnumerable<T> me, Action<T> act) {
+            var enumerator = me.GetEnumerator();
+            while(enumerator.MoveNext()) {
+                act?.Invoke(enumerator.Current);
+            }
+        }
     }
 }

@@ -1,5 +1,4 @@
 ﻿
-
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
@@ -49,7 +48,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute() {
             return Exec(DataAccessor.QueryGenerator.AddForeignKey(
-                _table.ToLower(), _column, _refTable.ToLower(), _refColumn));
+                _table, _column, _refTable, _refColumn));
         }
 
         public override string ToString() {
@@ -72,7 +71,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute() {
             return Exec(DataAccessor.QueryGenerator.AddColumn(
-                _table.ToLower(), StructureChecker.GetColumnDefinition(_columnMember)));
+                _table, StructureChecker.GetColumnDefinition(_columnMember)));
         }
 
         public override string ToString() {
@@ -220,7 +219,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var refTablName = keys[i].RefTable;
                 if (refColName == null) continue;
                 foreach (var type in workingTypes) {
-                    if (type.Name.ToLower() != tablName.ToLower()) continue;
+                    if (type.Name != tablName) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                         .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
                     foreach (var field in fields) {
@@ -229,7 +228,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             continue;
                         if (
                             fkDef.RefColumn == refColName &&
-                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
+                            fkDef.RefTable == refTablName &&
                             field.Name == colName) {
                             found = true;
                             break;
@@ -263,8 +262,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 foreach (var type in workingTypes) {
                     var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
                     if (oldNameAtt != null) {
-                        if (tableName.ToLower() == oldNameAtt.Name.ToLower()) {
-                            oldNames.Add(type.Name.ToLower(), oldNameAtt.Name.ToLower());
+                        if (tableName == oldNameAtt.Name) {
+                            oldNames.Add(type.Name, oldNameAtt.Name);
                         }
                     }
                 }
@@ -273,14 +272,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var type in workingTypes) {
                 var found = false;
                 foreach (String tableName in tables) {
-                    if (tableName.ToLower() == type.Name.ToLower()) {
+                    if (tableName == type.Name) {
                         found = true;
                     }
                 }
                 if (!found) {
                     bool renamed = false;
                     foreach (var old in oldNames) {
-                        if (old.Key == type.Name.ToLower()) {
+                        if (old.Key == type.Name) {
                             foreach (var a in EvaluateForFullTableDekeyal(old.Value, tables, keys)) {
                                 yield return a;
                             }
@@ -307,7 +306,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var fieldExists = false;
                     foreach (var col in columns) {
-                        if (type.Name.ToLower() != col.Table.ToLower())
+                        if (type.Name != col.Table)
                             continue;
                         var colName = col.Name;
                         if (field.Name == colName) {
@@ -319,7 +318,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                         var oldExists = false;
                         foreach (var col in columns) {
-                            if (col.Table.ToLower() != type.Name.ToLower()) continue;
+                            if (col.Table != type.Name) continue;
                             var colName = col.Name;
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
@@ -338,7 +337,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                         foreach (var col in columns) {
                             var tableName = col.Table;
-                            if (tableName.ToLower() != type.Name.ToLower()) continue;
+                            if (tableName != type.Name) continue;
                             var columnName = col.Name;
                             if (field.Name != columnName) continue;
                             // Found columns, check definitions
@@ -563,7 +562,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             continue;
                         if (
                             fkDef.RefColumn == refColName &&
-                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
+                            fkDef.RefTable == refTablName &&
                             field.Name == colName) {
                             found = true;
                             break;
@@ -593,10 +592,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var refTablName = keys.Rows[i]["REFERENCED_TABLE_NAME"] as String;
                         var refColName = keys.Rows[i]["REFERENCED_COLUMN_NAME"] as String;
                         if (
-                            type.Name.ToLower() == tableName.ToLower() &&
+                            type.Name == tableName &&
                             field.Name == colName &&
                             fkDef.RefColumn == refColName &&
-                            fkDef.RefTable.ToLower() == refTablName.ToLower()) {
+                            fkDef.RefTable == refTablName) {
                             found = true;
                             break;
                         } else {
@@ -606,13 +605,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     if (!found) {
                         try {
-                            Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name.ToLower()}/{field.Name} references {fkDef.RefTable.ToLower()}/{fkDef.RefColumn}");
+                            Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name}/{field.Name} references {fkDef.RefTable}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.Purge(type.Name.ToLower(), field.Name, fkDef.RefTable.ToLower(), fkDef.RefColumn));
+                                DataAccessor.QueryGenerator.Purge(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn));
 
-                            Benchmarker.Mark($"Create Constraint FK {type.Name.ToLower()}/{field.Name} references {fkDef.RefTable.ToLower()}/{fkDef.RefColumn}");
+                            Benchmarker.Mark($"Create Constraint FK {type.Name}/{field.Name} references {fkDef.RefTable}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.AddForeignKey(type.Name.ToLower(), field.Name, fkDef.RefTable.ToLower(), fkDef.RefColumn));
+                                DataAccessor.QueryGenerator.AddForeignKey(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn));
                         } catch (Exception x) {
                             Fi.Tech.WriteLine(x.Message);
                         }
@@ -657,8 +656,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 foreach (var type in workingTypes) {
                     var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
                     if (oldNameAtt != null) {
-                        if (tabName.ToLower() == oldNameAtt.Name.ToLower()) {
-                            oldNames.Add(type.Name.ToLower(), oldNameAtt.Name.ToLower());
+                        if (tabName == oldNameAtt.Name) {
+                            oldNames.Add(type.Name, oldNameAtt.Name);
                         }
                     }
                 }
@@ -669,14 +668,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var found = false;
                 foreach (DataRow a in tables.Rows) {
                     var tabName = a["TABLE_NAME"] as String;
-                    if (tabName.ToLower() == type.Name.ToLower()) {
+                    if (tabName == type.Name) {
                         found = true;
                     }
                 }
                 if (!found) {
                     bool renamed = false;
                     foreach (var old in oldNames) {
-                        if (old.Key.ToLower() == type.Name.ToLower() && old.Value.ToLower() != type.Name.ToLower()) {
+                        if (old.Key == type.Name && old.Value != type.Name) {
                             DekeyTable(old.Value, keys);
                             Exec(DataAccessor.QueryGenerator.RenameTable(old.Value, old.Key));
                             renamed = true;
@@ -698,7 +697,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var tablName = a["TABLE_NAME"] as String;
                 var colName = a["COLUMN_NAME"] as String;
                 foreach (var type in workingTypes) {
-                    if (tablName.ToLower() != type.Name.ToLower()) continue;
+                    if (tablName != type.Name) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
                     
@@ -717,10 +716,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var colName2 = columns.Rows[i]["COLUMN_NAME"] as String;
                             var tablName2 = columns.Rows[i]["TABLE_NAME"] as String;
 
-                            if (tablName2.ToLower() != type.Name.ToLower()) continue;
+                            if (tablName2 != type.Name) continue;
 
                             if (colName2 == field.Name
-                                && type.Name.ToLower() == tablName2.ToLower()
+                                && type.Name == tablName2
                                 ) {
                                 found = true;
                                 break;
@@ -731,11 +730,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             bool renamed = false;
                             foreach (var old in oldNames) {
                                 if (old.Key == field.Name
-                                    && type.Name.ToLower() == tablName.ToLower()
+                                    && type.Name == tablName
                                     ) {
                                     Benchmarker.Mark($"ACTION: Rename {old.Value} to {field.Name}");
-                                    DekeyColumn(type.Name.ToLower(), old.Value, keys);
-                                    Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name.ToLower(), old.Value, GetColumnDefinition(field)));
+                                    DekeyColumn(type.Name, old.Value, keys);
+                                    Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name, old.Value, GetColumnDefinition(field)));
                                     renamed = true;
                                     break;
                                 }
@@ -744,7 +743,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                             if (!renamed) {
                                 Benchmarker.Mark($"ACTION: Create column {field.Name}");
-                                Exec(DataAccessor.QueryGenerator.AddColumn(type.Name.ToLower(), GetColumnDefinition(field)));
+                                Exec(DataAccessor.QueryGenerator.AddColumn(type.Name, GetColumnDefinition(field)));
                             }
                         }
                     }
@@ -757,7 +756,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             for (int i = 0; i < columns.Rows.Count; i++) {
                 foreach (var type in workingTypes) {
                     var tableName = columns.Rows[i]["TABLE_NAME"] as String;
-                    if (tableName.ToLower() != type.Name.ToLower()) continue;
+                    if (tableName != type.Name) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                         .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
                     foreach (var field in fields) {
@@ -776,8 +775,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             (length ?? 0) != fieldAtt.Size ||
                             datatype != dbDefinition
                             ) {
-                            Benchmarker.Mark($"ACTION: Alter Column {type.Name.ToLower()}/{field.Name}");
-                            Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name.ToLower(), field.Name, GetColumnDefinition(field)));
+                            Benchmarker.Mark($"ACTION: Alter Column {type.Name}/{field.Name}");
+                            Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name, field.Name, GetColumnDefinition(field)));
                         } else {
                         }
                     }
@@ -818,7 +817,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
-                switch (dataType.ToLower()) {
+                switch (dataType) {
                     case "rid":
                         type = $"VARCHAR(64)";
                         break;
@@ -911,7 +910,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             // We know for sure that value is not null at this point
             // But it may still be nullable.
             var checkingType = value.GetType();
-            switch (value.GetType().Name.ToLower()) {
+            switch (value.GetType().Name) {
                 case "string":
                     if (value.ToString() == "CURRENT_TIMESTAMP")
                         return "CURRENT_TIMESTAMP";

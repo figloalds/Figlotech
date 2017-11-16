@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
 using Newtonsoft.Json;
 using System;
@@ -133,7 +134,7 @@ namespace Figlotech.BDados.Authentication {
             if(DataAccessor is IRdbmsDataAccessor bd) {
                 bd.Access(() => {
                     // DID ANYONE SAY DRAGONS?!
-                    (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Active=0 WHERE Token=@1", s);
+                    (bd).Execute($"UPDATE {typeof(TSession).Name} SET Active=0 WHERE Token=@1", s);
                 });
             } else {
                 var session = DataAccessor.LoadByRid<TSession>(s.RID);
@@ -177,7 +178,7 @@ namespace Figlotech.BDados.Authentication {
             // Here be DRAGONS!!
             if(DataAccessor is IRdbmsDataAccessor bd) {
                 bd.Access(() => {
-                        (bd).Execute($"UPDATE {typeof(TSession).Name.ToLower()} SET Ativo=b'0' WHERE Token=@1;", Token);
+                        (bd).Execute($"UPDATE {typeof(TSession).Name} SET Ativo=b'0' WHERE Token=@1;", Token);
                     }
                 );
             }

@@ -1,5 +1,6 @@
 ﻿using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
 using System;
 using System.Collections.Generic;
@@ -29,7 +30,7 @@ namespace Figlotech.BDados.CustomForms {
                     bool exists = false;
                     int cIndex = -1;
                     for(var c = 0; c < columnsInfo.Rows.Count; c++) { // C++!!!
-                        if(columnsInfo.Rows[c]["COLUMN_NAME"] == form.Fields[i].Name) {
+                        if(columnsInfo.Rows[c]["COLUMN_NAME"] as String == form.Fields[i].Name) {
                             exists = true;
                             cIndex = c;
                             break;

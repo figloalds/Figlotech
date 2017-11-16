@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.Helpers;
+using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
 using Figlotech.Core.Interfaces;
 using System;
@@ -138,7 +139,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             JoiningTable tj = new JoiningTable();
             tj.Alias = Alias;
-            tj.TableName = typeof(T).Name.ToLower();
+            tj.TableName = typeof(T).Name;
             tj.ValueObject = typeof(T);
             tj.Args = Args;
             tj.Type = joinType;

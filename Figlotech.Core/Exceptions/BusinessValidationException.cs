@@ -1,5 +1,6 @@
 ﻿using Figlotech.Core.BusinessModel;
 using System;
+using System.Linq;
 using System.Runtime.Serialization;
 
 namespace System {
@@ -12,7 +13,11 @@ namespace System {
     public class BusinessValidationException : EndUserGeneratedException {
         public ValidationErrors Errors;
 
-        public BusinessValidationException(ValidationErrors errors) : base(400, "Business validation failed") {
+        public static string ErrsToStr(ValidationErrors errors) {
+            return String.Join(";\r\n", errors.ToArray().Select(e => $"{e.Key} - {e.Message}"));
+        }
+
+        public BusinessValidationException(ValidationErrors errors) : base(400, ErrsToStr(errors)) {
             Errors = errors;
         }
 

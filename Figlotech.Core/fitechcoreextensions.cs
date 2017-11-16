@@ -831,6 +831,10 @@ namespace Figlotech.Core {
         }
 
         public static void MemberwiseCopy(this Fi _selfie, object origin, object destination) {
+            if (origin == null)
+                return;
+            if (destination == null)
+                return;
             ObjectReflector.Open(origin, (objA) => {
                 var members = ReflectionTool.FieldsAndPropertiesOf(origin.GetType());
                 ObjectReflector.Open(destination, (objB) => {

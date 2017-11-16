@@ -58,7 +58,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GetCreationCommand(Type t) {
-            String objectName = t.Name.ToLower();
+            String objectName = t.Name;
 
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
             members.RemoveAll(
@@ -107,7 +107,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 throw new BDadosException("This join needs 1 or more tables.");
 
             List<Type> Tabelas = (from a in juncaoInput.Joins select a.ValueObject).ToList();
-            List<String> tableNames = (from a in juncaoInput.Joins select a.ValueObject.Name.ToLower()).ToList();
+            List<String> tableNames = (from a in juncaoInput.Joins select a.ValueObject.Name).ToList();
             List<String> aliases = (from a in juncaoInput.Joins select a.Prefix).ToList();
             List<String> Aliases = (from a in juncaoInput.Joins select a.Alias).ToList();
             List<String> ArgsJuncoes = (from a in juncaoInput.Joins select a.Args).ToList();
@@ -206,7 +206,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //}
             if (conditions != null && !conditions.IsEmpty) {
                 Query.Append("\tWHERE");
-                //if (condicoes.GetCommandText().ToLower().Contains("order by")) {
+                //if (condicoes.GetCommandText().Contains("order by")) {
                 //    Query.Append(condicoes.GetCommandText().Substring(0, condicoes.GetCommandText().ToUpper().IndexOf("ORDER BY")), condicoes.GetParameters().Select((a) => a.Value).ToArray());
                 //} else {
                 Query.Append(conditions);
@@ -249,7 +249,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var type = typeof(T);
             QueryBuilder Query = new QueryBuilder("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append($"FROM {type.Name.ToLower()} AS a;");
+            Query.Append($"FROM {type.Name} AS a;");
             return Query;
         }
 
@@ -257,7 +257,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var type = typeof(T);
             QueryBuilder Query = new QueryBuilder("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format("FROM {0} AS a", type.Name.ToLower()));
+            Query.Append(String.Format("FROM {0} AS a", type.Name));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
@@ -323,7 +323,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 return null;
             }
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"UPDATE {typeof(T).Name.ToLower()} ");
+            Query.Append($"UPDATE {typeof(T).Name} ");
             Query.Append("SET ");
 
             // -- 
@@ -356,7 +356,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT INTO {typeof(T).Name.ToLower()} (");
+            Query.Append($"INSERT INTO {typeof(T).Name} (");
             Query.Append(GenerateFieldsString(typeof(T), true));
             Query.Append(") VALUES");
             // -- 
@@ -418,15 +418,15 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder AddColumn(string table, string columnDefinition) {
-            return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD COLUMN {columnDefinition};");
+            return new QueryBuilder($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
         }
 
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder($"ALTER TABLE {table.ToLower()} ADD CONSTRAINT fk_{table.ToLower()}_{column.ToLower()} FOREIGN KEY ({column}) REFERENCES {refTable.ToLower()}({refColumn})");
+            return new QueryBuilder($"ALTER TABLE {table} ADD CONSTRAINT fk_{table}_{column} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder($"DELETE FROM {table.ToLower()} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable.ToLower()})");
+            return new QueryBuilder($"DELETE FROM {table} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
         }
 
         private List<MemberInfo> GetMembers(Type t) {

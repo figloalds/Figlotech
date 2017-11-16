@@ -13,6 +13,8 @@ using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core.Helpers;
 using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
+using Figlotech.BDados.TableNameTransformDefaults;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T : IRdbmsPluginAdapter, new() {
@@ -439,9 +441,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Object o = dt.Rows[i][col.Name];
                     objBuilder[col] = o;
                 }
+                objBuilder["DataAccessor"] = this;
             } else {
                 retv = default(T);
             }
+
             return retv;
         }
 
@@ -530,7 +534,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name)).As(p.GetAliasFor("root", typeof(T).Name));
                         MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, p, false);
                     });
-            var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
+            var query = new QueryBuilder($"DELETE FROM {typeof(T).Name} WHERE ");
             query.Append($"{id} IN (SELECT a_{id} as {id} FROM (");
             query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
             query.Append(") sub)");
@@ -1136,7 +1140,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     break;
             }
 
-            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name.ToLower()}? {hasAnyAggregations}.");
+            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}.");
             // CLUMSY
             if (hasAnyAggregations) {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -1190,9 +1194,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
             Access(() => {
-                var query = new QueryBuilder($"DELETE FROM {typeof(T).Name.ToLower()} WHERE ");
+                var query = new QueryBuilder($"DELETE FROM {typeof(T).Name} WHERE ");
                 if (cnd != null) {
-                    query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name.ToLower()} AS a WHERE ");
+                    query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS a WHERE ");
                     query.Append(new ConditionParser().ParseExpression<T>(cnd));
                     query.Append(") sub)");
                 }
