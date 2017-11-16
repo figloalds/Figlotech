@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace System
 {
-    public static class StringExtensions
+    public static class DateTimeExtensions
     {
         public static DateTime AtStartOfDay(this DateTime dt) {
             return new DateTime(dt.Year, dt.Month, dt.Day, 0, 0, 0, dt.Kind);

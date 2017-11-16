@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 
 namespace System
 {
-
     public static class StringExtensions {
         public static string Remove(this string me, string other) {
             return me.Replace(other, String.Empty);
@@ -29,10 +28,6 @@ namespace System
             }
         }
         
-        public static string Remove(this string me, string other) {
-            return me.Replace(other, String.Empty);
-        }
-
     }
 
 }

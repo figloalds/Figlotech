@@ -272,14 +272,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var type in workingTypes) {
                 var found = false;
                 foreach (String tableName in tables) {
-                    if (tableName == type.Name) {
+                    if (tableName.ToLower() == type.Name.ToLower()) {
                         found = true;
                     }
                 }
                 if (!found) {
                     bool renamed = false;
                     foreach (var old in oldNames) {
-                        if (old.Key == type.Name) {
+                        if (old.Key.ToLower() == type.Name.ToLower()) {
                             foreach (var a in EvaluateForFullTableDekeyal(old.Value, tables, keys)) {
                                 yield return a;
                             }
@@ -289,6 +289,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                     }
                     if (!renamed) {
+                        TablesToCreate.Add(type.Name.ToLower());
                         yield return new CreateTableScAction(DataAccessor, type);
                     }
                 }
@@ -296,6 +297,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             yield break;
         }
+
+        private List<string> TablesToCreate = new List<string>();
 
         private IEnumerable<IStructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
 
@@ -306,7 +309,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var fieldExists = false;
                     foreach (var col in columns) {
-                        if (type.Name != col.Table)
+                        if (type.Name.ToLower() != col.Table.ToLower())
                             continue;
                         var colName = col.Name;
                         if (field.Name == colName) {
@@ -329,7 +332,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
 
-                        if (!oldExists) {
+                        if (!oldExists && !TablesToCreate.Contains(type.Name.ToLower())) {
                             yield return new CreateColumnScAction(DataAccessor, type.Name, field.Name, field);
                         }
 
@@ -409,6 +412,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
             var columns = GetInfoSchemaColumns();
+            TablesToCreate.Clear();
             foreach (var a in EvaluateLegacyKeys(keys))
                 yield return a;
             foreach (var a in EvaluateTableChanges(tables, keys))
