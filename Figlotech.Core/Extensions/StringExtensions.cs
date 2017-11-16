@@ -28,5 +28,11 @@ namespace System
                 return default(T);
             }
         }
+        
+        public static string Remove(this string me, string other) {
+            return me.Replace(other, String.Empty);
+        }
+
     }
+
 }

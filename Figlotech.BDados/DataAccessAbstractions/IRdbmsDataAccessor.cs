@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor
     {
+        event Action<Type, IDataObject> OnSuccessfulSave;
+        event Action<Type, IDataObject, Exception> OnFailedSave;
 
         void Access(Action tryFun, Action<Exception> catchFun = null);
         T Access<T>(Func<T> tryFun, Action<Exception> catchFun = null);

@@ -19,5 +19,12 @@ namespace Figlotech.Core {
     public class Fi {
 
         public static Fi Tech = new Fi();
+
+        public static IEnumerable<int> Range(int min, int max, int skip = 1) {
+            for(int i = min; i < max; i+=skip) {
+                yield return i;
+            }
+        }
+
     }
 }
