@@ -208,7 +208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 .GenericCache.Where((o) => (string)o.RID == v).FirstOrDefault();
         }
 
-        public RecordSet<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, int? limit = default(int?), int? page = default(int?), int PageSize = 200, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
+        public IEnumerable<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = default(int?), int? page = default(int?), int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
             var cache = GetCacheOf<T>();
             RecordSet<T> retv = new RecordSet<T>(this);
             WorkQueuer.Live((queuer) => {
@@ -358,6 +358,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
             return LoadAll<T>(condicoes, page, limit).FirstOrDefault();
+        }
+
+        public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new() {
+            throw new NotImplementedException();
         }
     }
 }

@@ -120,7 +120,7 @@ namespace Figlotech.BDados.Helpers {
 
         public QueryBuilder ParseExpression<T>(Expression<Func<T, bool>> foofun, bool fullConditions = true, QueryBuilder strBuilder = null) {
             if (foofun == null) {
-                return new QueryBuilder("TRUE");
+                return new QbFmt("TRUE");
             }
             rootType = typeof(T);
             return ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
@@ -161,7 +161,7 @@ namespace Figlotech.BDados.Helpers {
                         var aList = new List<MemberInfo>();
                         aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == mexp.Member.Name));
                         if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
-                            return new QueryBuilder("TRUE");
+                            return new QbFmt("TRUE");
                         }
                     }
                 }
@@ -223,7 +223,7 @@ namespace Figlotech.BDados.Helpers {
                     var aList = new List<MemberInfo>();
                     aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == expr.Member.Name.Replace("_","")));
                     if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
-                        return new QueryBuilder("1");
+                        return new QbFmt("1");
                     }
                     if (aList.Any()) {
                         strBuilder.Append($"{ForceAlias ?? GetPrefixOf(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
@@ -286,7 +286,7 @@ namespace Figlotech.BDados.Helpers {
                 }
             } else
             if (!fullConditions) {
-                return new QueryBuilder("");
+                return new QbFmt("");
             } else
             if (foofun is MethodCallExpression) {
                 var expr = foofun as MethodCallExpression;
@@ -321,7 +321,7 @@ namespace Figlotech.BDados.Helpers {
             if (fullConditions) {
                 return strBuilder;
             } else {
-                return new QueryBuilder(strBuilder.GetCommandText().Replace("a.", ""), strBuilder._objParams.Select((pm) => pm.Value).ToArray());
+                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("a.", ""), strBuilder._objParams.Select((pm) => pm.Value).ToArray());
             }
         }
     }

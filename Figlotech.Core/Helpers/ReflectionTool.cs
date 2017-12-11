@@ -50,17 +50,23 @@ namespace Figlotech.Core.Helpers {
             return member.GetCustomAttribute<T>();
         }
 
-        public static bool SetValue(Object target, String fieldName, Object value) {
-            try {
-                MemberInfo member = ((MemberInfo)
-                target.GetType()
+        public static MemberInfo GetMember(Type t, string fieldName, object target) {
+            if (t == null) return null;
+            MemberInfo member = ((MemberInfo)
+                t
                     .GetFields()
                     .Where((field) => field.Name == fieldName)
                     .FirstOrDefault()) ?? ((MemberInfo)
-                target.GetType()
+                t
                     .GetProperties()
                     .Where((field) => field.Name == fieldName)
                     .FirstOrDefault());
+            return member ?? GetMember(t.BaseType, fieldName, target);
+        }
+
+        public static bool SetValue(Object target, String fieldName, Object value) {
+            try {
+                MemberInfo member = GetMember(target?.GetType(), fieldName, target);
                 if (member == null) {
                     return false;
                 }
@@ -103,6 +109,7 @@ namespace Figlotech.Core.Helpers {
             return val;
         }
         static Type ToUnderlying(Type t) {
+            if (t == null) return null;
             return Nullable.GetUnderlyingType(t) ?? t;
         }
 
@@ -131,6 +138,7 @@ namespace Figlotech.Core.Helpers {
                 var t = GetTypeOf(member);
                 value = DbEvalValue(value, t);
                 t = ToUnderlying(t);
+                if (t == null) return;
                 if (value == null && t.IsValueType) {
                     return;
                 }
@@ -186,16 +194,7 @@ namespace Figlotech.Core.Helpers {
 
         public static Object GetValue(Object target, String fieldName) {
             try {
-                var retv = target.GetType()
-                    .GetFields()
-                    .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault()?.GetValue(target);
-                if (retv == null) {
-                    retv = target.GetType()
-                    .GetProperties()
-                    .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault()?.GetValue(target);
-                }
+                var retv = GetMemberValue(GetMember(target?.GetType(), fieldName, target), target);
                 return retv;
             } catch (Exception) {
 

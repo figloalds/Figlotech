@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Figlotech.Core.Helpers {
+namespace Figlotech.Core.Extensions {
     public interface IMultiSerializableObject
     {
 

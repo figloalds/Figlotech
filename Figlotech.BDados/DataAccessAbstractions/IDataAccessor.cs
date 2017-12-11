@@ -1,6 +1,7 @@
 ﻿using Figlotech.BDados.Builders;
 using Figlotech.Core.Interfaces;
 using System;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -12,6 +13,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         ILogger Logger { get; set; }
 
         RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
 
         T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
         T LoadByRid<T>(String RID) where T : IDataObject, new();
@@ -26,6 +28,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         Type[] WorkingTypes { get; set; }
 
-        RecordSet<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, int? limit = null, int? page = null, int PageSize = 200, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new();
+        IEnumerable<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new();
     }
 }

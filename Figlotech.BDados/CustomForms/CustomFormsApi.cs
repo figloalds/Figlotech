@@ -18,13 +18,15 @@ namespace Figlotech.BDados.CustomForms {
             var tableName = GetPrefixedTableName(ref form);
 
             // 
-            DataTable schemaInfo = da.Query($"SELECT * FROM information_schema.tables WHERE table_schema='{da.SchemaName}' AND table_name='{tableName}'");
+            DataTable schemaInfo = da.Query(
+                new Qb($"SELECT * FROM information_schema.tables WHERE table_schema='{da.SchemaName}' AND table_name='{tableName}'"));
             // Se a tabela não existir, criar
             if (schemaInfo.Rows.Count < 1) {
                 var creationQuery = BuildCreationQuery(form);
                 da.Execute(creationQuery);
             } else {
-                DataTable columnsInfo = da.Query($"SELECT * FROM information_schema.columns WHERE table_schema='{da.SchemaName}' AND table_name='{tableName}'");
+                DataTable columnsInfo = da.Query(
+                    new Qb($"SELECT * FROM information_schema.columns WHERE table_schema='{da.SchemaName}' AND table_name='{tableName}'"));
 
                 for(var i = 0; i < form.Fields.Count; i++) {
                     bool exists = false;
@@ -37,12 +39,12 @@ namespace Figlotech.BDados.CustomForms {
                         }
                     }
                     if(!exists) {
-                        da.Execute($"ALTER TABLE {tableName} ADD COLUMN {SqlType(form.Fields[i])} DEFAULT NULL;");
+                        da.Execute(new Qb($"ALTER TABLE {tableName} ADD COLUMN {SqlType(form.Fields[i])} DEFAULT NULL;"));
                     } else {
                         ulong? sz = (ulong?) columnsInfo.Rows[cIndex]["CHARACTER_MAXIMUM_LENGTH"];
                         String dbtype = (String) columnsInfo.Rows[cIndex]["DATA_TYPE"];
                         if (dbtype.ToLower() == "varchar" && sz != (ulong) form.Fields[i].Size) {
-                            da.Execute($"ALTER TABLE {tableName} CHANGE COLUMN {form.Fields[i].Name} {form.Fields[i].Name} {SqlType(form.Fields[i])} DEFAULT NULL");
+                            da.Execute(new Qb($"ALTER TABLE {tableName} CHANGE COLUMN {form.Fields[i].Name} {form.Fields[i].Name} {SqlType(form.Fields[i])} DEFAULT NULL"));
                         }
                     }
                 }
@@ -229,10 +231,10 @@ namespace Figlotech.BDados.CustomForms {
             return retv;
         }
 
-        public static String BuildCreationQuery(CustomForm form) {
+        public static IQueryBuilder BuildCreationQuery(CustomForm form) {
             var tableName = GetPrefixedTableName(ref form);
 
-            StringBuilder retv = new StringBuilder();
+            QueryBuilder retv = new QueryBuilder();
             retv.Append($"CREATE TABLE {tableName} (");
             retv.Append("Id BIGINT(20) NOT NULL PRIMARY KEY AUTO_INCREMENT,");
             for(var i = 0; i < form.Fields.Count; i++) {
@@ -244,7 +246,7 @@ namespace Figlotech.BDados.CustomForms {
             }
             retv.Append("RID VARCHAR(64) NOT NULL UNIQUE");
             retv.Append(")");
-            return retv.ToString();
+            return retv;
         }
         public static String SqlType(CustomFormField campo) {
             switch (campo.Type.ToLower()) {

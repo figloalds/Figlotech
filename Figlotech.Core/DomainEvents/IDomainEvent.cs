@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents
 {
-    public interface IDomainEvent
-    {
+    public interface IDomainEvent {
         long Time { get; }
+        long Id { get; }
     }
 }

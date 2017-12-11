@@ -21,7 +21,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
         public bool UsePooling { get; set; } = true;
         public int Timeout { get; set; } = 60000;
         public int Lifetime { get; set; } = 60000;
-        public bool ResetConnection { get; set; } = false;
+        public bool ResetConnection { get; set; } = true;
         public bool ContinuousConnection { get; set; } = false;
 
         public void SaveToFile(String path, String password) {

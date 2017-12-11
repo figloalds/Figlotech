@@ -10,6 +10,7 @@
 using Figlotech.Core.BusinessModel;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -73,10 +74,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public OrderingType Ordering = OrderingType.Asc;
         public MemberInfo OrderingMember = null;
+        public MemberInfo GroupingMember = null;
+        private Func<T, object> orderingExpression = null;
         public RecordSet<T> OrderBy(Expression<Func<T, object>> fn, OrderingType orderingType) {
             try {
+                orderingExpression = fn.Compile();
                 OrderingMember = FindMember(fn.Body);
                 Ordering = orderingType;
+            } catch (Exception) { }
+
+            return this;
+        }
+
+        public RecordSet<T> SetGroupingMember(MemberInfo mbi) {
+            GroupingMember = mbi;
+            return this;
+        }
+
+        public RecordSet<T> GroupResultsBy(Expression<Func<T, object>> fn) {
+            try {
+                GroupingMember = FindMember(fn.Body);
             } catch (Exception) { }
 
             return this;
@@ -90,28 +107,45 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this;
         }
 
-        public RecordSet<T> LoadAll(Expression<Func<T,bool>> cnd = null, int? page = null) {
-            Clear();
-            var transport = DataAccessor.AggregateLoad<T>(cnd, LimitResults, page, PageSize, OrderingMember, Ordering, LinearLoad);
-            foreach(var i in transport) {
-                if(i is IBusinessObject bo) {
-                    bo.OnAfterLoad();
-                }
-                this.Add(i);
-            }
-            transport = null;
-
-            LimitResults = null;
-            OrderingMember = null;
-
+        public RecordSet<T> LoadAll(Expression<Func<T, bool>> cnd = null, int? page = null) {
+            AddRange(Fetch(cnd, page));
             return this;
         }
 
         public RecordSet<T> LoadAllLinear(Expression<Func<T, bool>> cnd = null, int? page = null) {
-            LinearLoad = true;
-            LoadAll(cnd, page);
-            LinearLoad = false;
+            AddRange(FetchLinear(cnd, page));
             return this;
+        }
+
+        public IEnumerable<T> Fetch(Expression<Func<T,bool>> cnd = null, int? page = null, bool Linear = false) {
+            Clear();
+
+            var agl = DataAccessor.AggregateLoad<T>(cnd, OrderingMember, Ordering, LimitResults, page, PageSize,  GroupingMember, OrderingMember, Ordering, Linear);
+            agl = agl.ToList();
+            if (OrderingMember != null) {
+                if(Ordering == OrderingType.Desc) {
+                    agl = agl.OrderByDescending(orderingExpression);
+                } else {
+                    agl = agl.OrderBy(orderingExpression);
+                }
+            }
+            var enumerator = agl.GetEnumerator();
+            while(enumerator.MoveNext()) {
+                var transport = enumerator.Current;
+                yield return transport;
+            }
+            
+            LimitResults = null;
+            orderingExpression = null;
+            OrderingMember = null;
+            GroupingMember = null;
+        }
+
+        public IEnumerable<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? page = null) {
+            LinearLoad = true;
+            var retv = Fetch(cnd, page, true);
+            LinearLoad = false;
+            return retv;
         }
 
         public bool Load(Action fn = null) {

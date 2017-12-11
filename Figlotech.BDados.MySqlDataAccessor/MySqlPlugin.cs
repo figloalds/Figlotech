@@ -32,29 +32,34 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new MySqlConnection(Config.GetConnectionString());
         }
 
-        public DataSet GetDataSet(IDbCommand command) {
-            using (var reader = (command as MySqlCommand).ExecuteReader() as MySqlDataReader) {
-                DataTable dt = new DataTable();
-                for (int i = 0; i < reader.FieldCount; i++) {
-                    dt.Columns.Add(new DataColumn(reader.GetName(i)));
-                }
+        static long idGen = 0;
+        long myId = ++idGen;
 
-                while(reader.Read()) {
-                    var dr = dt.NewRow();
+        public DataSet GetDataSet(IDbCommand command) {
+            lock(command) {
+                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                    DataTable dt = new DataTable();
                     for (int i = 0; i < reader.FieldCount; i++) {
-                        var type = reader.GetFieldType(i);
-                        if(reader.IsDBNull(i)) {
-                            dr[i] = null;
-                        } else {
-                            var val = reader.GetValue(i);
-                            dr[i] = Convert.ChangeType(val, type);
-                        }
+                        dt.Columns.Add(new DataColumn(reader.GetName(i)));
                     }
-                    dt.Rows.Add(dr);
+
+                    while (reader.Read()) {
+                        var dr = dt.NewRow();
+                        for (int i = 0; i < reader.FieldCount; i++) {
+                            var type = reader.GetFieldType(i);
+                            if (reader.IsDBNull(i)) {
+                                dr[i] = null;
+                            } else {
+                                var val = reader.GetValue(i);
+                                dr[i] = Convert.ChangeType(val, type);
+                            }
+                        }
+                        dt.Rows.Add(dr);
+                    }
+                    var ds = new DataSet();
+                    ds.Tables.Add(dt);
+                    return ds;
                 }
-                var ds = new DataSet();
-                ds.Tables.Add(dt);
-                return ds;
             }
         }
 

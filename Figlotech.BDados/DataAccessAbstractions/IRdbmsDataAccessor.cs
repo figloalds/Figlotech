@@ -13,16 +13,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         event Action<Type, IDataObject> OnSuccessfulSave;
         event Action<Type, IDataObject, Exception> OnFailedSave;
 
-        void Access(Action tryFun, Action<Exception> catchFun = null);
-        T Access<T>(Func<T> tryFun, Action<Exception> catchFun = null);
+        void Access(Action<IDbConnection> tryFun, Action<Exception> catchFun = null);
+        T Access<T>(Func<IDbConnection, T> tryFun, Action<Exception> catchFun = null);
 
         RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes = null) where T : IDataObject, new();
 
-        T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null) where T : IDataObject, new();
+
+        //T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
 
-        IEnumerable<T> Query<T>(IQueryBuilder Query) where T : new();
+        IEnumerable<T> Query<T>(IQueryBuilder Query = null) where T : new();
         IEnumerable<T> Query<T>(String Query, params object[] args) where T : new();
 
         DataTable Query(IQueryBuilder Query);
@@ -37,5 +40,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
 
+        DataTable Query(IDbConnection connection, IQueryBuilder Query);
+        IEnumerable<T> Query<T>(IDbConnection connection, IQueryBuilder Query = null) where T : new();
+        int Execute(IDbConnection connection, IQueryBuilder Query);
+        IEnumerable<T> Fetch<T>(IDbConnection connection, IQueryBuilder condicoes = null) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IDbConnection connection, IQueryBuilder condicoes = null) where T : IDataObject, new();
+
+        bool SaveItem(IDbConnection connection, IDataObject objeto, Action funcaoPosSalvar = null);
     }
 }

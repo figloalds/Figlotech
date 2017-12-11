@@ -21,6 +21,8 @@ using Figlotech.Core.Interfaces;
 using Figlotech.Core;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
+using Figlotech.Core.BusinessModel;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Builders {
     public class JoinObjectBuilder : IJoinBuilder
@@ -55,20 +57,14 @@ namespace Figlotech.BDados.Builders {
             }
         }
 
-        public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null) {
-            return generator.GenerateJoinQuery(_join, conditions, p, limit, conditionsRoot);
+        public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null) {
+            return generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
         }
 
-        public DataTable GenerateDataTable(IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) {
-            QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, p, limit, conditionsRoot);
+        public DataTable GenerateDataTable(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) {
+            QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
             DataTable dt = null;
-            _dataAccessor.Access(() => {
-                dt = _dataAccessor.Query(query);
-            }, (x) => {
-                Logger.WriteLog("-- Failed to generate DataTable in JoinBuilder, verify your ON and WHERE clauses.");
-                throw x;
-            }
-            );
+            dt = _dataAccessor.Query(query);
             return dt;
         }
 
@@ -202,6 +198,10 @@ namespace Figlotech.BDados.Builders {
                         }
                     }
                 }
+
+                if (thisObject is IBusinessObject bo) {
+                    bo.OnAfterLoad();
+                }
                 retv.Add(thisObject);
             }
             return retv;
@@ -240,21 +240,21 @@ namespace Figlotech.BDados.Builders {
             return _join.Relations;
         }
 
-        public RecordSet<T> BuildObject<T>(Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
+        public IEnumerable<T> BuildObject<T>(Action<BuildParametersHelper> fn, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
             // May Jesus have mercy on your soul
             // If you intend on messing with this funciton.
 
             if (conditions == null) {
-                conditions = new QueryBuilder("TRUE");
+                conditions = new QbFmt("TRUE");
             }
 
             // First we generate the DataTable we'll be working with:
-            DataTable dt = GenerateDataTable((_dataAccessor).QueryGenerator, conditions, p, limit, conditionsRoot);
+            DataTable dt = GenerateDataTable((_dataAccessor).QueryGenerator, conditions,orderingMember, otype,  p, limit, conditionsRoot);
             _buildParameters = new BuildParametersHelper(ref _join, dt);
             fn(_buildParameters);
             // And validate everything;
             DateTime start = DateTime.Now;
-            RecordSet<T> retv = new RecordSet<T>();
+            Queue<T> cache = new Queue<T>();
             ValidateRelations();
             var Relations = _join.Relations;
             // Then we do this... Magic...
@@ -270,7 +270,7 @@ namespace Figlotech.BDados.Builders {
             rs = rs.GroupBy(c => c[Prefix + $"_{rid}"]).Select(grp => grp.First()).ToList();
             // This says: Foreach datarow at the 
             // "grouped by the Aggregate Root RID"
-            foreach (DataRow dr in rs) {
+            Parallel.ForEach (rs, dr=> {
                 // We will create 1 root level object
                 // and then we will conduce some crazy 
                 // recursiveness to objectize its children.
@@ -332,6 +332,7 @@ namespace Figlotech.BDados.Builders {
                                 }
                                 break;
                             }
+
                         // this one is almost the same as previous one.
                         case AggregateBuildOptions.AggregateObject: {
                                 String fieldAlias = rel.NewName ?? _join.Joins[rel.ChildIndex].Alias;
@@ -375,11 +376,17 @@ namespace Figlotech.BDados.Builders {
                     }
                 }
 
-                retv.Add(thisObject);
-            }
-            //});
-            Logger.WriteLog($"Fi.Tech JoinBuilder has built the output object in {DateTime.Now.Subtract(start).TotalMilliseconds}ms");
-            return retv;
+                if (thisObject is IBusinessObject bo) {
+                    bo.OnAfterLoad();
+                }
+
+                lock(cache)
+                    cache.Enqueue(thisObject);
+                //}
+            });
+            Logger.WriteLog($"Fi.Tech JoinBuilder has coroutinely built the output object in {DateTime.Now.Subtract(start).TotalMilliseconds}ms");
+            foreach (var a in cache)
+                yield return a;
         }
     }
 }

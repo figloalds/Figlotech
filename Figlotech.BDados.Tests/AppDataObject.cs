@@ -40,7 +40,7 @@ namespace AppRostoJovem.WebCore {
         }
 
 
-        public bool IsPersisted => Id > 0;
+        public bool IsPersisted { get; set; }
 
         public void ForceId(long novoId) {
             Id = novoId;

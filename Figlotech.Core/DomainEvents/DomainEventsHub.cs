@@ -48,8 +48,32 @@ namespace Figlotech.Core.DomainEvents
             return DateTime.UtcNow.Subtract(dt) > EventCacheDuration;
         }
 
-        public IEnumerable<IDomainEvent> GetEventsSince(DateTime dt) {
-            return EventCache.Where(e => e.Time > dt.Ticks);
+        public IEnumerable<IDomainEvent> GetEventsSince(long Id) {
+            return EventCache.Where(e => e.Id > Id);
+        }
+        public IEnumerable<IDomainEvent> GetEventsSince(DateTime Stamp) {
+            return EventCache.Where(e => e.Time > Stamp.Ticks);
+        }
+
+        public async Task<List<IDomainEvent>> PollForEventsSince<T>(TimeSpan maximumPollTime, long Id, Predicate<T> filter) {
+            return await PollForEventsSince(maximumPollTime, Id, e => e is T evt && filter(evt));
+        }
+        public async Task<List<IDomainEvent>> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
+            DateTime pollStart = DateTime.UtcNow;
+            return await Task.Run(async () => {
+                List<IDomainEvent> retv = new List<IDomainEvent>();
+                do {
+                    var events = GetEventsSince(Id).ToList();
+                    retv.AddRange(events.Where(e => filter(e)));
+                    if (events.Any())
+                        Id = events.Max(e => e.Id);
+                    if (!retv.Any()) {
+                        await Task.Delay(500);
+                    }
+                } while (!retv.Any() && DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
+
+                return retv;
+            });
         }
 
         public async Task<List<IDomainEvent>> PollForEventsSince<T>(TimeSpan maximumPollTime, DateTime dt, Predicate<T> filter) {
@@ -61,7 +85,7 @@ namespace Figlotech.Core.DomainEvents
             return await Task.Run(async () => {
                 List<IDomainEvent> retv = new List<IDomainEvent>();
                 do {
-                    var events = GetEventsSince(dt);
+                    var events = GetEventsSince(dt).ToList();
                     retv.AddRange(events.Where(e=> filter(e)));
                     if (events.Any()) dt = new DateTime(events.Max(e => e.Time));
                     if(!retv.Any()) {

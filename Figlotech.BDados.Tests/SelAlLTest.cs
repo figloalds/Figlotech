@@ -5,6 +5,7 @@ using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.MySqlDataAccessor;
 using Figlotech.Core;
 using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -117,7 +118,7 @@ namespace Figlotech.BDados.Tests
                     { "User", "root" },
                     { "Password", "asdafe1025" },
                    });
-            var li = da.Query<Terminais>("SELECT * FROM Terminais").ToList();
+            var li = da.Query<Terminais>(new Qb("SELECT * FROM Terminais")).ToList();
 
             Assert.IsTrue(li.Count > 0);
         }

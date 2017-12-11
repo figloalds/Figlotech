@@ -4,6 +4,7 @@ using System.Text;
 using Figlotech.Core.Autokryptex.EncryptMethods;
 using System.Drawing;
 using Figlotech.Core;
+using Figlotech.BDados.Builders;
 
 namespace Figlotech.Core.Autokryptex.Tests
 {
@@ -30,6 +31,14 @@ namespace Figlotech.Core.Autokryptex.Tests
             for(int i = 0; i < listA.Length; i++) {
                 Assert.AreEqual(listA[i], listB[i]);
             }
+        }
+
+
+        [TestMethod]
+        public void QbMustWork() {
+            var q = (Qb) "World";
+            var h = (Qb) "Hello" + q;
+            Assert.IsTrue(h.GetCommandText() == "Hello World");
         }
 
         //[TestMethod]

@@ -2,11 +2,13 @@
 using System.Data;
 using Figlotech.Core.Interfaces;
 using Figlotech.BDados.Helpers;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IJoinBuilder {
-        IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null);
-        DataTable GenerateDataTable(IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null);
-        RecordSet<T> BuildObject<T>(Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) where T: IDataObject, new();
+        IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null);
+        DataTable GenerateDataTable(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null);
+        IEnumerable<T> BuildObject<T>(Action<BuildParametersHelper> fn, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) where T: IDataObject, new();
     }
 }

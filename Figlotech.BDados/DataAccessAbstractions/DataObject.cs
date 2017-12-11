@@ -36,8 +36,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public override bool IsPersisted { get { return Id > 0; } }
-
         public override bool IsActive { get; set; }
 
         public DataObject() { }

@@ -31,7 +31,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
-            QueryBuilder query = new QueryBuilder($"INSERT INTO {inputObject.GetType().Name}");
+            QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
             query.Append(GenerateFieldsString(inputObject.GetType(), true));
             query.Append(")");
@@ -65,7 +65,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 (m) => m?.GetCustomAttribute<FieldAttribute>() == null);
             if (objectName == null || objectName.Length == 0)
                 return null;
-            QueryBuilder CreateTable = new QueryBuilder($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
+            QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
             for (int i = 0; i < members.Count; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
                 CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
@@ -80,7 +80,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateCallProcedure(string name, object[] args) {
-            QueryBuilder query = new QueryBuilder("CALL {name}");
+            QueryBuilder query = new QbFmt("CALL {name}");
             for (int i = 0; i < args.Length; i++) {
                 if (i == 0) {
                     query.Append("(");
@@ -100,9 +100,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
-        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, int? p = 1, int? limit = 100, IQueryBuilder condicoesRoot = null) {
+        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 100, IQueryBuilder condicoesRoot = null) {
             if (condicoesRoot == null)
-                condicoesRoot = new QueryBuilder("true");
+                condicoesRoot = new QbFmt("true");
             if (juncaoInput.Joins.Count < 1)
                 throw new BDadosException("This join needs 1 or more tables.");
 
@@ -123,7 +123,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 capturedInSub.Add(i);
             }
 
-            QueryBuilder Query = new QueryBuilder("SELECT \n");
+            QueryBuilder Query = new QbFmt("SELECT \n");
             for (int i = 1; i < Tabelas.Count; i++) {
                 if (capturedInSub.Contains(i)) {
                     continue;
@@ -164,7 +164,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 Query.Append("\n");
             }
+
+            //Query.Append($"\t\t1 FROM {tableNames[0]} AS {aliases[0]}\n");
+            //Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
+            if(orderingMember != null) {
+                Query.Append($"ORDER BY {orderingMember.Name} {(otype == OrderingType.Asc? "ASC" : "DESC" )}");
+            }
+            Query.Append($") AS {aliases[0]}\n");
             //if (!condicoesRoot.IsEmpty) {
             //    Query.Append("WHERE ");
             //    Query.Append(condicoesRoot);
@@ -175,9 +182,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //        Query.Append($"{(p - 1) * limit}, ");
             //    Query.Append($"{limit}");
             //} else {
-            //    Query.Append("LIMIT 99999999999");
+            //    //Query.Append("LIMIT 99999999999");
             //}
-            Query.Append($") AS {aliases[0]}\n");
+            //Query.Append($"");
             for (int i = 1; i < Tabelas.Count; i++) {
                 if (!capturedInSub.Contains(i)) {
                     continue;
@@ -219,6 +226,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append($"{limit}");
             }
             Query.Append(") AS sub\n");
+
             var capPrefixes = aliases.Where((a, b) => capturedInSub.Contains(b)).ToList();
             for (int i = 1; i < Tabelas.Count; i++) {
                 if (capturedInSub.Contains(i)) {
@@ -247,7 +255,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new() {
             var type = typeof(T);
-            QueryBuilder Query = new QueryBuilder("SELECT ");
+            QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
             Query.Append($"FROM {type.Name} AS a;");
             return Query;
@@ -255,7 +263,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null) where T : IDataObject, new() {
             var type = typeof(T);
-            QueryBuilder Query = new QueryBuilder("SELECT ");
+            QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
             Query.Append(String.Format("FROM {0} AS a", type.Name));
             if (condicoes != null && !condicoes.IsEmpty) {
@@ -270,7 +278,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
             var id = Fi.Tech.GetIdColumn(tabelaInput.GetType());
-            QueryBuilder Query = new QueryBuilder(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
+            QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GerarParamsValoresUpdate(tabelaInput));
             Query.Append($" WHERE {id} = @id;", tabelaInput.Id);
@@ -296,11 +304,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateValuesString(IDataObject tabelaInput) {
+        public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
             var cod = IntEx.GenerateShortRid();
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
-            fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            if(OmmitPK) {
+                fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            }
             for (int i = 0; i < fields.Count; i++) {
                 Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
                 if (!Query.IsEmpty)
@@ -350,19 +360,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> inputRecordset) where T : IDataObject, new() {
+        public IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> inputRecordset, bool OmmitPk = true) where T : IDataObject, new() {
             RecordSet<T> workingSet = new RecordSet<T>();
             workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
             Query.Append($"INSERT INTO {typeof(T).Name} (");
-            Query.Append(GenerateFieldsString(typeof(T), true));
+            Query.Append(GenerateFieldsString(typeof(T), OmmitPk));
             Query.Append(") VALUES");
             // -- 
             for (int i = 0; i < workingSet.Count; i++) {
                 Query.Append("(");
-                Query.Append(GenerateValuesString(workingSet[i]));
+                Query.Append(GenerateValuesString(workingSet[i], OmmitPk));
                 Query.Append(")");
                 if (i < workingSet.Count - 1)
                     Query.Append(",");
@@ -396,37 +406,37 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder InformationSchemaQueryTables(String schema) {
-            return new QueryBuilder("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
         }
         public IQueryBuilder InformationSchemaQueryColumns(String schema) {
-            return new QueryBuilder("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
         }
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
         }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
-            return new QueryBuilder($"RENAME TABLE {tabName} TO {newName};");
+            return new QueryBuilder().Append($"RENAME TABLE {tabName} TO {newName};");
         }
 
         public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
-            return new QueryBuilder($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
         }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {
-            return new QueryBuilder($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
         }
 
         public IQueryBuilder AddColumn(string table, string columnDefinition) {
-            return new QueryBuilder($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
         }
 
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder($"ALTER TABLE {table} ADD CONSTRAINT fk_{table}_{column} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT fk_{table}_{column} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder($"DELETE FROM {table} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+            return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
         }
 
         private List<MemberInfo> GetMembers(Type t) {
@@ -445,19 +455,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new() {
-            return new QueryBuilder("SELECT last_insert_id()");
+            return new QbFmt("SELECT last_insert_id()");
         }
 
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-            return new QueryBuilder($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
+            return new QueryBuilder().Append($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
         }
 
         public IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd) {
             var cname = $"fk_{fkd.Column}_{fkd.RefTable}_{fkd.RefColumn}";
             String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
-            return new QueryBuilder(creationCommand);
+            return new QbFmt(creationCommand);
         }
     }
 }

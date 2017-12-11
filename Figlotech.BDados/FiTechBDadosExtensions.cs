@@ -255,7 +255,7 @@ namespace Figlotech.BDados {
             QueryBuilder retv = new QueryBuilder();
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
-                    new QueryBuilder(
+                    new QueryBuilder().Append(
                         $"@{IntEx.GenerateShortRid()}",
                         set[i].RID
                     )
@@ -313,7 +313,7 @@ namespace Figlotech.BDados {
             QueryBuilder retv = new QueryBuilder();
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
-                    new QueryBuilder(
+                    new QbFmt(
                         $"@{IntEx.GenerateShortRid()}",
                         set[i].Id
                     )

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.Core.BusinessModel;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -10,6 +11,7 @@ namespace Figlotech.Core.Extensions
 {
     public static class IEnumerableExtensions
     {
+
         public static DataTable ToDataTable<T>(this IEnumerable<T> me) {
             var dt = new DataTable();
             var enny = me.GetEnumerator();

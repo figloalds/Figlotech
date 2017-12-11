@@ -1,5 +1,6 @@
 ﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core.FileAcessAbstractions;
+using Figlotech.Core.Helpers;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -12,12 +13,7 @@ using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Serialization;
 
-namespace Figlotech.Core.Helpers {
-    public class FTHSerializableOptions {
-        public bool UseGzip { get; set; }
-        public bool Formatted { get; set; }
-        public IEncryptionMethod UseEncryption { get; set; }
-    }
+namespace Figlotech.Core.Extensions {
 
     public static class IMultiSerializableObjectExtensions {
         public static void ToJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {

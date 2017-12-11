@@ -27,7 +27,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public abstract DateTime CreatedTime { get; set; }
         public abstract bool IsActive { get; set; }
         public abstract String RID { get; set; }
-        public abstract bool IsPersisted { get; }
+
+        private bool? isPersisted = null;
+        public bool IsPersisted {
+            get {
+                return isPersisted ?? (Id > 0);
+            }
+            set {
+                isPersisted = value;
+            }
+        }
 
         [JsonIgnore]
         public IDataAccessor DataAccessor { get; set; }
@@ -43,18 +52,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             RID = newRid;
         }
 
-        public void Delete(ConditionParametrizer conditions = null)
-        {
+        public void Delete(ConditionParametrizer conditions = null) {
             DataAccessor.Delete(this);
         }
 
         public abstract bool Save(Action fn = null);
         public abstract bool Load(Action fn = null);
-        
+
         // Optional stuff, override it or don't.
         // The save method will attempt to use them though.
 
-        public virtual ValidationErrors Validate() { return new ValidationErrors();  }
+        public virtual ValidationErrors Validate() { return new ValidationErrors(); }
 
         public virtual ValidationErrors ValidateInput() { return new ValidationErrors(); }
 

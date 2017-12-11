@@ -147,11 +147,15 @@ namespace Figlotech.Core {
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
             WorkQueuer wq = new WorkQueuer("map_list", Environment.ProcessorCount, true);
-            for(int i = 0; i < dt.Rows.Count; i++) {
+            Queue<T> cache = new Queue<T>();
+            Parallel.For(0, dt.Rows.Count, i => {
                 var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta, mapReplacements);
-                yield return val;
-            }
+                lock(cache)
+                    cache.Enqueue(val);
+            });
             Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
+            foreach (var a in cache)
+                yield return a;
         }
 
         public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
