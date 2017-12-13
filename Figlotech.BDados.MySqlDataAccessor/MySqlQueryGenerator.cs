@@ -261,7 +261,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null) where T : IDataObject, new() {
+        public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
@@ -270,27 +270,28 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
             }
-            else {
-                Query.Append(";");
+            if(orderingMember != null) {
+                Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc?"ASC":"DESC")}");
             }
+            Query.Append(";");
             return Query;
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var id = Fi.Tech.GetIdColumn(tabelaInput.GetType());
+            var rid = Fi.Tech.GetRidColumn(tabelaInput.GetType());
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
-            Query.Append(GerarParamsValoresUpdate(tabelaInput));
-            Query.Append($" WHERE {id} = @id;", tabelaInput.Id);
+            Query.Append(GenerateUpdateValueParams(tabelaInput, false));
+            Query.Append($" WHERE {rid} = @rid;", tabelaInput.RID);
             return Query;
         }
 
-        internal QueryBuilder GerarParamsValoresUpdate(IDataObject tabelaInput) {
+        internal QueryBuilder GenerateUpdateValueParams(IDataObject tabelaInput, bool OmmitPk = true) {
             QueryBuilder Query = new QueryBuilder();
             var lifi = GetMembers(tabelaInput.GetType());
             int k = 0;
             for (int i = 0; i < lifi.Count; i++) {
-                if (lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
@@ -326,14 +327,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             // -- 
             RecordSet<T> workingSet = new RecordSet<T>(inputRecordset.DataAccessor);
 
-            var id = Fi.Tech.GetIdColumn<T>();
+            var rid = Fi.Tech.GetRidColumn<T>();
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
                 return null;
             }
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"UPDATE {typeof(T).Name} ");
+            Query.Append($"UPDATE IGNORE {typeof(T).Name} ");
             Query.Append("SET ");
 
             // -- 
@@ -345,7 +346,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
                     string sid = IntEx.GenerateShortRid();
-                    Query.Append($"WHEN {id}=@{sid}{x++} THEN @{sid}{x++}", a.Id, ReflectionTool.GetMemberValue(members[i], a));
+                    Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {
@@ -353,8 +354,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
             }
 
-            Query.Append($"WHERE {id} IN (")
-                .Append(Fi.Tech.ListIds(workingSet))
+            Query.Append($"WHERE {rid} IN (")
+                .Append(Fi.Tech.ListRids(workingSet))
                 .Append(");");
             // --
             return Query;
@@ -366,7 +367,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT INTO {typeof(T).Name} (");
+            Query.Append($"INSERT IGNORE INTO {typeof(T).Name} (");
             Query.Append(GenerateFieldsString(typeof(T), OmmitPk));
             Query.Append(") VALUES");
             // -- 
@@ -381,7 +382,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             Query.Append("ON DUPLICATE KEY UPDATE ");
             var Fields = GetMembers(typeof(T));
             for (int i = 0; i < Fields.Count; ++i) {
-                if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
                 if (i < Fields.Count - 1) {

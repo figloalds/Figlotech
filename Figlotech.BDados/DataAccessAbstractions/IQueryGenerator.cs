@@ -17,7 +17,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
-        IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes) where T : IDataObject, new();
+        IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder condicoes, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 100, IQueryBuilder condicoesRoot = null);
         IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> conjuntoInput, bool OmmitPk = true) where T : IDataObject, new();
         IQueryBuilder GenerateMultiUpdate<T>(RecordSet<T> inputRecordset) where T : IDataObject, new();

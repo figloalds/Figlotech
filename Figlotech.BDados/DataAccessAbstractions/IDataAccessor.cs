@@ -12,10 +12,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         ILogger Logger { get; set; }
 
-        RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
-        IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
-        T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200) where T : IDataObject, new();
+        T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         T LoadByRid<T>(String RID) where T : IDataObject, new();
         T LoadById<T>(long Id) where T : IDataObject, new();
 

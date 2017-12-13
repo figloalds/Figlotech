@@ -111,8 +111,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #endregion ***************************
 
-        public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200) where T : IDataObject, new() {
-            return LoadAll<T>(condicoes, page, limit).FirstOrDefault();
+        public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return LoadAll<T>(condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
         }
 
         private static String GetDatabaseType(FieldInfo field, FieldAttribute info = null) {
@@ -179,6 +179,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             return type;
+        }
+
+        private MemberInfo FindMember(Expression x) {
+            if (x is UnaryExpression) {
+                return FindMember((x as UnaryExpression).Operand);
+            }
+            if (x is MemberExpression) {
+                return (x as MemberExpression).Member;
+            }
+
+            return null;
+        }
+
+        public MemberInfo GetOrderingMember<T>(Expression<Func<T, object>> fn) {
+            if (fn == null) return null;
+            try {
+                var orderingExpression = fn.Compile();
+                var OrderingMember = FindMember(fn.Body);
+            } catch (Exception) { }
+
+            return null;
         }
 
         private static String GetColumnDefinition(FieldInfo field, FieldAttribute info = null) {
@@ -424,38 +445,38 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Fetch<T>(Qb.Fmt(where, args)).ToRecordSet();
         }
 
-        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200) where T : IDataObject, new() {
-            return Fetch<T>(conditions, page, limit).ToRecordSet();
+        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(conditions, page, limit, orderingMember, ordering).ToRecordSet();
         }
 
-        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
+        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             return Access((connection) => {
-                return LoadAll<T>(connection, condicoes).ToRecordSet();
+                return LoadAll<T>(connection, condicoes, orderingMember, ordering).ToRecordSet();
             });
         }
 
-        public RecordSet<T> LoadAll<T>(IDbConnection connection, IQueryBuilder condicoes) where T : IDataObject, new() {
-            return Fetch<T>(connection, condicoes).ToRecordSet();
+        public RecordSet<T> LoadAll<T>(IDbConnection connection, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(connection, condicoes, orderingMember, ordering).ToRecordSet();
         }
 
         public IEnumerable<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
             return Fetch<T>(Qb.Fmt(where, args));
         }
 
-        public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200) where T : IDataObject, new() {
+        public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var query = new ConditionParser().ParseExpression(conditions);
             if (page != null && limit != null)
                 query.Append($"LIMIT {(page - 1) * limit}, {limit}");
             else if (limit != null)
                 query.Append($"LIMIT {limit}");
-            return Fetch<T>(query);
+            return Fetch<T>(query, orderingMember, ordering);
         }
 
         Benchmarker Bench = null;
 
-        public IEnumerable<T> Fetch<T>(IQueryBuilder condicoes) where T : IDataObject, new() {
+        public IEnumerable<T> Fetch<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             return Access((connection) => {
-                return Fetch<T>(connection, condicoes);
+                return Fetch<T>(connection, condicoes, orderingMember, ordering);
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
@@ -464,18 +485,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        public IEnumerable<T> Fetch<T>(IDbConnection connection, IQueryBuilder condicoes) where T : IDataObject, new() {
+        public IEnumerable<T> Fetch<T>(IDbConnection connection, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
 
             if (condicoes == null) {
                 condicoes = Qb.Fmt("TRUE");
             }
-
+            var member = GetOrderingMember<T>(orderingMember);
             DataTable dt = null;
 
             Bench?.Mark("--");
 
             Bench?.Mark("Data Load ---");
-            var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes);
+            var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes, member, ordering);
             Bench?.Mark("Generate SELECT");
             dt = Query(connection, selectQuery);
             Bench?.Mark("Execute SELECT");
@@ -744,6 +765,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     } else {
                         throw x;
                     }
+
                     return default(T);
                 } finally {
                     var total = Bench?.FinalMark();
