@@ -19,10 +19,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T Access<T>(Func<IDbTransaction, T> tryFun, Action<Exception> catchFun = null);
 
         RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         IEnumerable<T> Fetch<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         //T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
@@ -42,28 +42,41 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
 
+        void BeginTransaction();
+
+        void EndTransaction();
+
+        void Commit();
+        void Rollback();
+
         DataTable Query(IDbTransaction transaction, IQueryBuilder Query);
         IEnumerable<T> Query<T>(IDbTransaction transaction, IQueryBuilder Query = null) where T : new();
         int Execute(IDbTransaction transaction, IQueryBuilder Query);
-        IEnumerable<T> Fetch<T>(IDbTransaction transaction, IQueryBuilder condicoes = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        RecordSet<T> LoadAll<T>(IDbTransaction transaction, IQueryBuilder condicoes = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(IDbTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IDbTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         bool SaveItem(IDbTransaction transaction, IDataObject objeto);
-        bool SaveRecordSet<T>(IDbTransaction transaction, RecordSet<T> target) where T:IDataObject,new();
+        bool SaveRecordSet<T>(IDbTransaction transaction, RecordSet<T> target) where T : IDataObject, new();
 
-        T LoadFirstOrDefault<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        T LoadFirstOrDefault<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         T LoadByRid<T>(IDbTransaction transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(IDbTransaction transaction, long Id) where T : IDataObject, new();
 
         //T ForceExist<T>(IDbTransaction transaction, Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
-        RecordSet<T> LoadAll<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        IEnumerable<T> Fetch<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        RecordSet<T> LoadAll<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         bool DeleteWhereRidNotIn<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd, RecordSet<T> rids) where T : IDataObject, new();
         bool Delete<T>(IDbTransaction transaction, Expression<Func<T, bool>> condition) where T : IDataObject, new();
         bool Delete(IDbTransaction transaction, IDataObject obj);
 
 
-        IEnumerable<T> AggregateLoad<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new();
+        IEnumerable<T> AggregateLoad<T>(
+            IDbTransaction transaction, 
+            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
+            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
+            MemberInfo GroupingMember = null,
+            bool Linear = false) where T : IDataObject, new();
+
     }
 }

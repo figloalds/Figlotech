@@ -26,8 +26,7 @@ using Figlotech.BDados.Builders;
 using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlQueryGenerator : IQueryGenerator
-    {
+    public class MySqlQueryGenerator : IQueryGenerator {
 
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
@@ -168,8 +167,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //Query.Append($"\t\t1 FROM {tableNames[0]} AS {aliases[0]}\n");
             //Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            if(orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(otype == OrderingType.Asc? "ASC" : "DESC" )}");
+            if (orderingMember != null) {
+                Query.Append($"ORDER BY {orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
             }
             Query.Append($") AS {aliases[0]}\n");
             //if (!condicoesRoot.IsEmpty) {
@@ -240,8 +239,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 if (capPrefixes.Contains(aliases[i])) {
                     onClause = onClause.Replace("##**##", $"sub.{aliases[i]}_");
-                }
-                else {
+                } else {
                     onClause = onClause.Replace("##**##", $"{aliases[i]}.");
                 }
                 Query.Append($"\t{joinTypes[i].ToString().Replace('_', ' ').ToUpper()} JOIN {tableNames[i]} AS {aliases[i]} ON {onClause}\n");
@@ -257,21 +255,25 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var type = typeof(T);
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append($"FROM {type.Name} AS a;");
+            Query.Append($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name)};");
             return Query;
         }
 
-        public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
+            Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format("FROM {0} AS a", type.Name));
+            Query.Append(String.Format($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name)}"));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
             }
-            if(orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc?"ASC":"DESC")}");
+            if (orderingMember != null) {
+                Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc ? "ASC" : "DESC")}");
+            }
+            if(limit != null || skip != null) {
+                Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");
             }
             Query.Append(";");
             return Query;
@@ -309,7 +311,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var cod = IntEx.GenerateShortRid();
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
-            if(OmmitPK) {
+            if (OmmitPK) {
                 fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             }
             for (int i = 0; i < fields.Count; i++) {

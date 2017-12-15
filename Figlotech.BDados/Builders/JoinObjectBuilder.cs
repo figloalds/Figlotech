@@ -61,7 +61,7 @@ namespace Figlotech.BDados.Builders {
             return generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
         }
 
-        public DataTable GenerateDataTable(IDbTransaction transaction, IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) {
+        public DataTable GenerateDataTable(IDbTransaction transaction, IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) {
             QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
             DataTable dt = null;
             dt = _dataAccessor.Query(transaction, query);
@@ -240,7 +240,7 @@ namespace Figlotech.BDados.Builders {
             return _join.Relations;
         }
 
-        public IEnumerable<T> BuildObject<T>(IDbTransaction transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 200, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
+        public IEnumerable<T> BuildObject<T>(IDbTransaction transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
             // May Jesus have mercy on your soul
             // If you intend on messing with this funciton.
 
@@ -249,7 +249,7 @@ namespace Figlotech.BDados.Builders {
             }
 
             // First we generate the DataTable we'll be working with:
-            DataTable dt = GenerateDataTable(transaction, (_dataAccessor).QueryGenerator, conditions,orderingMember, otype,  p, limit, conditionsRoot);
+            DataTable dt = GenerateDataTable(transaction, (_dataAccessor).QueryGenerator, conditions, p, limit, orderingMember, otype,  conditionsRoot);
             _buildParameters = new BuildParametersHelper(ref _join, dt);
             fn(_buildParameters);
             // And validate everything;

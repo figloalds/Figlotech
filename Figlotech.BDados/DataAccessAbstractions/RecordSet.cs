@@ -60,41 +60,36 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             return retv.ToString();
         }
-        
+
         private MemberInfo FindMember(Expression x) {
-            if(x is UnaryExpression) {
+            if (x is UnaryExpression) {
                 return FindMember((x as UnaryExpression).Operand);
             }
-            if(x is MemberExpression) {
+            if (x is MemberExpression) {
                 return (x as MemberExpression).Member;
             }
 
             return null;
         }
+        public MemberInfo GetOrderingMember(Expression<Func<T, object>> fn) {
+            if (fn == null) return null;
+            try {
+                var orderingExpression = fn.Compile();
+                var OrderingMember = FindMember(fn.Body);
+            } catch (Exception) { }
 
-        public OrderingType Ordering = OrderingType.Asc;
-        public MemberInfo OrderingMember = null;
-        public MemberInfo GroupingMember = null;
-        private Func<T, object> orderingExpression = null;
+            return null;
+        }
+
         public RecordSet<T> OrderBy(Expression<Func<T, object>> fn, OrderingType orderingType) {
-            try {
-                orderingExpression = fn.Compile();
-                OrderingMember = FindMember(fn.Body);
-                Ordering = orderingType;
-            } catch (Exception) { }
+            OrderingMember = fn;
+            orderingExpression = fn.Compile();
+            Ordering = orderingType;
 
             return this;
         }
-
-        public RecordSet<T> SetGroupingMember(MemberInfo mbi) {
-            GroupingMember = mbi;
-            return this;
-        }
-
-        public RecordSet<T> GroupResultsBy(Expression<Func<T, object>> fn) {
-            try {
-                GroupingMember = FindMember(fn.Body);
-            } catch (Exception) { }
+        public RecordSet<T> SetGroupingMember(MemberInfo fn) {
+            GroupingMember = fn;
 
             return this;
         }
@@ -106,23 +101,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return this;
         }
+        public OrderingType Ordering = OrderingType.Asc;
+        public Expression<Func<T, object>> OrderingMember = null;
+        public MemberInfo GroupingMember = null;
+        private Func<T, object> orderingExpression = null;
 
-        public RecordSet<T> LoadAll(Expression<Func<T, bool>> cnd = null, int? page = null) {
-            AddRange(Fetch(cnd, page));
+        public RecordSet<T> GroupResultsBy(Expression<Func<T, object>> fn) {
+            GroupingMember = GetOrderingMember(fn);
+
             return this;
         }
 
-        public RecordSet<T> LoadAllLinear(Expression<Func<T, bool>> cnd = null, int? page = null) {
-            AddRange(FetchLinear(cnd, page));
+
+        public RecordSet<T> LoadAll(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+            AddRange(Fetch(cnd, skip, limit));
             return this;
         }
 
-        public IEnumerable<T> Fetch(Expression<Func<T,bool>> cnd = null, int? page = null, bool Linear = false) {
+        public RecordSet<T> LoadAllLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+            AddRange(FetchLinear(cnd, skip, limit));
+            return this;
+        }
+
+        public IEnumerable<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
             Clear();
-
-            var agl = DataAccessor.AggregateLoad<T>(cnd, OrderingMember, Ordering, LimitResults, page, PageSize,  GroupingMember, OrderingMember, Ordering, Linear);
+            var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
             agl = agl.ToList();
-            if (OrderingMember != null) {
+            if (orderingExpression != null) {
                 if(Ordering == OrderingType.Desc) {
                     agl = agl.OrderByDescending(orderingExpression);
                 } else {
@@ -134,16 +139,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var transport = enumerator.Current;
                 yield return transport;
             }
-            
+
             LimitResults = null;
             orderingExpression = null;
             OrderingMember = null;
             GroupingMember = null;
         }
 
-        public IEnumerable<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? page = null) {
+        public IEnumerable<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
             LinearLoad = true;
-            var retv = Fetch(cnd, page, true);
+            var retv = Fetch(cnd, skip, limit, true);
             LinearLoad = false;
             return retv;
         }

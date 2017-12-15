@@ -15,7 +15,7 @@ namespace Figlotech.BDados.Helpers {
             if(dict.ContainsKey($"{parent}_{child}")) {
                 return dict[$"{parent}_{child}"];
             } else {
-                dict.Add($"{parent}_{child}", new IntEx(seq++).ToString(IntEx.Base26).ToLower());
+                dict.Add($"{parent}_{child}", "tb"+new IntEx(seq++).ToString(IntEx.Base26).ToLower());
                 return dict[$"{parent}_{child}"];
             }
         }

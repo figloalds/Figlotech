@@ -44,8 +44,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private bool _accessSwitch = false;
         public String SchemaName { get { return Plugin.SchemaName; } }
 
-        //public IDbTransaction transactionHandle;
-
         private static int counter = 0;
         private int myId = ++counter;
         private String _readLock = $"readLock{counter + 1}";
@@ -69,18 +67,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
-            return Access((transaction) => ForceExist<T>(transaction, Default, qb));
-        }
-        public T ForceExist<T>(IDbTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(transaction, qb.Append("LIMIT 1"));
-            if (f.Any()) {
-                return f.First();
-            } else {
-                T quickSave = Default();
-                quickSave.RID = new T().RID;
-                SaveItem(quickSave);
-                return quickSave;
+            if (currentTransaction != null) {
+                return ForceExist<T>(currentTransaction, Default, qb);
             }
+            return Access((transaction) => ForceExist<T>(transaction, Default, qb));
         }
 
         public string GetCreateTable(String table) {
@@ -115,11 +105,50 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #endregion ***************************
 
-        public T LoadFirstOrDefault<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return LoadAll<T>(transaction, condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
-        }
         public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             return LoadAll<T>(condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
+        }
+
+        IDbTransaction currentTransaction = null;
+        public void BeginTransaction() {
+            lock (this) {
+                if (this.currentTransaction == null) {
+                    WriteLog("Opening Transaction");
+                    var connection = Plugin.GetNewConnection();
+                    if (connection?.State != ConnectionState.Open) {
+                        connection.Open();
+                    }
+                    this.currentTransaction = connection.BeginTransaction(IsolationLevel.RepeatableRead);
+                    WriteLog("Transaction Open");
+                }
+            }
+        }
+
+        public void EndTransaction() {
+            lock (this) {
+                if (this.currentTransaction != null) {
+                    WriteLog("Ending Transaction");
+                    var conn = this.currentTransaction.Connection;
+                    this.currentTransaction.Dispose();
+                    conn.Dispose();
+
+                    this.currentTransaction = null;
+                    WriteLog("Transaction ended");
+                }
+            }
+        }
+
+        public void Commit() {
+            WriteLog("Committing Transaction");
+            lock (this)
+                this.currentTransaction?.Commit();
+            WriteLog("Commit OK");
+        }
+        public void Rollback() {
+            WriteLog("Rolling back Transaction");
+            lock (this)
+                this.currentTransaction?.Rollback();
+            WriteLog("Rollback OK");
         }
 
         private static String GetDatabaseType(FieldInfo field, FieldAttribute info = null) {
@@ -189,24 +218,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private MemberInfo FindMember(Expression x) {
-            if (x is UnaryExpression) {
-                return FindMember((x as UnaryExpression).Operand);
-            }
-            if (x is MemberExpression) {
-                return (x as MemberExpression).Member;
+            if (x == null)
+                return null;
+            MemberInfo retv = null;
+
+            if(x is LambdaExpression lex) {
+                retv = FindMember(lex.Body);
             }
 
-            return null;
+            if (x is UnaryExpression) {
+                retv = FindMember((x as UnaryExpression).Operand);
+            }
+            if (x is MemberExpression) {
+                retv = (x as MemberExpression).Member;
+            }
+            if(x is BinaryExpression bex) {
+                retv = FindMember(bex.Left);
+            }
+
+            if(retv == null)
+                throw new MissingMemberException($"Member not found: {x.ToString()}");
+            
+            return retv;
         }
 
         public MemberInfo GetOrderingMember<T>(Expression<Func<T, object>> fn) {
-            if (fn == null) return null;
-            try {
-                var orderingExpression = fn.Compile();
-                var OrderingMember = FindMember(fn.Body);
-            } catch (Exception) { }
-
-            return null;
+            var OrderingMember = FindMember(fn);
+            return OrderingMember;
         }
 
         private static String GetColumnDefinition(FieldInfo field, FieldAttribute info = null) {
@@ -279,6 +317,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public bool SaveItem(IDataObject input) {
+            if (currentTransaction != null) {
+                return SaveItem(currentTransaction, input);
+            }
             return Access((transaction) => {
                 return SaveItem(transaction, input);
             }, (x) => {
@@ -288,114 +329,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        public bool SaveItem(IDbTransaction transaction, IDataObject input) {
-            bool retv = false;
-
-            int rs = -33;
-
-            var id = GetIdColumn(input.GetType());
-            var rid = GetRidColumn(input.GetType());
-
-            input.CreatedTime = DateTime.UtcNow;
-
-            if (input.IsPersisted) {
-                rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
-                retv = true;
-                return retv;
-            }
-
-            rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
-            if (rs == 0) {
-                this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
-            }
-
-            retv = rs > 0;
-            if (retv && !input.IsPersisted) {
-                long retvId = 0;
-                var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-                //if (ridAtt.Any()) {
-                //    var query = (IQueryBuilder)Plugin.QueryGenerator
-                //        .GetType()
-                //        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                //        .MakeGenericMethod(input.GetType())
-                //        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                //    DataTable dt = Query(query);
-                //    retvId = (long)dt.Rows[0][id];
-                //} else {
-
-
-                if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
-                    try {
-                        var query = (IQueryBuilder)Plugin.QueryGenerator
-                            .GetType()
-                            .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                            .MakeGenericMethod(input.GetType())
-                            .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                        var gid = ScalarQuery(transaction, query);
-                        if (gid is long l)
-                            retvId = l;
-                        if (gid is string s) {
-                            if (Int64.TryParse(s, out retvId)) {
-                            }
-                        }
-                    } catch (Exception x) {
-                        Fi.Tech.WriteLine(x.Message);
-                    }
-                }
-
-                if (retvId <= 0) {
-                    try {
-                        var query = (IQueryBuilder)Plugin.QueryGenerator
-                            .GetType()
-                            .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
-                            .MakeGenericMethod(input.GetType())
-                            .Invoke(Plugin.QueryGenerator, new Object[0]);
-                        retvId = ((long?)ScalarQuery(transaction, query)) ?? 0;
-                        var gid = ScalarQuery(transaction, query);
-                        if (gid is long l)
-                            retvId = l;
-                        if (gid is string s) {
-                            if (Int64.TryParse(s, out retvId)) {
-                            }
-                        }
-                    } catch (Exception x) {
-                        OnFailedSave?.Invoke(input?.GetType(), input, x);
-                    }
-                }
-
-                //}
-                if (retvId > 0) {
-                    input.Id = retvId;
-                } else {
-                }
-                retv = true;
-            }
-            return retv;
-        }
-
-        //public List<T> Load<T>(string Consulta, params object[] args) {
-        //    List<T> retv = new List<T>();
-        //    Access(() => {
-
-        //        return Query(Consulta, args);
-        //    });retv;
-        //}
-
-        //public IDbTransaction Gettransaction() {
-        //    return transactionHandle;
-        //}
-
         public IEnumerable<T> Query<T>(IQueryBuilder query) where T : new() {
             return Access((transaction) => {
                 return Query<T>(transaction, query);
             });
-        }
-        public IEnumerable<T> Query<T>(IDbTransaction transaction, IQueryBuilder query) where T : new() {
-            if (query == null) {
-                return new List<T>();
-            }
-            DataTable resultado = Query(transaction, query);
-            return Fi.Tech.Map<T>(resultado);
         }
 
         public IEnumerable<T> Query<T>(string queryString, params object[] args) where T : new() {
@@ -434,101 +371,62 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         public T LoadById<T>(long Id) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return LoadById<T>(currentTransaction, Id);
+            }
             return Access((transaction) => LoadById<T>(transaction, Id));
-        }
-        public T LoadById<T>(IDbTransaction transaction, long Id) where T : IDataObject, new() {
-            var id = GetIdColumn(typeof(T));
-            return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id)).FirstOrDefault();
         }
 
         public T LoadByRid<T>(String RID) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return LoadByRid<T>(currentTransaction, RID);
+            }
             return Access((transaction) => LoadByRid<T>(transaction, RID));
-        }
-        public T LoadByRid<T>(IDbTransaction transaction, String RID) where T : IDataObject, new() {
-            var rid = GetRidColumn(typeof(T));
-            return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID)).FirstOrDefault();
         }
 
         public RecordSet<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
             return Fetch<T>(Qb.Fmt(where, args)).ToRecordSet();
         }
 
-        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(conditions, page, limit, orderingMember, ordering).ToRecordSet();
-        }
-        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(conditions, page, limit, orderingMember, ordering).ToRecordSet();
+
+        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(conditions, skip, limit, orderingMember, ordering).ToRecordSet();
         }
 
-        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes, int? skip = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return LoadAll<T>(currentTransaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
+            }
             return Access((transaction) => {
-                return LoadAll<T>(transaction, condicoes, orderingMember, ordering).ToRecordSet();
+                return LoadAll<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
             });
         }
 
-        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(transaction, condicoes, orderingMember, ordering).ToRecordSet();
-        }
 
         public IEnumerable<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
             return Fetch<T>(Qb.Fmt(where, args));
         }
 
-        public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Access((transaction) => Fetch(transaction, conditions, page, limit, orderingMember, ordering));
-        }
-        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            var query = new ConditionParser().ParseExpression(conditions);
-            if (page != null && limit != null)
-                query.Append($"LIMIT {(page - 1) * limit}, {limit}");
-            else if (limit != null)
-                query.Append($"LIMIT {limit}");
-            return Fetch<T>(transaction, query, orderingMember, ordering);
+        public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return Fetch(currentTransaction, conditions, skip, limit, orderingMember, ordering);
+            }
+            return Access((transaction) => Fetch(transaction, conditions, skip, limit, orderingMember, ordering));
         }
 
         Benchmarker Bench = null;
 
-        public IEnumerable<T> Fetch<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IEnumerable<T> Fetch<T>(IQueryBuilder condicoes, int? skip = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return Fetch<T>(currentTransaction, condicoes, skip, limit, orderingMember, ordering);
+            }
             return Access((transaction) => {
-                return Fetch<T>(transaction, condicoes, orderingMember, ordering);
+                return Fetch<T>(transaction, condicoes, skip, limit, orderingMember, ordering);
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
                 throw x;
             });
-        }
-
-
-        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-
-            if (condicoes == null) {
-                condicoes = Qb.Fmt("TRUE");
-            }
-            var member = GetOrderingMember<T>(orderingMember);
-            DataTable dt = null;
-
-            Bench?.Mark("--");
-
-            Bench?.Mark("Data Load ---");
-            var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes, member, ordering);
-            Bench?.Mark("Generate SELECT");
-            dt = Query(transaction, selectQuery);
-            Bench?.Mark("Execute SELECT");
-
-            if (dt == null)
-                return new T[0];
-            if (dt.Rows.Count < 1) {
-                this.WriteLog("Query returned no results.");
-                return new T[0];
-            }
-
-            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
-                .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
-                .ToList();
-
-            var mapFn = Fi.Tech.Map<T>(dt);
-            return RunAfterLoads(mapFn);
-
         }
 
         private IEnumerable<T> RunAfterLoads<T>(IEnumerable<T> target) {
@@ -542,46 +440,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
         public bool Delete(IDataObject obj) {
+            if (currentTransaction != null) {
+                return Delete(currentTransaction, obj);
+            }
             return Access((transaction) => Delete(transaction, obj));
         }
-        public bool Delete(IDbTransaction transaction, IDataObject obj) {
-            bool retv = false;
-
-            //var id = GetIdColumn(obj.GetType());
-            var rid = obj.RID;
-            var ridcol = (from a in ReflectionTool.FieldsAndPropertiesOf(obj.GetType())
-                          where ReflectionTool.GetAttributeFrom<ReliableIdAttribute>(a) != null
-                          select a).FirstOrDefault();
-            string ridname = "RID";
-            if (ridcol != null) {
-                ridname = ridcol.Name;
-            }
-
-            var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
-            retv = Execute(transaction, query) > 0;
-            return retv;
-        }
         public bool Delete<T>(Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return Delete(currentTransaction, conditions);
+            }
             return Access((transaction) => Delete(transaction, conditions));
-        }
-        public bool Delete<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
-            bool retv = false;
-
-            T dataObject = (T)Activator.CreateInstance(typeof(T));
-            var id = GetIdColumn<T>();
-            var p = new PrefixMaker();
-            var join = MakeJoin(
-                    (q) => {
-                        // Starting with T itself
-                        q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name)).As(p.GetAliasFor("root", typeof(T).Name));
-                        MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, p, false);
-                    });
-            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
-            query.Append($"{id} IN (SELECT a_{id} as {id} FROM (");
-            query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
-            query.Append(") sub)");
-            retv = Execute(transaction, query) > 0;
-            return retv;
         }
 
         #region **** BDados API ****
@@ -589,41 +457,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<Task<Object>> Workers = new List<Task<Object>>();
         private static int accessCount = 0;
 
-        //public void Open() {
-        //    if (transactionHandle == null) {
-        //        transactionHandle = Plugin.GetNewConnection();
-        //    } else {
-        //        transactionHandle.Close();
-        //    }
-        //    if (transactionHandle.State != transactionState.Open) {
-        //        transactionHandle.Open();
-        //    }
-        //}
-
-        //public bool TryOpen() {
-        //    try {
-        //        Open();
-        //    } catch (Exception x) {
-        //        this.WriteLog(x.Message);
-        //        throw new BDadosException(String.Format(Fi.Tech.GetStrings().RDBMS_CANNOT_CONNECT, x.Message));
-        //    }
-        //    return true;
-        //}
-
-        //public delegate void FuncoesDados(BDados banco);
-        //public delegate void TrataExceptions(Exception x);
-
         public Object ScalarQuery(IQueryBuilder qb) {
-            return Access(transaction => ScalarQuery(transaction, qb));
-        }
-
-        public Object ScalarQuery(IDbTransaction transaction, IQueryBuilder qb) {
-            Object retv = null;
-            try {
-                retv = Query(transaction, qb).Rows[0][0];
-            } catch (Exception) {
+            if (currentTransaction != null) {
+                return ScalarQuery(currentTransaction, qb);
             }
-            return retv;
+            return Access(transaction => ScalarQuery(transaction, qb));
         }
 
         public T ScalarQuery<T>(IQueryBuilder qb) {
@@ -641,104 +479,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public IQueryGenerator QueryGenerator => Plugin.QueryGenerator;
-
-        //public void GenerateValueObjectDefinitions(String defaultNamespace, String baseDir) {
-        //    Access(() => {
-        //        DataTable t = Query("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", this.Plugin.Config.Database);
-        //        DataTable cols = Query("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1", this.Plugin.Config.Database);
-        //        for (int i = 0; i < t.Rows.Count; i++) {
-        //            String Tabela = (string)t.Rows[i]["TABLE_NAME"];
-        //            List<String> lines = new List<String>();
-        //            lines.Add($"// --------------------------------------------------");
-        //            lines.Add($"// BDados v{Fi.Tech.GetVersion()}");
-        //            lines.Add($"// Arquivo gerado automaticamente.");
-        //            lines.Add($"// --------------------------------------------------");
-        //            lines.Add("using System;");
-        //            lines.Add("using Figlotech.BDados.Attributes;");
-        //            lines.Add("using Figlotech.Core.Interfaces;");
-        //            lines.Add("using Figlotech.BDados.Entity;");
-        //            lines.Add("");
-        //            lines.Add($"// ------------------------------------------");
-        //            lines.Add($"// Tabela {Tabela} ");
-        //            lines.Add($"// ------------------------------------------");
-        //            lines.Add($"namespace {defaultNamespace} {{");
-        //            lines.Add($"\t public partial class {Tabela} : BaseDataObject " + "{");
-        //            for (int c = 0; c < cols.Rows.Count; c++) {
-        //                var thisCol = cols.Rows[c];
-        //                if (thisCol["TABLE_NAME"] != Tabela)
-        //                    continue;
-        //                if (thisCol["COLUMN_NAME"] == "Id" ||
-        //                    thisCol["COLUMN_NAME"] == "RID")
-        //                    continue;
-        //                StringBuilder attLineOptions = new StringBuilder();
-        //                List<String> lineOptions = new List<String>();
-        //                //for(int x = 0; x < cols.Columns.Count; x++) {
-        //                //    Fi.Tech.Write(thisCol[x]);
-        //                //    Fi.Tech.Write("|");
-        //                //}
-        //                //this.WriteLog();
-        //                lines.Add("");
-        //                if (thisCol["COLUMN_KEY"] == "PRI") {
-        //                    lineOptions.Add("PrimaryKey=true");
-        //                    lines.Add("\t\t[PrimaryKey]");
-        //                }
-        //                ulong? l = (ulong?)thisCol["CHARACTER_MAXIMUM_LENGTH"];
-        //                if (l != null && l > 0)
-        //                    lineOptions.Add($"Size={l}");
-        //                if ("YES" == (thisCol["IS_NULLABLE"]))
-        //                    lineOptions.Add("AllowNull=true");
-        //                if (thisCol["COLUMN_KEY"] == "UNI")
-        //                    lineOptions.Add("Unique=true");
-        //                if (thisCol["COLUMN_DEFAULT"] != null) {
-        //                    Object defVal = thisCol["COLUMN_DEFAULT"];
-        //                    if (defVal is String)
-        //                        defVal = "\"" + defVal + "\"";
-        //                    else
-        //                        defVal = defVal.ToString().ToLower();
-        //                    lineOptions.Add($"DefaultValue={defVal}");
-        //                }
-        //                for (int a = 0; a < lineOptions.Count; a++) {
-        //                    attLineOptions.Append(lineOptions[a]);
-        //                    if (a < lineOptions.Count - 1)
-        //                        attLineOptions.Append(", ");
-        //                }
-        //                lines.Add($"\t\t[Field({attLineOptions.ToString()})]");
-
-        //                String tipo = "String";
-        //                bool usgn = ((string)thisCol["COLUMN_TYPE"]).ToLower().Contains("unsigned");
-        //                switch (((string)thisCol["DATA_TYPE"]).ToUpper()) {
-        //                    case "VARCHAR":
-        //                    case "CHAR":
-        //                        tipo = "String"; break;
-        //                    case "BIT":
-        //                    case "TINYINT":
-        //                        tipo = "bool"; break;
-        //                    case "INT":
-        //                        tipo = (usgn ? "u" : "") + "int"; break;
-        //                    case "BIGINT":
-        //                        tipo = (usgn ? "u" : "") + "long"; break;
-        //                    case "SMALLINT":
-        //                        tipo = (usgn ? "u" : "") + "short"; break;
-        //                    case "FLOAT":
-        //                    case "SINGLE":
-        //                        tipo = "float"; break;
-        //                    case "DOUBLE":
-        //                        tipo = "double"; break;
-        //                    case "DATETIME":
-        //                    case "TIMESTAMP":
-        //                    case "DATE":
-        //                    case "TIME":
-        //                        tipo = "DateTime"; break;
-        //                }
-        //                var nable = tipo != "String" && "YES" == (thisCol["IS_NULLABLE"]) ? "?" : "";
-        //                lines.Add($"\t\tpublic {tipo}{nable} {thisCol["COLUMN_NAME"]};");
-        //            }
-        //            lines.Add("\t}");
-        //            lines.Add("}");
-        //            File.WriteAllLines(Path.Combine(baseDir, Tabela + ".cs"), lines);
-        //        }
-        //    });
-        //}
 
         int accessId = 0;
 
@@ -759,74 +499,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //}
             int aid = accessId;
             return UseTransaction((transaction) => {
-                try {
-                    aid = ++accessId;
-                    if (Bench == null) {
-                        Bench = new Benchmarker($"---- Access [{++aid}]");
-                        Bench.WriteToStdout = showPerformanceLogs;
-                    }
-                    return functions.Invoke(transaction);
-                } finally {
-                    var total = Bench?.FinalMark();
-                    this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
+                aid = ++accessId;
+                if (Bench == null) {
+                    Bench = new Benchmarker($"---- Access [{++aid}]");
+                    Bench.WriteToStdout = showPerformanceLogs;
                 }
-            }, handler);
 
+                var retv = functions.Invoke(transaction);
+                var total = Bench?.FinalMark();
+                this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
+                return retv;
+            }, handler);
         }
 
         public DataTable Query(IQueryBuilder query) {
+            if (currentTransaction != null) {
+                return Query(currentTransaction, query);
+            }
             return Access((transaction) => {
                 return Query(transaction, query);
             });
         }
 
-        public DataTable Query(IDbTransaction transaction, IQueryBuilder query) {
-            if (query == null || query.GetCommandText() == null) {
-                return new DataTable();
-            }
-            DateTime Inicio = DateTime.Now;
-            String QueryText = query.GetCommandText();
-            DataTable retv = new DataTable();
-            using (var command = transaction.Connection.CreateCommand()) {
-                command.Transaction = transaction;
-                command.CommandText = QueryText;
-                command.CommandTimeout = Plugin.CommandTimeout;
-                int i = 0;
-                this.WriteLog($"[{accessId}] -- Query: {QueryText}");
-                // Adiciona os parametros
-                foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
-                    var cmdParam = command.CreateParameter();
-                    cmdParam.ParameterName = param.Key;
-                    cmdParam.Value = param.Value;
-                    command.Parameters.Add(cmdParam);
-                    var pval = $"'{param.Value?.ToString() ?? "null"}'";
-                    if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
-                        pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
-                        pval = $"'{pval}'";
-                    }
-                    this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
-                }
-                // --
-                DataSet ds = Plugin.GetDataSet(command);
-                try {
-                    int resultados = 0;
-                    if (ds.Tables.Count < 1) {
-                        throw new BDadosException("Database did not return any table.");
-                    }
-                    resultados = ds.Tables[0].Rows.Count;
-                    this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                    return ds.Tables[0];
-                } catch (Exception x) {
-                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                    this.WriteLog(x.Message);
-                    this.WriteLog(x.StackTrace);
-                    throw x;
-                } finally {
-                    command.Dispose();
-                    this.WriteLog("------------------------------------");
-                }
-            }
-        }
 
         public DataTable Query(String Query, params Object[] args) {
             return this.Query(Qb.Fmt(Query, args));
@@ -842,49 +536,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public int Execute(IQueryBuilder query) {
+            if (currentTransaction != null) {
+                return Execute(currentTransaction, query);
+            }
             return Access((transaction) => {
                 return Execute(transaction, query);
             });
         }
 
-        public int Execute(IDbTransaction transaction, IQueryBuilder query) {
-            if (query == null)
-                return 0;
-            int result = -1;
-
-            Bench?.Mark("--");
-            this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
-            foreach (var param in query.GetParameters()) {
-                this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
-            }
-            using (var command = transaction.Connection.CreateCommand()) {
-                command.Transaction = transaction;
-                try {
-                    command.CommandText = query.GetCommandText();
-                    foreach (var param in query.GetParameters()) {
-                        var cmdParam = command.CreateParameter();
-                        cmdParam.ParameterName = param.Key;
-                        cmdParam.Value = param.Value;
-                        command.Parameters.Add(cmdParam);
-                    }
-                    command.CommandTimeout = Plugin.CommandTimeout;
-                    this.WriteLog(command.CommandText);
-                    Bench?.Mark("Prepared Statement");
-                    result = command.ExecuteNonQuery();
-                    var elaps = Bench?.Mark("Executed Statement");
-                    this.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
-                } catch (Exception x) {
-                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
-                    this.WriteLog(x.Message);
-                    this.WriteLog(x.StackTrace);
-                    this.WriteLog($"BDados Execute: {x.Message}");
-                    throw x;
-                } finally {
-                    this.WriteLog("------------------------------------");
-                }
-            }
-            return result;
-        }
 
         public void Close(IDbTransaction transaction) {
             try {
@@ -906,85 +565,86 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (connection?.State != ConnectionState.Open) {
                         connection.Open();
                     }
-                    using (var transaction = connection.BeginTransaction()) {
-                        try {
-                            var retv = func.Invoke(transaction);
-                            WriteLog($"Committing [{accessId}]");
-                            transaction.Commit();
-                            WriteLog($"Commited OK [{accessId}]");
-                            return retv;
-                        } catch (Exception x) {
-                            var ex = x;
-                            WriteLog($"Rolling back [{accessId}]: {x.Message} {x.StackTrace}");
-                            transaction.Rollback();
-                            WriteLog($"Transaction rolled back [{accessId}]");
+                    using (var transaction = connection.BeginTransaction(IsolationLevel.RepeatableRead)) {
+                        lock (transaction) {
+                            try {
+                                var retv = func.Invoke(transaction);
+                                WriteLog($"Committing [{accessId}]");
+                                transaction.Commit();
+                                WriteLog($"Commited OK [{accessId}]");
+                                return retv;
+                            } catch (Exception x) {
+                                var ex = x;
+                                WriteLog($"Rolling back [{accessId}]: {x.Message} {x.StackTrace}");
+                                transaction.Rollback();
+                                WriteLog($"Transaction rolled back [{accessId}]");
 
-                            this.WriteLog("Exception Details:");
-                            var depth = 1;
-                            while (ex != null && ex.InnerException != ex) {
-                                this.WriteLog($"{new String('-', depth)} ERROR [{accessId}]{ex.Message}");
-                                this.WriteLog($"{new String('-', depth)} STACKTRACE [{accessId}] {ex.StackTrace}");
-                                this.WriteLog($"{new String('-', depth)}>");
-                                depth++;
-                                ex = ex.InnerException;
+                                this.WriteLog("Exception Details:");
+                                var depth = 1;
+                                while (ex != null && ex.InnerException != ex) {
+                                    this.WriteLog($"{new String('-', depth)} ERROR [{accessId}]{ex.Message}");
+                                    this.WriteLog($"{new String('-', depth)} STACKTRACE [{accessId}] {ex.StackTrace}");
+                                    this.WriteLog($"{new String('-', depth)}>");
+                                    depth++;
+                                    ex = ex.InnerException;
+                                }
+
+
+                                if (handler != null) {
+                                    handler.Invoke(x);
+                                } else {
+                                    throw x;
+                                }
+
+                                return default(T);
                             }
-
-
-                            if (handler != null) {
-                                handler.Invoke(x);
-                            } else {
-                                throw x;
-                            }
-
-                            return default(T);
-
                         }
                     }
                 }
             }
         }
 
-        public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
-            DateTime inicio = DateTime.Now;
-            List<T> retv = new List<T>();
-            this.WriteLog($"[{accessId}] Exec procedure -- ");
+        //public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
+        //    DateTime inicio = DateTime.Now;
+        //    List<T> retv = new List<T>();
+        //    this.WriteLog($"[{accessId}] Exec procedure -- ");
 
-            QueryBuilder query = (QueryBuilder)Plugin.QueryGenerator.GenerateCallProcedure(typeof(T).Name, args);
-            DataTable dt = Query(query);
-            foreach (DataRow r in dt.Rows) {
-                T newval = Activator.CreateInstance<T>();
-                foreach (FieldInfo f in newval.GetType().GetFields()) {
-                    try {
-                        Object v = r[f.Name];
-                        if (v == null) {
-                            f.SetValue(newval, null);
-                        } else {
-                            f.SetValue(newval, r[f.Name]);
-                        }
-                    } catch (Exception x) {
-                        throw x;
-                    }
-                }
-                foreach (PropertyInfo p in newval.GetType().GetProperties()) {
-                    try {
-                        Object v = r[p.Name];
-                        if (v == null) {
-                            p.SetValue(newval, null);
-                        } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
-                            p.SetValue(newval, r[p.Name]);
-                        } else {
-                            p.SetValue(newval, Convert.ChangeType(r[p.Name], p.PropertyType));
-                        }
-                    } catch (Exception x) {
-                        throw x;
-                    }
-                }
-                retv.Add(newval);
-            }
+        //    QueryBuilder query = (QueryBuilder)Plugin.QueryGenerator.GenerateCallProcedure(typeof(T).Name, args);
+        //    DataTable dt = Query(query);
+        //    foreach (DataRow r in dt.Rows) {
+        //        T newval = Activator.CreateInstance<T>();
+        //        foreach (FieldInfo f in newval.GetType().GetFields()) {
+        //            try {
+        //                Object v = r[f.Name];
+        //                if (v == null) {
+        //                    f.SetValue(newval, null);
+        //                } else {
+        //                    f.SetValue(newval, r[f.Name]);
+        //                }
+        //            } catch (Exception x) {
+        //                throw x;
+        //            }
+        //        }
+        //        foreach (PropertyInfo p in newval.GetType().GetProperties()) {
+        //            try {
+        //                Object v = r[p.Name];
+        //                if (v == null) {
+        //                    p.SetValue(newval, null);
+        //                } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
+        //                    p.SetValue(newval, r[p.Name]);
+        //                } else {
+        //                    p.SetValue(newval, Convert.ChangeType(r[p.Name], p.PropertyType));
+        //                }
+        //            } catch (Exception x) {
+        //                throw x;
+        //            }
+        //        }
+        //        retv.Add(newval);
+        //    }
 
-            this.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
-            return retv;
-        }
+        //    this.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
+        //    return retv;
+        //}
 
 
         //private PrefixMaker prefixer = new PrefixMaker();
@@ -1201,117 +861,48 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public IEnumerable<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingType = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
+        public IEnumerable<T> AggregateLoad<T>(
+            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
+            Expression<Func<T,object>> orderingMember = null, OrderingType otype = OrderingType.Asc,  
+            MemberInfo GroupingMember = null, bool Linear = false) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return AggregateLoad(
+                    currentTransaction, cnd, skip, limit, 
+                    orderingMember, otype, 
+                    GroupingMember, Linear);
+            }
             return Access((transaction) =>
-                AggregateLoad(cnd, orderingMember, otype, limit, page, PageSize, GroupingMember, OrderingType, Ordering, Linear));
+                AggregateLoad(
+                    transaction, cnd, skip, limit, 
+                    orderingMember, otype, 
+                    GroupingMember, Linear));
         }
 
 
-        public IEnumerable<T> AggregateLoad<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingType = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
 
-            var prefixer = new PrefixMaker();
-            var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            bool hasAnyAggregations = false;
-            foreach (var a in Members) {
-                hasAnyAggregations =
-                    a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (hasAnyAggregations)
-                    break;
-            }
-
-            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {Linear}");
-            // CLUMSY
-            if (hasAnyAggregations) {
-                var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-
-                var join = MakeJoin(
-                        (query) => {
-                            // Starting with T itself
-                            query.AggregateRoot<T>(prefixer.GetAliasFor("root", typeof(T).Name)).As(prefixer.GetAliasFor("root", typeof(T).Name));
-                            MakeQueryAggregations(ref query, typeof(T), "root", typeof(T).Name, prefixer, Linear);
-                        });
-                var builtConditions = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd));
-                var builtConditionsRoot = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd, false));
-                //builtConditions
-                //    .If(GroupingMember != null).Then()
-                //        .Append($"GROUP BY a.{GroupingMember?.Name}")
-                //    .EndIf();
-                //.If(OrderingType != null).Then()
-                //    .Append($"ORDER BY a.{OrderingType?.Name} {Ordering.ToString().ToUpper()}")
-                //.EndIf();
-                //if (limit != null) {
-                //    builtConditions.Append($"LIMIT {(page ?? 0) * limit}, {limit}");
-                //}
-                var dynamicJoinJumble = join.BuildObject<T>(
-                    transaction,
-                    (build) => {
-                        MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
-                    }, builtConditions, orderingMember, otype, page, limit, builtConditionsRoot
-                    //.If(GroupingMember != null).Then()
-                    //    .Append($"GROUP BY a.{GroupingMember?.Name}")
-                    //.EndIf()
-                    //.Append($"{(OrderingType != null ? $"ORDER BY {OrderingType?.Name} {Ordering.ToString().ToUpper()}" : "")}")
-                    );
-
-                return dynamicJoinJumble;
-                // Yay.
-                // Confusing but effective. Okay das.
-                //List<T> list = dynamicJoinJumble.Qualify<T>();
-                //for (int i = 0; i < list.Count; i++) {
-                //    list[i].DataAccessor = this;
-                //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
-                //    retv.Add(list[i]);
-                //}
-            } else {
-                this.WriteLog(cnd?.ToString());
-
-                return Fetch<T>(transaction, new ConditionParser().ParseExpression<T>(cnd)
-                    .If(GroupingMember != null).Then()
-                        .Append($"GROUP BY a.{GroupingMember?.Name}")
-                    .EndIf()
-                    .If(OrderingType != null).Then()
-                        .Append($"ORDER BY a.{OrderingType?.Name} {Ordering.ToString().ToUpper()}")
-                    .EndIf()
-                    .If(limit != null).Then()
-                        .Append($"LIMIT {(page != null && page > 0 ? $"{(page - 1) * limit}," : "")}{limit}"));
-            }
-        }
         public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return DeleteWhereRidNotIn(currentTransaction, cnd, list);
+            }
             return Access((transaction) => DeleteWhereRidNotIn(transaction, cnd, list));
         }
-        public bool DeleteWhereRidNotIn<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
-            int retv = 0;
-            if (list == null)
-                return true;
 
-            var id = GetIdColumn<T>();
-            var rid = GetRidColumn<T>();
-            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
-            if (cnd != null) {
-                query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS a WHERE ");
-                query.Append(new ConditionParser().ParseExpression<T>(cnd));
-                query.Append(") sub)");
-            }
-            if (list.Count > 0) {
-                query.Append($"AND {rid} NOT IN (");
-                for (var i = 0; i < list.Count; i++) {
-                    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
-                    if (i < list.Count - 1)
-                        query.Append(",");
-                }
-                query.Append(")");
-            }
-            retv = Execute(transaction, query);
-            return retv > 0;
+        public void Dispose() {
+            //this.Close();
         }
-
-        public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
-            return Access((transaction) => {
-                return SaveRecordSet<T>(transaction, rs);
-            });
+        #endregion *****************
+        //
+        #region Default Transaction Using Core Funcitons.
+        public T ForceExist<T>(IDbTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
+            var f = LoadAll<T>(transaction, qb.Append("LIMIT 1"));
+            if (f.Any()) {
+                return f.First();
+            } else {
+                T quickSave = Default();
+                quickSave.RID = new T().RID;
+                SaveItem(quickSave);
+                return quickSave;
+            }
         }
 
         public bool SaveRecordSet<T>(IDbTransaction transaction, RecordSet<T> rs) where T : IDataObject, new() {
@@ -1354,10 +945,399 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public void Dispose() {
-            //this.Close();
+        public Object ScalarQuery(IDbTransaction transaction, IQueryBuilder qb) {
+            Object retv = null;
+            try {
+                retv = Query(transaction, qb).Rows[0][0];
+            } catch (Exception) {
+            }
+            return retv;
         }
-        #endregion *****************
-        //
+
+        public bool DeleteWhereRidNotIn<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
+            int retv = 0;
+            if (list == null)
+                return true;
+
+            var id = GetIdColumn<T>();
+            var rid = GetRidColumn<T>();
+            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
+            if (cnd != null) {
+                PrefixMaker pm = new PrefixMaker();
+                query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS {pm.GetAliasFor("root", typeof(T).Name)} WHERE ");
+                query.Append(new ConditionParser(pm).ParseExpression<T>(cnd));
+                query.Append(") sub)");
+            }
+            if (list.Count > 0) {
+                query.Append($"AND {rid} NOT IN (");
+                for (var i = 0; i < list.Count; i++) {
+                    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
+                    if (i < list.Count - 1)
+                        query.Append(",");
+                }
+                query.Append(")");
+            }
+            retv = Execute(transaction, query);
+            return retv > 0;
+        }
+
+        public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
+            if (currentTransaction != null) {
+                return SaveRecordSet<T>(currentTransaction, rs);
+            }
+            return Access((transaction) => {
+                return SaveRecordSet<T>(transaction, rs);
+            });
+        }
+
+        public bool Delete<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
+            bool retv = false;
+
+            T dataObject = (T)Activator.CreateInstance(typeof(T));
+            var id = GetIdColumn<T>();
+            var p = new PrefixMaker();
+            var join = MakeJoin(
+                    (q) => {
+                        // Starting with T itself
+                        q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name)).As(p.GetAliasFor("root", typeof(T).Name));
+                        MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, p, false);
+                    });
+            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
+            query.Append($"{id} IN (SELECT a_{id} as {id} FROM (");
+            query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
+            query.Append(") sub)");
+            retv = Execute(transaction, query) > 0;
+            return retv;
+        }
+
+        public IEnumerable<T> Query<T>(IDbTransaction transaction, IQueryBuilder query) where T : new() {
+            if (query == null) {
+                return new List<T>();
+            }
+            DataTable resultado = Query(transaction, query);
+            return Fi.Tech.Map<T>(resultado);
+        }
+
+        public T LoadById<T>(IDbTransaction transaction, long Id) where T : IDataObject, new() {
+            var id = GetIdColumn(typeof(T));
+            return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id)).FirstOrDefault();
+        }
+
+        public T LoadByRid<T>(IDbTransaction transaction, String RID) where T : IDataObject, new() {
+            var rid = GetRidColumn(typeof(T));
+            return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID)).FirstOrDefault();
+        }
+
+        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering).ToRecordSet();
+        }
+
+        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
+        }
+
+        public bool Delete(IDbTransaction transaction, IDataObject obj) {
+            bool retv = false;
+
+            //var id = GetIdColumn(obj.GetType());
+            var rid = obj.RID;
+            var ridcol = (from a in ReflectionTool.FieldsAndPropertiesOf(obj.GetType())
+                          where ReflectionTool.GetAttributeFrom<ReliableIdAttribute>(a) != null
+                          select a).FirstOrDefault();
+            string ridname = "RID";
+            if (ridcol != null) {
+                ridname = ridcol.Name;
+            }
+
+            var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
+            retv = Execute(transaction, query) > 0;
+            return retv;
+        }
+
+        public bool SaveItem(IDbTransaction transaction, IDataObject input) {
+            bool retv = false;
+
+            int rs = -33;
+
+            var id = GetIdColumn(input.GetType());
+            var rid = GetRidColumn(input.GetType());
+
+            input.CreatedTime = DateTime.UtcNow;
+
+            if (input.IsPersisted) {
+                rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
+                retv = true;
+                return retv;
+            }
+
+            rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
+            if (rs == 0) {
+                this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
+            }
+
+            retv = rs > 0;
+            if (retv && !input.IsPersisted) {
+                long retvId = 0;
+                var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+                //if (ridAtt.Any()) {
+                //    var query = (IQueryBuilder)Plugin.QueryGenerator
+                //        .GetType()
+                //        .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
+                //        .MakeGenericMethod(input.GetType())
+                //        .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
+                //    DataTable dt = Query(query);
+                //    retvId = (long)dt.Rows[0][id];
+                //} else {
+
+
+                if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
+                    try {
+                        var query = (IQueryBuilder)Plugin.QueryGenerator
+                            .GetType()
+                            .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
+                            .MakeGenericMethod(input.GetType())
+                            .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
+                        var gid = ScalarQuery(transaction, query);
+                        if (gid is long l)
+                            retvId = l;
+                        if (gid is string s) {
+                            if (Int64.TryParse(s, out retvId)) {
+                            }
+                        }
+                    } catch (Exception x) {
+                        Fi.Tech.WriteLine(x.Message);
+                    }
+                }
+
+                if (retvId <= 0) {
+                    try {
+                        var query = (IQueryBuilder)Plugin.QueryGenerator
+                            .GetType()
+                            .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
+                            .MakeGenericMethod(input.GetType())
+                            .Invoke(Plugin.QueryGenerator, new Object[0]);
+                        retvId = ((long?)ScalarQuery(transaction, query)) ?? 0;
+                        var gid = ScalarQuery(transaction, query);
+                        if (gid is long l)
+                            retvId = l;
+                        if (gid is string s) {
+                            if (Int64.TryParse(s, out retvId)) {
+                            }
+                        }
+                    } catch (Exception x) {
+                        OnFailedSave?.Invoke(input?.GetType(), input, x);
+                    }
+                }
+
+                //}
+                if (retvId > 0) {
+                    input.Id = retvId;
+                } else {
+                }
+                retv = true;
+            }
+            return retv;
+        }
+
+        public IEnumerable<T> AggregateLoad<T>
+            (IDbTransaction transaction, 
+            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
+            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,  
+            MemberInfo GroupingMember = null, bool Linear = false) where T : IDataObject, new() {
+
+            var prefixer = new PrefixMaker();
+            var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
+            bool hasAnyAggregations = false;
+            foreach (var a in Members) {
+                hasAnyAggregations =
+                    a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
+                    a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
+                    a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
+                    a.GetCustomAttribute<AggregateListAttribute>() != null;
+                if (hasAnyAggregations)
+                    break;
+            }
+
+            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {Linear}");
+            // CLUMSY
+            if (hasAnyAggregations) {
+                var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
+
+                var join = MakeJoin(
+                        (query) => {
+                            // Starting with T itself
+                            query.AggregateRoot<T>(prefixer.GetAliasFor("root", typeof(T).Name)).As(prefixer.GetAliasFor("root", typeof(T).Name));
+                            MakeQueryAggregations(ref query, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                        });
+                var builtConditions = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd));
+                var builtConditionsRoot = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd, false));
+                //builtConditions
+                //    .If(GroupingMember != null).Then()
+                //        .Append($"GROUP BY a.{GroupingMember?.Name}")
+                //    .EndIf();
+                //.If(OrderingType != null).Then()
+                //    .Append($"ORDER BY a.{OrderingType?.Name} {Ordering.ToString().ToUpper()}")
+                //.EndIf();
+                //if (limit != null) {
+                //    builtConditions.Append($"LIMIT {(page ?? 0) * limit}, {limit}");
+                //}
+                var om = GetOrderingMember(orderingMember);
+                var dynamicJoinJumble = join.BuildObject<T>(
+                    transaction,
+                    (build) => {
+                        MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                    }, builtConditions, skip, limit, om, otype, builtConditionsRoot
+                    //.If(GroupingMember != null).Then()
+                    //    .Append($"GROUP BY a.{GroupingMember?.Name}")
+                    //.EndIf()
+                    //.Append($"{(OrderingType != null ? $"ORDER BY {OrderingType?.Name} {Ordering.ToString().ToUpper()}" : "")}")
+                    ).ToArray();
+
+                return dynamicJoinJumble;
+                // Yay.
+                // Confusing but effective. Okay das.
+                //List<T> list = dynamicJoinJumble.Qualify<T>();
+                //for (int i = 0; i < list.Count; i++) {
+                //    list[i].DataAccessor = this;
+                //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
+                //    retv.Add(list[i]);
+                //}
+            } else {
+                this.WriteLog(cnd?.ToString());
+                var pm = new PrefixMaker();
+                var cndb = new ConditionParser(pm).ParseExpression<T>(cnd);
+                return Fetch<T>(transaction, cndb, skip, limit, orderingMember, otype);
+            }
+        }
+
+        public T LoadFirstOrDefault<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return LoadAll<T>(transaction, condicoes, skip, limit, orderingMember, ordering).FirstOrDefault();
+        }
+
+        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            var query = new ConditionParser().ParseExpression(conditions);
+            
+            return Fetch<T>(transaction, query, skip, limit, orderingMember, ordering);
+        }
+
+        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, IQueryBuilder condicoes, int? skip, int? limit, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+
+            if (condicoes == null) {
+                condicoes = Qb.Fmt("TRUE");
+            }
+            DataTable dt = null;
+
+            Bench?.Mark("--");
+
+            Bench?.Mark("Data Load ---");
+            MemberInfo ordMember = GetOrderingMember<T>(orderingMember);
+            var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes, skip, limit, ordMember, ordering);
+            Bench?.Mark("Generate SELECT");
+            dt = Query(transaction, selectQuery);
+            Bench?.Mark("Execute SELECT");
+
+            if (dt == null)
+                return new T[0];
+            if (dt.Rows.Count < 1) {
+                this.WriteLog("Query returned no results.");
+                return new T[0];
+            }
+
+            var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
+                .Where((a) => a.GetCustomAttribute<FieldAttribute>() != null)
+                .ToList();
+
+            var mapFn = Fi.Tech.Map<T>(dt);
+            return RunAfterLoads(mapFn);
+        }
+
+        public DataTable Query(IDbTransaction transaction, IQueryBuilder query) {
+            if (query == null || query.GetCommandText() == null) {
+                return new DataTable();
+            }
+            DateTime Inicio = DateTime.Now;
+            String QueryText = query.GetCommandText();
+            DataTable retv = new DataTable();
+            using (var command = transaction.Connection.CreateCommand()) {
+                command.Transaction = transaction;
+                command.CommandText = QueryText;
+                command.CommandTimeout = Plugin.CommandTimeout;
+                int i = 0;
+                this.WriteLog($"[{accessId}] -- Query: {QueryText}");
+                // Adiciona os parametros
+                foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
+                    var cmdParam = command.CreateParameter();
+                    cmdParam.ParameterName = param.Key;
+                    cmdParam.Value = param.Value;
+                    command.Parameters.Add(cmdParam);
+                    var pval = $"'{param.Value?.ToString() ?? "null"}'";
+                    if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
+                        pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
+                        pval = $"'{pval}'";
+                    }
+                    this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
+                }
+                // --
+                DataSet ds = Plugin.GetDataSet(command);
+                try {
+                    int resultados = 0;
+                    if (ds.Tables.Count < 1) {
+                        throw new BDadosException("Database did not return any table.");
+                    }
+                    resultados = ds.Tables[0].Rows.Count;
+                    this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    return ds.Tables[0];
+                } catch (Exception x) {
+                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    this.WriteLog(x.Message);
+                    this.WriteLog(x.StackTrace);
+                    throw x;
+                } finally {
+                    command.Dispose();
+                    this.WriteLog("------------------------------------");
+                }
+            }
+        }
+        public int Execute(IDbTransaction transaction, IQueryBuilder query) {
+            if (query == null)
+                return 0;
+            int result = -1;
+
+            Bench?.Mark("--");
+            this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
+            foreach (var param in query.GetParameters()) {
+                this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
+            }
+            using (var command = transaction.Connection.CreateCommand()) {
+                command.Transaction = transaction;
+                try {
+                    command.CommandText = query.GetCommandText();
+                    foreach (var param in query.GetParameters()) {
+                        var cmdParam = command.CreateParameter();
+                        cmdParam.ParameterName = param.Key;
+                        cmdParam.Value = param.Value;
+                        command.Parameters.Add(cmdParam);
+                    }
+                    command.CommandTimeout = Plugin.CommandTimeout;
+                    this.WriteLog(command.CommandText);
+                    Bench?.Mark("Prepared Statement");
+                    result = command.ExecuteNonQuery();
+                    var elaps = Bench?.Mark("Executed Statement");
+                    this.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
+                } catch (Exception x) {
+                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{Bench?.Mark("Error")} ms]");
+                    this.WriteLog(x.Message);
+                    this.WriteLog(x.StackTrace);
+                    this.WriteLog($"BDados Execute: {x.Message}");
+                    throw x;
+                } finally {
+                    this.WriteLog("------------------------------------");
+                }
+            }
+            return result;
+        }
+
+        #endregion
+
     }
 }

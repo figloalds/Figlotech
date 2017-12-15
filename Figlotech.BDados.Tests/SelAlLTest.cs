@@ -133,17 +133,10 @@ namespace Figlotech.BDados.Tests
                     { "User", "root" },
                     { "Password", "asdafe1025" },
                    });
-            var li = new RecordSet<Pessoas>(da).LoadAll(new Conditions<Pessoas>(p=> true), 1);
-            var objs = String.Join(";", li.Select(l => l.ToString()).ToArray());
-            Console.WriteLine(li.Count);
-            Console.WriteLine(li.Count);
-
-            Console.WriteLine(li.Count);
-
-            Console.WriteLine(li.Count);
-            Console.WriteLine(li.Count);
-
-
+            var li = da.LoadFirstOrDefault<Pessoas>(
+                new Conditions<Pessoas>(p=> true), 0,1, 
+                p => p.Nome, OrderingType.Desc);
+            Console.WriteLine(li);
         }
 
         [TestMethod]
