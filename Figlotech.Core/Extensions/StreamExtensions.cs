@@ -73,13 +73,36 @@ namespace Figlotech.Extensions
             var len = AllowedSizes[typeof(T)];
             var buff = new byte[len];
             me.Read(buff, 0, len);
-            var methods = me.GetType().GetMethods();
+            
+            var methods = typeof(BitConverter).GetMethods();
             var method = methods.FirstOrDefault(m => m.Name == $"To{typeof(T).Name}");
             if(method == null) {
                 err();
             }
             T retv = (T)method.Invoke(me, new Object[] { buff, 0 });
             return retv;
+        }
+
+        public static void Write<T>(this Stream me, T val) {
+            Action err = () => {
+                var supportedTypes = String.Join(", ", AllowedTypes.Select(t => t.Name));
+                throw new ArgumentException($"Generic type {typeof(T).Name} for FiStreamExtensions.Read<T> is invalid, supported types are: { supportedTypes }");
+            };
+
+            if (!AllowedSizes.ContainsKey(typeof(T))) {
+                err();
+            }
+            var len = AllowedSizes[typeof(T)];
+            var buff = new byte[len];
+
+            var methods = typeof(BitConverter).GetMethods();
+            var method = methods.FirstOrDefault(m => m.Name == $"GetBytes" && m.GetParameters().FirstOrDefault()?.ParameterType == typeof(T));
+            if (method == null) {
+                err();
+            }
+
+            buff = (byte[]) method.Invoke(me, new Object[] { val });
+            me.Write(buff, 0, len);
         }
     }
 }

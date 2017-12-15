@@ -741,6 +741,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //}
             int aid = accessId;
             return UseConnection((connection) => {
+
                 try {
                     aid = ++accessId;
                     if (Bench == null) {
