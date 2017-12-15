@@ -40,11 +40,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         protected IRdbmsPluginAdapter Plugin;
 
         //private DataAccessorPlugin.Config Plugin.Config;
-        private int _simmultaneousConnections;
+        private int _simmultaneoustransactions;
         private bool _accessSwitch = false;
         public String SchemaName { get { return Plugin.SchemaName; } }
 
-        //public IDbConnection ConnectionHandle;
+        //public IDbTransaction transactionHandle;
 
         private static int counter = 0;
         private int myId = ++counter;
@@ -67,8 +67,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new() {
             return ForceExist<T>(Default, Qb.Fmt(query, args));
         }
+
         public T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(qb.Append("LIMIT 1"));
+            return Access((transaction) => ForceExist<T>(transaction, Default, qb));
+        }
+        public T ForceExist<T>(IDbTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
+            var f = LoadAll<T>(transaction, qb.Append("LIMIT 1"));
             if (f.Any()) {
                 return f.First();
             } else {
@@ -111,6 +115,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #endregion ***************************
 
+        public T LoadFirstOrDefault<T>(IDbTransaction transaction, Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return LoadAll<T>(transaction, condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
+        }
         public T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? page = default(int?), int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             return LoadAll<T>(condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
         }
@@ -271,9 +278,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         }
 
-        public bool SaveItem(IDataObject input, Action fn = null) {
-            return Access((connection) => {
-                return SaveItem(connection, input, fn);
+        public bool SaveItem(IDataObject input) {
+            return Access((transaction) => {
+                return SaveItem(transaction, input);
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
@@ -281,7 +288,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        public bool SaveItem(IDbConnection connection, IDataObject input, Action fn = null) {
+        public bool SaveItem(IDbTransaction transaction, IDataObject input) {
             bool retv = false;
 
             int rs = -33;
@@ -292,14 +299,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             input.CreatedTime = DateTime.UtcNow;
 
             if (input.IsPersisted) {
-                rs = Execute(connection, Plugin.QueryGenerator.GenerateUpdateQuery(input));
+                rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
                 retv = true;
-                if (fn != null)
-                    fn.Invoke();
                 return retv;
             }
 
-            rs = Execute(connection, Plugin.QueryGenerator.GenerateInsertQuery(input));
+            rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
             if (rs == 0) {
                 this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
@@ -326,7 +331,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
                             .MakeGenericMethod(input.GetType())
                             .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                        var gid = ScalarQuery(connection, query);
+                        var gid = ScalarQuery(transaction, query);
                         if (gid is long l)
                             retvId = l;
                         if (gid is string s) {
@@ -345,8 +350,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
                             .MakeGenericMethod(input.GetType())
                             .Invoke(Plugin.QueryGenerator, new Object[0]);
-                        retvId = ((long?)ScalarQuery(connection, query)) ?? 0;
-                        var gid = ScalarQuery(connection, query);
+                        retvId = ((long?)ScalarQuery(transaction, query)) ?? 0;
+                        var gid = ScalarQuery(transaction, query);
                         if (gid is long l)
                             retvId = l;
                         if (gid is string s) {
@@ -363,8 +368,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     input.Id = retvId;
                 } else {
                 }
-                if (fn != null)
-                    fn.Invoke();
                 retv = true;
             }
             return retv;
@@ -378,20 +381,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //    });retv;
         //}
 
-        //public IDbConnection GetConnection() {
-        //    return ConnectionHandle;
+        //public IDbTransaction Gettransaction() {
+        //    return transactionHandle;
         //}
 
         public IEnumerable<T> Query<T>(IQueryBuilder query) where T : new() {
-            return Access((connection) => {
-                return Query<T>(connection, query);
+            return Access((transaction) => {
+                return Query<T>(transaction, query);
             });
         }
-        public IEnumerable<T> Query<T>(IDbConnection connection, IQueryBuilder query) where T : new() {
+        public IEnumerable<T> Query<T>(IDbTransaction transaction, IQueryBuilder query) where T : new() {
             if (query == null) {
                 return new List<T>();
             }
-            DataTable resultado = Query(connection, query);
+            DataTable resultado = Query(transaction, query);
             return Fi.Tech.Map<T>(resultado);
         }
 
@@ -430,33 +433,41 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ?? "RID";
             return retv;
         }
-
         public T LoadById<T>(long Id) where T : IDataObject, new() {
+            return Access((transaction) => LoadById<T>(transaction, Id));
+        }
+        public T LoadById<T>(IDbTransaction transaction, long Id) where T : IDataObject, new() {
             var id = GetIdColumn(typeof(T));
-            return LoadAll<T>(new Qb().Append($"{id}=@id", Id)).FirstOrDefault();
+            return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id)).FirstOrDefault();
         }
 
         public T LoadByRid<T>(String RID) where T : IDataObject, new() {
+            return Access((transaction) => LoadByRid<T>(transaction, RID));
+        }
+        public T LoadByRid<T>(IDbTransaction transaction, String RID) where T : IDataObject, new() {
             var rid = GetRidColumn(typeof(T));
-            return LoadAll<T>(new Qb().Append($"{rid}=@rid", RID)).FirstOrDefault();
+            return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID)).FirstOrDefault();
         }
 
         public RecordSet<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
             return Fetch<T>(Qb.Fmt(where, args)).ToRecordSet();
         }
 
+        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(conditions, page, limit, orderingMember, ordering).ToRecordSet();
+        }
         public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             return Fetch<T>(conditions, page, limit, orderingMember, ordering).ToRecordSet();
         }
 
         public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Access((connection) => {
-                return LoadAll<T>(connection, condicoes, orderingMember, ordering).ToRecordSet();
+            return Access((transaction) => {
+                return LoadAll<T>(transaction, condicoes, orderingMember, ordering).ToRecordSet();
             });
         }
 
-        public RecordSet<T> LoadAll<T>(IDbConnection connection, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(connection, condicoes, orderingMember, ordering).ToRecordSet();
+        public RecordSet<T> LoadAll<T>(IDbTransaction transaction, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(transaction, condicoes, orderingMember, ordering).ToRecordSet();
         }
 
         public IEnumerable<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
@@ -464,19 +475,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Access((transaction) => Fetch(transaction, conditions, page, limit, orderingMember, ordering));
+        }
+        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions = null, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var query = new ConditionParser().ParseExpression(conditions);
             if (page != null && limit != null)
                 query.Append($"LIMIT {(page - 1) * limit}, {limit}");
             else if (limit != null)
                 query.Append($"LIMIT {limit}");
-            return Fetch<T>(query, orderingMember, ordering);
+            return Fetch<T>(transaction, query, orderingMember, ordering);
         }
 
         Benchmarker Bench = null;
 
         public IEnumerable<T> Fetch<T>(IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Access((connection) => {
-                return Fetch<T>(connection, condicoes, orderingMember, ordering);
+            return Access((transaction) => {
+                return Fetch<T>(transaction, condicoes, orderingMember, ordering);
             }, (x) => {
                 this.WriteLog(x.Message);
                 this.WriteLog(x.StackTrace);
@@ -485,7 +499,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        public IEnumerable<T> Fetch<T>(IDbConnection connection, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IEnumerable<T> Fetch<T>(IDbTransaction transaction, IQueryBuilder condicoes, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
 
             if (condicoes == null) {
                 condicoes = Qb.Fmt("TRUE");
@@ -498,7 +512,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Bench?.Mark("Data Load ---");
             var selectQuery = Plugin.QueryGenerator.GenerateSelect<T>(condicoes, member, ordering);
             Bench?.Mark("Generate SELECT");
-            dt = Query(connection, selectQuery);
+            dt = Query(transaction, selectQuery);
             Bench?.Mark("Execute SELECT");
 
             if (dt == null)
@@ -527,8 +541,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     yield return enumerator.Current;
             }
         }
-
         public bool Delete(IDataObject obj) {
+            return Access((transaction) => Delete(transaction, obj));
+        }
+        public bool Delete(IDbTransaction transaction, IDataObject obj) {
             bool retv = false;
 
             //var id = GetIdColumn(obj.GetType());
@@ -542,11 +558,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
-            retv = Execute(query) > 0;
+            retv = Execute(transaction, query) > 0;
             return retv;
         }
-
         public bool Delete<T>(Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
+            return Access((transaction) => Delete(transaction, conditions));
+        }
+        public bool Delete<T>(IDbTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
             bool retv = false;
 
             T dataObject = (T)Activator.CreateInstance(typeof(T));
@@ -562,7 +580,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             query.Append($"{id} IN (SELECT a_{id} as {id} FROM (");
             query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
             query.Append(") sub)");
-            retv = Execute(query) > 0;
+            retv = Execute(transaction, query) > 0;
             return retv;
         }
 
@@ -572,13 +590,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private static int accessCount = 0;
 
         //public void Open() {
-        //    if (ConnectionHandle == null) {
-        //        ConnectionHandle = Plugin.GetNewConnection();
+        //    if (transactionHandle == null) {
+        //        transactionHandle = Plugin.GetNewConnection();
         //    } else {
-        //        ConnectionHandle.Close();
+        //        transactionHandle.Close();
         //    }
-        //    if (ConnectionHandle.State != ConnectionState.Open) {
-        //        ConnectionHandle.Open();
+        //    if (transactionHandle.State != transactionState.Open) {
+        //        transactionHandle.Open();
         //    }
         //}
 
@@ -596,13 +614,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //public delegate void TrataExceptions(Exception x);
 
         public Object ScalarQuery(IQueryBuilder qb) {
-            return Access(connection => ScalarQuery(connection, qb));
+            return Access(transaction => ScalarQuery(transaction, qb));
         }
 
-        public Object ScalarQuery(IDbConnection connection, IQueryBuilder qb) {
+        public Object ScalarQuery(IDbTransaction transaction, IQueryBuilder qb) {
             Object retv = null;
             try {
-                retv = Query(connection, qb).Rows[0][0];
+                retv = Query(transaction, qb).Rows[0][0];
             } catch (Exception) {
             }
             return retv;
@@ -727,70 +745,50 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public event Action<Type, IDataObject> OnSuccessfulSave;
         public event Action<Type, IDataObject, Exception> OnFailedSave;
 
-        public void Access(Action<IDbConnection> functions, Action<Exception> handler = null) {
-            var i = Access<int>((connection) => {
-                functions?.Invoke(connection);
+        public void Access(Action<IDbTransaction> functions, Action<Exception> handler = null) {
+            var i = Access<int>((transaction) => {
+                functions?.Invoke(transaction);
                 return 0;
             }, handler);
         }
 
-        public T Access<T>(Func<IDbConnection, T> functions, Action<Exception> handler = null) {
+        public T Access<T>(Func<IDbTransaction, T> functions, Action<Exception> handler = null) {
             if (functions == null) return default(T);
-            //if (ConnectionHandle != null && ConnectionHandle.State == ConnectionState.Open) {
-            //    return functions.Invoke(connection);
+            //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
+            //    return functions.Invoke(transaction);
             //}
             int aid = accessId;
-            return UseConnection((connection) => {
-
+            return UseTransaction((transaction) => {
                 try {
                     aid = ++accessId;
                     if (Bench == null) {
                         Bench = new Benchmarker($"---- Access [{++aid}]");
                         Bench.WriteToStdout = showPerformanceLogs;
                     }
-                    return functions.Invoke(connection);
-                } catch (Exception x) {
-                    var ex = x;
-                    this.WriteLog("Exception Details:");
-                    var depth = 1;
-                    while (ex != null && ex.InnerException != ex) {
-                        this.WriteLog($"[{aid}]{new String('-', depth)} {ex.Message}");
-                        this.WriteLog($"[{aid}]{new String('-', depth)} {ex.StackTrace}");
-                        this.WriteLog($"{new String('-', depth)}>");
-                        depth++;
-                        ex = ex.InnerException;
-                    }
-
-                    if (handler != null) {
-                        handler.Invoke(x);
-                    } else {
-                        throw x;
-                    }
-
-                    return default(T);
+                    return functions.Invoke(transaction);
                 } finally {
                     var total = Bench?.FinalMark();
                     this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
-                    Close(connection);
                 }
-            });
+            }, handler);
 
         }
 
         public DataTable Query(IQueryBuilder query) {
-            return Access((connection) => {
-                return Query(connection, query);
+            return Access((transaction) => {
+                return Query(transaction, query);
             });
         }
 
-        public DataTable Query(IDbConnection connection, IQueryBuilder query) {
+        public DataTable Query(IDbTransaction transaction, IQueryBuilder query) {
             if (query == null || query.GetCommandText() == null) {
                 return new DataTable();
             }
             DateTime Inicio = DateTime.Now;
             String QueryText = query.GetCommandText();
             DataTable retv = new DataTable();
-            using (var command = connection.CreateCommand()) {
+            using (var command = transaction.Connection.CreateCommand()) {
+                command.Transaction = transaction;
                 command.CommandText = QueryText;
                 command.CommandTimeout = Plugin.CommandTimeout;
                 int i = 0;
@@ -844,12 +842,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public int Execute(IQueryBuilder query) {
-            return Access((connection) => {
-                return Execute(connection, query);
+            return Access((transaction) => {
+                return Execute(transaction, query);
             });
         }
 
-        public int Execute(IDbConnection connection, IQueryBuilder query) {
+        public int Execute(IDbTransaction transaction, IQueryBuilder query) {
             if (query == null)
                 return 0;
             int result = -1;
@@ -859,7 +857,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var param in query.GetParameters()) {
                 this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
             }
-            using (var command = connection.CreateCommand()) {
+            using (var command = transaction.Connection.CreateCommand()) {
+                command.Transaction = transaction;
                 try {
                     command.CommandText = query.GetCommandText();
                     foreach (var param in query.GetParameters()) {
@@ -887,15 +886,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return result;
         }
 
-        public void Close(IDbConnection connection) {
+        public void Close(IDbTransaction transaction) {
             try {
-                connection.Close();
+                transaction.Commit();
             } catch (Exception x) {
+                transaction.Rollback();
                 this.WriteLog($"[{accessId}] BDados Close: {x.Message}");
+            } finally {
+                transaction.Connection.Dispose();
+                transaction.Dispose();
             }
         }
 
-        private T UseConnection<T>(Func<IDbConnection, T> func) {
+        private T UseTransaction<T>(Func<IDbTransaction, T> func, Action<Exception> handler = null) {
             if (func == null) return default(T);
 
             using (var connection = Plugin.GetNewConnection()) {
@@ -903,10 +906,40 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (connection?.State != ConnectionState.Open) {
                         connection.Open();
                     }
-                    var retv = func.Invoke(connection);
-                    Close(connection);
+                    using (var transaction = connection.BeginTransaction()) {
+                        try {
+                            var retv = func.Invoke(transaction);
+                            WriteLog($"Committing [{accessId}]");
+                            transaction.Commit();
+                            WriteLog($"Commited OK [{accessId}]");
+                            return retv;
+                        } catch (Exception x) {
+                            var ex = x;
+                            WriteLog($"Rolling back [{accessId}]: {x.Message} {x.StackTrace}");
+                            transaction.Rollback();
+                            WriteLog($"Transaction rolled back [{accessId}]");
 
-                    return retv;
+                            this.WriteLog("Exception Details:");
+                            var depth = 1;
+                            while (ex != null && ex.InnerException != ex) {
+                                this.WriteLog($"{new String('-', depth)} ERROR [{accessId}]{ex.Message}");
+                                this.WriteLog($"{new String('-', depth)} STACKTRACE [{accessId}] {ex.StackTrace}");
+                                this.WriteLog($"{new String('-', depth)}>");
+                                depth++;
+                                ex = ex.InnerException;
+                            }
+
+
+                            if (handler != null) {
+                                handler.Invoke(x);
+                            } else {
+                                throw x;
+                            }
+
+                            return default(T);
+
+                        }
+                    }
                 }
             }
         }
@@ -1169,6 +1202,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public IEnumerable<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingType = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
+            return Access((transaction) =>
+                AggregateLoad(cnd, orderingMember, otype, limit, page, PageSize, GroupingMember, OrderingType, Ordering, Linear));
+        }
+
+
+        public IEnumerable<T> AggregateLoad<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingType = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new() {
 
             var prefixer = new PrefixMaker();
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -1207,14 +1246,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 //    builtConditions.Append($"LIMIT {(page ?? 0) * limit}, {limit}");
                 //}
                 var dynamicJoinJumble = join.BuildObject<T>(
-                        (build) => {
-                            MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
-                        }, builtConditions, orderingMember, otype, page, limit, builtConditionsRoot
-                            //.If(GroupingMember != null).Then()
-                            //    .Append($"GROUP BY a.{GroupingMember?.Name}")
-                            //.EndIf()
-                            //.Append($"{(OrderingType != null ? $"ORDER BY {OrderingType?.Name} {Ordering.ToString().ToUpper()}" : "")}")
-                            );
+                    transaction,
+                    (build) => {
+                        MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                    }, builtConditions, orderingMember, otype, page, limit, builtConditionsRoot
+                    //.If(GroupingMember != null).Then()
+                    //    .Append($"GROUP BY a.{GroupingMember?.Name}")
+                    //.EndIf()
+                    //.Append($"{(OrderingType != null ? $"ORDER BY {OrderingType?.Name} {Ordering.ToString().ToUpper()}" : "")}")
+                    );
 
                 return dynamicJoinJumble;
                 // Yay.
@@ -1228,7 +1268,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } else {
                 this.WriteLog(cnd?.ToString());
 
-                return Fetch<T>(new ConditionParser().ParseExpression<T>(cnd)
+                return Fetch<T>(transaction, new ConditionParser().ParseExpression<T>(cnd)
                     .If(GroupingMember != null).Then()
                         .Append($"GROUP BY a.{GroupingMember?.Name}")
                     .EndIf()
@@ -1239,43 +1279,42 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         .Append($"LIMIT {(page != null && page > 0 ? $"{(page - 1) * limit}," : "")}{limit}"));
             }
         }
-
         public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
+            return Access((transaction) => DeleteWhereRidNotIn(transaction, cnd, list));
+        }
+        public bool DeleteWhereRidNotIn<T>(IDbTransaction transaction, Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
             int retv = 0;
             if (list == null)
                 return true;
 
             var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
-            Access((connection) => {
-                var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
-                if (cnd != null) {
-                    query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS a WHERE ");
-                    query.Append(new ConditionParser().ParseExpression<T>(cnd));
-                    query.Append(") sub)");
-                }
-                if (list.Count > 0) {
-                    query.Append($"AND {rid} NOT IN (");
-                    for (var i = 0; i < list.Count; i++) {
-                        query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
-                        if (i < list.Count - 1)
-                            query.Append(",");
-                    }
-                    query.Append(")");
-                }
-                retv = Execute(connection, query);
+            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
+            if (cnd != null) {
+                query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS a WHERE ");
+                query.Append(new ConditionParser().ParseExpression<T>(cnd));
+                query.Append(") sub)");
             }
-            );
+            if (list.Count > 0) {
+                query.Append($"AND {rid} NOT IN (");
+                for (var i = 0; i < list.Count; i++) {
+                    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
+                    if (i < list.Count - 1)
+                        query.Append(",");
+                }
+                query.Append(")");
+            }
+            retv = Execute(transaction, query);
             return retv > 0;
         }
 
         public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
-            return Access((connection) => {
-                return SaveRecordSet<T>(connection, rs);
+            return Access((transaction) => {
+                return SaveRecordSet<T>(transaction, rs);
             });
         }
 
-        public bool SaveRecordSet<T>(IDbConnection connection, RecordSet<T> rs) where T : IDataObject, new() {
+        public bool SaveRecordSet<T>(IDbTransaction transaction, RecordSet<T> rs) where T : IDataObject, new() {
             bool retv = true;
             if (rs.Count == 0)
                 return true;

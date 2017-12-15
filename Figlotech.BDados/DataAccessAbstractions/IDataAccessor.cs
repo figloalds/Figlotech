@@ -8,10 +8,9 @@ using System.Reflection;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IDataAccessor
     {
-        T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
-
         ILogger Logger { get; set; }
 
+        T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
         RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? page = null, int? limit = 200, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
@@ -24,10 +23,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Delete(IDataObject obj);
 
         bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new();
-        bool SaveItem(IDataObject objeto, Action funcaoPosSalvar = null);
+        bool SaveItem(IDataObject objeto);
 
         Type[] WorkingTypes { get; set; }
 
         IEnumerable<T> AggregateLoad<T>(Expression<Func<T, bool>> cnd = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? limit = null, int? page = null, int PageSize = 200, MemberInfo GroupingMember = null, MemberInfo OrderingMember = null, OrderingType Ordering = OrderingType.Asc, bool Linear = false) where T : IDataObject, new();
+
     }
 }
