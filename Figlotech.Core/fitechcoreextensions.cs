@@ -140,22 +140,21 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static IEnumerable<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
-            if (dt.Rows.Count < 1) yield break;
+        public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
+            if (dt.Rows.Count < 1) return new List<T>();
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
-            WorkQueuer wq = new WorkQueuer("map_list", Environment.ProcessorCount, true);
-            Queue<T> cache = new Queue<T>();
+            List<T> retv = new List<T>();
             Parallel.For(0, dt.Rows.Count, i => {
                 var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta, mapReplacements);
-                lock(cache)
-                    cache.Enqueue(val);
+                //yield return val;
+                lock (retv)
+                    retv.Add(val);
             });
             Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
-            foreach (var a in cache)
-                yield return a;
+            return retv;
         }
 
         public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
@@ -177,6 +176,8 @@ namespace Figlotech.Core {
                 return Assembly.GetExecutingAssembly().GetName().Version.ToString();
             }
         }
+
+        public static bool EnableBenchMarkers { get; set; } = false;
 
         public static String GetVersion(this Fi _selfie) {
             return Version;

@@ -277,15 +277,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (!File.Exists(WorkingDirectory)) {
                     return null;
                 }
-                String text = string.Empty;
-                using (FileStream fs = new FileStream(WorkingDirectory, FileMode.Open)) {
-                    using (MemoryStream ms = new MemoryStream()) {
-                        fs.CopyTo(ms);
-                        var bytes = ms.ToArray();
-                        text = Encoding.UTF8.GetString(bytes);
-                    }
-                }
-
+                String text = File.ReadAllText(WorkingDirectory);
                 return text;
             });
         }
@@ -311,9 +303,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         private void LockRegion(String wd, Action act) {
-            lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
+            //lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
                 act?.Invoke();
-            }
+            //}
         }
 
         public void WriteAllText(String relative, String content) {
@@ -407,7 +399,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
-            var bufferLength = new FileInfo(WorkingDirectory).Length * 1.5;
+            var bufferLength = new FileInfo(WorkingDirectory).Length * .6;
             bufferLength = Math.Max(256 * 1024, bufferLength);
             bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 

@@ -386,12 +386,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var thisAction = enny.Current;
                 wq.Enqueue(() => {
                     retv += thisAction.Execute();
-                    lock(wq) {
+                    //lock(wq) {
                         int myWent = went++;
                         cliQ.Enqueue(() => {
                             onActionExecuted?.Invoke(thisAction, myWent);
                         });
-                    }
+                    //}
                 }, (x) => {
                     if (handleException == null)
                         lock (exces)

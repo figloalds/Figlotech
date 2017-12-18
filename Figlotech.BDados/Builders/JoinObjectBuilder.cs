@@ -61,7 +61,7 @@ namespace Figlotech.BDados.Builders {
             return generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
         }
 
-        public DataTable GenerateDataTable(IDbTransaction transaction, IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) {
+        public DataTable GenerateDataTable(ConnectionInfo transaction, IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) {
             QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
             DataTable dt = null;
             dt = _dataAccessor.Query(transaction, query);
@@ -79,7 +79,7 @@ namespace Figlotech.BDados.Builders {
                 ?.MakeGenericMethod(type)
                 .Invoke(this, new object[] { ParentVal, relation, dt });
 
-            return new List<IDataObject>(retv);
+            return new List<IDataObject>(retv).ToList();
         }
 
         public List<T> BuildAggregateList<T>(Object ParentVal, Relation relation, DataTable dt) where T : IDataObject, new() {
@@ -240,7 +240,7 @@ namespace Figlotech.BDados.Builders {
             return _join.Relations;
         }
 
-        public IEnumerable<T> BuildObject<T>(IDbTransaction transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
+        public List<T> BuildObject<T>(ConnectionInfo transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
             // May Jesus have mercy on your soul
             // If you intend on messing with this funciton.
 
@@ -249,18 +249,22 @@ namespace Figlotech.BDados.Builders {
             }
 
             // First we generate the DataTable we'll be working with:
+
+            transaction?.Benchmarker?.Mark("Query DB for DataTable");
             DataTable dt = GenerateDataTable(transaction, (_dataAccessor).QueryGenerator, conditions, p, limit, orderingMember, otype,  conditionsRoot);
+            transaction?.Benchmarker?.Mark("--");
             _buildParameters = new BuildParametersHelper(ref _join, dt);
             fn(_buildParameters);
             // And validate everything;
             DateTime start = DateTime.Now;
-            Queue<T> cache = new Queue<T>();
+            List<T> cache = new List<T>();
             ValidateRelations();
             var Relations = _join.Relations;
             // Then we do this... Magic...
             // To initialize and group our 2D data table
             // You see, I need those values in a beautiful 3D Shaped
             // Hierarchic and Object Oriented Stuff
+            transaction?.Benchmarker?.Mark("Start building result");
             int TopLevel = 0;
             String Prefix = _join.Joins[TopLevel].Prefix;
             var rs = new List<DataRow>();
@@ -380,13 +384,13 @@ namespace Figlotech.BDados.Builders {
                     bo.OnAfterLoad();
                 }
 
-                lock(cache)
-                    cache.Enqueue(thisObject);
+                //lock(cache)
+                    cache.Add(thisObject);
                 //}
             });
             Logger.WriteLog($"Fi.Tech JoinBuilder has coroutinely built the output object in {DateTime.Now.Subtract(start).TotalMilliseconds}ms");
-            foreach (var a in cache)
-                yield return a;
+            transaction?.Benchmarker?.Mark("-- Finished building result");
+            return cache;
         }
     }
 }

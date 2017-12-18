@@ -32,12 +32,11 @@ namespace Figlotech.Core.Extensions {
         }
 
         public static void ToJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
-            lock(obj)
-            {
+            //lock(obj) {
                 fs.Write(fileName, fstream => {
                     obj.ToJson(fstream, options);
                 });
-            }
+            //}
         }
 
         public static void FromJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
@@ -63,12 +62,11 @@ namespace Figlotech.Core.Extensions {
         }
 
         public static void FromJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
-            lock(obj)
-            {
+            //lock(obj) {
                 fs.Read(fileName, fstream => {
                     obj.FromJson(fstream, options);
                 });
-            }
+            //}
         }
 
         private static IStreamProcessor GetSaveStreamOptions(FTHSerializableOptions options) {

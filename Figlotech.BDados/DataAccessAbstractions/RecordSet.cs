@@ -123,30 +123,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this;
         }
 
-        public IEnumerable<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
+        public List<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
             Clear();
             var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
-            agl = agl.ToList();
             if (orderingExpression != null) {
                 if(Ordering == OrderingType.Desc) {
-                    agl = agl.OrderByDescending(orderingExpression);
+                    agl = agl.OrderByDescending(orderingExpression).ToList();
                 } else {
-                    agl = agl.OrderBy(orderingExpression);
+                    agl = agl.OrderBy(orderingExpression).ToList();
                 }
             }
-            var enumerator = agl.GetEnumerator();
-            while(enumerator.MoveNext()) {
-                var transport = enumerator.Current;
-                yield return transport;
-            }
-
             LimitResults = null;
             orderingExpression = null;
             OrderingMember = null;
             GroupingMember = null;
+
+            return agl;
         }
 
-        public IEnumerable<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+        public List<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
             LinearLoad = true;
             var retv = Fetch(cnd, skip, limit, true);
             LinearLoad = false;

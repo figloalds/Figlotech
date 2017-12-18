@@ -12,7 +12,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
         RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        IEnumerable<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        List<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         T LoadByRid<T>(String RID) where T : IDataObject, new();
@@ -27,7 +27,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         Type[] WorkingTypes { get; set; }
 
-        IEnumerable<T> AggregateLoad<T>(
+        List<T> AggregateLoad<T>(
             Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
             Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc, 
             MemberInfo GroupingMember = null, bool Linear = false) where T : IDataObject, new();

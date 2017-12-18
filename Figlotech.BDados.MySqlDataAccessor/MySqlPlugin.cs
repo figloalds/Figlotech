@@ -6,10 +6,8 @@ using System.Collections.Generic;
 using Figlotech.Core.Helpers;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlPlugin : IRdbmsPluginAdapter
-    {
-        public MySqlPlugin(MySqlPluginConfiguration cfg)
-        {
+    public class MySqlPlugin : IRdbmsPluginAdapter {
+        public MySqlPlugin(MySqlPluginConfiguration cfg) {
             Config = cfg;
         }
 
@@ -36,30 +34,30 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         long myId = ++idGen;
 
         public DataSet GetDataSet(IDbCommand command) {
-            lock(command) {
-                using (var reader = (command as MySqlCommand).ExecuteReader()) {
-                    DataTable dt = new DataTable();
-                    for (int i = 0; i < reader.FieldCount; i++) {
-                        dt.Columns.Add(new DataColumn(reader.GetName(i)));
-                    }
-
-                    while (reader.Read()) {
-                        var dr = dt.NewRow();
-                        for (int i = 0; i < reader.FieldCount; i++) {
-                            var type = reader.GetFieldType(i);
-                            if (reader.IsDBNull(i)) {
-                                dr[i] = null;
-                            } else {
-                                var val = reader.GetValue(i);
-                                dr[i] = Convert.ChangeType(val, type);
-                            }
-                        }
-                        dt.Rows.Add(dr);
-                    }
-                    var ds = new DataSet();
-                    ds.Tables.Add(dt);
-                    return ds;
+            //lock(command) {
+            using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                DataTable dt = new DataTable();
+                for (int i = 0; i < reader.FieldCount; i++) {
+                    dt.Columns.Add(new DataColumn(reader.GetName(i)));
                 }
+
+                while (reader.Read()) {
+                    var dr = dt.NewRow();
+                    for (int i = 0; i < reader.FieldCount; i++) {
+                        var type = reader.GetFieldType(i);
+                        if (reader.IsDBNull(i)) {
+                            dr[i] = null;
+                        } else {
+                            var val = reader.GetValue(i);
+                            dr[i] = Convert.ChangeType(val, type);
+                        }
+                    }
+                    dt.Rows.Add(dr);
+                }
+                var ds = new DataSet();
+                ds.Tables.Add(dt);
+                return ds;
+                //}
             }
         }
 

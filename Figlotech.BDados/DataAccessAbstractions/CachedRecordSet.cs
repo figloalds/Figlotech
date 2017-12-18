@@ -53,7 +53,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } else {
                     retv = new T();
                     customInit?.Invoke(retv);
-                    lock(listLockObject)
+                    //lock(listLockObject)
                         this.Add(retv);
                 }
             }

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2005
+VisualStudioVersion = 15.0.27130.2003
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "imgdupt", "imgdupt\imgdupt.csproj", "{83E7E895-5EE7-499C-9DE0-60BB4941430F}"
 EndProject
@@ -17,9 +17,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.Tests", "F
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "test", "test\test.csproj", "{29885589-A84B-4B59-A7FB-FCA795C1A996}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "test", "test\test.csproj", "{29885589-A84B-4B59-A7FB-FCA795C1A996}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.ExcelUtil", "Figlotech.ExcelUtil\Figlotech.ExcelUtil.csproj", "{394EA7B2-090B-4A2C-B885-72386735226E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.ExcelUtil", "Figlotech.ExcelUtil\Figlotech.ExcelUtil.csproj", "{394EA7B2-090B-4A2C-B885-72386735226E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.BDados.SqliteDataAccessor", "Figlotech.BDados.SQLiteDataAccessor\Figlotech.BDados.SqliteDataAccessor.csproj", "{3A643DFA-70F1-423E-97D9-30C2D182AFF3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -63,6 +65,10 @@ Global
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
