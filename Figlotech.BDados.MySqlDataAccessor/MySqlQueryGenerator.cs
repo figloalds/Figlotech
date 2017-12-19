@@ -99,7 +99,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
-        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = 1, int? limit = 100, IQueryBuilder condicoesRoot = null) {
+        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, int? skip = 1, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null) {
             if (condicoesRoot == null)
                 condicoesRoot = new QbFmt("true");
             if (juncaoInput.Joins.Count < 1)
@@ -216,12 +216,15 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 //    Query.Append(condicoes.GetCommandText().Substring(0, condicoes.GetCommandText().ToUpper().IndexOf("ORDER BY")), condicoes.GetParameters().Select((a) => a.Value).ToArray());
                 //} else {
                 Query.Append(conditions);
-                //}
+
+            }
+            if (orderingMember != null) {
+                Query.Append($"ORDER BY {aliases[0]}.{orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
             }
             if (limit != null) {
                 Query.Append($"LIMIT");
-                if ((p ?? 0) > 0)
-                    Query.Append($"{(p - 1) * limit}, ");
+                if ((skip ?? 0) > 0)
+                    Query.Append($"{skip}, ");
                 Query.Append($"{limit}");
             }
             Query.Append(") AS sub\n");
@@ -233,17 +236,21 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 var onClause = ArgsJuncoes[i];
                 onClause = onClause.Replace($"{aliases[i]}.", "##**##");
+
                 var m = Regex.Match(onClause, "(\\w+)\\.").Groups[0].Value;
                 if (capPrefixes.Contains(m.Replace(".", ""))) {
                     onClause = Regex.Replace(onClause, "(\\w+)\\.", "sub.$1_");
                 }
+
                 if (capPrefixes.Contains(aliases[i])) {
                     onClause = onClause.Replace("##**##", $"sub.{aliases[i]}_");
                 } else {
                     onClause = onClause.Replace("##**##", $"{aliases[i]}.");
                 }
+
                 Query.Append($"\t{joinTypes[i].ToString().Replace('_', ' ').ToUpper()} JOIN {tableNames[i]} AS {aliases[i]} ON {onClause}\n");
             }
+
             return Query;
         }
 

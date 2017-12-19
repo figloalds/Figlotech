@@ -334,7 +334,7 @@ namespace Figlotech.BDados {
             return retv.ToArray();
         }
 
-        internal static bool FindColumn(this Fi _selfie, string ChaveA, Type type) {
+        public static bool FindColumn(this Fi _selfie, string ChaveA, Type type) {
             var members = ReflectionTool.FieldsAndPropertiesOf(type);
             return members.Any((f) => f.GetCustomAttribute<FieldAttribute>() != null && f.Name == ChaveA);
         }

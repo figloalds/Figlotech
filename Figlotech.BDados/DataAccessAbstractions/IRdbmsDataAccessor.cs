@@ -15,6 +15,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         event Action<Type, IDataObject> OnSuccessfulSave;
         event Action<Type, IDataObject, Exception> OnFailedSave;
 
+        int DefaultQueryLimit { get; set; }
         void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null);
         T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null);
 

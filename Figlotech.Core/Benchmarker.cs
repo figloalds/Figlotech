@@ -12,7 +12,9 @@ namespace System {
             if (!self.Active)
                 return 0;
             try {
-                self.marks.Add(new TimeMark(txt));
+                if(self.marks.Count > 1)
+                    self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
+                self.marks.Add(new TimeMark(self.marks[0].Timestamp, txt));
                 if (self.marks.Count < 2)
                     return 0;
                 var retv = self.marks[self.marks.Count - 1]
@@ -31,32 +33,25 @@ namespace System {
             if (!self.Active)
                 return 0;
             try {
-                var mark = DateTime.UtcNow;
-                self.marks.Add(new TimeMark(self.myName));
+                if (self.marks.Count > 1)
+                    self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
+                self.marks.Add(new TimeMark(self.marks[0].Timestamp, self.myName));
                 var retv = self.marks[self.marks.Count - 1].Timestamp
                     .Subtract(self.marks[0].Timestamp).TotalMilliseconds;
                 if (self.WriteToStdout) {
-                    Console.WriteLine($"-- PERFORMANCE -----------");
-                    Console.WriteLine($"{self.myName}");
-                    Console.WriteLine($"--------------------------");
-                    double line = 0;
-                    Console.WriteLine($" | 0ms ");
-                    for (int i = 1; i < self.marks.Count - 1; i++) {
-                        try {
-                            var time = self.marks[i]
-                                .Timestamp.Subtract(self.marks[i - 1].Timestamp).TotalMilliseconds;
-                            var time2 = self.marks[i + 1]
-                                .Timestamp.Subtract(self.marks[i].Timestamp).TotalMilliseconds;
-                            line += time;
-                            var name = self.marks[i - 1].Name;
-                            Console.WriteLine($" | {line}ms -> {name} ({time2}ms)");
-                        } catch (Exception) {
-
+                    lock ("BENCHMARKER BM_WRITE") {
+                        Console.WriteLine($"-- PERFORMANCE -----------");
+                        Console.WriteLine($"{self.myName}");
+                        Console.WriteLine($"--------------------------");
+                        double line = 0;
+                        Console.WriteLine($" | 0ms ");
+                        for (int i = 0; i < self.marks.Count - 1; i++) {
+                            Console.WriteLine($" | {self.marks[i].Name} +[{self.marks[i].Duration.TotalMilliseconds}ms]");
                         }
+                        Console.WriteLine($" v {retv}ms");
+                        Console.WriteLine($"--------------------------");
+                        Console.WriteLine($"Total: {retv}ms");
                     }
-                    Console.WriteLine($" v {retv}ms");
-                    Console.WriteLine($"--------------------------");
-                    Console.WriteLine($"Total: {retv}ms");
                 }
                 return retv;
             } catch (Exception) { }
@@ -66,11 +61,15 @@ namespace System {
 
     internal class TimeMark {
         public DateTime Timestamp;
+        public TimeSpan Duration;
         public String Name;
 
-        public TimeMark(String txt) {
+        public TimeMark(DateTime start, String txt) {
             Timestamp = DateTime.UtcNow;
-            Name = txt;
+            Name = $"{Timestamp.Subtract(start).TotalMilliseconds.ToString("0.0").PadLeft(7, ' ')}ms -->> {txt} ";
+        }
+        public void SetDuration(DateTime next) {
+            Duration = next.Subtract(Timestamp);
         }
     }
 
@@ -84,7 +83,7 @@ namespace System {
             if (String.IsNullOrEmpty(name))
                 name = new RID().AsBase36;
             myName = name;
-            marks.Add(new TimeMark(myName));
+            marks.Add(new TimeMark(DateTime.UtcNow, myName));
         }
 
         public bool WriteToStdout { get; set; } = true;

@@ -91,7 +91,7 @@ namespace Figlotech.BDados.Helpers {
             if (newRelation.ParentIndex < 0)
                 throw new BDadosException($"No table in this join corresponds to alias '{destinationAlias}'");
 
-            newRelation.AssemblyOption = AggregateBuildOptions.AggregateField;
+            newRelation.AggregateBuildOption = AggregateBuildOptions.AggregateField;
 
             newRelation.Fields = new List<string> { originField };
             newRelation.NewName = newName;
@@ -121,7 +121,7 @@ namespace Figlotech.BDados.Helpers {
             newRelation.NewName = newName;
             newRelation.ChildIndex = Aliases.IndexOf(childAlias);
             newRelation.ParentIndex = Aliases.IndexOf(parentAlias);
-            newRelation.AssemblyOption = AggregateBuildOptions.AggregateObject;
+            newRelation.AggregateBuildOption = AggregateBuildOptions.AggregateObject;
             _join.Relations.Add(newRelation);
         }
 
@@ -143,7 +143,7 @@ namespace Figlotech.BDados.Helpers {
             var Aliases = (from a in _join.Joins select a.Alias).ToList();
             newRelation.ChildIndex = Aliases.IndexOf(childAlias);
             newRelation.ParentIndex = Aliases.IndexOf(parentAlias);
-            newRelation.AssemblyOption = AggregateBuildOptions.AggregateList;
+            newRelation.AggregateBuildOption = AggregateBuildOptions.AggregateList;
             newRelation.NewName = newName;
 
             _join.Relations.Add(newRelation);

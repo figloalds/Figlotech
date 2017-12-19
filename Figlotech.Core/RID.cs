@@ -48,6 +48,7 @@ namespace Figlotech.Core {
 
         private void NewRid() {
             lock ("GLOBAL_RID_GENERATION") {
+                Fi.Tech.WriteLine("RID GENERATION CALLED");
                 Alpha = DateTime.UtcNow.Ticks;
                 Beta = (uint)rng.Next(0, Int32.MaxValue) + (uint)rng.Next(0, Int32.MaxValue);
                 Gamma = gammaGen + ++gammaseq;

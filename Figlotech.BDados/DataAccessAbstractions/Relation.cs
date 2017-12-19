@@ -4,12 +4,12 @@ using System.Collections.Generic;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class Relation
     {
-        internal int ChildIndex;
-        internal int ParentIndex;
-        internal String ParentKey;
-        internal String ChildKey;
-        internal AggregateBuildOptions AssemblyOption;
-        internal String NewName;
-        internal List<String> Fields = new List<String>();
+        public int ChildIndex;
+        public int ParentIndex;
+        public String ParentKey;
+        public String ChildKey;
+        public AggregateBuildOptions AggregateBuildOption;
+        public String NewName;
+        public List<String> Fields = new List<String>();
     }
 }

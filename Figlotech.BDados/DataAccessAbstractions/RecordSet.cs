@@ -88,6 +88,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return this;
         }
+
         public RecordSet<T> SetGroupingMember(MemberInfo fn) {
             GroupingMember = fn;
 

@@ -57,12 +57,16 @@ namespace Figlotech.BDados.Builders {
             }
         }
 
+        public JoinDefinition GetJoin() {
+            return _join;
+        }
+
         public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null) {
-            return generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
+            return generator.GenerateJoinQuery(_join, conditions, p, limit, orderingMember, otype, conditionsRoot);
         }
 
         public DataTable GenerateDataTable(ConnectionInfo transaction, IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) {
-            QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, orderingMember, otype, p, limit, conditionsRoot);
+            QueryBuilder query = (QueryBuilder)generator.GenerateJoinQuery(_join, conditions, p, limit, orderingMember, otype, conditionsRoot);
             DataTable dt = null;
             dt = _dataAccessor.Query(transaction, query);
             return dt;
@@ -125,7 +129,7 @@ namespace Figlotech.BDados.Builders {
 
                 // Here is where Recursivity gets real.
                 foreach (var rel in (from a in Relacoes where a.ParentIndex == thisIndex select a)) {
-                    switch (rel.AssemblyOption) {
+                    switch (rel.AggregateBuildOption) {
                         case AggregateBuildOptions.AggregateField: {
 
                                 String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
@@ -295,7 +299,7 @@ namespace Figlotech.BDados.Builders {
                 // -- Find all relations where current table is 'parent'.
                 var relations = (from a in Relations where a.ParentIndex == TopLevel select a);
                 foreach (var rel in relations) {
-                    switch (rel.AssemblyOption) {
+                    switch (rel.AggregateBuildOption) {
                         // Aggregate fields are the beautiful easy ones to deal
                         case AggregateBuildOptions.AggregateField: {
 

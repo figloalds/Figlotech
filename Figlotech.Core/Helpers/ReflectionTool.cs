@@ -150,6 +150,9 @@ namespace Figlotech.Core.Helpers {
                             value = false;
                     }
                 }
+                if(t.IsEnum && value as int? != null) {
+                    value = Enum.ToObject(t, (int) value);
+                }
                 if (value != null && !value.GetType().IsAssignableFrom(t)) {
                     value = Convert.ChangeType(value, t);
                 }

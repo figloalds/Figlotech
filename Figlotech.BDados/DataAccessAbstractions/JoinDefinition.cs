@@ -103,13 +103,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     r1.ParentIndex = IndexB;
                     r1.ChildKey = keyA;
                     r1.ChildIndex = IndexA;
-                    r1.AssemblyOption = AggregateBuildOptions.None;
+                    r1.AggregateBuildOption = AggregateBuildOptions.None;
 
                     r2.ParentKey = keyA;
                     r2.ParentIndex = IndexA;
                     r2.ChildKey = keyB;
                     r2.ChildIndex = IndexB;
-                    r2.AssemblyOption = AggregateBuildOptions.None;
+                    r2.AggregateBuildOption = AggregateBuildOptions.None;
                     Relations.Add(r1);
                     Relations.Add(r2);
                 } catch (Exception x) {

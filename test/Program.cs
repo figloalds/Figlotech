@@ -16,7 +16,7 @@ using System.Threading;
 namespace test {
     class Program {
         static void Main(string[] args) {
-
+            FiTechCoreExtensions.EnableStdoutLogs = true;
             var da = new RdbmsDataAccessor<MySqlPlugin>(
                    new Settings {
                     { "Database", "erpsl" },
@@ -24,14 +24,12 @@ namespace test {
                     { "User", "root" },
                     { "Password", "asdafe1025" },
                    });
-            RecordSet<Produtos> li = null;
+            RecordSet<ComercialContratosAluguel> li = null;
             for(int i = 0; i < 100; i++) {
-                li = new RecordSet<Produtos>(da)
-                    .OrderBy(p => p.Descricao, OrderingType.Desc)
-                    .LoadAll(new Conditions<Produtos>(p => true), 0, 200);
-                foreach (var a in li)
-                    da.SaveItem(a);
-                da.SaveRecordSet(li);
+                li = new RecordSet<ComercialContratosAluguel>(da)
+                    //.OrderBy(p => p.IdExterno, OrderingType.Desc)
+                    .LoadAll(new Conditions<ComercialContratosAluguel>(p => true), 0, 12);
+                Console.WriteLine();
             }
             
             Console.WriteLine(li);
