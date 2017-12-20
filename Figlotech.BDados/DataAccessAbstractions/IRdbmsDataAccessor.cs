@@ -16,8 +16,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         event Action<Type, IDataObject, Exception> OnFailedSave;
 
         int DefaultQueryLimit { get; set; }
-        void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null);
-        T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null);
+        void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);
+        T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);
 
         RecordSet<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
         RecordSet<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();

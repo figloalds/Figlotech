@@ -32,7 +32,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
-        public bool UseTransactions { get; set; } = false;
         public ILogger Logger { get; set; }
 
         public Type[] _workingTypes = new Type[0];
@@ -489,14 +488,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public event Action<Type, IDataObject> OnSuccessfulSave;
         public event Action<Type, IDataObject, Exception> OnFailedSave;
 
-        public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null) {
+        public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null, bool useTransaction = false) {
             var i = Access<int>((transaction) => {
                 functions?.Invoke(transaction);
                 return 0;
             }, handler);
         }
 
-        public T Access<T>(Func<ConnectionInfo, T> functions, Action<Exception> handler = null) {
+        public T Access<T>(Func<ConnectionInfo, T> functions, Action<Exception> handler = null, bool useTransaction = false) {
             if (functions == null) return default(T);
             //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
             //    return functions.Invoke(transaction);
@@ -513,7 +512,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var total = transaction.Benchmarker?.FinalMark();
                 this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
                 return retv;
-            }, handler);
+            }, handler, useTransaction);
         }
 
         public DataTable Query(IQueryBuilder query) {
@@ -549,19 +548,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        public void Close(ConnectionInfo transaction) {
-            try {
-                transaction?.Transaction.Commit();
-            } catch (Exception x) {
-                transaction?.Transaction.Rollback();
-                this.WriteLog($"[{accessId}] BDados Close: {x.Message}");
-            } finally {
-                transaction.Connection.Dispose();
-                transaction?.Transaction.Dispose();
-            }
-        }
+        //public void Close(ConnectionInfo transaction) {
+        //    try {
+        //        transaction?.Transaction.Commit();
+        //    } catch (Exception x) {
+        //        transaction?.Transaction.Rollback();
+        //        this.WriteLog($"[{accessId}] BDados Close: {x.Message}");
+        //    } finally {
+        //        transaction.Connection.Dispose();
+        //        transaction?.Transaction.Dispose();
+        //    }
+        //}
 
-        private T UseTransaction<T>(Func<ConnectionInfo, T> func, Action<Exception> handler = null) {
+        private T UseTransaction<T>(Func<ConnectionInfo, T> func, Action<Exception> handler = null, bool useTransaction = false) {
             if (func == null) return default(T);
 
             using (var connection = Plugin.GetNewConnection()) {
@@ -574,16 +573,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var b = new Benchmarker("Database Access");
                     connInfo.Benchmarker = b;
                     b.WriteToStdout = FiTechCoreExtensions.EnableStdoutLogs;
-                    var usetrans = UseTransactions;
-                    b.Mark($"INIT Use Transaction: ({usetrans})");
+                    b.Mark($"INIT Use Transaction: ({useTransaction})");
 
-                    if (usetrans)
+                    if (useTransaction)
                         connInfo.Transaction = connection.BeginTransaction();
                     //lock (connInfo) {
                     try {
                         b.Mark("Run User Code");
                         var retv = func.Invoke(connInfo);
-                        if (usetrans) {
+                        if (useTransaction) {
                             WriteLog($"[{accessId}] Committing");
                             b.Mark($"[{accessId}] Begin Commit");
                             connInfo?.Transaction?.Commit();
@@ -593,7 +591,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         return retv;
                     } catch (Exception x) {
                         var ex = x;
-                        if (usetrans) {
+                        if (useTransaction) {
                             WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
                             b.Mark($"[{accessId}] Begin Rollback");
                             connInfo?.Transaction?.Rollback();
@@ -621,10 +619,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         return default(T);
                     } finally {
                         b.Mark($"[{accessId}] Dispose objects");
-                        var c = connection;
-                        if (usetrans)
+                        if (useTransaction)
                             connInfo.Transaction.Dispose();
-                        c.Dispose();
 
                         b.FinalMark();
                     }
@@ -927,7 +923,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //
         #region Default Transaction Using Core Funcitons.
         public T ForceExist<T>(ConnectionInfo transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(transaction, qb.Append("LIMIT 1"));
+            var f = LoadAll<T>(transaction, qb, null, 1);
             if (f.Any()) {
                 return f.First();
             } else {
@@ -1071,7 +1067,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Retv List");
-                var retv = Plugin.GetObjectList<T>(command).ToList();
+                var retv = Plugin.GetObjectList<T>(command);
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
 
                 try {
@@ -1085,7 +1081,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     this.WriteLog(x.StackTrace);
                     throw x;
                 } finally {
-                    command.Dispose();
                     this.WriteLog("------------------------------------");
                 }
             }
@@ -1093,12 +1088,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public T LoadById<T>(ConnectionInfo transaction, long Id) where T : IDataObject, new() {
             var id = GetIdColumn(typeof(T));
-            return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id)).FirstOrDefault();
+            return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id), null, 1).FirstOrDefault();
         }
 
         public T LoadByRid<T>(ConnectionInfo transaction, String RID) where T : IDataObject, new() {
             var rid = GetRidColumn(typeof(T));
-            return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID)).FirstOrDefault();
+            return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID), null, 1).FirstOrDefault();
         }
 
         public RecordSet<T> LoadAll<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = -1, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
@@ -1129,7 +1124,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public bool SaveItem(ConnectionInfo transaction, IDataObject input) {
             bool retv = false;
-
+            
             int rs = -33;
 
             var id = GetIdColumn(input.GetType());
@@ -1255,44 +1250,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var om = GetOrderingMember(orderingMember);
                 transaction?.Benchmarker?.Mark("--");
 
-                if (false) {
-
-                    var dynamicJoinJumble = joinBuilder.BuildObject<T>(
-                        transaction,
-                        (build) => {
-                            MakeBuildAggregations(ref build, typeof(T), "root", typeof(T).Name, prefixer, Linear);
-                        }, builtConditions, skip, limit, om, otype, builtConditionsRoot
-
-                        ).ToList();
+                using (var command = transaction?.Connection.CreateCommand()) {
+                    var join = joinBuilder.GetJoin();
+                    transaction?.Benchmarker?.Mark("Generate Join Query");
+                    var _buildParameters = new BuildParametersHelper(ref join, null);
+                    MakeBuildAggregations(ref _buildParameters, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark("--");
-
-                    return dynamicJoinJumble;
-                } else {
-                    using (var command = transaction?.Connection.CreateCommand()) {
-                        var join = joinBuilder.GetJoin();
-                        transaction?.Benchmarker?.Mark("Generate Join Query");
-                        var _buildParameters = new BuildParametersHelper(ref join, null);
-                        MakeBuildAggregations(ref _buildParameters, typeof(T), "root", typeof(T).Name, prefixer, Linear);
-                        var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
-                        transaction?.Benchmarker?.Mark("--");
-                        command.Transaction = transaction?.Transaction;
-                        command.CommandText = query.GetCommandText();
-                        this.WriteLog($"[{accessId}] {command.CommandText}");
-                        foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
-                            var cmdParam = command.CreateParameter();
-                            cmdParam.ParameterName = param.Key;
-                            cmdParam.Value = param.Value;
-                            command.Parameters.Add(cmdParam);
-                            var pval = $"'{param.Value?.ToString() ?? "null"}'";
-                            if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
-                                pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
-                                pval = $"'{pval}'";
-                            }
-                            this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
+                    command.Transaction = transaction?.Transaction;
+                    command.CommandText = query.GetCommandText();
+                    this.WriteLog($"[{accessId}] {command.CommandText}");
+                    foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
+                        var cmdParam = command.CreateParameter();
+                        cmdParam.ParameterName = param.Key;
+                        cmdParam.Value = param.Value;
+                        command.Parameters.Add(cmdParam);
+                        var pval = $"'{param.Value?.ToString() ?? "null"}'";
+                        if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
+                            pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
+                            pval = $"'{pval}'";
                         }
-                        var retv = Plugin.BuildAggregateListDirect<T>(transaction, command, join, 0);
-                        return retv;
+                        this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
                     }
+                    var retv = Plugin.BuildAggregateListDirect<T>(transaction, command, join, 0);
+                    return retv;
                 }
 
                 // Yay.
@@ -1391,7 +1372,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     this.WriteLog(x.StackTrace);
                     throw x;
                 } finally {
-                    command.Dispose();
                     this.WriteLog("------------------------------------");
                 }
             }

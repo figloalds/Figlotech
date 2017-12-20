@@ -95,11 +95,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this;
         }
 
-        int? LimitResults = BDadosConfiguration.DefaultResultsLimit;
-
         public RecordSet<T> Limit(int? limits) {
-            LimitResults = limits;
-
             return this;
         }
         public OrderingType Ordering = OrderingType.Asc;
@@ -134,7 +130,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     agl = agl.OrderBy(orderingExpression).ToList();
                 }
             }
-            LimitResults = null;
             orderingExpression = null;
             OrderingMember = null;
             GroupingMember = null;

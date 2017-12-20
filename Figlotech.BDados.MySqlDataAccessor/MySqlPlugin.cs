@@ -40,21 +40,21 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         long myId = ++idGen;
 
         public void BuildAggregateObject(
-            Type t, IDataReader reader, ObjectReflector refl, 
-            object obj, string[] fieldNames, JoinDefinition join, 
+            Type t, IDataReader reader, ObjectReflector refl,
+            object obj, string[] fieldNames, JoinDefinition join,
             int thisIndex, bool isNew,
             Dictionary<string, object> constructionCache) {
             var myPrefix = join.Joins[thisIndex].Prefix;
             refl.Slot(obj);
             if (isNew) {
                 for (int i = 0; i < fieldNames.Length; i++) {
-                    if(fieldNames[i].StartsWith($"{myPrefix}_")) {
-                        refl[fieldNames[i].Substring(myPrefix.Length+1)] = reader.GetValue(i);
+                    if (fieldNames[i].StartsWith($"{myPrefix}_")) {
+                        refl[fieldNames[i].Substring(myPrefix.Length + 1)] = reader.GetValue(i);
                     }
                 }
             }
 
-            var relations = join.Relations.Where(a=> a.ParentIndex == thisIndex);
+            var relations = join.Relations.Where(a => a.ParentIndex == thisIndex);
             foreach (var rel in relations) {
                 switch (rel.AggregateBuildOption) {
                     // Aggregate fields are the beautiful easy ones to deal
@@ -95,7 +95,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                             string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ChildIndex].Prefix + "_" + ridCol]) as string;
                             object newObj;
-                            if(parentRid == null || childRid == null) {
+                            if (parentRid == null || childRid == null) {
                                 continue;
                             }
                             bool isUlNew = false;
@@ -150,30 +150,32 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var ridcol = Fi.Tech.GetRidColumn<T>();
             join.Relations = ValidateRelations(join);
             transaction?.Benchmarker?.Mark("Execute Query");
-            using (var reader = (command as MySqlCommand).ExecuteReader()) {
-                transaction?.Benchmarker?.Mark("--");
-                var fieldNames = new string[reader.FieldCount];
-                for (int i = 0; i < fieldNames.Length; i++)
-                    fieldNames[i] = reader.GetName(i);
-                var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
-                if (reader.HasRows) {
-                    bool isNew;
-                    var constructionCache = new Dictionary<string, object>();
-                    transaction?.Benchmarker?.Mark("Build Result");
-                    while (reader.Read()) {
-                        isNew = true;
-                        T obj = retv.FirstOrDefault(o => o.RID == reader[myRidCol] as string);
-                        if (obj == null) {
-                            obj = new T();
-                            retv.Add(obj);
-                        } else {
-                            isNew = false;
-                        }
-
-                        BuildAggregateObject(typeof(T), reader, new ObjectReflector(), obj, fieldNames, join, thisIndex, isNew, constructionCache);
-                    }
-                    constructionCache.Clear();
+            lock (command) {
+                using (var reader = (command as MySqlCommand).ExecuteReader()) {
                     transaction?.Benchmarker?.Mark("--");
+                    var fieldNames = new string[reader.FieldCount];
+                    for (int i = 0; i < fieldNames.Length; i++)
+                        fieldNames[i] = reader.GetName(i);
+                    var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
+                    if (reader.HasRows) {
+                        bool isNew;
+                        var constructionCache = new Dictionary<string, object>();
+                        transaction?.Benchmarker?.Mark("Build Result");
+                        while (reader.Read()) {
+                            isNew = true;
+                            T obj = retv.FirstOrDefault(o => o.RID == reader[myRidCol] as string);
+                            if (obj == null) {
+                                obj = new T();
+                                retv.Add(obj);
+                            } else {
+                                isNew = false;
+                            }
+
+                            BuildAggregateObject(typeof(T), reader, new ObjectReflector(), obj, fieldNames, join, thisIndex, isNew, constructionCache);
+                        }
+                        constructionCache.Clear();
+                        transaction?.Benchmarker?.Mark("--");
+                    }
                 }
             }
 
@@ -216,19 +218,21 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public List<T> GetObjectList<T>(IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
             List<T> retv = new List<T>();
-            using (var reader = (command as MySqlCommand).ExecuteReader()) {
-                var cols = new string[reader.FieldCount];
-                for (int i = 0; i < cols.Length; i++)
-                    cols[i] = reader.GetName(i);
+            lock (command) {
+                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                    var cols = new string[reader.FieldCount];
+                    for (int i = 0; i < cols.Length; i++)
+                        cols[i] = reader.GetName(i);
 
-                if (reader.HasRows) {
-                    while (reader.Read()) {
-                        T obj = new T();
-                        refl.Slot(obj);
-                        for (int i = 0; i < cols.Length; i++) {
-                            refl[cols[i]] = reader.GetValue(i);
+                    if (reader.HasRows) {
+                        while (reader.Read()) {
+                            T obj = new T();
+                            refl.Slot(obj);
+                            for (int i = 0; i < cols.Length; i++) {
+                                refl[cols[i]] = reader.GetValue(i);
+                            }
+                            retv.Add((T)refl.Retrieve());
                         }
-                        retv.Add((T)refl.Retrieve());
                     }
                 }
             }
@@ -236,31 +240,31 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public DataSet GetDataSet(IDbCommand command) {
-            //lock(command) {
-            using (var reader = (command as MySqlCommand).ExecuteReader()) {
-                DataTable dt = new DataTable();
-                for (int i = 0; i < reader.FieldCount; i++) {
-                    dt.Columns.Add(new DataColumn(reader.GetName(i)));
-                }
-
-                while (reader.Read()) {
-                    var dr = dt.NewRow();
+            lock (command) {
+                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                    DataTable dt = new DataTable();
                     for (int i = 0; i < reader.FieldCount; i++) {
-                        var type = reader.GetFieldType(i);
-                        if (reader.IsDBNull(i)) {
-                            dr[i] = null;
-                        } else {
-                            var val = reader.GetValue(i);
-                            dr[i] = Convert.ChangeType(val, type);
-                        }
+                        dt.Columns.Add(new DataColumn(reader.GetName(i)));
                     }
-                    dt.Rows.Add(dr);
-                }
 
-                var ds = new DataSet();
-                ds.Tables.Add(dt);
-                return ds;
-                //}
+                    while (reader.Read()) {
+                        var dr = dt.NewRow();
+                        for (int i = 0; i < reader.FieldCount; i++) {
+                            var type = reader.GetFieldType(i);
+                            if (reader.IsDBNull(i)) {
+                                dr[i] = null;
+                            } else {
+                                var val = reader.GetValue(i);
+                                dr[i] = Convert.ChangeType(val, type);
+                            }
+                        }
+                        dt.Rows.Add(dr);
+                    }
+
+                    var ds = new DataSet();
+                    ds.Tables.Add(dt);
+                    return ds;
+                }
             }
         }
 
