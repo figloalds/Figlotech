@@ -56,20 +56,24 @@ namespace Figlotech.Core {
         }
 
         public RID(byte[] barr) {
-
-            using (var ms = new MemoryStream(barr)) {
-                Alpha   = BitConverter.ToInt64(barr, 0);
-                Beta    = BitConverter.ToUInt32(barr, sizeof(Int64));
-                Gamma   = BitConverter.ToUInt32(barr, sizeof(Int64) + sizeof(UInt32));
-            }
+            Alpha   = BitConverter.ToInt64(barr, 0);
+            Beta    = BitConverter.ToUInt32(barr, sizeof(Int64));
+            Gamma   = BitConverter.ToUInt32(barr, sizeof(Int64) + sizeof(UInt32));
         }
 
         public override string ToString() {
+            return ToBase64();
+        }
+        public string ToBase64() {
             return Convert.ToBase64String(this.ToByteArray());
         }
 
         public string ToBase36() {
             return new IntEx(this.ToByteArray()).ToString(IntEx.Base36);
+        }
+
+        public string ToHex() {
+            return BitConverter.ToString(this.ToByteArray()).Replace("-", "");
         }
 
         public byte[] ToByteArray() {

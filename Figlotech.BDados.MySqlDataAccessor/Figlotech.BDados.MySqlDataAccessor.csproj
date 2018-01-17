@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MySql.Data" Version="6.10.4" />
+    <PackageReference Include="MySql.Data" Version="6.10.5" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />

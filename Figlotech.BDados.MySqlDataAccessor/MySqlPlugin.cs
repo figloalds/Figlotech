@@ -43,7 +43,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             Type t, IDataReader reader, ObjectReflector refl,
             object obj, string[] fieldNames, JoinDefinition join,
             int thisIndex, bool isNew,
-            Dictionary<string, object> constructionCache) {
+            Dictionary<string, Dictionary<string, object>> constructionCache) {
             var myPrefix = join.Joins[thisIndex].Prefix;
             refl.Slot(obj);
             if (isNew) {
@@ -92,18 +92,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                             }
                             var li = refl[fieldAlias];
                             var ridCol = Fi.Tech.GetRidColumn(ulType);
+                            var childRidCol = join.Joins[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
-                            string childRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ChildIndex].Prefix + "_" + ridCol]) as string;
+                            string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
                             object newObj;
                             if (parentRid == null || childRid == null) {
                                 continue;
                             }
                             bool isUlNew = false;
-                            if (constructionCache.ContainsKey(childRid)) {
-                                newObj = constructionCache[childRid];
+                            if (!constructionCache.ContainsKey(childRidCol))
+                                constructionCache.Add(childRidCol, new Dictionary<string, object>());
+                            if (constructionCache[childRidCol].ContainsKey(childRid)) {
+                                newObj = constructionCache[childRidCol][childRid];
                             } else {
                                 newObj = Activator.CreateInstance(ulType);
                                 addMethod.Invoke(li, new object[] { newObj });
+                                constructionCache[childRidCol][childRid] = newObj;
                                 isUlNew = true;
                             }
 
@@ -123,18 +127,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                                 continue;
                             }
                             var ridCol = Fi.Tech.GetRidColumn(ulType);
+                            var childRidCol = join.Joins[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
-                            string childRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ChildIndex].Prefix + "_" + ridCol]) as string;
+                            string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
                             object newObj;
                             if (parentRid == null || childRid == null) {
                                 continue;
                             }
                             bool isUlNew = false;
-                            if (constructionCache.ContainsKey(childRid)) {
-                                newObj = constructionCache[childRid];
+                            if (!constructionCache.ContainsKey(childRidCol))
+                                constructionCache.Add(childRidCol, new Dictionary<string, object>());
+                            if (constructionCache[childRidCol].ContainsKey(childRid)) {
+                                newObj = constructionCache[childRidCol][childRid];
                             } else {
                                 newObj = Activator.CreateInstance(ulType);
                                 refl[fieldAlias] = newObj;
+                                constructionCache[childRidCol][childRid] = newObj;
                                 isUlNew = true;
                             }
                             BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, join, rel.ChildIndex, isUlNew, constructionCache);
@@ -159,19 +167,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
                     if (reader.HasRows) {
                         bool isNew;
-                        var constructionCache = new Dictionary<string, object>();
+                        var constructionCache = new Dictionary<string, Dictionary<string, object>>();
+                        constructionCache.Add(myRidCol, new Dictionary<string, object>());
                         transaction?.Benchmarker?.Mark("Build Result");
                         while (reader.Read()) {
                             isNew = true;
-                            T obj = retv.FirstOrDefault(o => o.RID == reader[myRidCol] as string);
-                            if (obj == null) {
-                                obj = new T();
-                                retv.Add(obj);
+                            T newObj;
+                            if (!constructionCache[myRidCol].ContainsKey(reader[myRidCol] as string)) {
+                                newObj = new T();
+                                constructionCache[myRidCol][reader[myRidCol] as string] = newObj;
+                                retv.Add(newObj);
                             } else {
+                                newObj = (T) constructionCache[myRidCol][reader[myRidCol] as string];
                                 isNew = false;
                             }
 
-                            BuildAggregateObject(typeof(T), reader, new ObjectReflector(), obj, fieldNames, join, thisIndex, isNew, constructionCache);
+                            BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, join, thisIndex, isNew, constructionCache);
                         }
                         constructionCache.Clear();
                         transaction?.Benchmarker?.Mark("--");
@@ -229,7 +240,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                             T obj = new T();
                             refl.Slot(obj);
                             for (int i = 0; i < cols.Length; i++) {
-                                refl[cols[i]] = reader.GetValue(i);
+                                var o = reader.GetValue(i);
+                                if(o is string str) {
+                                    refl[cols[i]] = reader.GetString(i);
+                                } else {
+                                    refl[cols[i]] = o;
+                                }
                             }
                             retv.Add((T)refl.Retrieve());
                         }

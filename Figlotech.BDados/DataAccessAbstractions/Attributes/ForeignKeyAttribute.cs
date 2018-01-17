@@ -37,5 +37,13 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
             RefTable = RefType.Name;
             RefColumn = foreignColumn;
         }
+
+        public override bool Equals(object obj) {
+            return this == obj || (obj is ForeignKeyAttribute fkatt && fkatt.ToString() == this.ToString());
+        }
+
+        public override string ToString() {
+            return $"{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
+        }
     }
 }

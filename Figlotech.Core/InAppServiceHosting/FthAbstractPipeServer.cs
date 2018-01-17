@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +24,7 @@ namespace Figlotech.Core.InAppServiceHosting
             this.pipeName = pipeName;
         }
 
-        public abstract void Init(params string[] args);
+        public abstract void Init(params object[] args);
 
         bool ServerStop = false;
 

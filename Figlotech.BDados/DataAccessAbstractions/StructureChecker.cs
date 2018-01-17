@@ -31,6 +31,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return $"Drop key {_table}.{_constraint}";
         }
     }
+
     public class CreateForeignKeyScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
@@ -48,11 +49,36 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute() {
             return Exec(DataAccessor.QueryGenerator.AddForeignKey(
+                    _table, _column, _refTable, _refColumn));
+        }
+
+        public override string ToString() {
+            return $"Create foreign key {_table}.fk_{_column}_{_refTable}_{_refColumn}";
+        }
+    }
+
+    public class ExecutePugeForFkScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        String _refTable;
+        String _refColumn;
+
+        public ExecutePugeForFkScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string column, string refTable, string refColumn, MemberInfo columnMember) : base(dataAccessor) {
+            _table = table;
+            _column = column;
+            _refTable = refTable;
+            _refColumn = refColumn;
+        } 
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.Purge(
                 _table, _column, _refTable, _refColumn));
         }
 
         public override string ToString() {
-            return $"Create foreign key fk_{_column}_{_refTable}_{_refColumn}";
+            return $"Data Purge for key {_table}.fk_{_column}_{_refTable}_{_refColumn}";
         }
     }
 
@@ -61,7 +87,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         String _column;
         MemberInfo _columnMember;
 
-        public CreateColumnScAction (
+        public CreateColumnScAction(
             IRdbmsDataAccessor dataAccessor,
             string table, string column, MemberInfo columnMember) : base(dataAccessor) {
             _table = table;
@@ -129,7 +155,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         MemberInfo _columnMember;
 
         public AlterColumnDefinitionScAction(
-            IRdbmsDataAccessor dataAccessor, 
+            IRdbmsDataAccessor dataAccessor,
             string table, string column, MemberInfo columnMember) : base(dataAccessor) {
             _table = table;
             _column = column;
@@ -173,7 +199,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 return DataAccessor.Execute(query);
             } catch (Exception x) {
-                throw new BDadosException($"Error executing [{this.ToString()}]", x);
+                throw new BDadosException($"Error executing [{this.ToString()}]: [{x.Message}]", x);
             }
         }
     }
@@ -219,7 +245,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var refTablName = keys[i].RefTable;
                 if (refColName == null) continue;
                 foreach (var type in workingTypes) {
-                    if (type.Name != tablName) continue;
+                    if (type.Name.ToLower() != tablName.ToLower()) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                         .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
                     foreach (var field in fields) {
@@ -227,9 +253,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (fkDef == null)
                             continue;
                         if (
-                            fkDef.RefColumn == refColName &&
-                            fkDef.RefTable == refTablName &&
-                            field.Name == colName) {
+                            fkDef.RefColumn.ToLower() == refColName.ToLower() &&
+                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
+                            field.Name.ToLower() == colName.ToLower()) {
                             found = true;
                             break;
                         }
@@ -304,7 +330,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             foreach (var type in workingTypes) {
                 var fields = ReflectionTool.FieldsAndPropertiesOf(type)
-                    .Where(f=> f.GetCustomAttribute<FieldAttribute>()!=null);
+                    .Where(f => f.GetCustomAttribute<FieldAttribute>() != null);
                 foreach (var field in fields) {
 
                     var fieldExists = false;
@@ -382,15 +408,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             WorkQueuer wq = new WorkQueuer("Strucheck Queuer");
             var cliQ = new WorkQueuer("cli_q", 1);
             List<Exception> exces = new List<Exception>();
-            while(enny.MoveNext()) {
+            while (enny.MoveNext()) {
                 var thisAction = enny.Current;
                 wq.Enqueue(() => {
                     retv += thisAction.Execute();
                     //lock(wq) {
-                        int myWent = went++;
-                        cliQ.Enqueue(() => {
-                            onActionExecuted?.Invoke(thisAction, myWent);
-                        });
+                    int myWent = went++;
+                    cliQ.Enqueue(() => {
+                        onActionExecuted?.Invoke(thisAction, myWent);
+                    });
                     //}
                 }, (x) => {
                     if (handleException == null)
@@ -402,7 +428,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             wq.Stop();
             cliQ.Stop();
-            if(exces.Any()) {
+            if (exces.Any()) {
                 throw new AggregateException("There were errors executing actions", exces);
             }
             return retv;
@@ -419,6 +445,151 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 yield return a;
             foreach (var a in EvaluateColumnChanges(columns, keys))
                 yield return a;
+            foreach (var a in EvaluateMissingKeysCreation(columns, keys))
+                yield return a;
+        }
+
+        private IEnumerable<ForeignKeyAttribute> GetNecessaryForeignKeys() {
+            foreach(var t in workingTypes) {
+                foreach(var f in ReflectionTool.FieldsAndPropertiesOf(t)) {
+                    var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
+                    if(fk != null) {
+                        fk.Table = t.Name;
+                        fk.Column = f.Name;
+                        yield return fk;
+                        continue;
+                    }
+                    fk = new ForeignKeyAttribute();
+                    fk.Table = t.Name;
+                    fk.Column = f.Name;
+
+                    var agf = f.GetCustomAttribute<AggregateFieldAttribute>();
+                    if(agf != null) {
+                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agf.RemoteObjectType)
+                            .FirstOrDefault(a => a.Name == agf.ObjectKey);
+                        if(classField != null) {
+                            fk.Table = agf.RemoteObjectType.Name;
+                            fk.Column = agf.ObjectKey;
+                            fk.RefTable = t.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        } else {
+                            fk.Table = t.Name;
+                            fk.Column = agf.ObjectKey;
+                            fk.RefTable = agf.RemoteObjectType.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(agf.RemoteObjectType);
+                        }
+                        yield return fk;
+                        continue;
+                    }
+
+                    var agff = f.GetCustomAttribute<AggregateFarFieldAttribute>();
+                    if (agff != null) {
+                        var cf = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.ImediateType)
+                            .FirstOrDefault(a => a.Name == agff.ImediateKey);
+                        if (cf != null) {
+                            fk.Table = agff.ImediateType.Name;
+                            fk.Column = agff.ImediateKey;
+                            fk.RefTable = t.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        } else {
+                            fk.Table = t.Name;
+                            fk.Column = agff.ImediateKey;
+                            fk.RefTable = agff.ImediateType.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(agff.ImediateType);
+                        }
+                        yield return fk;
+                        fk = new ForeignKeyAttribute();
+                        var cf2 = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.FarType)
+                            .FirstOrDefault(a => a.Name == agff.FarKey);
+                        if (cf2 != null) {
+                            fk.Table = agff.FarType.Name;
+                            fk.Column = agff.FarKey;
+                            fk.RefTable = t.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        } else {
+                            fk.Table = t.Name;
+                            fk.Column = agff.FarKey;
+                            fk.RefTable = agff.FarType.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(agff.FarType);
+                        }
+                        yield return fk;
+                        continue;
+                    }
+
+                    var ago = f.GetCustomAttribute<AggregateObjectAttribute>();
+                    if (ago != null) {
+                        var type = ReflectionTool.GetTypeOf(f);
+                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(type)
+                            .FirstOrDefault(a => a.Name == ago.ObjectKey);
+                        if (classField != null) {
+                            fk.Table = type.Name;
+                            fk.Column = ago.ObjectKey;
+                            fk.RefTable = t.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        } else {
+                            fk.Table = t.Name;
+                            fk.Column = ago.ObjectKey;
+                            fk.RefTable = type.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(type);
+                        }
+                        yield return fk;
+                        continue;
+                    }
+                    var agl = f.GetCustomAttribute<AggregateListAttribute>();
+                    if (agl != null) {
+                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agl.RemoteObjectType)
+                            .FirstOrDefault(a => a.Name == agl.RemoteField);
+                        if (classField != null) {
+                            fk.Table = agl.RemoteObjectType.Name;
+                            fk.Column = agl.RemoteField;
+                            fk.RefTable = t.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        } else {
+                            fk.Table = t.Name;
+                            fk.Column = agl.RemoteField;
+                            fk.RefTable = agl.RemoteObjectType.Name;
+                            fk.RefColumn = Fi.Tech.GetRidColumn(agl.RemoteObjectType);
+                        }
+                        yield return fk;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        public IEnumerable<ExecutePugeForFkScAction> EnumeratePurgesFor(ForeignKeyAttribute fk, List<ForeignKeyAttribute> fkli) {
+            if (_purgedKeys.Contains(fk.ToString())) {
+                yield break;
+            }
+
+            _purgedKeys.Add(fk.ToString());
+            foreach (var a in fkli.Where(b=> b.RefTable.ToLower() == fk.Table.ToLower())) {
+                foreach(var x in EnumeratePurgesFor(a, fkli)) {
+                    yield return x;
+                }
+            }
+
+            yield return new ExecutePugeForFkScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, null);
+        }
+
+        private List<string> _purgedKeys = new List<string>();
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateMissingKeysCreation(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
+            _purgedKeys.Clear();
+            var needFK = GetNecessaryForeignKeys().ToList();
+            var needFKDict = new Dictionary<string, ForeignKeyAttribute>();
+            foreach(var a in needFK) {
+                needFKDict[a.ToString()] = a;
+            }
+            needFK = needFKDict.Values.ToList();
+
+            foreach(var fk in needFK) {
+                if (!keys.Any(a => a.ToString() == fk.ToString())) {
+                    foreach (var x in EnumeratePurgesFor(fk, needFK)) {
+                        yield return x;
+                    }
+                    yield return new CreateForeignKeyScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, null);
+                }
+            }
         }
 
         private List<ForeignKeyAttribute> GetInfoSchemaKeys() {
@@ -465,17 +636,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 { "GENERATION_EXPRESSION", nameof(FieldAttribute.GenerationExpression) },
             }).ToList();
         }
-        
+
         public async Task CheckStructureAsync(
-            Func<IStructureCheckNecessaryAction,Task> onActionProcessed = null, 
-            Func<IStructureCheckNecessaryAction, Exception, Task> onError = null, 
-            Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null, 
+            Func<IStructureCheckNecessaryAction, Task> onActionProcessed = null,
+            Func<IStructureCheckNecessaryAction, Exception, Task> onError = null,
+            Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null,
             Func<int, Task> onReportTotalTasks = null) {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
 
             var enumerator = neededActions.GetEnumerator();
-            while(enumerator.MoveNext()) {
+            while (enumerator.MoveNext()) {
                 var action = enumerator.Current;
                 if (preAuthorizeAction != null)
                     if (!await preAuthorizeAction(action))
@@ -484,7 +655,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     action.Execute();
                     await onActionProcessed(action);
-                } catch(Exception x) {
+                } catch (Exception x) {
                     if (onError != null)
                         await onError(action, x);
                 }
@@ -704,7 +875,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (tablName != type.Name) continue;
                     var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
-                    
+
                     var oldNames = new Dictionary<string, string>();
                     foreach (var field in fields) {
                         var oldNameAtt = field.GetCustomAttribute<OldNameAttribute>();

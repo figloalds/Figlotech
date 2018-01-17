@@ -168,7 +168,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
             }
             Query.Append($") AS {aliases[0]}\n");
             //if (!condicoesRoot.IsEmpty) {
@@ -219,7 +219,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             }
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {aliases[0]}.{orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {aliases[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
             }
             if (limit != null) {
                 Query.Append($"LIMIT");
@@ -268,16 +268,17 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
+            var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name);
             Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name)}"));
+            Query.Append(String.Format($"FROM {type.Name} AS { alias }"));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
             }
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
             if(limit != null || skip != null) {
                 Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");

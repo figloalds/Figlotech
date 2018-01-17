@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core.DomainEvents
 {
     public interface IDomainEvent {
+        bool AllowPropagation { get; set; }
         long Time { get; }
         long Id { get; }
     }

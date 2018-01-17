@@ -123,6 +123,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
             Clear();
             var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
+            if(agl == null || agl.Any(a=> a == null)) {
+                throw new BDadosException("CRITICAL DATA MAPPING ERROR!");
+            }
             if (orderingExpression != null) {
                 if(Ordering == OrderingType.Desc) {
                     agl = agl.OrderByDescending(orderingExpression).ToList();

@@ -17,10 +17,15 @@ namespace Figlotech.Core.InAppServiceHosting {
 
         public string Request(string commands) {
             using (var client = new NamedPipeClientStream(pipeName)) {
-                client.Connect();
+                if (client.CanTimeout) {
+                    client.WriteTimeout = 3000;
+                }
+
+                client.Connect(5000);
                 if(!client.IsConnected) {
                     throw new Exception($"No listeners at Pipe {pipeName}");
                 }
+
                 client.WriteByte(0x02);
                 var reqText = commands;
                 var reqBytes = Encoding.UTF8.GetBytes(reqText);

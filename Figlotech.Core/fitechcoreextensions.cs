@@ -140,6 +140,12 @@ namespace Figlotech.Core {
             return retv;
         }
 
+        private static DateTime _startupstamp = DateTime.UtcNow;
+        public static DateTime ProgramStartupTimestamp => _startupstamp;
+        public static bool DidTimeElapseFromProgramStart(this Fi _selfie, TimeSpan ts) {
+            return DateTime.UtcNow.Subtract(_startupstamp) > ts;
+        }
+
         public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
             if (dt.Rows.Count < 1) return new List<T>();
             var init = DateTime.UtcNow;

@@ -18,5 +18,12 @@ namespace Figlotech.BDados.DataAccessAbstractions
         public ValidationErrors Validate(T ObjectToValidate, ValidationErrors errs) {
             return validationFunction(ObjectToValidate, errs);
         }
+
+        public ValidationErrors Validate(IBusinessObject ObjectToValidate, ValidationErrors errors) {
+            if(ObjectToValidate is T validationTarget) {
+                return Validate(validationTarget, errors);
+            }
+            return errors;
+        }
     }
 }
