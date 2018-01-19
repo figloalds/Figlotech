@@ -388,6 +388,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private bool CheckMatch(ScStructuralLink a, ScStructuralLink n) {
+            if (a.Type != n.Type) return false;
             switch(a.Type) {
                 case ScStructuralKeyType.Index:
                     return
@@ -397,8 +398,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     return
                         a.Table.ToLower() == n.Table.ToLower() &&
                         a.Column.ToLower() == n.Column.ToLower() &&
-                        a.RefTable?.ToLower() == n.RefTable?.ToLower() &&
-                        a.RefColumn?.ToLower() == n.RefColumn?.ToLower();
+                        a.RefTable.ToLower() == n.RefTable.ToLower() &&
+                        a.RefColumn.ToLower() == n.RefColumn.ToLower();
                 case ScStructuralKeyType.PrimaryKey:
                     return
                         a.Table.ToLower() == n.Table.ToLower() &&
@@ -839,7 +840,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //}
 
             foreach (var fk in needFK) {
-                if (String.IsNullOrEmpty(fk.RefColumn)) continue;
                 if (!keys.Any(n => CheckMatch(fk, n))) {
                     switch(fk.Type) {
                         case ScStructuralKeyType.ForeignKey:
@@ -888,7 +888,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 { "NON_UNIQUE", nameof(ScStructuralLink.IsUnique) },
                 { "INDEX_NAME", nameof(ScStructuralLink.KeyName) },
              }).ToList();
-            idx.RemoveAll(a => a.KeyName == "PRIMARY");
             idx.ForEach(a => {
                 a.Type = ScStructuralKeyType.Index;
                 a.IsUnique = !a.IsUnique;
