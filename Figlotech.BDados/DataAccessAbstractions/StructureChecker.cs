@@ -10,12 +10,74 @@ using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
+    public enum ScStructuralKeyType {
+        Index,
+        PrimaryKey,
+        ForeignKey
+    }
 
-    public class DropKeyScAction : AbstractIStructureCheckNecessaryAction {
+    public class ScStructuralLink {
+        private String _linkName;
+
+        public String Table { get; set; }
+        public String Column { get; set; }
+        public String RefTable { get; set; }
+        public String RefColumn { get; set; }
+        public String KeyName { get => _linkName ?? this.FTechKeyName; set => _linkName = value; }
+        public bool IsUnique { get; set; } = false;
+
+        public String FTechKeyName {
+            get {
+                switch (this.Type) {
+                    case ScStructuralKeyType.ForeignKey:
+                        return $"fk_{Column}_{RefTable}_{RefColumn}".ToLower();
+                    case ScStructuralKeyType.Index:
+                        return $"{(IsUnique ? "uk_" : "idx_")}{Column}".ToLower();
+                    case ScStructuralKeyType.PrimaryKey:
+                        return "PRIMARY";
+                }
+                return "";
+            }
+        }
+
+        public static ScStructuralLink FromFkAttribute(ForeignKeyAttribute FkAtt) {
+            var retv = new ScStructuralLink();
+            retv.CopyFrom(FkAtt);
+            retv.Type = ScStructuralKeyType.ForeignKey;
+            return retv;
+        }
+
+        public ScStructuralKeyType Type { get; set; } = ScStructuralKeyType.Index;
+
+        public override string ToString() {
+            return $"{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
+        }
+    }
+
+    public class DropFkScAction : AbstractIStructureCheckNecessaryAction {
+        ScStructuralLink keyInfo;
+
+        public DropFkScAction(
+            IRdbmsDataAccessor dataAccessor,
+            ScStructuralLink keyInfo) : base(dataAccessor) {
+            this.keyInfo = keyInfo;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.DropForeignKey(
+                    keyInfo.Table, keyInfo.KeyName));
+        }
+
+        public override string ToString() {
+            return $"Drop foreign key {keyInfo.Table}.{keyInfo.KeyName}";
+        }
+    }
+
+    public class DropPkScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _constraint;
 
-        public DropKeyScAction(
+        public DropPkScAction(
             IRdbmsDataAccessor dataAccessor,
             string table, string constraint) : base(dataAccessor) {
             _table = table;
@@ -23,37 +85,124 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.DropForeignKey(
+            return Exec(DataAccessor.QueryGenerator.DropPrimary(
                     _table, _constraint));
         }
 
         public override string ToString() {
-            return $"Drop key {_table}.{_constraint}";
+            return $"Drop primary {_table}.{_constraint}";
+        }
+    }
+    public class DropIdxScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _constraint;
+
+        public DropIdxScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string constraint) : base(dataAccessor) {
+            _table = table;
+            _constraint = constraint;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.DropIndex(
+                    _table, _constraint));
+        }
+
+        public override string ToString() {
+            return $"Drop unique {_table}.{_constraint}";
+        }
+
+    }
+    public class DropUkScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _constraint;
+
+        public DropUkScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string constraint) : base(dataAccessor) {
+            _table = table;
+            _constraint = constraint;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.DropUnique(
+                    _table, _constraint));
+        }
+
+        public override string ToString() {
+            return $"Drop unique {_table}.{_constraint}";
+        }
+
+    }
+
+    public class CreateIndexScAction : AbstractIStructureCheckNecessaryAction {
+        ScStructuralLink keyInfo;
+        bool _unique;
+
+        public CreateIndexScAction(
+            IRdbmsDataAccessor dataAccessor,
+            ScStructuralLink keyInfo) : base(dataAccessor) {
+            this.keyInfo = keyInfo;
+        }
+
+        public override int Execute() {
+            int v = 0;
+            if(keyInfo.IsUnique) {
+                return Exec(DataAccessor.QueryGenerator.AddUniqueKey(
+                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+            } else {
+                return Exec(DataAccessor.QueryGenerator.AddIndexForUniqueKey(
+                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+            }
+        }
+
+        public override string ToString() {
+            return $"Create unique key {keyInfo.Table}.{keyInfo.KeyName}";
+        }
+    }
+
+    public class CreatePrimaryKeyScAction : AbstractIStructureCheckNecessaryAction {
+        ScStructuralLink keyInfo;
+        int _length;
+
+        public CreatePrimaryKeyScAction(
+            IRdbmsDataAccessor dataAccessor, ScStructuralLink keyInfo) : base(dataAccessor) {
+            this.keyInfo = keyInfo;
+        }
+
+        public override int Execute() {
+            return Exec(DataAccessor.QueryGenerator.AddPrimaryKey(
+                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+        }
+
+        public override string ToString() {
+            return $"Create primary key {keyInfo.Table}.{keyInfo.KeyName}";
         }
     }
 
     public class CreateForeignKeyScAction : AbstractIStructureCheckNecessaryAction {
-        String _table;
-        String _column;
-        String _refTable;
-        String _refColumn;
+        ScStructuralLink keyInfo;
 
         public CreateForeignKeyScAction(
             IRdbmsDataAccessor dataAccessor,
-            string table, string column, string refTable, string refColumn, MemberInfo columnMember) : base(dataAccessor) {
-            _table = table;
-            _column = column;
-            _refTable = refTable;
-            _refColumn = refColumn;
+             ScStructuralLink keyInfo) : base(dataAccessor) {
+            this.keyInfo = keyInfo;
         }
 
         public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.AddForeignKey(
-                    _table, _column, _refTable, _refColumn));
+            int v = 0;
+            try {
+                v += Exec(DataAccessor.QueryGenerator.AddLocalIndexForFK(
+                    keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
+            } catch (Exception x) { }
+            v += Exec(DataAccessor.QueryGenerator.AddForeignKey(
+                    keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
+            return v;
         }
 
         public override string ToString() {
-            return $"Create foreign key {_table}.fk_{_column}_{_refTable}_{_refColumn}";
+            return $"Create foreign key {keyInfo.Table}.{keyInfo.KeyName}";
         }
     }
 
@@ -62,6 +211,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         String _column;
         String _refTable;
         String _refColumn;
+        bool _isNullable;
 
         public ExecutePugeForFkScAction(
             IRdbmsDataAccessor dataAccessor,
@@ -70,11 +220,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _column = column;
             _refTable = refTable;
             _refColumn = refColumn;
-        } 
+            _isNullable = columnMember.GetCustomAttribute<FieldAttribute>()?.AllowNull ?? true;
+        }
 
         public override int Execute() {
             return Exec(DataAccessor.QueryGenerator.Purge(
-                _table, _column, _refTable, _refColumn));
+                _table, _column, _refTable, _refColumn, _isNullable));
+            return 0;
         }
 
         public override string ToString() {
@@ -101,7 +253,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Create column {_columnMember.Name}";
+            return $"Create column {_columnMember.Name} {StructureChecker.GetColumnDefinition(_columnMember)}";
         }
     }
 
@@ -235,54 +387,66 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 || IsDataObject(t.BaseType);
         }
 
-        public IEnumerable<IStructureCheckNecessaryAction> EvaluateLegacyKeys(List<ForeignKeyAttribute> keys) {
-            for (int i = 0; i < keys.Count; i++) {
-                if (keys[i].RefColumn == null) continue;
-                bool found = false;
-                var tablName = keys[i].Table;
-                var colName = keys[i].Column;
-                var refColName = keys[i].RefColumn;
-                var refTablName = keys[i].RefTable;
-                if (refColName == null) continue;
-                foreach (var type in workingTypes) {
-                    if (type.Name.ToLower() != tablName.ToLower()) continue;
-                    var fields = ReflectionTool.FieldsAndPropertiesOf(type)
-                        .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null);
-                    foreach (var field in fields) {
-                        var fkDef = field.GetCustomAttribute<ForeignKeyAttribute>();
-                        if (fkDef == null)
-                            continue;
-                        if (
-                            fkDef.RefColumn.ToLower() == refColName.ToLower() &&
-                            fkDef.RefTable.ToLower() == refTablName.ToLower() &&
-                            field.Name.ToLower() == colName.ToLower()) {
-                            found = true;
+        private bool CheckMatch(ScStructuralLink a, ScStructuralLink n) {
+            switch(a.Type) {
+                case ScStructuralKeyType.Index:
+                    return
+                        a.Table.ToLower() == n.Table.ToLower() &&
+                        a.Column.ToLower() == n.Column.ToLower();
+                case ScStructuralKeyType.ForeignKey:
+                    return
+                        a.Table.ToLower() == n.Table.ToLower() &&
+                        a.Column.ToLower() == n.Column.ToLower() &&
+                        a.RefTable?.ToLower() == n.RefTable?.ToLower() &&
+                        a.RefColumn?.ToLower() == n.RefColumn?.ToLower();
+                case ScStructuralKeyType.PrimaryKey:
+                    return
+                        a.Table.ToLower() == n.Table.ToLower() &&
+                        a.Column.ToLower() == n.Column.ToLower();
+            }
+            throw new Exception("Something supposedly impossible happened within StructureChecker internal logic.");
+        }
+
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateLegacyKeys(List<ScStructuralLink> keys) {
+
+            var needFk = GetNecessaryLinks().ToList();
+            foreach (var a in keys) {
+                if (!needFk.Any(n=> CheckMatch(a,n) )) {
+                    switch(a.Type) {
+                        case ScStructuralKeyType.ForeignKey:
+                            yield return new DropFkScAction(DataAccessor, a);
                             break;
-                        }
+                        case ScStructuralKeyType.Index:
+                            if (a.IsUnique)
+                                yield return new DropUkScAction(DataAccessor, a.Table, a.KeyName);
+                            else
+                                yield return new DropIdxScAction(DataAccessor, a.Table, a.KeyName); 
+                            break;
+                        case ScStructuralKeyType.PrimaryKey:
+                            yield return new DropPkScAction(DataAccessor, a.Table, a.KeyName);
+                            break;
                     }
                 }
-                if (!found) {
-                    yield return new DropKeyScAction(DataAccessor, tablName, keys[i].ConstraintName);
-                }
             }
+
             yield break;
         }
 
-        private IEnumerable<IStructureCheckNecessaryAction> EvaluateForFullTableDekeyal(String target, List<String> tables, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateForFullTableDekeyal(String target, List<String> tables, List<ScStructuralLink> keys) {
             for (int i = 0; i < keys.Count; i++) {
                 var refTableName = keys[i].RefTable;
                 if (refTableName == target) {
                     var tableName = keys[i].Table;
                     var columnName = keys[i].Column;
                     var refColumnName = keys[i].RefColumn;
-                    var constraint = keys[i].ConstraintName;
+                    var constraint = keys[i].KeyName;
                     Benchmarker.Mark($"Dekey Table {tableName} from {constraint} references {refTableName}");
-                    yield return new DropKeyScAction(DataAccessor, tableName, keys[i].ConstraintName);
+                    yield return new DropFkScAction(DataAccessor, keys[i]);
                 }
             }
         }
 
-        private IEnumerable<IStructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ScStructuralLink> keys) {
             Dictionary<string, string> oldNames = new Dictionary<string, string>();
             foreach (String tableName in tables) {
                 foreach (var type in workingTypes) {
@@ -326,7 +490,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private List<string> TablesToCreate = new List<string>();
 
-        private IEnumerable<IStructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ScStructuralLink> keys) {
 
             foreach (var type in workingTypes) {
                 var fields = ReflectionTool.FieldsAndPropertiesOf(type)
@@ -449,36 +613,76 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 yield return a;
         }
 
-        private IEnumerable<ForeignKeyAttribute> GetNecessaryForeignKeys() {
-            foreach(var t in workingTypes) {
-                foreach(var f in ReflectionTool.FieldsAndPropertiesOf(t)) {
-                    var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
-                    if(fk != null) {
-                        fk.Table = t.Name;
-                        fk.Column = f.Name;
-                        yield return fk;
+        private ScStructuralLink GetIndexForFk(ScStructuralLink fk) {
+            return new ScStructuralLink {
+                Table = fk.Table,
+                Column = fk.Column,
+                KeyName = $"idx_{fk.Table.ToLower()}_{fk.Column.ToLower()}"
+            };
+        }
+
+        private IEnumerable<ScStructuralLink> GetNecessaryLinks() {
+            foreach (var t in workingTypes) {
+                foreach (var f in ReflectionTool.FieldsAndPropertiesOf(t)) {
+                    var uk = f.GetCustomAttribute<FieldAttribute>();
+                    if (uk == null) {
                         continue;
                     }
-                    fk = new ForeignKeyAttribute();
-                    fk.Table = t.Name;
-                    fk.Column = f.Name;
+
+                    var constraint = new ScStructuralLink();
+
+                    if (uk != null && uk.Unique) {
+                        yield return new ScStructuralLink {
+                            Table = t.Name,
+                            Column = f.Name,
+                            IsUnique = true,
+                            Type = ScStructuralKeyType.Index,
+                        };
+                    }
+
+                    var pri = f.GetCustomAttribute<PrimaryKeyAttribute>();
+                    if (pri != null) {
+                        yield return new ScStructuralLink {
+                            Table = t.Name,
+                            Column = f.Name,
+                            Type = ScStructuralKeyType.PrimaryKey,
+                        };
+                    }
+
+
+                    var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
+                    if (fk != null) {
+                        constraint = ScStructuralLink.FromFkAttribute(fk);
+                        constraint.Table = t.Name;
+                        constraint.Column = f.Name;
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
+                        continue;
+                    }
+
+                    constraint = new ScStructuralLink();
+                    constraint.Table = t.Name;
+                    constraint.Column = f.Name;
 
                     var agf = f.GetCustomAttribute<AggregateFieldAttribute>();
-                    if(agf != null) {
+                    if (agf != null) {
                         var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agf.RemoteObjectType)
                             .FirstOrDefault(a => a.Name == agf.ObjectKey);
-                        if(classField != null) {
-                            fk.Table = agf.RemoteObjectType.Name;
-                            fk.Column = agf.ObjectKey;
-                            fk.RefTable = t.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                        if (classField != null) {
+                            constraint.Table = agf.RemoteObjectType.Name;
+                            constraint.Column = agf.ObjectKey;
+                            constraint.RefTable = t.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
-                            fk.Table = t.Name;
-                            fk.Column = agf.ObjectKey;
-                            fk.RefTable = agf.RemoteObjectType.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(agf.RemoteObjectType);
+                            constraint.Table = t.Name;
+                            constraint.Column = agf.ObjectKey;
+                            constraint.RefTable = agf.RemoteObjectType.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(agf.RemoteObjectType);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return fk;
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
                         continue;
                     }
 
@@ -487,32 +691,39 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var cf = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.ImediateType)
                             .FirstOrDefault(a => a.Name == agff.ImediateKey);
                         if (cf != null) {
-                            fk.Table = agff.ImediateType.Name;
-                            fk.Column = agff.ImediateKey;
-                            fk.RefTable = t.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Table = agff.ImediateType.Name;
+                            constraint.Column = agff.ImediateKey;
+                            constraint.RefTable = t.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
-                            fk.Table = t.Name;
-                            fk.Column = agff.ImediateKey;
-                            fk.RefTable = agff.ImediateType.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(agff.ImediateType);
+                            constraint.Table = t.Name;
+                            constraint.Column = agff.ImediateKey;
+                            constraint.RefTable = agff.ImediateType.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(agff.ImediateType);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return fk;
-                        fk = new ForeignKeyAttribute();
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
+                        constraint = new ScStructuralLink();
+
                         var cf2 = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.FarType)
                             .FirstOrDefault(a => a.Name == agff.FarKey);
                         if (cf2 != null) {
-                            fk.Table = agff.FarType.Name;
-                            fk.Column = agff.FarKey;
-                            fk.RefTable = t.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Table = agff.FarType.Name;
+                            constraint.Column = agff.FarKey;
+                            constraint.RefTable = t.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
-                            fk.Table = t.Name;
-                            fk.Column = agff.FarKey;
-                            fk.RefTable = agff.FarType.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(agff.FarType);
+                            constraint.Table = t.Name;
+                            constraint.Column = agff.FarKey;
+                            constraint.RefTable = agff.FarType.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(agff.FarType);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return fk;
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
                         continue;
                     }
 
@@ -522,17 +733,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(type)
                             .FirstOrDefault(a => a.Name == ago.ObjectKey);
                         if (classField != null) {
-                            fk.Table = type.Name;
-                            fk.Column = ago.ObjectKey;
-                            fk.RefTable = t.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Table = type.Name;
+                            constraint.Column = ago.ObjectKey;
+                            constraint.RefTable = t.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
-                            fk.Table = t.Name;
-                            fk.Column = ago.ObjectKey;
-                            fk.RefTable = type.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(type);
+                            constraint.Table = t.Name;
+                            constraint.Column = ago.ObjectKey;
+                            constraint.RefTable = type.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(type);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return fk;
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
                         continue;
                     }
                     var agl = f.GetCustomAttribute<AggregateListAttribute>();
@@ -540,72 +754,150 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agl.RemoteObjectType)
                             .FirstOrDefault(a => a.Name == agl.RemoteField);
                         if (classField != null) {
-                            fk.Table = agl.RemoteObjectType.Name;
-                            fk.Column = agl.RemoteField;
-                            fk.RefTable = t.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Table = agl.RemoteObjectType.Name;
+                            constraint.Column = agl.RemoteField;
+                            constraint.RefTable = t.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(t);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
-                            fk.Table = t.Name;
-                            fk.Column = agl.RemoteField;
-                            fk.RefTable = agl.RemoteObjectType.Name;
-                            fk.RefColumn = Fi.Tech.GetRidColumn(agl.RemoteObjectType);
+                            constraint.Table = t.Name;
+                            constraint.Column = agl.RemoteField;
+                            constraint.RefTable = agl.RemoteObjectType.Name;
+                            constraint.RefColumn = Fi.Tech.GetRidColumn(agl.RemoteObjectType);
+                            constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return fk;
+                        yield return GetIndexForFk(constraint);
+                        yield return constraint;
                         continue;
                     }
                 }
             }
         }
 
-        public IEnumerable<ExecutePugeForFkScAction> EnumeratePurgesFor(ForeignKeyAttribute fk, List<ForeignKeyAttribute> fkli) {
+        public IEnumerable<DropFkScAction> DekeyItAll() {
+            var keys = GetInfoSchemaKeys();
+            foreach (var a in keys) {
+                yield return new DropFkScAction(DataAccessor, a);
+            }
+        }
+
+        public IEnumerable<ExecutePugeForFkScAction> EnumeratePurgesFor(ScStructuralLink fk, List<ScStructuralLink> fkli) {
             if (_purgedKeys.Contains(fk.ToString())) {
+                yield break;
+            }
+            if (String.IsNullOrEmpty(fk.RefTable)) {
                 yield break;
             }
 
             _purgedKeys.Add(fk.ToString());
-            foreach (var a in fkli.Where(b=> b.RefTable.ToLower() == fk.Table.ToLower())) {
-                foreach(var x in EnumeratePurgesFor(a, fkli)) {
+            foreach (var a in fkli.Where(b => b.RefTable?.ToLower() == fk.Table.ToLower())) {
+                foreach (var x in EnumeratePurgesFor(a, fkli)) {
                     yield return x;
                 }
             }
-
-            yield return new ExecutePugeForFkScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, null);
+            var mem = ReflectionTool.FieldsWithAttribute<FieldAttribute>(workingTypes.FirstOrDefault(t => t.Name == fk.Table)).FirstOrDefault();
+            if (mem != null)
+                yield return new ExecutePugeForFkScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, mem);
         }
 
+
+
         private List<string> _purgedKeys = new List<string>();
-        public IEnumerable<IStructureCheckNecessaryAction> EvaluateMissingKeysCreation(List<FieldAttribute> columns, List<ForeignKeyAttribute> keys) {
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateMissingKeysCreation(List<FieldAttribute> columns, List<ScStructuralLink> keys) {
+
             _purgedKeys.Clear();
-            var needFK = GetNecessaryForeignKeys().ToList();
-            var needFKDict = new Dictionary<string, ForeignKeyAttribute>();
-            foreach(var a in needFK) {
+            var needFK = GetNecessaryLinks().ToList();
+            var needFKDict = new Dictionary<string, ScStructuralLink>();
+
+            foreach (var a in needFK) {
                 needFKDict[a.ToString()] = a;
             }
+
             needFK = needFKDict.Values.ToList();
 
-            foreach(var fk in needFK) {
-                if (!keys.Any(a => a.ToString() == fk.ToString())) {
-                    foreach (var x in EnumeratePurgesFor(fk, needFK)) {
-                        yield return x;
+            //foreach (var t in workingTypes) {
+            //    foreach (var f in ReflectionTool.FieldsWithAttribute<FieldAttribute>(t)) {
+            //        var fa = f.GetCustomAttribute<PrimaryKeyAttribute>();
+            //        if (fa != null) {
+            //            var a = new ScStructuralLink { Table = t.Name, Column = f.Name, Type = ScStructuralKeyType.PrimaryKey };
+            //            if (!keys.Any(n => CheckMatch(a, n)))
+            //                yield return new CreatePrimaryKeyScAction(DataAccessor, a);
+            //        }
+            //    }
+            //}
+            //foreach (var t in workingTypes) {
+            //    foreach (var f in ReflectionTool.FieldsWithAttribute<FieldAttribute>(t)) {
+            //        var fa = f.GetCustomAttribute<FieldAttribute>();
+            //        if (fa != null) {
+            //            if (fa.Unique) {
+            //                var key = new ScStructuralLink { Table = t.Name, Column = f.Name, KeyName = $"uk_{t.Name.ToLower()}_{f.Name.ToLower()}" };
+            //                if (!keys.Any(n=> CheckMatch(key, n)))
+            //                    yield return new CreateUniqueIndexScAction(DataAccessor, key, fa.Size);
+            //            }
+            //        }
+            //    }
+            //}
+
+            foreach (var fk in needFK) {
+                if (String.IsNullOrEmpty(fk.RefColumn)) continue;
+                if (!keys.Any(n => CheckMatch(fk, n))) {
+                    switch(fk.Type) {
+                        case ScStructuralKeyType.ForeignKey:
+                            foreach (var x in EnumeratePurgesFor(fk, needFK)) {
+                                yield return x;
+                            }
+                            yield return new CreateForeignKeyScAction(DataAccessor, fk);
+                            break;
+                        case ScStructuralKeyType.Index:
+                            yield return new CreateIndexScAction(DataAccessor, fk);
+                            break; 
+                        case ScStructuralKeyType.PrimaryKey:
+                            yield return new CreatePrimaryKeyScAction(DataAccessor, fk);
+                            break;
                     }
-                    yield return new CreateForeignKeyScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, null);
                 }
             }
         }
 
-        private List<ForeignKeyAttribute> GetInfoSchemaKeys() {
+        private List<ScStructuralLink> GetInfoSchemaKeys() {
             var dbName = DataAccessor.SchemaName;
-            return DataAccessor.Query(
+            var retv = new List<ScStructuralLink>();
+            var fk = DataAccessor.Query(
                 DataAccessor
                     .QueryGenerator
                     .InformationSchemaQueryKeys(dbName)
             )
-            .Map<ForeignKeyAttribute>(new Dictionary<string, string> {
-                { "TABLE_NAME", nameof(ForeignKeyAttribute.Table) },
-                { "COLUMN_NAME", nameof(ForeignKeyAttribute.Column) },
-                { "REFERENCED_COLUMN_NAME", nameof(ForeignKeyAttribute.RefColumn) },
-                { "REFERENCED_TABLE_NAME", nameof(ForeignKeyAttribute.RefTable) },
-                { "CONSTRAINT_NAME", nameof(ForeignKeyAttribute.ConstraintName) },
+            .Map<ScStructuralLink>(new Dictionary<string, string> {
+                { "TABLE_NAME", nameof(ScStructuralLink.Table) },
+                { "COLUMN_NAME", nameof(ScStructuralLink.Column) },
+                { "REFERENCED_COLUMN_NAME", nameof(ScStructuralLink.RefColumn) },
+                { "REFERENCED_TABLE_NAME", nameof(ScStructuralLink.RefTable) },
+                { "CONSTRAINT_NAME", nameof(ScStructuralLink.KeyName) },
             }).ToList();
+            fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
+            fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
+            retv.AddRange(fk);
+            var idx = DataAccessor.Query(
+                 DataAccessor
+                     .QueryGenerator
+                     .InformationSchemaIndexes(dbName)
+             )
+             .Map<ScStructuralLink>(new Dictionary<string, string> {
+                { "TABLE_NAME", nameof(ScStructuralLink.Table) },
+                { "COLUMN_NAME", nameof(ScStructuralLink.Column) },
+                { "NON_UNIQUE", nameof(ScStructuralLink.IsUnique) },
+                { "INDEX_NAME", nameof(ScStructuralLink.KeyName) },
+             }).ToList();
+            idx.RemoveAll(a => a.KeyName == "PRIMARY");
+            idx.ForEach(a => {
+                a.Type = ScStructuralKeyType.Index;
+                a.IsUnique = !a.IsUnique;
+                if(a.KeyName == "PRIMARY") {
+                    a.Type = ScStructuralKeyType.PrimaryKey;
+                }
+            });
+            retv.AddRange(idx);
+            return retv;
         }
         private List<String> GetInfoSchemaTables() {
             var dbName = DataAccessor.SchemaName;
@@ -645,23 +937,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
 
-            var enumerator = neededActions.GetEnumerator();
-            while (enumerator.MoveNext()) {
-                var action = enumerator.Current;
-                if (preAuthorizeAction != null)
-                    if (!await preAuthorizeAction(action))
-                        continue;
+            DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=0;");
+            //DataAccessor.BeginTransaction();
+            try {
 
-                try {
-                    action.Execute();
-                    await onActionProcessed(action);
-                } catch (Exception x) {
-                    if (onError != null)
-                        await onError(action, x);
+                var enumerator = neededActions.GetEnumerator();
+                while (enumerator.MoveNext()) {
+                    var action = enumerator.Current;
+                    if (preAuthorizeAction != null)
+                        if (!await preAuthorizeAction(action))
+                            continue;
+
+                    try {
+                        action.Execute();
+                        await onActionProcessed?.Invoke(action);
+                    } catch (Exception x) {
+                        if (onError != null)
+                            await onError?.Invoke(action, x);
+                    }
                 }
-            }
 
-            if (ortt != null) await ortt;
+            } catch (Exception) {
+
+            } finally {
+                DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=1;");
+                //DataAccessor.EndTransaction();
+            }
         }
 
         // This code is here so that I can
@@ -782,11 +1083,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         try {
                             Benchmarker.Mark($"Purge for CONSTRAINT FK {type.Name}/{field.Name} references {fkDef.RefTable}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.Purge(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn));
+                                DataAccessor.QueryGenerator.Purge(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn, field.GetCustomAttribute<FieldAttribute>()?.AllowNull ?? true));
 
-                            Benchmarker.Mark($"Create Constraint FK {type.Name}/{field.Name} references {fkDef.RefTable}/{fkDef.RefColumn}");
+                            Benchmarker.Mark($"Create Key FK {type.Name}/{field.Name} references {fkDef.RefTable}/{fkDef.RefColumn}");
                             Exec(
-                                DataAccessor.QueryGenerator.AddForeignKey(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn));
+                                DataAccessor.QueryGenerator.AddForeignKey(type.Name, field.Name, fkDef.RefTable, fkDef.RefColumn, fkDef.ConstraintName));
                         } catch (Exception x) {
                             Fi.Tech.WriteLine(x.Message);
                         }
@@ -994,7 +1295,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
-                switch (dataType) {
+                switch (dataType.ToLower()) {
                     case "rid":
                         type = $"VARCHAR(64)";
                         break;

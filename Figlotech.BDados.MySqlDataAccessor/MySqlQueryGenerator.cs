@@ -425,6 +425,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
             return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
         }
+        public IQueryBuilder InformationSchemaIndexes(string schema) {
+            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE INDEX_SCHEMA=@1;", schema);
+        }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
             return new QueryBuilder().Append($"RENAME TABLE {tabName} TO {newName};");
@@ -437,17 +440,49 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder DropForeignKey(string target, string constraint) {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
         }
+        public IQueryBuilder DropUnique(string target, string constraint) {
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint};");
+        }
+        public IQueryBuilder DropIndex(string target, string constraint) {
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP INDEX {constraint};");
+        }
+        public IQueryBuilder DropPrimary(string target, string constraint) {
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP PRIMARY KEY;");
+        }
 
         public IQueryBuilder AddColumn(string table, string columnDefinition) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
         }
 
-        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT fk_{table}_{column} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
+        public IQueryBuilder AddLocalIndexForFK(string table, string column, string refTable, string refColumn, string constraintName) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column});");
+        }
+        public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
         }
 
-        public IQueryBuilder Purge(string table, string column, string refTable, string refColumn) {
-            return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+        public IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName) {
+            table = table.ToLower();
+            column = column.ToLower();
+            return new QueryBuilder().Append($"alter table {table} ADD INDEX {column} ({column});");
+        }
+        public IQueryBuilder AddUniqueKey(string table, string column, string constraintName) {
+            table = table.ToLower();
+            column = column.ToLower();
+            return new QueryBuilder().Append($"alter table {table} ADD UNIQUE KEY {constraintName}({column});");
+        }
+        public IQueryBuilder AddPrimaryKey(string table, string column, string constraintName) {
+            table = table.ToLower();
+            column = column.ToLower();
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} PRIMARY KEY({column})");
+        }
+
+        public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
+            if(!isNullable) {
+                return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+            } else {
+                return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+            }
         }
 
         private List<MemberInfo> GetMembers(Type t) {

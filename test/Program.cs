@@ -26,17 +26,11 @@ namespace test {
                     { "Password", "asdafe1025" },
                    });
 
-            RecordSet<ComercialContratosAluguel> li = null;
-            li = new RecordSet<ComercialContratosAluguel>(da)
-                //.OrderBy(p => p.IdExterno, OrderingType.Desc)
-                .LoadAll(new Conditions<ComercialContratosAluguel>(p => true), 0, 50);
-            for (int i = 0; i < li.Count; i++) {
-                var lii = li[i];
-                var val = new RecordSet<ComercialContratosAluguel>(da).LoadAll(c=> c.RID == lii.RID);
-                var val2 = new RecordSet<ComercialContratosAluguel>(da).LoadAll(c => c.Id == lii.Id);
+            var actions = new StructureChecker(da, typeof(Pessoas).Assembly.GetTypes()).EvaluateNecessaryActions();
+            foreach(var a in actions) {
+                Console.WriteLine(a);
             }
-            
-            Console.WriteLine(li);
+            Console.ReadLine();            
         }
     }
 }

@@ -22,13 +22,18 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// valueobject (table)
     /// </summary>
     public class ForeignKeyAttribute : Attribute {
+
         public String Table { get; set; }
         public String Column { get; set; }
         public String RefTable { get; set; }
         public String RefColumn { get; set; }
         public String ConstraintName { get; set; }
-        public String FTechConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}";
+        public String FTechConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}".ToLower();
         internal Type RefType { get; set; }
+
+        public override string ToString() {
+            return $"{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
+        }
 
         public ForeignKeyAttribute() { }
         public ForeignKeyAttribute(Type foreignType, String foreignColumn = "RID")
@@ -38,12 +43,5 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
             RefColumn = foreignColumn;
         }
 
-        public override bool Equals(object obj) {
-            return this == obj || (obj is ForeignKeyAttribute fkatt && fkatt.ToString() == this.ToString());
-        }
-
-        public override string ToString() {
-            return $"{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
-        }
     }
 }
