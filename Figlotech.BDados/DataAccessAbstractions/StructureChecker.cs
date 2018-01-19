@@ -896,6 +896,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             });
             retv.AddRange(idx);
+            var wtNames = workingTypes.Select(wt => wt.Name.ToLower());
+            retv.RemoveAll(r => !wtNames.Contains(r.Table.ToLower()));
             return retv;
         }
         private List<String> GetInfoSchemaTables() {
