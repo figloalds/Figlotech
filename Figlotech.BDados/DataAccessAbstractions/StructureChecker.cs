@@ -447,6 +447,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateForColumnDekeyal(string tableName, string columnName, List<ScStructuralLink> keys) {
+            for (int i = 0; i < keys.Count; i++) {
+                var refTableName = keys[i].RefTable;
+                if (refTableName == tableName.ToLower() && columnName.ToLower() == keys[i].RefColumn.ToLower()) {
+                    yield return new DropFkScAction(DataAccessor, keys[i]);
+                }
+            }
+        }
+
         private IEnumerable<IStructureCheckNecessaryAction> EvaluateTableChanges(List<String> tables, List<ScStructuralLink> keys) {
             Dictionary<string, string> oldNames = new Dictionary<string, string>();
             foreach (String tableName in tables) {
@@ -518,6 +527,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             if (ona != null) {
                                 if (ona.Name == colName && ona.Name != col.Name) {
                                     oldExists = true;
+                                    foreach (var a in EvaluateForColumnDekeyal(type.Name, ona.Name, keys)) {
+                                        yield return a;
+                                    }
                                     yield return new RenameColumnScAction(DataAccessor, type.Name, ona.Name, field);
                                 }
                             }
@@ -551,6 +563,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 !sizesMatch ||
                                 datatype.ToUpper() != dbDefinition.ToUpper()
                                 ) {
+                                foreach(var a in EvaluateForColumnDekeyal(type.Name, field.Name, keys)) {
+                                    yield return a;
+                                }
                                 yield return new AlterColumnDefinitionScAction(DataAccessor, type.Name, field.Name, field);
                             } else {
 
