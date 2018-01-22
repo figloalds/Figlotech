@@ -377,7 +377,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT IGNORE INTO {typeof(T).Name} (");
+            Query.Append($"INSERT INTO {typeof(T).Name} (");
             Query.Append(GenerateFieldsString(typeof(T), OmmitPk));
             Query.Append(") VALUES");
             // -- 

@@ -453,8 +453,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 foreach (var type in workingTypes) {
                     var oldNameAtt = type.GetCustomAttribute<OldNameAttribute>();
                     if (oldNameAtt != null) {
-                        if (tableName == oldNameAtt.Name) {
-                            oldNames.Add(type.Name, oldNameAtt.Name);
+                        if (tableName.ToLower() == oldNameAtt.Name.ToLower()) {
+                            oldNames.Add(type.Name.ToLower(), oldNameAtt.Name.ToLower());
                         }
                     }
                 }
@@ -512,7 +512,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                         var oldExists = false;
                         foreach (var col in columns) {
-                            if (col.Table != type.Name) continue;
+                            if (col.Table.ToLower() != type.Name.ToLower()) continue;
                             var colName = col.Name;
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
@@ -530,10 +530,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     } else {
 
                         foreach (var col in columns) {
-                            var tableName = col.Table;
-                            if (tableName != type.Name) continue;
-                            var columnName = col.Name;
-                            if (field.Name != columnName) continue;
+                            var tableName = col.Table.ToLower();
+                            if (tableName != type.Name.ToLower()) continue;
+                            var columnName = col.Name.ToLower();
+                            if (columnName != field.Name.ToLower()) continue;
                             // Found columns, check definitions
                             var columnIsNullable = col.AllowNull;
                             var length = col.Size;

@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core;
 using Figlotech.Core.Helpers;
 /**
 * Iaetec.BDados.Builders.QueryBuilder
@@ -49,6 +50,57 @@ namespace Figlotech.BDados.Builders {
 
         public static QbParam Param(object o) {
             return new QbParam(o);
+        }
+
+        static readonly string defParam = IntEx.GenerateShortRid();
+        static int pids = 0;
+        private static string paramId => $"{defParam}{++pids}";
+
+        private static QbFmt ListQueryFunction<T>(string column, List<T> o, Func<T, object> fn, bool isIn) {
+            if (!o.Any()) {
+                return Qb.Fmt(isIn ? "FALSE" : "TRUE");
+            }
+            var retv = Qb.Fmt($"{column} {(isIn ? "IN" : "NOT IN" )} (");
+            var sRetv = IntEx.GenerateShortRid();
+            for (int i = 0; i < o.Count; i++) {
+                retv.Append($"@{paramId}", fn?.Invoke(o[i]));
+            }
+            retv.Append(")");
+
+            return retv;
+        }
+
+        public static QbFmt Eq(string column, object value) {
+            return Qb.Fmt($"{column}=@{paramId}", value);
+        }
+        public static QbFmt Neq(string column, object value) {
+            return Qb.Fmt($"{column}!=@{paramId}", value);
+        }
+        public static QbFmt Gt(string column, object value) {
+            return Qb.Fmt($"{column}>@{paramId}", value);
+        }
+        public static QbFmt Ge(string column, object value) {
+            return Qb.Fmt($"{column}>=@{paramId}", value);
+        }
+        public static QbFmt Lt(string column, object value) {
+            return Qb.Fmt($"{column}<@{paramId}", value);
+        }
+        public static QbFmt Le(string column, object value) {
+            return Qb.Fmt($"{column}<=@{paramId}", value);
+        }
+
+        public static QbFmt Or() {
+            return Qb.Fmt("OR");
+        }
+        public static QbFmt And() {
+            return Qb.Fmt("AND");
+        }
+
+        public static QbFmt In<T>(string column, List<T> o, Func<T, object> fn) {
+            return ListQueryFunction(column, o, fn, true);
+        }
+        public static QbFmt NotIn<T>(string column, List<T> o, Func<T, object> fn) {
+            return ListQueryFunction(column, o, fn, false);
         }
 
         public static QbListOf<T> List<T>(List<T> o, Func<T, object> fn) {
