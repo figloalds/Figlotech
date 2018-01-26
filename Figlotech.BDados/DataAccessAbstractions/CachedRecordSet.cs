@@ -12,12 +12,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public CachedRecordSet() {
 
         }
-        public CachedRecordSet(IDataAccessor dataAccessor) : base(dataAccessor) {
-
+        public bool AutoPersist { get; set; } = false;
+        public CachedRecordSet(IDataAccessor dataAccessor, bool autoPersist = false) : base(dataAccessor) {
+            AutoPersist = autoPersist;
         }
 
 
-        public T FetchSimple(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
+        public T GetItemOffline(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
 
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null) {
@@ -28,7 +29,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public T FetchOrNull(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
+        public T GetItemOrNull(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null) {
                 retv = new RecordSet<T>(DataAccessor).LoadAll(new Conditions<T>(expr)).FirstOrDefault();
@@ -43,7 +44,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public T Fetch(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
+        public T GetItem(Expression<Func<T, bool>> expr, Func<T> customInit = null) {
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null) {
                 retv = new RecordSet<T>(DataAccessor).LoadAll(new Conditions<T>(expr)).FirstOrDefault();
@@ -51,10 +52,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     lock (listLockObject)
                         this.Add(retv);
                 } else {
-                    retv = new T();
-                    customInit?.Invoke(retv);
+                    if (customInit != null) {
+                        retv = customInit.Invoke();
+                    } else {
+                        retv = new T();
+                    }
+                    if (AutoPersist)
+                        DataAccessor.SaveItem(retv);
                     //lock(listLockObject)
-                        this.Add(retv);
+                    this.Add(retv);
                 }
             }
 
