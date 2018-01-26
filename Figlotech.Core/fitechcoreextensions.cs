@@ -807,7 +807,7 @@ namespace Figlotech.Core {
             MainThreadHandler = Thread.CurrentThread;
         }
 
-        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", 20, true);
+        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", 2000, true) { MinWorkers = 12, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
 
         public static void RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
             FiTechRAF.Enqueue(job, handler, then);

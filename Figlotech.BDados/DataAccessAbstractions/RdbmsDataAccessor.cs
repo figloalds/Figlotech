@@ -150,28 +150,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void EndTransaction() {
             //lock (this) {
-                if (this.CurrentTransaction != null) {
-                    WriteLog("Ending Transaction");
-                    var conn = this.CurrentTransaction.Connection;
-                    this.CurrentTransaction.Transaction?.Dispose();
-                    conn?.Dispose();
+            if (this.CurrentTransaction != null) {
+                WriteLog("Ending Transaction");
+                var conn = this.CurrentTransaction.Connection;
+                this.CurrentTransaction.Transaction?.Dispose();
+                conn?.Dispose();
 
-                    this.CurrentTransaction = null;
-                    WriteLog("Transaction ended");
-                }
+                this.CurrentTransaction = null;
+                WriteLog("Transaction ended");
+            }
             //}
         }
 
         public void Commit() {
             WriteLog("Committing Transaction");
             //lock (this)
-                this.CurrentTransaction?.Transaction?.Commit();
+            this.CurrentTransaction?.Transaction?.Commit();
             WriteLog("Commit OK");
         }
         public void Rollback() {
             WriteLog("Rolling back Transaction");
             //lock (this)
-                this.CurrentTransaction?.Transaction?.Rollback();
+            this.CurrentTransaction?.Transaction?.Rollback();
             WriteLog("Rollback OK");
         }
 
@@ -501,8 +501,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         int accessId = 0;
 
-        public event Action<Type, IDataObject> OnSuccessfulSave;
-        public event Action<Type, IDataObject, Exception> OnFailedSave;
+        public event Action<Type, List<IDataObject>> OnSuccessfulSave;
+        public event Action<Type, List<IDataObject>, Exception> OnFailedSave;
 
         public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null, bool useTransaction = false) {
             var i = Access<int>((transaction) => {
@@ -1014,20 +1014,43 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } else {
                 temp = rs;
             }
+            List<IDataObject> successfulSaves = new List<IDataObject>();
             while (i * cut < rs.Count) {
                 var sub = new RecordSet<T>();
                 sub.AddRange(temp.Skip(i * cut).Take(Math.Min(rs.Count, cut)));
                 var inserts = sub.Where(it => !it.IsPersisted).ToRecordSet();
                 var updates = sub.Where(it => it.IsPersisted).ToRecordSet();
-                if (inserts.Count > 0) {
-                    rst += Execute(Plugin.QueryGenerator.GenerateMultiInsert(inserts, false));
+                try {
+                    if (inserts.Count > 0) {
+                        rst += Execute(Plugin.QueryGenerator.GenerateMultiInsert(inserts, false));
+                        successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
+                    }
+                } catch (Exception x) {
+                    Fi.Tech.RunAndForget(() => {
+                        OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToList(), x);
+                    });
                 }
-                if (updates.Count > 0) {
-                    rst += Execute(Plugin.QueryGenerator.GenerateMultiUpdate(updates));
+                try {
+                    if (updates.Count > 0) {
+                        rst += Execute(Plugin.QueryGenerator.GenerateMultiUpdate(updates));
+                        successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
+                    }
+                } catch (Exception x) {
+                    Fi.Tech.RunAndForget(() => {
+                        OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToList(), x);
+                    });
                 }
+
                 sub.Clear();
                 i++;
             }
+
+            if(successfulSaves.Any()) {
+                Fi.Tech.RunAndForget(() => {
+                    OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.Select(a => (IDataObject)a).ToList());
+                });
+            }
+            
             return retv;
         }
 
@@ -1196,7 +1219,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return retv;
             }
 
-            rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
+            try {
+                rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
+
+            } catch (Exception x) {
+                Fi.Tech.RunAndForget(() => {
+                    OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }, x);
+                }, (xe) => {
+                });
+            }
             if (rs == 0) {
                 this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
@@ -1251,7 +1282,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
                     } catch (Exception x) {
-                        OnFailedSave?.Invoke(input?.GetType(), input, x);
+                        OnFailedSave?.Invoke(input?.GetType(), new List<IDataObject>() { input }, x);
                     }
                 }
 
@@ -1262,6 +1293,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 retv = true;
             }
+
+            Fi.Tech.RunAndForget(() => {
+                OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input });
+            }, (x) => {
+            });
+
             return retv;
         }
 

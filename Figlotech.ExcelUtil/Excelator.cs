@@ -12,6 +12,9 @@ namespace Figlotech.ExcelUtil
     public class ExcelatorLineReader {
         int line;
         Excelator excelator;
+
+        public int LineNumber => line;
+
         public ExcelatorLineReader(int ln, Excelator parent) {
             line = ln;
             excelator = parent;
