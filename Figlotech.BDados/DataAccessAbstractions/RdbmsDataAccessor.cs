@@ -1221,12 +1221,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             try {
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
-
             } catch (Exception x) {
                 Fi.Tech.RunAndForget(() => {
                     OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }, x);
                 }, (xe) => {
                 });
+                throw x;
             }
             if (rs == 0) {
                 this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");

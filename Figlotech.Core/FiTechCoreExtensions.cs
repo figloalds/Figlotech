@@ -202,6 +202,7 @@ namespace Figlotech.Core {
         public static IBDadosStringsProvider GetStrings(this Fi _selfie) {
             return Strings;
         }
+
         public static void SetStrings(this Fi _selfie, IBDadosStringsProvider provider) {
             Strings = provider;
         }
