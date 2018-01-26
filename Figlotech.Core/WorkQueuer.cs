@@ -171,7 +171,7 @@ namespace Figlotech.Core {
                         }
                         clearHolds = DateTime.UtcNow;
                     }
-                    if (DateTime.UtcNow.Subtract(lastSupervisorRun) > TimeSpan.FromMilliseconds(ThreadsTimeout)) {
+                    if (DateTime.UtcNow.Subtract(lastSupervisorRun) > TimeSpan.FromMilliseconds(ExtraWorkerTimeout)) {
                         return;
                     }
                 }
@@ -179,7 +179,9 @@ namespace Figlotech.Core {
             }
         }
 
-        public int ThreadsTimeout { get; set; } = 7000;
+        public int ExtraWorkerTimeout { get; set; } = 7000;
+        public int MainWorkerTimeout { get; set; } = 60000;
+        public int MinWorkers { get; set; } = 0;
         private void SpawnWorker() {
             lock (workers) {
                 if (workers.Count >= parallelSize) {
@@ -209,11 +211,11 @@ namespace Figlotech.Core {
                         List<Exception> exes = new List<Exception>();
 
                         if (job == null) {
+                            Thread.CurrentThread.IsBackground = true;
                             var idleTime = DateTime.UtcNow.Subtract(lastJobProcessedStamp).TotalMilliseconds;
-                            if (idleTime > ThreadsTimeout) {
-                                return;
+                            if ((workers.Count > MinWorkers && idleTime > ExtraWorkerTimeout) || (idleTime > MainWorkerTimeout)) {
+                                break;
                             } else {
-                                Thread.CurrentThread.IsBackground = true;
                                 if (!Active) {
                                     break;
                                 }
@@ -221,6 +223,7 @@ namespace Figlotech.Core {
                                 continue;
                             }
                         }
+                        Thread.CurrentThread.IsBackground = false;
 
                         lock (job) {
 

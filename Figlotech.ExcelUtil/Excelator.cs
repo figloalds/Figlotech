@@ -71,6 +71,7 @@ namespace Figlotech.ExcelUtil
         ExcelWorksheet ws;
         String filePath;
         Stream _stream;
+        
 
         public Excelator(Stream stream, string name = "Untitled") {
             _stream = stream;
