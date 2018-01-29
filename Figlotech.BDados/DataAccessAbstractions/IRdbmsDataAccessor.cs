@@ -43,7 +43,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
 
-        void BeginTransaction(bool useRdbmsTransaction = false);
+        void BeginTransaction(bool useRdbmsTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
 
         void EndTransaction();
 

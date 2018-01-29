@@ -133,7 +133,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public void BeginTransaction(bool useTransaction = false) {
+        public void BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             //lock (this) {
             if (this.CurrentTransaction == null) {
                 WriteLog("Opening Transaction");
@@ -142,7 +142,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.CurrentTransaction = new ConnectionInfo();
                 this.CurrentTransaction.Connection = connection;
                 if (useTransaction)
-                    this.CurrentTransaction.Transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
+                    this.CurrentTransaction.Transaction = connection.BeginTransaction(ilev);
                 WriteLog("Transaction Open");
             }
             //}
@@ -1014,6 +1014,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } else {
                 temp = rs;
             }
+            List<Exception> failedSaves = new List<Exception>();
             List<IDataObject> successfulSaves = new List<IDataObject>();
             while (i * cut < rs.Count) {
                 var sub = new RecordSet<T>();
@@ -1029,6 +1030,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Fi.Tech.RunAndForget(() => {
                         OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToList(), x);
                     });
+                    failedSaves.Add(x);
                 }
                 try {
                     if (updates.Count > 0) {
@@ -1039,6 +1041,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Fi.Tech.RunAndForget(() => {
                         OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToList(), x);
                     });
+                    failedSaves.Add(x);
                 }
 
                 sub.Clear();
@@ -1049,6 +1052,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Fi.Tech.RunAndForget(() => {
                     OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.Select(a => (IDataObject)a).ToList());
                 });
+            }
+            if(failedSaves.Any()) {
+                throw new BDadosException("Not everything could be saved", new AggregateException(failedSaves));
             }
             
             return retv;
