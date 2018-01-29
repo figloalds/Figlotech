@@ -163,19 +163,33 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 execFunc(s);
             }));
         }
-        public void ForFilesIn(String relative, Action<String> execFunc) {
+
+        public void ForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
             FixRel(ref relative);
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return;
             }
+            List<Exception> ex = new List<Exception>();
             foreach (var s1 in Directory.GetFiles(WorkingDirectory)) {
-                var s = s1.Substring(RootDirectory.Length);
-                if (s.StartsWith("\\")) {
-                    s = s.Substring(1);
+                String s = s1;
+                try {
+                    s = s1.Substring(RootDirectory.Length);
+                    if (s.StartsWith("\\")) {
+                        s = s.Substring(1);
+                    }
+                    FixRel(ref s);
+                    execFunc?.Invoke(s);
+                } catch (Exception x) {
+                    if (handler != null) {
+                        handler?.Invoke(s, x);
+                    } else {
+                        ex.Add(new Exception("Error manipulating {s}", x));
+                    }
                 }
-                FixRel(ref s);
-                execFunc(s);
+                if (handler == null && ex.Any()) {
+                    throw new AggregateException(ex);
+                }
             }
         }
         public IEnumerable<string> GetFilesIn(String relative) {
@@ -186,12 +200,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             return Directory.GetFiles(WorkingDirectory).Select(
                     ((a) => {
-                    var s = a.Substring(RootDirectory.Length);
-                    if (s.StartsWith("\\")) {
-                        s = s.Substring(1);
-                    }
-                    return this.FixRel(ref s);
-                }));
+                        var s = a.Substring(RootDirectory.Length);
+                        if (s.StartsWith("\\")) {
+                            s = s.Substring(1);
+                        }
+                        return this.FixRel(ref s);
+                    }));
         }
 
         public void ParallelForDirectoriesIn(String relative, Action<String> execFunc) {
@@ -224,7 +238,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 execFunc(s);
             }
         }
-        public IEnumerable<string> GetDirectoriesIn(String relative)  {
+        public IEnumerable<string> GetDirectoriesIn(String relative) {
             relative = relative.Replace('/', '\\');
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
@@ -239,7 +253,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public bool Read(String relative, Action<Stream> func) {
             FixRel(ref relative);
-            if(!Exists(relative)) {
+            if (!Exists(relative)) {
                 return false;
             }
             var WorkingDirectory = Path.Combine(RootDirectory, relative);
@@ -304,7 +318,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         private void LockRegion(String wd, Action act) {
             //lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
-                act?.Invoke();
+            act?.Invoke();
             //}
         }
 
@@ -403,7 +417,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             bufferLength = Math.Max(256 * 1024, bufferLength);
             bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 
-            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int) bufferLength);
+            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int)bufferLength);
         }
     }
 }

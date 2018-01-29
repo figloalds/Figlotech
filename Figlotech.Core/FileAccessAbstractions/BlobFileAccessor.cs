@@ -143,7 +143,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public void SetLastAccess(String relative, DateTime dt) {
         }
 
-        public void ParallelForFilesIn(String relative, Action<String> execFunc) {
+        public void ParallelForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
             try {
                 var blobs = ListBlobs(relative);
                 var list = blobs.Select(
@@ -156,12 +156,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     try {
                         execFunc(a);
                     } catch (Exception x) {
+                        handler?.Invoke(a, x);
                     };
                 });
             } catch (StorageException) { } catch (Exception) { }
 
         }
-        public void ForFilesIn(String relative, Action<String> execFunc) {
+        public void ForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
             try {
                 var blobs = ListBlobs(relative);
                 var list = blobs.Select(
@@ -174,6 +175,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     try {
                         execFunc(a);
                     } catch (Exception x) {
+                        handler?.Invoke(a, x);
                     };
                 }
             } catch (StorageException) { } catch (Exception) { }

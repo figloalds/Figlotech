@@ -54,9 +54,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
 
-        public void ForFilesIn(string relative, Action<string> execFunc) {
+        public void ForFilesIn(string relative, Action<string> execFunc, Action<string, Exception> handler = null) {
             Parallel.ForEach(accessors, (a) => {
-                a.ForFilesIn(relative, execFunc);
+                a.ForFilesIn(relative, execFunc, handler);
             });
         }
 

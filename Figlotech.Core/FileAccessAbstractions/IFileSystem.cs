@@ -7,7 +7,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         void Write(string relative, Action<Stream> func);
 
-        void ForFilesIn(string relative, Action<string> execFunc);
+        void ForFilesIn(string relative, Action<string> execFunc, Action<String, Exception> handler = null);
         IEnumerable<string> GetFilesIn(string relative);
 
         void ForDirectoriesIn(string relative, Action<string> execFunc);
