@@ -18,11 +18,13 @@ namespace Figlotech.Core {
         public int CompletedSteps;
     }
 
-    public class WorkJob {
-        public WorkJobStatus status;
+    public abstract class WorkJob {
+        public WorkJobStatus status = WorkJobStatus.Queued;
         public DateTime? enqueued = DateTime.Now;
         public DateTime? dequeued;
         public DateTime? completed;
+
+        public abstract Task Conclusion();
     }
 
     public class WorkJob<T> : WorkJob {
@@ -43,12 +45,11 @@ namespace Figlotech.Core {
             }
         }
 
-        public async Task<T> Conclusion() {
+        public override async Task Conclusion() {
             if (AssociatedTask != null && AssociatedTask.Status != TaskStatus.RanToCompletion)
-                return await AssociatedTask;
-            return default(T);
+                await AssociatedTask;
         }
-
+        
         //#if DEBUG
         //        public StackFrame[] ContextStack;
         //#endif
@@ -161,7 +162,8 @@ namespace Figlotech.Core {
 
         public async Task<T> AccompanyJob<T>(Func<T> a, Action<Exception> exceptionHandler = null, Action<T> finished = null) {
             var wj = Enqueue(a, exceptionHandler, finished);
-            return await wj.Conclusion();
+            await wj.Conclusion();
+            return wj.ReturnValue;
         }
 
         public int TotalWork = 0;
@@ -180,12 +182,14 @@ namespace Figlotech.Core {
 
             retv.AssociatedTask = Task.Run<T>(() => {
                 try {
+                    retv.status = WorkJobStatus.Running;
                     retv.ReturnValue = a.Invoke();
                 } catch (Exception x) {
                     exceptionHandler?.Invoke(x);
                 } finally {
                     finished?.Invoke(retv.ReturnValue);
                 }
+                retv.status = WorkJobStatus.Finished;
                 return retv.ReturnValue;
             });
 

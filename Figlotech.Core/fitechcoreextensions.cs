@@ -818,8 +818,8 @@ namespace Figlotech.Core {
             return RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
         }
 
-        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action<int> then = null)
-            => RunAndForget<int>(_selfie, "Anonymous_RunAndForget", () => { job.Invoke(); return 0; }, handler, then);
+        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action then = null)
+            => RunAndForget<int>(_selfie, "Anonymous_RunAndForget", () => { job.Invoke(); return 0; }, handler, (a) => { then(); });
 
         public static byte[] GenerateKey(this Fi _selfie, string Str) {
             Random random = new Random(Fi.Tech.IntSeedFromString(Str));
