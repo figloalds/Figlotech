@@ -119,17 +119,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return LoadAll<T>(condicoes, page, limit, orderingMember, ordering).FirstOrDefault();
         }
 
+        public int ThreadId => Thread.CurrentThread.ManagedThreadId;
 
-        Dictionary<Thread, ConnectionInfo> _currentTransaction = new Dictionary<Thread, ConnectionInfo>();
+        Dictionary<int, ConnectionInfo> _currentTransaction = new Dictionary<int, ConnectionInfo>();
         ConnectionInfo CurrentTransaction {
             get {
-                if (_currentTransaction.ContainsKey(Thread.CurrentThread)) {
-                    return _currentTransaction[Thread.CurrentThread];
+                if (_currentTransaction.ContainsKey(ThreadId)) {
+                    return _currentTransaction[ThreadId];
                 }
                 return null;
             }
             set {
-                _currentTransaction[Thread.CurrentThread] = value;
+                _currentTransaction[ThreadId] = value;
             }
         }
 
@@ -163,11 +164,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Commit() {
-            WriteLog("Committing Transaction");
-            //lock (this)
-            this.CurrentTransaction?.Transaction?.Commit();
-            WriteLog("Commit OK");
+            if (this.CurrentTransaction?.Transaction != null) {
+                WriteLog("Committing Transaction");
+                lock ( $"DATA_ACCESSOR_COMMIT_{this.myId}" ) {
+                    this.CurrentTransaction?.Transaction?.Commit();
+                }
+
+                WriteLog("Commit OK");
+            }
         }
+
         public void Rollback() {
             WriteLog("Rolling back Transaction");
             //lock (this)
@@ -584,6 +590,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private T UseTransaction<T>(Func<ConnectionInfo, T> func, Action<Exception> handler = null, bool useTransaction = false) {
+            if(this.CurrentTransaction != null) {
+                try {
+                    return func.Invoke(this.CurrentTransaction);
+                } catch(Exception x) {
+                    handler?.Invoke(x);
+                }
+                return default(T);
+            }
+
             if (func == null) return default(T);
 
             this.BeginTransaction(useTransaction);
@@ -1217,15 +1232,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var id = GetIdColumn(input.GetType());
             var rid = GetRidColumn(input.GetType());
 
-            input.CreatedTime = DateTime.UtcNow;
-
             if (input.IsPersisted) {
+                input.UpdatedTime = DateTime.UtcNow;
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
                 retv = true;
                 return retv;
             }
 
             try {
+                input.UpdatedTime = DateTime.UtcNow;
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
             } catch (Exception x) {
                 Fi.Tech.RunAndForget(() => {

@@ -41,6 +41,17 @@ namespace Figlotech.Core {
             }
         }
 
+        public async Task Conclusion() {
+            while (completed == null) {
+                if (AssignedThread != null) {
+                    lock (this) {
+                        return;
+                    }
+                }
+                await Task.Delay(100);
+            }
+        }
+
         //#if DEBUG
         //        public StackFrame[] ContextStack;
         //#endif

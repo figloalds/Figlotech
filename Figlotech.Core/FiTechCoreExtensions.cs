@@ -810,12 +810,12 @@ namespace Figlotech.Core {
 
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", 2000, true) { MinWorkers = 12, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
 
-        public static void RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
-            FiTechRAF.Enqueue(job, handler, then);
+        public static WorkJob RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
+            return FiTechRAF.Enqueue(job, handler, then);
         }
 
-        public static void RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action then = null) {
-            RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
+        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action then = null) {
+            return RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
         }
 
         public static byte[] GenerateKey(this Fi _selfie, string Str) {
