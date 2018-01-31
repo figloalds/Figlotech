@@ -581,7 +581,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
-        public int ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
+        public async Task<int> ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
             var enny = actions.GetEnumerator();
             int retv = 0;
             int went = 0;
@@ -606,8 +606,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         handleException.Invoke(x);
                 });
             }
-            wq.Stop();
-            cliQ.Stop();
+            await wq.Stop();
+            await cliQ.Stop();
             if (exces.Any()) {
                 throw new AggregateException("There were errors executing actions", exces);
             }

@@ -1246,6 +1246,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Fi.Tech.RunAndForget(() => {
                     OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }, x);
                 }, (xe) => {
+
                 });
                 throw x;
             }

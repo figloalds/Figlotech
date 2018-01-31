@@ -41,7 +41,7 @@ namespace Figlotech.BDados.Tests
         }
 
         [TestMethod]
-        public void fileAccessormustNotbeShit()
+        public async void fileAccessormustNotbeShit()
         {
             var fs = new FileAccessor(".");
             var context = "a";
@@ -65,7 +65,7 @@ namespace Figlotech.BDados.Tests
                     });
                 });
             }
-            wq.Stop();
+            await wq.Stop();
         }
 
         class sc : IMultiSerializableObject
@@ -165,7 +165,7 @@ namespace Figlotech.BDados.Tests
         }
 
         [TestMethod]
-        public void WorkQueuerShouldWork()
+        public async void WorkQueuerShouldWork()
         {
             int a = 0;
             WorkQueuer wq = new WorkQueuer("wq", 4);
@@ -178,7 +178,7 @@ namespace Figlotech.BDados.Tests
                     throw x;
                 });
             }
-            wq.Stop();
+            await wq.Stop();
             Assert.IsTrue(a > 9000);
         }
 

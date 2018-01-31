@@ -115,7 +115,7 @@ namespace Figlotech.Core {
         }
 
         public static void Map(this Fi _selfie, object retv, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta, Dictionary<string, string> mapReplacements = null) {
-            if(preMeta == null) {
+            if (preMeta == null) {
                 preMeta = Fi.Tech.MapMeta(retv.GetType(), dr.Table);
             }
             var fields = preMeta.Item1;
@@ -125,7 +125,7 @@ namespace Figlotech.Core {
             foreach (var col in propercolumns) {
                 object o = dr[col.ColumnName];
                 string objField;
-                if(mapReplacements != null && mapReplacements.ContainsKey(col.ColumnName)) {
+                if (mapReplacements != null && mapReplacements.ContainsKey(col.ColumnName)) {
                     objField = mapReplacements[col.ColumnName];
                 } else {
                     objField = col.ColumnName;
@@ -810,13 +810,16 @@ namespace Figlotech.Core {
 
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", 2000, true) { MinWorkers = 12, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
 
-        public static WorkJob RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
+        public static WorkJob RunAndForget<T>(this Fi _selfie, String name, Func<T> job, Action<Exception> handler = null, Action<T> then = null) {
             return FiTechRAF.Enqueue(job, handler, then);
         }
 
-        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action then = null) {
+        public static WorkJob RunAndForget<T>(this Fi _selfie, Func<T> job, Action<Exception> handler = null, Action<T> then = null) {
             return RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
         }
+
+        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action<int> then = null)
+            => RunAndForget<int>(_selfie, "Anonymous_RunAndForget", () => { job.Invoke(); return 0; }, handler, then);
 
         public static byte[] GenerateKey(this Fi _selfie, string Str) {
             Random random = new Random(Fi.Tech.IntSeedFromString(Str));

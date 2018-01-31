@@ -272,10 +272,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             wq.Start();
-            wq.Stop();
+            wq.Stop().Wait();
         }
 
         int workedFiles = 0;
+
         private const string GZIP_FILE_SUFFIX = ".gz";
 
         private enum MirrorWay {
@@ -366,7 +367,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!isRecursing) {
 
                 wq.Start();
-                wq.Stop(true);
+                wq.Stop().Wait();
 
                 if (options.UseHashList) {
                     HashList.RemoveAll((f) =>
