@@ -182,14 +182,32 @@ namespace Figlotech.BDados.Helpers {
                 if (expr.NodeType == ExpressionType.Equal &&
                     CanGetValue(expr.Right) &&
                     GetValue(expr.Right).GetType() == typeof(string) &&
-                    (expr.Left is MemberExpression) &&
-                    (expr.Left as MemberExpression).Member.GetCustomAttribute<QueryComparisonAttribute>()?.Type == DataStringComparisonType.Containing
+                    (expr.Left is MemberExpression)
                 ) {
+                    var comparisonType = (expr.Left as MemberExpression).Member.GetCustomAttribute<QueryComparisonAttribute>()?.Type;
                     if (GetValue(expr.Right).GetType() == typeof(string)) {
                         strBuilder.Append("(");
                         strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
                         strBuilder.Append("LIKE");
-                        strBuilder.Append($"CONCAT('%', @{IntEx.GenerateShortRid()}, '%')", GetValue(expr.Right));
+                        var appendFragment = String.Empty;
+                        switch (comparisonType) {
+                            case DataStringComparisonType.Containing:
+                                appendFragment = $"CONCAT('%', @{IntEx.GenerateShortRid()}, '%')";
+                                break;
+                            case DataStringComparisonType.EndingWith:
+                                appendFragment = $"CONCAT('%', @{IntEx.GenerateShortRid()})";
+                                break;
+                            case DataStringComparisonType.StartingWith:
+                                appendFragment = $"CONCAT(@{IntEx.GenerateShortRid()}, '%')";
+                                break;
+                            case DataStringComparisonType.ExactValue:
+                                appendFragment = $"@{IntEx.GenerateShortRid()}";
+                                break;
+                            default:
+                                appendFragment = $"@{IntEx.GenerateShortRid()}";
+                                break;
+                        }
+                        strBuilder.Append(appendFragment, GetValue(expr.Right));
                         strBuilder.Append(")");
                     }
                 } else {
