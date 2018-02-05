@@ -100,6 +100,7 @@ namespace Figlotech.Core {
         private bool isPaused = false;
 
         int parallelSize = 1;
+        
 
         ThreadPriority _defaultWorkerPriority = ThreadPriority.Normal;
         public ThreadPriority DefaultWorkerPriority {
@@ -128,15 +129,18 @@ namespace Figlotech.Core {
 
         }
 
-        public void Stop(bool wait = true) {
+        public async Task Stop() {
             Active = false;
-            if (wait) {
-                _supervisor.Join();
-                while (workers.Count > 0) {
-                    workers[workers.Count - 1].Join();
-                }
-                workers.Clear();
+            _supervisor.Join();
+            while (workQueue.Count > 0) {
+                await Task.Delay(200);
             }
+            foreach (var a in workers) {
+                await Task.Run(() => {
+                    a.Join();
+                });
+            }
+            workers.Clear();
             isRunning = false;
         }
 
