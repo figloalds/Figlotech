@@ -308,7 +308,7 @@ namespace Figlotech.Core {
             var queuer = new WorkQueuer($"AnnonymousLiveQueuer", parallelSize);
             queuer.Start();
             act(queuer);
-            queuer.Stop();
+            queuer.Stop().Wait();
         }
         public void AccompanyJob(Action a, Action f = null, Action<Exception> e = null) {
             var wj = Enqueue(a, e, f);
@@ -334,7 +334,7 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
-            Stop();
+            Stop().Wait();
         }
     }
 }

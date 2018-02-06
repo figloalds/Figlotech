@@ -65,7 +65,7 @@ namespace Figlotech.BDados.Tests
                     });
                 });
             }
-            wq.Stop();
+            wq.Stop().Wait();
         }
 
         class sc : IMultiSerializableObject
@@ -178,7 +178,7 @@ namespace Figlotech.BDados.Tests
                     throw x;
                 });
             }
-            wq.Stop();
+            wq.Stop().Wait();
             Assert.IsTrue(a > 9000);
         }
 
