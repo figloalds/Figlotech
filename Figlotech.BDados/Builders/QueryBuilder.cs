@@ -64,6 +64,9 @@ namespace Figlotech.BDados.Builders {
             var sRetv = IntEx.GenerateShortRid();
             for (int i = 0; i < o.Count; i++) {
                 retv.Append($"@{paramId}", fn?.Invoke(o[i]));
+                if(i < o.Count - 1) {
+                    retv.Append(",");
+                }
             }
             retv.Append(")");
 
