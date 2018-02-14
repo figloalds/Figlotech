@@ -135,10 +135,8 @@ namespace Figlotech.Core {
             while (workQueue.Count > 0) {
                 await Task.Delay(200);
             }
-            foreach (var a in workers) {
-                await Task.Run(() => {
-                    a.Join();
-                });
+            while(workers.Count > 0) {
+                await Task.Run(()=> workers[0].Join());
             }
             workers.Clear();
             isRunning = false;
