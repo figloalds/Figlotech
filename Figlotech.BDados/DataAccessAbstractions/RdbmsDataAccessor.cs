@@ -1006,7 +1006,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public bool SaveRecordSet<T>(ConnectionInfo transaction, RecordSet<T> rs) where T : IDataObject, new() {
+        public bool SaveRecordSet<T>(ConnectionInfo transaction, RecordSet<T> rs, bool recoverIds = false) where T : IDataObject, new() {
             bool retv = true;
             if (rs.Count == 0)
                 return true;
@@ -1064,6 +1064,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             if(successfulSaves.Any()) {
+                if (recoverIds) {
+                    var q = this.Query(transaction, QueryGenerator.QueryIds(rs));
+                    foreach(DataRow dr in q.Rows) {
+                        try {
+                            successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = (Int64)dr[0];
+                        } catch(Exception x) {
+
+                        }
+                    }
+                }
                 Fi.Tech.RunAndForget(() => {
                     OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.Select(a => (IDataObject)a).ToList());
                 });
@@ -1111,12 +1121,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv > 0;
         }
 
-        public bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new() {
+        public bool SaveRecordSet<T>(RecordSet<T> rs, bool recoverIds = false) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
-                return SaveRecordSet<T>(CurrentTransaction, rs);
+                return SaveRecordSet<T>(CurrentTransaction, rs, recoverIds);
             }
             return Access((transaction) => {
-                return SaveRecordSet<T>(transaction, rs);
+                return SaveRecordSet<T>(transaction, rs, recoverIds);
             });
         }
 

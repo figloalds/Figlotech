@@ -43,5 +43,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
         IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd);
+        IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new();
     }
 }

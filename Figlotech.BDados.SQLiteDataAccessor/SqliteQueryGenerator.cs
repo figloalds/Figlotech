@@ -510,5 +510,11 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
             return new QbFmt(creationCommand);
         }
+        public IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new() {
+            var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+
+            return Qb.Fmt($"SELECT {id.Name}, {rid.Name} FROM {typeof(T).Name} WHERE") + Qb.In(rid.Name, rs, i => i.RID);
+        }
     }
 }

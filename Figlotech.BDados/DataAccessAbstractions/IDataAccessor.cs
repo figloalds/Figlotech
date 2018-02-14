@@ -22,7 +22,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Delete<T>(Expression<Func<T, bool>> condition) where T : IDataObject, new();
         bool Delete(IDataObject obj);
 
-        bool SaveRecordSet<T>(RecordSet<T> rs) where T : IDataObject, new();
+        bool SaveRecordSet<T>(RecordSet<T> rs, bool recoverIds = false) where T : IDataObject, new();
         bool SaveItem(IDataObject objeto);
 
         Type[] WorkingTypes { get; set; }
