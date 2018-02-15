@@ -1067,11 +1067,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (recoverIds) {
                     var q = this.Query(transaction, QueryGenerator.QueryIds(rs));
                     foreach(DataRow dr in q.Rows) {
-                        try {
-                            successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = (Int64)dr[0];
-                        } catch(Exception x) {
-
-                        }
+                        successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = Int64.Parse(dr[0] as String);
                     }
                 }
                 Fi.Tech.RunAndForget(() => {

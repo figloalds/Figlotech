@@ -1,8 +1,3 @@
-#!/bin/bash
-
-. /etc/init.d/functions
-
-# This awesome snippet was taken from John Kugelman response on StackOverflow
 # https://stackoverflow.com/a/5196220
 step() {
     echo -n "$@"
@@ -71,5 +66,3 @@ next
 step Packaging Figlotech.Core
 try dotnet pack Figlotech.ExcelUtil -o ..\_nupkg
 next 
-
-pause >nul
