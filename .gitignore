@@ -27,6 +27,7 @@ _nupkg
 [Ll]og/
 TestResult/
 Figlotech.BDados.Tests/
+.dist/
 
 # Visual Studio 2015 cache/options directory
 .vs/

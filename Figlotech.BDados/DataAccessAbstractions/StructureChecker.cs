@@ -512,8 +512,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (type.Name.ToLower() != col.Table.ToLower())
                             continue;
                         var colName = col.Name;
-                        if (field.Name == colName) {
+                        if (field.Name.ToLower() == colName.ToLower()) {
                             fieldExists = true;
+                            continue;
                         }
                     }
 
@@ -525,7 +526,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var colName = col.Name;
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
-                                if (ona.Name == colName && ona.Name != col.Name) {
+                                if (ona.Name.ToLower() == colName.ToLower()) {
                                     oldExists = true;
                                     foreach (var a in EvaluateForColumnDekeyal(type.Name, ona.Name, keys)) {
                                         yield return a;
@@ -1221,9 +1222,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (!found) {
                             bool renamed = false;
                             foreach (var old in oldNames) {
-                                if (old.Key == field.Name
-                                    && type.Name == tablName
-                                    ) {
+                                if (old.Key.ToLower() == field.Name.ToLower() && type.Name.ToLower() == tablName.ToLower()) {
                                     Benchmarker.Mark($"ACTION: Rename {old.Value} to {field.Name}");
                                     DekeyColumn(type.Name, old.Value, keys);
                                     Exec(DataAccessor.QueryGenerator.RenameColumn(type.Name, old.Value, GetColumnDefinition(field)));
