@@ -14,8 +14,8 @@ namespace Figlotech.Core {
         public DateTime Start;
         public WorkScheduler Parent;
 
-        public WorkSchedule(WorkScheduler parent, Action act, Action finished, Action<Exception> handle, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
-            Job = new WorkJob(act, finished, handle);
+        public WorkSchedule(WorkScheduler parent, Action act, Action<Exception> handle, Action finished, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
+            Job = new WorkJob<int>(() => { act(); return 0; }, handle, (a)=> { finished(); });
             Parent = parent;
             Start = start;
             Interval = interval;
@@ -55,7 +55,7 @@ namespace Figlotech.Core {
 
         public WorkSchedule OneTimeSched(DateTime dt, Action a, Action finished = null, Action<Exception> handler = null) {
             lock (schedules) {
-                var sched = new WorkSchedule(this, a, finished, handler, dt);
+                var sched = new WorkSchedule(this, a,handler, finished, dt);
                 schedules.Add(sched);
 
                 return sched;
@@ -63,7 +63,7 @@ namespace Figlotech.Core {
         }
         public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Action a, Action finished = null, Action<Exception> handler = null) {
             lock (schedules) {
-                var sched = new WorkSchedule(this, a, finished, handler, dt, true, interval);
+                var sched = new WorkSchedule(this, a, handler, finished, dt, true, interval);
                 schedules.Add(sched);
 
                 return sched;
@@ -74,35 +74,6 @@ namespace Figlotech.Core {
             if (Active || isRunning)
                 return;
             Active = true;
-            SchedulesThread = new Thread(() => {
-                while (Active) {
-                    lock (schedules) {
-                        for (int x = schedules.Count - 1; x >= 0; x--) {
-                            if (schedules[x].Start < DateTime.UtcNow) {
-                                var sched = schedules[x];
-                                schedules.RemoveAt(x);
-                                Fi.Tech.RunAndForget(
-                                    sched.Job.action, (ex) => {
-
-                                    }, () => {
-                                        if (sched.Repeat) {
-                                            sched.Start += sched.Interval;
-                                            schedules.Add(sched);
-                                        }
-                                        sched.Job.finished?.Invoke();
-                                    });
-                                break;
-                            }
-                        }
-                    }
-                    Thread.Sleep(1000);
-                }
-            });
-            SchedulesThread.Name = $"{Name}({QID})_sched";
-            SchedulesThread.IsBackground = true;
-            SchedulesThread.Priority = ThreadPriority.BelowNormal;
-            SchedulesThread.Start();
-            isRunning = true;
         }
 
         public void Stop(bool wait = true) {

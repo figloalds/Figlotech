@@ -104,5 +104,6 @@ namespace Figlotech.Extensions
             buff = (byte[]) method.Invoke(me, new Object[] { val });
             me.Write(buff, 0, len);
         }
+
     }
 }

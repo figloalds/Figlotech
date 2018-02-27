@@ -276,6 +276,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         int workedFiles = 0;
+
         private const string GZIP_FILE_SUFFIX = ".gz";
 
         private enum MirrorWay {

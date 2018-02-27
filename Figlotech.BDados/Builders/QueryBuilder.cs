@@ -32,7 +32,7 @@ namespace Figlotech.BDados.Builders {
         }
     }
     public class QueryParameter {
-        public object Value {get; private set; }
+        public object Value { get; private set; }
         public QueryParameter(object value) {
             this.Value = value;
         }
@@ -60,11 +60,11 @@ namespace Figlotech.BDados.Builders {
             if (!o.Any()) {
                 return Qb.Fmt(isIn ? "FALSE" : "TRUE");
             }
-            var retv = Qb.Fmt($"{column} {(isIn ? "IN" : "NOT IN" )} (");
+            var retv = Qb.Fmt($"{column} {(isIn ? "IN" : "NOT IN")} (");
             var sRetv = IntEx.GenerateShortRid();
             for (int i = 0; i < o.Count; i++) {
                 retv.Append($"@{paramId}", fn?.Invoke(o[i]));
-                if(i < o.Count - 1) {
+                if (i < o.Count - 1) {
                     retv.Append(",");
                 }
             }
@@ -147,7 +147,7 @@ namespace Figlotech.BDados.Builders {
         }
 
         public QueryBuilder AppendQuery(params object[] args) {
-            
+
             foreach (var a in args) {
                 if (a is String s) {
                     Append(s);
@@ -159,7 +159,7 @@ namespace Figlotech.BDados.Builders {
                     Append("@???", p.Value);
                 } else
                 if (a is QbIfParam ip) {
-                    Append("@???", ip.Condition?ip.Value:ip.ElseValue);
+                    Append("@???", ip.Condition ? ip.Value : ip.ElseValue);
                 } else {
                     Append("@???", a);
                 }
@@ -211,23 +211,23 @@ namespace Figlotech.BDados.Builders {
             return this;
         }
 
-        public IQueryBuilder Append(dynamic b) {
-            ObjectReflector or = new ObjectReflector(b);
-            var members = ReflectionTool.FieldsAndPropertiesOf(b.GetType());
-            var g = new QueryBuilder();
-            for (int i = 0; i < members.Count; i++) {
-                g.Append($"@{l}", or[members[i]]);
-                if (i < members.Count - 1) {
-                    g.Append(",");
-                }
-            }
+        //public IQueryBuilder Append(dynamic b) {
+        //    ObjectReflector or = b.AsReflectable();
+        //    var members = ReflectionTool.FieldsAndPropertiesOf(b.GetType());
+        //    var g = new QueryBuilder();
+        //    for (int i = 0; i < members.Count; i++) {
+        //        g.Append($"@{l}", or[members[i]]);
+        //        if (i < members.Count - 1) {
+        //            g.Append(",");
+        //        }
+        //    }
 
-            return this.Append(g);
-        }
+        //    return this.Append(g);
+        //}
 
-        public static QueryBuilder operator +(QueryBuilder a, dynamic b) {
-            return (QueryBuilder)a.Append(b);
-        }
+        //public static QueryBuilder operator +(QueryBuilder a, dynamic b) {
+        //    return (QueryBuilder)a.Append(b);
+        //}
 
         public static QueryBuilder operator +(QueryBuilder a, QueryBuilder b) {
             return (QueryBuilder)a.Append(b);
@@ -303,9 +303,9 @@ namespace Figlotech.BDados.Builders {
                 this._queryString.Append(" ");
                 this._queryString.Append(other.GetCommandText());
                 var otherParams = other.GetParameters();
-                for(int i = 0; i < otherParams.Count; i++) {
+                for (int i = 0; i < otherParams.Count; i++) {
                     var Param = otherParams.ElementAt(i);
-                    if(!this._objParams.ContainsKey(Param.Key)) {
+                    if (!this._objParams.ContainsKey(Param.Key)) {
                         this._objParams.Add(Param.Key, Param.Value);
                     }
                 }

@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
-using System.Dynamic;
 using System.Linq;
 using System.Reflection;
 
@@ -44,7 +43,7 @@ namespace Figlotech.Core.Helpers {
 
         public object this[String key] {
             get {
-                if (target is IDictionary<String, object> || target is ExpandoObject) {
+                if (target is IDictionary<String, object>) {
                     var t = (IDictionary<String, object>)target;
                     if (t.ContainsKey(key)) {
                         return ((Dictionary<String, object>)target)[key];
@@ -53,7 +52,7 @@ namespace Figlotech.Core.Helpers {
                 return ReflectionTool.GetValue(target, key);
             }
             set {
-                if (target is IDictionary<String, object> || target is ExpandoObject) {
+                if (target is IDictionary<String, object>) {
                     var t = (IDictionary<String, object>)target;
                     ((IDictionary<String, object>)target)[key] = value;
                     return;

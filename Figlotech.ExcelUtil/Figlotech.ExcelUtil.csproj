@@ -23,7 +23,7 @@
 
   <!-- NETSTANDARD REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="EPPlus.Core" Version="1.5.2" />
+    <PackageReference Include="EPPlus.Core" Version="1.5.4" />
   </ItemGroup>
   <!-- NET462 REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
