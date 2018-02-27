@@ -105,5 +105,14 @@ namespace Figlotech.Extensions
             me.Write(buff, 0, len);
         }
 
+        public static void Write(this Stream me, String text, Encoding encoding = null) {
+            if (encoding == null)
+                encoding = Encoding.UTF8;
+            var buff = encoding.GetBytes(text);
+            me.Write(buff, 0, buff.Length);
+        }
+        public static void WriteLine(this Stream me, String text, Encoding encoding = null) {
+            me.Write(text+"\n", encoding);
+        }
     }
 }
