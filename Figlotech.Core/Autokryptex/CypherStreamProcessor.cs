@@ -17,12 +17,11 @@ namespace Figlotech.Core.Autokryptex
 
         public void Process(Stream input, Action<Stream> act) {
             using (MemoryStream ms = new MemoryStream()) {
-                act(ms);
                 var bytes = ms.ToArray();
                 var cypheredBytes = _method.Encrypt(bytes);
                 using (MemoryStream output = new MemoryStream(cypheredBytes))
                 {
-                    output.CopyTo(input);
+                    act(output);
                 }
             }
         }

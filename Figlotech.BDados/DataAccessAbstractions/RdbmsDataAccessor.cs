@@ -17,6 +17,7 @@ using Figlotech.Core.BusinessModel;
 using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.BDados.Extensions;
 using System.Threading;
+using System.Diagnostics;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class ConnectionInfo {
@@ -137,7 +138,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public void BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             //lock (this) {
             if (this.CurrentTransaction == null) {
+                var stf = "";
                 WriteLog("Opening Transaction");
+                if (FiTechCoreExtensions.EnableDebug) {
+                    WriteLog(Environment.StackTrace);
+                }
                 var connection = Plugin.GetNewConnection();
                 OpenConnection(connection);
                 this.CurrentTransaction = new ConnectionInfo();

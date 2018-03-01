@@ -6,8 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex.EncryptMethods
-{
+namespace Figlotech.Core.Autokryptex.EncryptMethods {
     public class AesEncryptor : IEncryptionMethod {
         String instanceSecret;
         int instancePin;
@@ -44,21 +43,25 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
         }
 
         public byte[] Decrypt(byte[] en) {
-            Aes aes = Aes.Create();
-            aes.Key = Key;
-            aes.IV = IV;
-            en = aes.CreateDecryptor().TransformFinalBlock(en, 0, en.Length);
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin, instanceSecret);
-            return en;
+            using (Aes aes = Aes.Create()) {
+                aes.Key = Key;
+                aes.IV = IV;
+                using (var enc = aes.CreateDecryptor()) {
+                    en = enc.TransformFinalBlock(en, 0, en.Length);
+                }
+                return en;
+            }
         }
 
         public byte[] Encrypt(byte[] en) {
-            Aes aes = Aes.Create();
-            aes.Key = Key;
-            aes.IV = IV;
-            en = aes.CreateEncryptor().TransformFinalBlock(en, 0, en.Length);
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin, instanceSecret);
-            return en;
+            using (Aes aes = Aes.Create()) {
+                aes.Key = Key;
+                aes.IV = IV;
+                using (var enc = aes.CreateEncryptor()) {
+                    en = enc.TransformFinalBlock(en, 0, en.Length);
+                }
+                return en;
+            }
         }
 
     }

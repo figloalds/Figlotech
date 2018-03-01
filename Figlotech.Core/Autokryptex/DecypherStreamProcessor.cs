@@ -22,6 +22,7 @@ namespace Figlotech.Core.Autokryptex
                 var bytes = ms.ToArray();
                 var cypheredBytes = _method.Decrypt(bytes);
                 using (MemoryStream output = new MemoryStream(cypheredBytes)) {
+
                     act(output);
                 }
             }

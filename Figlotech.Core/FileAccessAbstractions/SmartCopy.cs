@@ -272,7 +272,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             wq.Start();
-            wq.Stop().Wait();
+            wq.Stop();
         }
 
         int workedFiles = 0;
@@ -367,7 +367,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!isRecursing) {
 
                 wq.Start();
-                wq.Stop().Wait();
+                wq.Stop();
 
                 if (options.UseHashList) {
                     HashList.RemoveAll((f) =>

@@ -6,6 +6,7 @@ using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -112,6 +113,27 @@ namespace Figlotech.BDados {
         /// </summary>
         /// <param name="valor"></param>
         /// <returns></returns>
+
+        public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader) where T : new() {
+            var cols = new string[reader.FieldCount];
+            for (int i = 0; i < cols.Length; i++)
+                cols[i] = reader.GetName(i);
+            var refl = new ObjectReflector();
+            while (reader.Read()) {
+                T obj = new T();
+                refl.Slot(obj);
+                for (int i = 0; i < cols.Length; i++) {
+                    var o = reader.GetValue(i);
+                    if (o is string str) {
+                        refl[cols[i]] = reader.GetString(i);
+                    } else {
+                        refl[cols[i]] = o;
+                    }
+                }
+                yield return (T) refl.Retrieve();
+            }
+            yield break;
+        }
 
         public static String CheapSanitize(this Fi _selfie, Object valor) {
             String valOutput;
@@ -409,7 +431,7 @@ namespace Figlotech.BDados {
             } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
-                        type = $"VARCHAR({(info.Size > 0? info.Size : 128)})";
+                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
                         break;
                     case "int":
                     case "int32":

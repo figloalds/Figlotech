@@ -15,7 +15,7 @@ namespace Figlotech.Core {
         public WorkScheduler Parent;
 
         public WorkSchedule(WorkScheduler parent, Action act, Action<Exception> handle, Action finished, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
-            Job = new WorkJob<int>(() => { act(); return 0; }, handle, (a)=> { finished(); });
+            Job = new WorkJob(() => { act(); }, handle, ()=> { finished(); });
             Parent = parent;
             Start = start;
             Interval = interval;
