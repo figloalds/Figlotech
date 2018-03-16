@@ -340,7 +340,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public abstract class AbstractIStructureCheckNecessaryAction : IStructureCheckNecessaryAction {
-        protected IRdbmsDataAccessor DataAccessor;
+        public IRdbmsDataAccessor DataAccessor { get; set; }
         public AbstractIStructureCheckNecessaryAction(IRdbmsDataAccessor dataAccessor) {
             DataAccessor = dataAccessor;
         }
@@ -356,6 +356,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
     public interface IStructureCheckNecessaryAction {
+        IRdbmsDataAccessor DataAccessor { get; set; }
         int Execute();
     }
 

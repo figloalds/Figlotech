@@ -15,6 +15,8 @@ namespace Figlotech.ExcelUtil
 
         public int LineNumber => line;
 
+        public bool IsLast => line == excelator.NumRows;
+
         public ExcelatorLineReader(int ln, Excelator parent) {
             line = ln;
             excelator = parent;

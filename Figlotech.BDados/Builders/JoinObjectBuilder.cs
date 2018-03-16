@@ -23,6 +23,7 @@ using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core.BusinessModel;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace Figlotech.BDados.Builders {
     public class JoinObjectBuilder : IJoinBuilder
@@ -61,7 +62,7 @@ namespace Figlotech.BDados.Builders {
             return _join;
         }
 
-        public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int p = 1, int limit = 200, IQueryBuilder conditionsRoot = null) {
+        public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = null, int? limit = null, IQueryBuilder conditionsRoot = null) {
             return generator.GenerateJoinQuery(_join, conditions, p, limit, orderingMember, otype, conditionsRoot);
         }
 

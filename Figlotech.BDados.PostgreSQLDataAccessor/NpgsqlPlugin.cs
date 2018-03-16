@@ -1,5 +1,4 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using MySql.Data.MySqlClient;
 using System;
 using System.Data;
 using System.Collections.Generic;
@@ -10,21 +9,21 @@ using System.Reflection;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados;
 using System.Text.RegularExpressions;
+using Npgsql;
 
-namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlPlugin : IRdbmsPluginAdapter {
-        public MySqlPlugin(MySqlPluginConfiguration cfg) {
+namespace Figlotech.BDados.NpgsqlDataAccessor {
+    public class NpgsqlPlugin : IRdbmsPluginAdapter {
+        public NpgsqlPlugin(NpgsqlPluginConfiguration cfg) {
             Config = cfg;
         }
 
-        public MySqlPlugin() {
-
+        public NpgsqlPlugin() {
         }
 
-        IQueryGenerator queryGenerator = new MySqlQueryGenerator();
+        IQueryGenerator queryGenerator = new NpgsqlQueryGenerator();
         public IQueryGenerator QueryGenerator => queryGenerator;
 
-        public MySqlPluginConfiguration Config { get; set; }
+        public NpgsqlPluginConfiguration Config { get; set; }
 
         public bool ContinuousConnection => Config.ContinuousConnection;
 
@@ -33,7 +32,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public string SchemaName => Config.Database;
 
         public IDbConnection GetNewConnection() {
-            return new MySqlConnection(Config.GetConnectionString());
+            return new NpgsqlConnection(Config.GetConnectionString());
         }
 
         static long idGen = 0;
@@ -160,7 +159,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             join.Relations = ValidateRelations(join);
             transaction?.Benchmarker?.Mark("Execute Query");
             lock (command) {
-                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                using (var reader = (command as NpgsqlCommand).ExecuteReader()) {
                     transaction?.Benchmarker?.Mark("--");
                     var fieldNames = new string[reader.FieldCount];
                     for (int i = 0; i < fieldNames.Length; i++)
@@ -231,7 +230,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var refl = new ObjectReflector();
             List<T> retv = new List<T>();
             lock (command) {
-                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                using (var reader = (command as NpgsqlCommand).ExecuteReader()) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
@@ -258,7 +257,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public DataSet GetDataSet(IDbCommand command) {
             lock (command) {
-                using (var reader = (command as MySqlCommand).ExecuteReader()) {
+                using (var reader = (command as NpgsqlCommand).ExecuteReader()) {
                     DataTable dt = new DataTable();
                     for (int i = 0; i < reader.FieldCount; i++) {
                         dt.Columns.Add(new DataColumn(reader.GetName(i)));
@@ -286,7 +285,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public void SetConfiguration(IDictionary<string, object> settings) {
-            Config = new MySqlPluginConfiguration();
+            Config = new NpgsqlPluginConfiguration();
             ObjectReflector o = new ObjectReflector(Config);
             foreach (var a in settings) {
                 o[a.Key] = a.Value;

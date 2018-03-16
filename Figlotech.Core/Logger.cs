@@ -43,7 +43,7 @@ namespace Figlotech.Core {
                 Debug.WriteLine(log);
                 Fi.Tech.RunAndForget(() => {
                     if (EnableConsoleLogging)
-                        Fi.Tech.WriteLine(log);
+                        Console.Error.WriteLine(log);
                     log = Regex.Replace(log, @"\s+", " ");
                     lock ("BDADOS_LOG_LOCK") {
                         String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
@@ -87,7 +87,7 @@ namespace Figlotech.Core {
                         var y = x;
                         while (y != null) {
                             if (EnableConsoleLogging)
-                                Fi.Tech.WriteLine(y.Message);
+                                Console.Error.WriteLine(y.Message);
                             y = y.InnerException;
                         }
                         try {

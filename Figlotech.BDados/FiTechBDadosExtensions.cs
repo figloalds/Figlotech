@@ -146,10 +146,10 @@ namespace Figlotech.BDados {
                 case "string":
                     if (valor.ToString() == "CURRENT_TIMESTAMP")
                         return "CURRENT_TIMESTAMP";
-                    valOutput = ((String)valor);
-                    valOutput = valOutput.Replace("\\", "\\\\");
-                    valOutput = valOutput.Replace("\'", "\\\'");
-                    valOutput = valOutput.Replace("\"", "\\\"");
+                    var invalid = new char[] { (char) 0x0, '\n', '\r', '\\', '\'', (char) 0x1a };
+                    valOutput = String.Join(string.Empty, (valor as string).Select(a=>
+                        invalid.Contains(a) ? $"\\{a}" : $"{a}"
+                    ));
                     return $"'{valOutput}'";
                 case "float":
                 case "double":

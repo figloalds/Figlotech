@@ -1,8 +1,8 @@
 ﻿
 /**
- * Figlotech.BDados.Builders.SqliteQueryGenerator
- * Sqlite implementation for IQueryGEnerator, used by the SqliteDataAccessor
- * For generating SQL Queries.
+ * Figlotech.BDados.Builders.NpgsqlQueryGenerator
+ * This is a blatant copy from MySQL Query Generator
+ * Will fix in time, maybe.
  * 
  * @Author: Felype Rennan Alves dos Santos
  * August/2014
@@ -24,9 +24,10 @@ using Figlotech.Core;
 using System.Text.RegularExpressions;
 using Figlotech.BDados.Builders;
 using Figlotech.Core.Helpers;
+using System.Diagnostics;
 
-namespace Figlotech.BDados.SqliteDataAccessor {
-    public class SqliteQueryGenerator : IQueryGenerator {
+namespace Figlotech.BDados.NpgsqlDataAccessor {
+    public class NpgsqlQueryGenerator : IQueryGenerator {
 
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
@@ -99,7 +100,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return retv;
         }
 
-        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, int? skip = 1, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null) {
+        public IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder conditions, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null) {
             if (condicoesRoot == null)
                 condicoesRoot = new QbFmt("true");
             if (juncaoInput.Joins.Count < 1)
@@ -168,7 +169,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             //Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
             }
             Query.Append($") AS {aliases[0]}\n");
             //if (!condicoesRoot.IsEmpty) {
@@ -219,7 +220,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
             }
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {aliases[0]}.{orderingMember.Name} {(otype == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {aliases[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
             }
             if (limit != null) {
                 Query.Append($"LIMIT");
@@ -236,17 +237,21 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 }
                 var onClause = ArgsJuncoes[i];
                 onClause = onClause.Replace($"{aliases[i]}.", "##**##");
+
                 var m = Regex.Match(onClause, "(\\w+)\\.").Groups[0].Value;
                 if (capPrefixes.Contains(m.Replace(".", ""))) {
                     onClause = Regex.Replace(onClause, "(\\w+)\\.", "sub.$1_");
                 }
+
                 if (capPrefixes.Contains(aliases[i])) {
                     onClause = onClause.Replace("##**##", $"sub.{aliases[i]}_");
                 } else {
                     onClause = onClause.Replace("##**##", $"{aliases[i]}.");
                 }
+
                 Query.Append($"\t{joinTypes[i].ToString().Replace('_', ' ').ToUpper()} JOIN {tableNames[i]} AS {aliases[i]} ON {onClause}\n");
             }
+
             return Query;
         }
 
@@ -264,16 +269,17 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
+            var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name);
             Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name)}"));
+            Query.Append(String.Format($"FROM {type.Name} AS { alias }"));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
             }
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc ? "ASC" : "DESC")}");
+                Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
             if(limit != null || skip != null) {
                 Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");
@@ -372,7 +378,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT IGNORE INTO {typeof(T).Name} (");
+            Query.Append($"INSERT INTO {typeof(T).Name} (");
             Query.Append(GenerateFieldsString(typeof(T), OmmitPk));
             Query.Append(") VALUES");
             // -- 
@@ -436,7 +442,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
         }
         public IQueryBuilder DropUnique(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP UNIQUE CONSTRAINT {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint};");
         }
         public IQueryBuilder DropIndex(string target, string constraint) {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP INDEX {constraint};");
@@ -453,7 +459,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column});");
         }
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column}), ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
         }
 
         public IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName) {
@@ -473,7 +479,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
-            if (!isNullable) {
+            if(!isNullable) {
                 return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
                 return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
@@ -510,7 +516,8 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
             return new QbFmt(creationCommand);
         }
-        public IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new() {
+
+        public IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new () {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
 

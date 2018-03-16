@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27130.2027
+VisualStudioVersion = 15.0.27130.2036
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados", "Figlotech.BDados\Figlotech.BDados.csproj", "{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}"
 EndProject
@@ -12,6 +12,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.ExcelUtil", "Figlotech.ExcelUtil\Figlotech.ExcelUtil.csproj", "{394EA7B2-090B-4A2C-B885-72386735226E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.SqliteDataAccessor", "Figlotech.BDados.SQLiteDataAccessor\Figlotech.BDados.SqliteDataAccessor.csproj", "{3A643DFA-70F1-423E-97D9-30C2D182AFF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.BDados.PgSQLDataAccessor", "Figlotech.BDados.PostgreSQLDataAccessor\Figlotech.BDados.PgSQLDataAccessor.csproj", "{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3A643DFA-70F1-423E-97D9-30C2D182AFF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

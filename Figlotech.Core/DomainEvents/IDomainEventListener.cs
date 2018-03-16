@@ -11,7 +11,7 @@ namespace Figlotech.Core.DomainEvents
     }
     public interface IDomainEventListener<T> : IDomainEventListener where T: IDomainEvent
     {
-        void OnEventTriggered(T evt);
-        void OnEventHandlingError(Exception x);
+        Task OnEventTriggered(T evt);
+        Task OnEventHandlingError(Exception x);
     }
 }

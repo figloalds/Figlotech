@@ -12,19 +12,23 @@ namespace Figlotech.Core.DomainEvents {
     }
 
     public class InlineLambdaListener<T> : IDomainEventListener<T> where T : IDomainEvent {
-        public Action<T> OnRaise;
-        public Action<Exception> OnHandle;
-        public InlineLambdaListener(Action<T> action, Action<Exception> handler) {
+        public Func<T, Task> OnRaise;
+        public Func<Exception, Task> OnHandle;
+        public InlineLambdaListener(Func<T, Task> action, Func<Exception, Task> handler) {
             OnRaise = action;
             OnHandle = handler;
         }
-        
-        public void OnEventTriggered(T evt) {
-            OnRaise?.Invoke(evt);
+        public InlineLambdaListener(Action<T> action, Action<Exception> handler) {
+            OnRaise = (a) => { action?.Invoke(a); return null; };
+            OnHandle = (a) => { handler?.Invoke(a); return null; };
         }
 
-        public void OnEventHandlingError(Exception x) {
-            OnHandle?.Invoke(x);
+        public Task OnEventTriggered(T evt) {
+            return OnRaise?.Invoke(evt);
+        }
+
+        public Task OnEventHandlingError(Exception x) {
+            return OnHandle?.Invoke(x);
         }
 
         private DomainEventsHub _registeredHub = null;

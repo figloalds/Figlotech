@@ -46,14 +46,20 @@ namespace Figlotech.Core.DomainEvents {
             Listeners.RemoveAll(l => l == null);
             foreach (var listener in Listeners) {
                 if (listener is IDomainEventListener<T> correctListener) {
-                    EventTasks.Add(Task.Run(() => {
+                    EventTasks.Add(Task.Run(async () => {
                         try {
-                            correctListener.OnEventTriggered(domainEvent);
-                            if(domainEvent.AllowPropagation) {
+                            var t = correctListener.OnEventTriggered(domainEvent);
+                            if(t != null) {
+                                await t;
+                            }
+                            if (domainEvent.AllowPropagation) {
                                 parentHub?.Raise(domainEvent);
                             }
                         } catch (Exception x) {
-                            correctListener.OnEventHandlingError(x);
+                            var t = correctListener.OnEventHandlingError(x);
+                            if (t != null) {
+                                await t;
+                            }
                         }
                     }));
                 }

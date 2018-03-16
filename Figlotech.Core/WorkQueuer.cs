@@ -131,9 +131,11 @@ namespace Figlotech.Core {
         public void Stop(bool wait = true) {
             Active = false;
             if (wait) {
-                _supervisor.Join();
+                //_supervisor.Join();
                 while (workers.Count > 0) {
-                    workers[workers.Count - 1].Join();
+                    if(workers[workers.Count-1].IsAlive) {
+                        workers[workers.Count - 1].Join();
+                    }
                 }
                 workers.Clear();
             }
@@ -250,7 +252,7 @@ namespace Figlotech.Core {
                             } catch (Exception x) {
                                 job.completed = DateTime.Now;
                                 Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                                job?.handling?.Invoke(x);
+                                job?.handling?.Invoke(new Exception("Error executing WorkJob: {x.Message}", x));
                             }
                             job.status = WorkJobStatus.Finished;
                             WorkDone++;
@@ -287,15 +289,15 @@ namespace Figlotech.Core {
         }
 
         private void InitSupervisor() {
-            if (_supervisor == null ||
-               _supervisor.ThreadState == ThreadState.Aborted ||
-               _supervisor.ThreadState == ThreadState.Stopped) {
-                _supervisor = new Thread(() => SupervisorJob());
-                _supervisor.Name = $"FTWQ_{Name}_supervisor";
-                _supervisor.IsBackground = true;
-                _supervisor.Priority = ThreadPriority.BelowNormal;
-                _supervisor.Start();
-            }
+            //if (_supervisor == null ||
+            //   _supervisor.ThreadState == ThreadState.Aborted ||
+            //   _supervisor.ThreadState == ThreadState.Stopped) {
+            //    _supervisor = new Thread(() => SupervisorJob());
+            //    _supervisor.Name = $"FTWQ_{Name}_supervisor";
+            //    _supervisor.IsBackground = true;
+            //    _supervisor.Priority = ThreadPriority.BelowNormal;
+            //    _supervisor.Start();
+            //}
         }
 
         public static void Live(Action<WorkQueuer> act, int parallelSize = -1) {

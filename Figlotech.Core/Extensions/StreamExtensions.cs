@@ -84,6 +84,10 @@ namespace Figlotech.Extensions
         }
 
         public static void Write<T>(this Stream me, T val) {
+            if(val is String || val is string) {
+                Write(me, val as String, Encoding.UTF8);
+                return;
+            }
             Action err = () => {
                 var supportedTypes = String.Join(", ", AllowedTypes.Select(t => t.Name));
                 throw new ArgumentException($"Generic type {typeof(T).Name} for FiStreamExtensions.Read<T> is invalid, supported types are: { supportedTypes }");

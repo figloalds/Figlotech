@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
+using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -19,23 +20,25 @@ namespace Figlotech.Core.Extensions {
         public static void ToJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
+            using (var ms = new MemoryStream()) {
+                var json = JsonConvert.SerializeObject(obj, options.Formatted ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
 
-            var StreamOptions = GetSaveStreamOptions(options);
-            StreamOptions
-                .Process(rawStream, (usableStream) => {
+                ms.Write(json);
+                ms.Seek(0, SeekOrigin.Begin);
 
-                    var json = JsonConvert.SerializeObject(obj, options.Formatted? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
-                    using (var writter = new StreamWriter(usableStream, Encoding.UTF8)) {
-                        writter.Write(json);
-                    }
-                });
+                var StreamOptions = GetSaveStreamOptions(options);
+                StreamOptions
+                    .Process(ms, (usableStream) => {
+                        usableStream.CopyTo(rawStream);
+                    });
+            }
         }
 
-        public static void ToJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+        public static void ToJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
             //lock(obj) {
-                fs.Write(fileName, fstream => {
-                    obj.ToJson(fstream, options);
-                });
+            fs.Write(fileName, fstream => {
+                obj.ToJson(fstream, options);
+            });
             //}
         }
 
@@ -61,34 +64,30 @@ namespace Figlotech.Core.Extensions {
                 });
         }
 
-        public static void FromJsonFile(this IMultiSerializableObject obj,IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+        public static void FromJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
             //lock(obj) {
-                fs.Read(fileName, fstream => {
-                    obj.FromJson(fstream, options);
-                });
+            fs.Read(fileName, fstream => {
+                obj.FromJson(fstream, options);
+            });
             //}
         }
 
         private static IStreamProcessor GetSaveStreamOptions(FTHSerializableOptions options) {
             var retv = new BatchStreamProcessor();
-            if (options?.UseEncryption != null)
-            {
-                retv.Add(new CypherStreamProcessor(options.UseEncryption));
-            }
-            if (options?.UseGzip ?? false)
-            {
+            if (options?.UseGzip ?? false) {
                 retv.Add(new GzipCompressStreamProcessor());
+            }
+            if (options?.UseEncryption != null) {
+                retv.Add(new CypherStreamProcessor(options.UseEncryption));
             }
             return retv;
         }
         private static IStreamProcessor GetOpenStreamOptions(FTHSerializableOptions options) {
             var retv = new BatchStreamProcessor();
-            if (options?.UseEncryption != null)
-            {
+            if (options?.UseEncryption != null) {
                 retv.Add(new DecypherStreamProcessor(options.UseEncryption));
             }
-            if (options?.UseGzip ?? false)
-            {
+            if (options?.UseGzip ?? false) {
                 retv.Add(new GzipDecompressStreamProcessor());
             }
             return retv;
@@ -100,27 +99,31 @@ namespace Figlotech.Core.Extensions {
 
             var StreamOptions = GetSaveStreamOptions(options);
 
-            StreamOptions
-                .Process(rawStream, (usableStream) => {
-                    
-                    XmlSerializer xsSubmit = new XmlSerializer(obj.GetType());
-                    var xml = "";
+            using (var ms = new MemoryStream()) {
 
-                    using (var sww = new StringWriter()) {
+                XmlSerializer xsSubmit = new XmlSerializer(obj.GetType());
+                var xml = "";
 
-                        using (XmlTextWriter writer = new XmlTextWriter(sww)) {
-                            if(options.Formatted) {
-                                writer.Formatting = System.Xml.Formatting.Indented;
-                                writer.Indentation = 4;
-                            }
-                            xsSubmit.Serialize(writer, obj);
-                            xml = sww.ToString();
-                            using (var sw = new StreamWriter(usableStream, Encoding.UTF8)) {
-                                sw.Write(xml);
-                            }
+                using (var sww = new StringWriter()) {
+
+                    using (XmlTextWriter writer = new XmlTextWriter(sww)) {
+                        if (options.Formatted) {
+                            writer.Formatting = System.Xml.Formatting.Indented;
+                            writer.Indentation = 4;
+                        }
+                        xsSubmit.Serialize(writer, obj);
+                        xml = sww.ToString();
+                        using (var sw = new StreamWriter(ms, Encoding.UTF8)) {
+                            sw.Write(xml);
+                            ms.Seek(0, SeekOrigin.Begin);
+                            StreamOptions
+                                .Process(ms, (usableStream) => {
+                                    usableStream.CopyTo(rawStream);
+                                });
                         }
                     }
-                });
+                }
+            }
         }
 
         public static void ToXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {

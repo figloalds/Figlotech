@@ -1147,7 +1147,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
             query.Append($"{id} IN (SELECT tba_{id} as {id} FROM (");
             query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
-            query.Append(") sub)");
+            query.Append(") as outmost )");
             retv = Execute(transaction, query) > 0;
             return retv;
         }

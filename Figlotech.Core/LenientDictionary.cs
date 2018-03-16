@@ -20,6 +20,12 @@ namespace Figlotech.Core
                 _dmmy[key] = value;
             }
         }
+        public static implicit operator Dictionary<TKey, TValue>(LenientDictionary<TKey, TValue> a) {
+            return a._dmmy;
+        }
+        public static implicit operator LenientDictionary<TKey, TValue>(Dictionary<TKey, TValue> a) {
+            return new LenientDictionary<TKey, TValue>() { _dmmy = a };
+        }
 
         public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys;
 

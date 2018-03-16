@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
+using System.Diagnostics;
 
 namespace Figlotech.BDados.Helpers {
     public class ConditionParser {
@@ -99,8 +100,12 @@ namespace Figlotech.BDados.Helpers {
             String rootType = "";
             Expression subexp = expression;
             while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression)
+                if (subexp is MemberExpression) {
                     subexp = (subexp as MemberExpression).Expression;
+                }
+            }
+            if (subexp is UnaryExpression un && subexp.NodeType == ExpressionType.Convert) {
+                subexp = un.Operand;
             }
             rootType = subexp.Type.Name;
             int i = -1;
