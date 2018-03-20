@@ -29,10 +29,12 @@ namespace Figlotech.BDados.Helpers {
         private String GetPrefixOfExpression(Expression expression) {
             if (expression == null)
                 return "";
-            if(expression is ParameterExpression p) {
+            if (expression is UnaryExpression u) {
+                return GetPrefixOfExpression(u.Operand);
+            }
+            if (expression is ParameterExpression p) {
                 return prefixer.GetAliasFor("root", p.Type.Name, String.Empty);
             }
-
             var exp = (expression as MemberExpression).Expression;
             var agT = exp.Type;
             Expression subexp = expression;
