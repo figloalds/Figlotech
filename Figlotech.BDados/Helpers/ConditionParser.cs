@@ -26,97 +26,109 @@ namespace Figlotech.BDados.Helpers {
             prefixer = prefixMaker;
         }
 
-        private String GetPrefixOfFarField(Expression expression, AggregateFarFieldAttribute info) {
+        private String GetPrefixOfExpression(Expression expression) {
             if (expression == null)
                 return "";
-            var s = expression.ToString().Split('.');
-            String rootType = "";
+            if(expression is ParameterExpression p) {
+                return prefixer.GetAliasFor("root", p.Type.Name, String.Empty);
+            }
+
+            var exp = (expression as MemberExpression).Expression;
+            var agT = exp.Type;
             Expression subexp = expression;
+            var thisAlias = prefixer.GetAliasFor("root", agT.Name, String.Empty);
             while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression)
-                    subexp = (subexp as MemberExpression).Expression;
-            }
-            rootType = subexp.Type.Name;
-            int i = -1;
-            var thisAlias = "root";
-            s[0] = rootType;
-            while (++i < s.Length - 1) {
-                thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-            }
-            thisAlias = prefixer.GetAliasFor(thisAlias, info.ImediateKey);
-            thisAlias = prefixer.GetAliasFor(thisAlias, info.FarKey);
-
-            return thisAlias;
-        }
-
-        private String GetPrefixOfAgField(Expression expression, AggregateFieldAttribute info) {
-            if (expression == null)
-                return "";
-            var s = expression.ToString().Split('.');
-            String rootType = "";
-            Expression subexp = expression;
-            while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression)
-                    subexp = (subexp as MemberExpression).Expression;
-            }
-            rootType = subexp.Type.Name;
-            int i = -1;
-            var thisAlias = "root";
-            s[0] = rootType;
-            while (++i < s.Length - 1) {
-                thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-            }
-            thisAlias = prefixer.GetAliasFor(thisAlias, info.ObjectKey);
-
-            return thisAlias;
-        }
-
-        private String GetPrefixOfAgObj(Expression expression, AggregateObjectAttribute info) {
-            if (expression == null)
-                return "";
-            var s = expression.ToString().Split('.');
-            String rootType = "";
-            Expression subexp = expression;
-            while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression)
-                    subexp = (subexp as MemberExpression).Expression;
-            }
-            rootType = subexp.Type.Name;
-            int i = -1;
-            var thisAlias = "root";
-            s[0] = rootType;
-            while (++i < s.Length - 1) {
-                thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-            }
-            thisAlias = prefixer.GetAliasFor(thisAlias, s[s.Length - 1]);
-
-            return thisAlias;
-        }
-
-        private String GetPrefixOf(Expression expression) {
-            if (expression == null)
-                return "";
-            var s = expression.ToString().Split('.');
-            String rootType = "";
-            Expression subexp = expression;
-            while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression) {
+                if (subexp is MemberExpression smex) {
+                    var mt = ReflectionTool.GetTypeOf(smex.Member);
+                    var f1 = smex.Member.GetCustomAttribute<AggregateFieldAttribute>();
+                    var f2 = smex.Member.GetCustomAttribute<AggregateObjectAttribute>();
+                    var f3 = smex.Member.GetCustomAttribute<AggregateFarFieldAttribute>();
+                    var f4 = smex.Member.GetCustomAttribute<AggregateListAttribute>();
+                    if(f1 != null) {
+                        thisAlias = prefixer.GetAliasFor(thisAlias, f1.RemoteObjectType.Name, f1.ObjectKey);
+                    } else if (f2 != null) {
+                        thisAlias = prefixer.GetAliasFor(thisAlias, mt.Name, f2.ObjectKey);
+                    } else if (f3 != null) {
+                        thisAlias = prefixer.GetAliasFor(thisAlias, f3.ImediateType.Name, f3.ImediateKey);
+                        thisAlias = prefixer.GetAliasFor(thisAlias, f3.FarType.Name, f3.FarKey);
+                    } else if (f4 != null) {
+                        thisAlias = prefixer.GetAliasFor(thisAlias, f4.RemoteObjectType.Name, f4.RemoteField);
+                    }
                     subexp = (subexp as MemberExpression).Expression;
                 }
             }
-            if (subexp is UnaryExpression un && subexp.NodeType == ExpressionType.Convert) {
-                subexp = un.Operand;
-            }
-            rootType = subexp.Type.Name;
-            int i = -1;
-            var thisAlias = "root";
-            s[0] = rootType;
-            while (++i < s.Length) {
-                thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-            }
 
             return thisAlias;
         }
+
+        //private String GetPrefixOfAgField(Expression expression, AggregateFieldAttribute info) {
+        //    if (expression == null)
+        //        return "";
+        //    var s = expression.ToString().Split('.');
+        //    String rootType = "";
+        //    Expression subexp = expression;
+        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
+        //        if (subexp is MemberExpression)
+        //            subexp = (subexp as MemberExpression).Expression;
+        //    }
+        //    rootType = subexp.Type.Name;
+        //    int i = -1;
+        //    var thisAlias = "root";
+        //    s[0] = rootType;
+        //    while (++i < s.Length - 1) {
+        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
+        //    }
+        //    thisAlias = prefixer.GetAliasFor(thisAlias, info.ObjectKey);
+
+        //    return thisAlias;
+        //}
+
+        //private String GetPrefixOfAgObj(Expression expression, AggregateObjectAttribute info) {
+        //    if (expression == null)
+        //        return "";
+        //    var s = expression.ToString().Split('.');
+        //    String rootType = "";
+        //    Expression subexp = expression;
+        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
+        //        if (subexp is MemberExpression)
+        //            subexp = (subexp as MemberExpression).Expression;
+        //    }
+        //    rootType = subexp.Type.Name;
+        //    int i = -1;
+        //    var thisAlias = "root";
+        //    s[0] = rootType;
+        //    while (++i < s.Length - 1) {
+        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
+        //    }
+        //    thisAlias = prefixer.GetAliasFor(thisAlias, s[s.Length - 1]);
+
+        //    return thisAlias;
+        //}
+
+        //private String GetPrefixOf(Expression expression) {
+        //    if (expression == null)
+        //        return "";
+        //    var s = expression.ToString().Split('.');
+        //    String rootType = "";
+        //    Expression subexp = expression;
+        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
+        //        if (subexp is MemberExpression) {
+        //            subexp = (subexp as MemberExpression).Expression;
+        //        }
+        //    }
+        //    if (subexp is UnaryExpression un && subexp.NodeType == ExpressionType.Convert) {
+        //        subexp = un.Operand;
+        //    }
+        //    rootType = subexp.Type.Name;
+        //    int i = -1;
+        //    var thisAlias = "root";
+        //    s[0] = rootType;
+        //    while (++i < s.Length) {
+        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
+        //    }
+
+        //    return thisAlias;
+        //}
 
 
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
@@ -156,20 +168,20 @@ namespace Figlotech.BDados.Helpers {
 
             if (foofun is BinaryExpression) {
                 var expr = foofun as BinaryExpression;
-                if (!fullConditions) {
-                    var mexp = expr.Left as MemberExpression;
-                    Expression subexp = mexp;
-                    while (subexp is MemberExpression && (subexp as MemberExpression).Expression != null)
-                        subexp = (subexp as MemberExpression).Expression;
-                    if (subexp is ParameterExpression) {
-                        // If this member belongs to an AggregateField, then problems problems...
-                        var aList = new List<MemberInfo>();
-                        aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == mexp.Member.Name));
-                        if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
-                            return new QbFmt("TRUE");
-                        }
-                    }
-                }
+                //if (!fullConditions) {
+                //    var mexp = expr.Left as MemberExpression;
+                //    Expression subexp = mexp;
+                //    while (subexp is MemberExpression && (subexp as MemberExpression).Expression != null)
+                //        subexp = (subexp as MemberExpression).Expression;
+                //    if (subexp is ParameterExpression) {
+                //        // If this member belongs to an AggregateField, then problems problems...
+                //        var aList = new List<MemberInfo>();
+                //        aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == mexp.Member.Name));
+                //        if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
+                //            return new QbFmt("TRUE");
+                //        }
+                //    }
+                //}
                 if (expr.NodeType == ExpressionType.Equal &&
                     expr.Right is ConstantExpression && (expr.Right as ConstantExpression).Value == null) {
                     strBuilder.Append("(");
@@ -245,11 +257,11 @@ namespace Figlotech.BDados.Helpers {
                     // If this member belongs to an AggregateField, then problems problems...
                     var aList = new List<MemberInfo>();
                     aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == expr.Member.Name.Replace("_","")));
-                    if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
+                    if (!fullConditions && ((subexp as ParameterExpression).Type != typeOfT || !aList.Any())) {
                         return new QbFmt("1");
                     }
                     if (aList.Any()) {
-                        strBuilder.Append($"{ForceAlias ?? GetPrefixOf(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
+                        strBuilder.Append($"{ForceAlias ?? GetPrefixOfExpression(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
                     } else {
                         // oh hell.
                         MemberInfo member;
@@ -260,26 +272,26 @@ namespace Figlotech.BDados.Helpers {
                         }
                         var info = ReflectionTool.GetAttributeFrom<AggregateFieldAttribute>(member);
                         if (info != null) {
-                            var prefix = ForceAlias ?? GetPrefixOfAgField(expr, info); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                            var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
                             Fi.Tech.WriteLine(info.ToString());
                         } else {
                             var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
-                                var prefix = ForceAlias ?? GetPrefixOfFarField(expr, info2); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                                var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                                                                              //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                 strBuilder.Append($"{prefix}.{info2.FarField}");
                             } else {
                                 var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name);
                                 var info3 = ReflectionTool.GetAttributeFrom<AggregateObjectAttribute>(mem);
                                 if (info3 != null) {
-                                    var prefix = ForceAlias ?? GetPrefixOfAgObj(expr.Expression, info3); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                                    var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                                                                                                                                  //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");
                                     Fi.Tech.WriteLine(info3.ToString());
                                 } else {
-                                    var prefix = GetPrefixOf(expr.Expression);
+                                    var prefix = GetPrefixOfExpression(expr);
                                     strBuilder.Append($"{prefix}.{expr.Member.Name}");
                                 }
 
@@ -316,7 +328,7 @@ namespace Figlotech.BDados.Helpers {
                 if (expr.Method.Name == "Any") {
                     if (expr.Arguments.Count > 0) {
                         if (expr.Arguments[0] is MemberExpression) {
-                            strBuilder.Append($"{GetPrefixOf(expr.Arguments[0])}.RID IS NOT NULL");
+                            strBuilder.Append($"{GetPrefixOfExpression(expr.Arguments[0])}.RID IS NOT NULL");
                         } else {
                             strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                         }
@@ -328,14 +340,14 @@ namespace Figlotech.BDados.Helpers {
                 if (expr.Method.Name == "Where") {
                     if (expr.Arguments.Count > 1) {
                         var prevV = ForceAlias;
-                        ForceAlias = GetPrefixOf(expr.Arguments[0] as MemberExpression);
+                        ForceAlias = GetPrefixOfExpression(expr.Arguments[0] as MemberExpression);
                         strBuilder.Append(ParseExpression((expr.Arguments[1] as LambdaExpression).Body, typeOfT, ForceAlias, strBuilder, fullConditions));
                         ForceAlias = prevV;
                     }
                 }
                 if (expr.Method.Name == "First") {
                     if (expr.Arguments.Count > 0) {
-                        strBuilder.Append(GetPrefixOf(expr.Arguments[0]));
+                        strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
                     }
                 }
             } else {
@@ -344,7 +356,7 @@ namespace Figlotech.BDados.Helpers {
             if (fullConditions) {
                 return strBuilder;
             } else {
-                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("a.", ""), strBuilder._objParams.Select((pm) => pm.Value).ToArray());
+                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder._objParams.Select((pm) => pm.Value).ToArray());
             }
         }
     }

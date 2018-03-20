@@ -111,7 +111,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<String> prefixes = (from a in inputJoin.Joins select a.Prefix).ToList();
             List<String> aliases = (from a in inputJoin.Joins select a.Alias).ToList();
             List<String> onclauses = (from a in inputJoin.Joins select a.Args).ToList();
-            List<List<String>> exclusions = (from a in inputJoin.Joins select a.Excludes).ToList();
+            List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
             List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
             
             QueryBuilder Query = new QbFmt("SELECT sub.*\n");
@@ -122,11 +122,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     tables[i])
                     .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
                     .ToArray();
-                exclusions[i].Remove("RID");
-                var nonexcl = fields.Where((c) => !exclusions[i].Contains(c.Name)).ToArray();
-                for (int j = 0; j < nonexcl.Length; j++) {
-                    Query.Append($"\t\t{prefixes[i]}.{nonexcl[j].Name} AS {prefixes[i]}_{nonexcl[j].Name}");
-                    if (true || j < nonexcl.Length - 1 || i < tables.Count - 1) {
+                if (!columns[i].Contains("RID"))
+                    columns[i].Add("RID");
+                var nonexcl = columns[i];
+                for (int j = 0; j < nonexcl.Count; j++) {
+                    Query.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
+                    if (true || j < nonexcl.Count - 1 || i < tables.Count - 1) {
                         Query.Append(",");
                     }
                     Query.Append("\n");
@@ -153,7 +154,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             
             for (int i = 1; i < tables.Count; i++) {
 
-                Query.Append($"\t\t{joinTypes[i]} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+                Query.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
             }
             
             if (conditions != null && !conditions.IsEmpty) {
@@ -183,13 +184,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var type = typeof(T);
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name)};");
+            Query.Append($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty)};");
             return Query;
         }
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
-            var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name);
+            var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty);
             Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));

@@ -27,40 +27,16 @@ namespace Figlotech.BDados.Helpers
 
         public delegate void SelectFields<T>(SelectFieldsHelper selector, T entity);
 
-        public JoinConfigureHelper<T> RemoveFields(Expression<SelectFields<T>> colunas)
-        {
-            _join.Joins[_index].Excludes.Clear();
-            if (colunas.Body.NodeType != ExpressionType.Call || (colunas.Body as MethodCallExpression).Method.Name != "Colunas")
-                throw new BDadosException("Expecting a call to SelectFields in the first/only call of this lambda.");
-            var args = ((MethodCallExpression)colunas.Body).Arguments;
-            foreach (var arg in args) {
-                var exp = (arg as NewArrayExpression);
-                foreach (var expression in exp.Expressions) {
-                    String exclude = null;
-                    if(expression is MemberExpression)
-                        exclude = (expression as MemberExpression).Member.Name;
-                    if(expression is UnaryExpression)
-                        exclude = ((expression as UnaryExpression).Operand as MemberExpression).Member.Name;
-                    if (exclude == null) continue;
-                    if (Fi.Tech.GetFieldNames(_join.Joins[_index].ValueObject).Contains(exclude)) {
-                        _join.Joins[_index].Excludes.Add(exclude);
-                    }
-                    continue;
-                }
-            }
-            return this;
-        }
 
-        public JoinConfigureHelper<T> OnlyFields(params String[] fields) {
-            _join.Joins[_index].Excludes.Clear();
-            foreach(var a in typeof(T).GetMembers()) {
-                if(a is FieldInfo || a is PropertyInfo) {
-                    if (!fields.Contains(a.Name))
-                        _join.Joins[_index].Excludes.Add(a.Name);
-                }
-            }
+        public JoinConfigureHelper<T> OnlyFields(IEnumerable<string> fields) {
+            _join.Joins[_index].Columns.AddRange(
+                fields.Where(a => !_join.Joins[_index].Columns.Contains(a))
+            );
             return this;
         }
+        //public JoinConfigureHelper<T> OnlyFields(params String[] fields) {
+        //    return OnlyFields(fields);
+        //}
 
         public JoinConfigureHelper<T> On(String args)
         {

@@ -1353,6 +1353,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     case "float":
                     case "double":
                     case "single":
+                    case "decimal":
                         type = $"FLOAT(16,3)";
                         break;
                     case "datetime":

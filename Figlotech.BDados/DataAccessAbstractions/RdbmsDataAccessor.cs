@@ -18,6 +18,7 @@ using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.BDados.Extensions;
 using System.Threading;
 using System.Diagnostics;
+using Figlotech.Core.Extensions;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public class ConnectionInfo {
@@ -758,38 +759,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
          * But the logic behind this is crazy,
          * it took a lot of coffee to achieve.
          */
-        private void MakeQueryAggregations(ref JoinDefinition query, Type theType, String parentAlias, String nameofThis, PrefixMaker prefixer, bool Linear = false) {
+        private void MakeQueryAggregations(ref JoinDefinition query, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
             var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType);
             var reflectedJoinMethod = query.GetType().GetMethod("Join");
 
-            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis);
+            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
 
-            // Iterating through AggregateFields and AggregateObjects
+            // Iterating through AggregateFields
             foreach (var field in membersOfT.Where(
                     (f) =>
-                        f.GetCustomAttribute<AggregateFieldAttribute>() != null ||
-                        f.GetCustomAttribute<AggregateObjectAttribute>() != null)) {
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var type =
-                    field.GetCustomAttribute<AggregateFieldAttribute>()?.RemoteObjectType ?? ReflectionTool.GetTypeOf(field);
-                var key =
-                    field.GetCustomAttribute<AggregateFieldAttribute>()?.ObjectKey ??
-                    field.GetCustomAttribute<AggregateObjectAttribute>()?.ObjectKey;
+                        f.GetCustomAttribute<AggregateFieldAttribute>() != null)) {
                 var infoField = field.GetCustomAttribute<AggregateFieldAttribute>();
-                var infoObj = field.GetCustomAttribute<AggregateObjectAttribute>();
+                var type = infoField?.RemoteObjectType;
+                var key = infoField?.ObjectKey;
                 String childAlias;
-
+                var tname = type.Name;
+                var pkey = key;
                 // This inversion principle might be fucktastic.
-                if (infoField != null) {
-                    childAlias = prefixer.GetAliasFor(thisAlias, infoField?.ObjectKey ?? field.Name);
-                    var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
-                    if (qjoins.Any()) {
-                        qjoins.First().Excludes.Remove(infoField?.RemoteField);
-                        continue;
-                    }
-                } else {
-                    childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
-                }
+                childAlias = prefixer.GetAliasFor(thisAlias,
+                    tname, 
+                    pkey);
 
                 String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
 
@@ -798,20 +787,59 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 var joh = reflectedJoinMethod.MakeGenericMethod(type).Invoke(
                     query,
-                    // Alias a bit confusing I bet, but ok.
                     new Object[] { childAlias, OnClause, JoinType.LEFT }
-                // ON CLAUSE
                 );
-                // Parent Alias is typeof(T).Name
-                // Child Alias is field.Name
-                // The ultra supreme gimmick mode reigns supreme here.
                 joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
+
+                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
+                if (qjoins.Any() && !qjoins.First().Columns.Contains(infoField?.RemoteField)) {
+                    qjoins.First().Columns.Add(infoField?.RemoteField);
+                    //continue;
+                }
+
                 if (field.GetCustomAttribute<AggregateFieldAttribute>() != null) {
                     joh.GetType().GetMethod("OnlyFields").Invoke(joh, new object[] { new string[] { field.GetCustomAttribute<AggregateFieldAttribute>().RemoteField } });
                 }
+            }
+            // Iterating through AggregateObjects
+            foreach (var field in membersOfT.Where(
+                    (f) => f.GetCustomAttribute<AggregateObjectAttribute>() != null)) {
+                var memberType = ReflectionTool.GetTypeOf(field);
+                var type = ReflectionTool.GetTypeOf(field);
+                var key = field.GetCustomAttribute<AggregateObjectAttribute>()?.ObjectKey;
+                var infoObj = field.GetCustomAttribute<AggregateObjectAttribute>();
+                String childAlias;
+                var tname = type.Name;
+                var pkey = key;
+                // This inversion principle might be fucktastic.
+                childAlias = prefixer.GetAliasFor(thisAlias,
+                    tname,
+                    pkey);
 
-                if (!Linear && field.GetCustomAttribute<AggregateObjectAttribute>() != null) {
-                    MakeQueryAggregations(ref query, ReflectionTool.GetTypeOf(field), thisAlias, field.Name, prefixer);
+                String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
+
+                if (!ReflectionTool.TypeContains(theType, key)) {
+                    OnClause = $"{thisAlias}.RID={childAlias}.{key}";
+                }
+                var joh = reflectedJoinMethod.MakeGenericMethod(type).Invoke(
+                    query,
+                    new Object[] { childAlias, OnClause, JoinType.LEFT }
+                );
+                joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
+
+                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
+                if (qjoins.Any()) {
+                    qjoins.First().Columns.AddRange(
+                        ReflectionTool.FieldsWithAttribute<FieldAttribute>(memberType)
+                            .Select(m => m.Name)
+                            .Where(i => !qjoins.First().Columns.Contains(i))
+                    );
+                    //continue;
+                }
+
+                var ago = field.GetCustomAttribute<AggregateObjectAttribute>();
+                if (ago != null) {
+                    MakeQueryAggregations(ref query, type, thisAlias, tname, pkey, prefixer);
                 }
             }
             // Iterating through AggregateFarFields
@@ -820,8 +848,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateFarFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFarFieldAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateKey ?? field.Name);
-                String farAlias = prefixer.GetAliasFor(childAlias, info.FarKey ?? info.FarField);
+                String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
+                String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
 
                 var qimediate = query.Joins.Where((j) => j.Alias == childAlias);
                 if (!qimediate.Any()) {
@@ -849,8 +877,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
 
                 var qfar = query.Joins.Where((j) => j.Alias == farAlias);
-                if (qfar.Any()) {
-                    qfar.First().Excludes.Remove(info.FarField);
+                if (qfar.Any() && !qfar.First().Columns.Contains(info.FarField)) {
+                    qfar.First().Columns.Add(info.FarField);
                     continue;
                 } else {
                     String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.RID";
@@ -885,7 +913,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
+                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
 
                 String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.RID";
                 // Yuck
@@ -896,27 +924,38 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     query,
                     // Alias
                     new Object[] { childAlias, OnClause, JoinType.RIGHT }
-                // ON CLAUSE
+                    // ON CLAUSE
                 );
                 // The ultra supreme gimmick mode reigns supreme here.
                 joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
+
+                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
+                if (qjoins.Any()) {
+                    qjoins.First().Columns.AddRange(
+                        ReflectionTool.FieldsWithAttribute<FieldAttribute>(info.RemoteObjectType)
+                            .Select(m => m.Name)
+                            .Where(i => !qjoins.First().Columns.Contains(i))
+                    );
+                    //continue;
+                }
+
                 if (!Linear) {
-                    MakeQueryAggregations(ref query, info.RemoteObjectType, thisAlias, field.Name, prefixer);
+                    MakeQueryAggregations(ref query, info.RemoteObjectType, thisAlias, info.RemoteObjectType.Name, info.RemoteField, prefixer);
                 }
             }
         }
 
 
-        private void MakeBuildAggregations(ref BuildParametersHelper build, Type theType, String parentAlias, String nameofThis, PrefixMaker prefixer, bool Linear = false) {
+        private void MakeBuildAggregations(ref BuildParametersHelper build, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
             // Don't try this at home kids.
             var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType);
 
-            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis);
+            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
             // Iterating through AggregateFields
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFieldAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, info?.ObjectKey ?? field.Name);
+                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.ObjectKey);
                 build.AggregateField(thisAlias, childAlias, info.RemoteField, field.Name);
             }
             // Iterating through AggregateFarFields
@@ -925,18 +964,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateFarFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFarFieldAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, info?.ImediateKey ?? field.Name);
-                String farAlias = prefixer.GetAliasFor(childAlias, info?.FarKey ?? info.FarField);
+                String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
+                String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
                 build.AggregateField(thisAlias, farAlias, info.FarField, field.Name);
             }
             // Iterating through AggregateObjects
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateObjectAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateObjectAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
+                String childAlias = prefixer.GetAliasFor(thisAlias, memberType.Name, info.ObjectKey);
                 build.AggregateObject(thisAlias, childAlias, field.Name);
                 if (!Linear) {
-                    MakeBuildAggregations(ref build, ReflectionTool.GetTypeOf(field), thisAlias, field.Name, prefixer);
+                    MakeBuildAggregations(ref build, ReflectionTool.GetTypeOf(field), thisAlias, memberType.Name, info.ObjectKey, prefixer);
                 }
             }
             // Iterating through ComputeFields
@@ -959,10 +998,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
-                String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
+                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
                 build.AggregateList(thisAlias, childAlias, field.Name);
                 if (!Linear) {
-                    MakeBuildAggregations(ref build, info.RemoteObjectType, thisAlias, field.Name, prefixer);
+                    MakeBuildAggregations(ref build, info.RemoteObjectType, thisAlias, info.RemoteObjectType.Name, info.RemoteField, prefixer);
                 }
             }
         }
@@ -1020,6 +1059,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     rs[it].RID = new RID().ToString();
                 }
             }
+            rs.Iterate(it => it.UpdatedTime = DateTime.UtcNow);
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i = 0;
@@ -1105,7 +1145,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
             if (cnd != null) {
                 PrefixMaker pm = new PrefixMaker();
-                query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS {pm.GetAliasFor("root", typeof(T).Name)} WHERE ");
+                query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS {pm.GetAliasFor("root", typeof(T).Name, String.Empty)} WHERE ");
                 query.Append(new ConditionParser(pm).ParseExpression<T>(cnd));
                 query.Append(") sub)");
             }
@@ -1140,8 +1180,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var join = MakeJoin(
                     (q) => {
                         // Starting with T itself
-                        q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name)).As(p.GetAliasFor("root", typeof(T).Name));
-                        MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, p, false);
+                        q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name, String.Empty)).As(p.GetAliasFor("root", typeof(T).Name, String.Empty));
+                        MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, String.Empty, p, false);
                     });
 
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
@@ -1367,8 +1407,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var joinBuilder = MakeJoin(
                         (query) => {
                             // Starting with T itself
-                            query.AggregateRoot<T>(prefixer.GetAliasFor("root", typeof(T).Name)).As(prefixer.GetAliasFor("root", typeof(T).Name));
-                            MakeQueryAggregations(ref query, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                            var jh = query.AggregateRoot<T>(prefixer.GetAliasFor("root", typeof(T).Name, String.Empty)).As(prefixer.GetAliasFor("root", typeof(T).Name, String.Empty));
+                            jh.OnlyFields(
+                                ReflectionTool.FieldsWithAttribute<FieldAttribute>(typeof(T))
+                                .Select(a=> a.Name)
+                            );
+                            MakeQueryAggregations(ref query, typeof(T), "root", typeof(T).Name, String.Empty, prefixer, Linear);
                         });
 
                 var builtConditions = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd));
@@ -1382,7 +1426,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var join = joinBuilder.GetJoin();
                     transaction?.Benchmarker?.Mark("Generate Join Query");
                     var _buildParameters = new BuildParametersHelper(ref join, null);
-                    MakeBuildAggregations(ref _buildParameters, typeof(T), "root", typeof(T).Name, prefixer, Linear);
+                    MakeBuildAggregations(ref _buildParameters, typeof(T), "root", typeof(T).Name, String.Empty, prefixer, Linear);
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark("--");
                     command.Transaction = transaction?.Transaction;

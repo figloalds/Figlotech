@@ -119,7 +119,7 @@ namespace Figlotech.BDados.Builders {
                 var objBuilder = new ObjectReflector(thisObject);
                 // -- Add aggregate values
                 for (int i = 0; i < fields.Length; i++) {
-                    if (_join.Joins[thisIndex].Excludes.Contains(fields[i].Name))
+                    if (!_join.Joins[thisIndex].Columns.Contains(fields[i].Name))
                         continue;
                     var colName = Prefix + "_" + fields[i].Name;
                     if (!dt.Columns.Contains(colName)) continue;
@@ -289,7 +289,7 @@ namespace Figlotech.BDados.Builders {
                 var fields = ReflectionTool.FieldsAndPropertiesOf(_join.Joins[TopLevel].ValueObject)
                     .Where((f) => f.GetCustomAttribute<FieldAttribute>() != null).ToArray();
                 for (int i = 0; i < fields.Length; i++) {
-                    if (_join.Joins[TopLevel].Excludes.Contains(fields[i].Name))
+                    if (!_join.Joins[TopLevel].Columns.Contains(fields[i].Name))
                         continue;
                     var colName = Prefix + "_" + fields[i].Name;
                     if (!dt.Columns.Contains(colName)) continue;

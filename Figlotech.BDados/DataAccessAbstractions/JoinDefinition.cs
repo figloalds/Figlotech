@@ -129,23 +129,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="Args">ON CLAUSE argument</param>
         /// <param name="joinType">Specifies the join type between LEFT, RIGHT or INNER</param>
         public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", JoinType joinType = JoinType.LEFT) where T : IDataObject, new() 
-
         {
             Validated = false;
             Relations.Clear();
-            if ((from a in Joins select a.Args).Contains(Alias)) {
-                throw new BDadosException("This Alias has already been used in this join.");
-            }
 
-            JoiningTable tj = new JoiningTable();
+            JoiningTable tj = Joins.FirstOrDefault(t=> t.Alias == Alias) ?? new JoiningTable();
             tj.Alias = Alias;
             tj.TableName = typeof(T).Name;
             tj.ValueObject = typeof(T);
             tj.Args = Args;
             tj.Type = joinType;
-            tj.Prefix = GetAPrefix(Alias);
-            Joins.Add(tj);
-            return GenerateNewHelper<T>(Joins.Count - 1);
+            tj.Prefix = Alias;
+            if(!Joins.Contains(tj)) {
+                Joins.Add(tj);
+            }
+            return GenerateNewHelper<T>(Joins.IndexOf(tj));
         }
 
         private bool ValidateTableCount()

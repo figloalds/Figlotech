@@ -11,6 +11,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public String Args = null;
         public String Prefix = null;
         public String Alias = null;
-        public List<String> Excludes = new List<String>();
+        public List<String> Columns = new List<String>();
     }
 }

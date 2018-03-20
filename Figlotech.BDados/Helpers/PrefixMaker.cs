@@ -11,12 +11,14 @@ namespace Figlotech.BDados.Helpers {
 
         int seq = 0;
         Dictionary<string, string> dict = new Dictionary<string, string>();
-        public string GetAliasFor(string parent, string child) {
-            if(dict.ContainsKey($"{parent}_{child}")) {
-                return dict[$"{parent}_{child}"];
+
+        public string GetAliasFor(string parent, string child, string pkey) {
+            var k = $"{parent}_{child}_{pkey}";
+            if (dict.ContainsKey(k)) {
+                return dict[k];
             } else {
-                dict.Add($"{parent}_{child}", "tb"+new IntEx(seq++).ToString(IntEx.Base26).ToLower());
-                return dict[$"{parent}_{child}"];
+                dict.Add(k, "tb"+new IntEx(seq++).ToString(IntEx.Base26).ToLower());
+                return dict[k];
             }
         }
     }
