@@ -12,18 +12,35 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public CachedRecordSet() {
 
         }
+        public CachedRecordSet(IDataAccessor da) :base(da) {
+        }
         public bool AutoPersist { get; set; } = false;
         public CachedRecordSet(IDataAccessor dataAccessor, bool autoPersist = false) : base(dataAccessor) {
             AutoPersist = autoPersist;
         }
 
+        public T GetItemOffline(Expression<Func<T, bool>> expr, Func<T> customInit = null) {
+
+            var retv = this.FirstOrDefault(expr.Compile());
+            if (retv == null && customInit != null) {
+                retv = customInit.Invoke();
+                if(retv != null) {
+                    this.Add(retv);
+                }
+            }
+
+            return retv;
+        }
 
         public T GetItemOffline(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
 
             var retv = this.FirstOrDefault(expr.Compile());
-            if (retv == null) {
+            if (retv == null && customInit != null) {
                 retv = new T();
                 customInit?.Invoke(retv);
+                if (retv != null) {
+                    this.Add(retv);
+                }
             }
 
             return retv;

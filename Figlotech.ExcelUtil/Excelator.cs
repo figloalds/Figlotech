@@ -120,7 +120,17 @@ namespace Figlotech.ExcelUtil
         }
 
         public T Get<T>(int line, int column) {
-            return (T)Get(line, column);
+            var o = Get(line, column);
+            try {
+                if(o.GetType() == typeof(T)) {
+                    return (T)o;
+                } else {
+                    return (T) Convert.ChangeType(o, typeof(T));
+                }
+            } catch(Exception) {
+
+            }
+            return default(T);
         }
         public object Get(int line, int column) {
             return ws.Cells[line, column].Value;

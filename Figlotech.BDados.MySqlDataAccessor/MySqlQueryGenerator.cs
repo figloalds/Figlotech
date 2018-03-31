@@ -29,7 +29,6 @@ using System.Diagnostics;
 namespace Figlotech.BDados.MySqlDataAccessor {
     public class MySqlQueryGenerator : IQueryGenerator {
 
-
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
@@ -255,9 +254,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
 
-        public IQueryBuilder GenerateMultiUpdate<T>(RecordSet<T> inputRecordset) where T : IDataObject, new() {
+        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
             // -- 
-            RecordSet<T> workingSet = new RecordSet<T>(inputRecordset.DataAccessor);
+            List<T> workingSet = new List<T>();
 
             var rid = Fi.Tech.GetRidColumn<T>();
 
@@ -293,8 +292,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> inputRecordset, bool OmmitPk = true) where T : IDataObject, new() {
-            RecordSet<T> workingSet = new RecordSet<T>();
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+            List<T> workingSet = new List<T>();
             workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
@@ -438,7 +437,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QbFmt(creationCommand);
         }
 
-        public IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new () {
+        public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
 

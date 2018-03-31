@@ -6,16 +6,14 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.InAppServiceHosting
 {
-    
+
     public interface IFthService {
         bool InterruptIssued { get; set; }
         bool IsCritical { get; set; }
 
         void Init(params object[] args);
 
-        string Exec(params object[] commands);
-
-        void Run();
-
+        Task<string> Exec(params object[] commands);
+        Task Run();
     }
 }

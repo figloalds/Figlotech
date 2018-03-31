@@ -1050,7 +1050,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public bool SaveRecordSet<T>(ConnectionInfo transaction, RecordSet<T> rs, bool recoverIds = false) where T : IDataObject, new() {
+        public bool SaveRecordSet<T>(ConnectionInfo transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
             bool retv = true;
             if (rs.Count == 0)
                 return true;
@@ -1066,9 +1066,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int cnt = 0;
             int cut = 500;
             int rst = 0;
-            RecordSet<T> temp;
+            List<T> temp;
             if (rs.Count > cut) {
-                temp = new RecordSet<T>();
+                temp = new List<T>();
                 temp.AddRange(rs);
                 temp.OrderBy(it => it.IsPersisted);
             } else {
@@ -1077,10 +1077,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<Exception> failedSaves = new List<Exception>();
             List<IDataObject> successfulSaves = new List<IDataObject>();
             while (i * cut < rs.Count) {
-                var sub = new RecordSet<T>();
+                var sub = new List<T>();
                 sub.AddRange(temp.Skip(i * cut).Take(Math.Min(rs.Count, cut)));
-                var inserts = sub.Where(it => !it.IsPersisted).ToRecordSet();
-                var updates = sub.Where(it => it.IsPersisted).ToRecordSet();
+                var inserts = sub.Where(it => !it.IsPersisted).ToList();
+                var updates = sub.Where(it => it.IsPersisted).ToList();
                 try {
                     if (inserts.Count > 0) {
                         rst += Execute(Plugin.QueryGenerator.GenerateMultiInsert(inserts, false));
@@ -1162,7 +1162,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv > 0;
         }
 
-        public bool SaveRecordSet<T>(RecordSet<T> rs, bool recoverIds = false) where T : IDataObject, new() {
+        public bool SaveRecordSet<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
             if (CurrentTransaction != null) {
                 return SaveRecordSet<T>(CurrentTransaction, rs, recoverIds);
             }

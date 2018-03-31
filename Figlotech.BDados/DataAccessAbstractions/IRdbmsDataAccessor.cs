@@ -57,7 +57,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         RecordSet<T> LoadAll<T>(ConnectionInfo transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
 
         bool SaveItem(ConnectionInfo transaction, IDataObject objeto);
-        bool SaveRecordSet<T>(ConnectionInfo transaction, RecordSet<T> target, bool recoverIds = false) where T : IDataObject, new();
+        bool SaveRecordSet<T>(ConnectionInfo transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
 
         T LoadFirstOrDefault<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         T LoadByRid<T>(ConnectionInfo transaction, String RID) where T : IDataObject, new();

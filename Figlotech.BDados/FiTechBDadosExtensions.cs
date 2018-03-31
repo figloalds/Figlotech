@@ -26,7 +26,7 @@ namespace Figlotech.BDados {
 
         //        public static bool EnableStdoutLogs { get; set; } = false;
 
-        public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetRidColumn(typeof(T)); }
+        public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
         public static String GetRidColumn(this Fi _selfie, Type type) {
             var fields = new List<FieldInfo>();
             do {
@@ -273,7 +273,7 @@ namespace Figlotech.BDados {
         //            int current = 0;
         //        }
 
-        public static QueryBuilder ListRids<T>(this Fi _selfie, RecordSet<T> set) where T : IDataObject, new() {
+        public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
@@ -452,6 +452,7 @@ namespace Figlotech.BDados {
                     case "float":
                     case "double":
                     case "single":
+                    case "decimal":
                         type = $"FLOAT(16,3)";
                         break;
                     case "datetime":

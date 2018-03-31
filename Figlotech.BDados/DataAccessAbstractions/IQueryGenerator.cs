@@ -19,8 +19,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
         IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, int? skip, int? limit, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder condicoes, int? p = 1, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null);
-        IQueryBuilder GenerateMultiInsert<T>(RecordSet<T> conjuntoInput, bool OmmitPk = true) where T : IDataObject, new();
-        IQueryBuilder GenerateMultiUpdate<T>(RecordSet<T> inputRecordset) where T : IDataObject, new();
+        IQueryBuilder GenerateMultiInsert<T>(List<T> conjuntoInput, bool OmmitPk = true) where T : IDataObject;
+        IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject;
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
         IQueryBuilder InformationSchemaQueryTables(string schema);
         IQueryBuilder InformationSchemaQueryColumns(string schema);
@@ -43,6 +43,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
         IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd);
-        IQueryBuilder QueryIds<T>(RecordSet<T> rs) where T : IDataObject, new();
+        IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject;
     }
 }

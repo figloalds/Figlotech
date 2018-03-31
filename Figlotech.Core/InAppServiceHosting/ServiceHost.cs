@@ -14,6 +14,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
         private List<IFthService> Services { get; set; } = new List<IFthService>();
         Dictionary<IFthService, Thread> ServiceThreads = new Dictionary<IFthService, Thread>();
+        Dictionary<IFthService, FthServiceInfo> ServiceInfos = new Dictionary<IFthService, FthServiceInfo>();
 
         public void AddDeclaredMicroService(Type serviceClass) {
             if (serviceClass.GetInterfaces().FirstOrDefault(i => i == typeof(IFthService)) == null) {
@@ -46,6 +47,9 @@ namespace Figlotech.Core.InAppServiceHosting
             return InitService(typeof(T), args);
         }
         public IFthService InitService(Type svcType, params object[] args) {
+            var svc = Services.FirstOrDefault(s => s.GetType() == svcType);
+            if (svc != null)
+                return svc;
             if (svcType != null) {
                 IFthService instance = (IFthService)Activator.CreateInstance(svcType);
                 instance.Init(args);
@@ -58,10 +62,32 @@ namespace Figlotech.Core.InAppServiceHosting
         int idgen = 0;
         public void Start(IFthService service) {
             if(!ServiceThreads.ContainsKey(service)) {
-                var t = new Thread(()=> {
+                var t = new Thread(async ()=> {
                     try {
-                        service.Run();
+                        var rt = service.Run();
+                        if (rt != null) {
+                            await rt;
+                        }
+                        if(service is IFthCyclicService cServ) {
+                            var rt2 = cServ.MainLoopInit();
+                            if (rt2 != null) {
+                                await rt2;
+                            }
+
+                            cServ.BreakMainLoop = false;
+                            cServ.InterruptIssued = false;
+                            while (!cServ.BreakMainLoop && !cServ.InterruptIssued) {
+                                var lt = cServ.MainLoopIteration();
+                                if (lt != null) {
+                                    await lt;
+                                }
+                            }
+                        }
                     } catch(Exception x) {
+                        Fi.Tech.WriteLine();
+                        Fi.Tech.WriteLine();
+                        Fi.Tech.WriteLine();
+                        Fi.Tech.WriteLine($"Error Executing Service {service.GetType().Name} {x.Message}");
                         OnServiceError?.Invoke(service, x);
                     }
                 });
@@ -69,10 +95,11 @@ namespace Figlotech.Core.InAppServiceHosting
                 t.Name = $"fthservice_{idgen++}_{service.GetType().Name}";
                 t.Start();
                 ServiceThreads[service] = t;
+                ServiceInfos[service] = new FthServiceInfo(service);
             }
         }
 
-        public event Action<object, Exception> OnServiceError;
+        public event Action<IFthService, Exception> OnServiceError;
 
         public void Stop(IFthService service) {
             if (ServiceThreads.ContainsKey(service)) {
@@ -83,6 +110,7 @@ namespace Figlotech.Core.InAppServiceHosting
                         ServiceThreads[service].Interrupt();
                     }
                     ServiceThreads.Remove(service);
+                    ServiceInfos.Remove(service);
                 }
             }
         }
@@ -97,10 +125,19 @@ namespace Figlotech.Core.InAppServiceHosting
             Start(svc);
         }
 
+        public IEnumerable<FthServiceInfo> GetServiceInfos() {
+            return ServiceInfos.Values;
+        }
+        public T GetInstance<T>() where T: IFthService {
+            return (T) Services
+                .FirstOrDefault(s => 
+                    s.GetType() == typeof(T)
+                );
+        }
 
-        public string Exec(string service, string Commands) {
+        public async Task<string> Exec(string service, string Commands) {
             var svc = Services.FirstOrDefault(s => s.GetType().Name == service);
-            return svc?.Exec(Commands);
+            return svc != null ? await svc?.Exec(Commands) : null;
         }
     }
 }

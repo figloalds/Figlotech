@@ -29,6 +29,7 @@ namespace Figlotech.Core {
         public DateTime? enqueued = DateTime.Now;
         public DateTime? dequeued;
         public DateTime? completed;
+        public String Name { get; set; } = null;
 
         public void Await() {
             while (completed == null) {
@@ -252,7 +253,10 @@ namespace Figlotech.Core {
                             } catch (Exception x) {
                                 job.completed = DateTime.Now;
                                 Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                                job?.handling?.Invoke(new Exception("Error executing WorkJob: {x.Message}", x));
+                                var callPoint = job?.action?.Method.DeclaringType?.Name;
+                                var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
+                                var msg = $"Error executing WorkJob {this.Name}/{jobdescription}@{callPoint}: {x.Message}";
+                                job?.handling?.Invoke(new Exception(msg, x));
                             }
                             job.status = WorkJobStatus.Finished;
                             WorkDone++;
