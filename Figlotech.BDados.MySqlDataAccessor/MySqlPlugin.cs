@@ -237,19 +237,20 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                         cols[i] = reader.GetName(i);
 
                     if (reader.HasRows) {
-                        while (reader.Read()) {
-                            T obj = new T();
-                            refl.Slot(obj);
-                            for (int i = 0; i < cols.Length; i++) {
-                                var o = reader.GetValue(i);
-                                if(o is string str) {
-                                    refl[cols[i]] = reader.GetString(i);
-                                } else {
-                                    refl[cols[i]] = o;
-                                }
-                            }
-                            retv.Add((T)refl.Retrieve());
-                        }
+                        return Fi.Tech.MapFromReader<T>(reader).ToList();
+                        //while (reader.Read()) {
+                        //    T obj = new T();
+                        //    refl.Slot(obj);
+                        //    for (int i = 0; i < cols.Length; i++) {
+                        //        var o = reader.GetValue(i);
+                        //        if(o is string str) {
+                        //            refl[cols[i]] = reader.GetString(i);
+                        //        } else {
+                        //            refl[cols[i]] = o;
+                        //        }
+                        //    }
+                        //    retv.Add((T)refl.Retrieve());
+                        //}
                     }
                 }
             }

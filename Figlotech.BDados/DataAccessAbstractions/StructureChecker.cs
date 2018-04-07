@@ -393,18 +393,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             switch(a.Type) {
                 case ScStructuralKeyType.Index:
                     return
-                        a.Table.ToLower() == n.Table.ToLower() &&
-                        a.Column.ToLower() == n.Column.ToLower();
+                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
+                            a.Table.ToLower() == n.Table.ToLower() &&
+                            a.Column.ToLower() == n.Column.ToLower()
+                        );
                 case ScStructuralKeyType.ForeignKey:
                     return
-                        a.Table.ToLower() == n.Table.ToLower() &&
-                        a.Column.ToLower() == n.Column.ToLower() &&
-                        a.RefTable.ToLower() == n.RefTable.ToLower() &&
-                        a.RefColumn.ToLower() == n.RefColumn.ToLower();
+                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                            a.Table.ToLower() == n.Table.ToLower() &&
+                            a.Column.ToLower() == n.Column.ToLower() &&
+                            a.RefTable.ToLower() == n.RefTable.ToLower() &&
+                            a.RefColumn.ToLower() == n.RefColumn.ToLower()
+                        );
                 case ScStructuralKeyType.PrimaryKey:
                     return
-                        a.Table.ToLower() == n.Table.ToLower() &&
-                        a.Column.ToLower() == n.Column.ToLower();
+                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                            a.Table.ToLower() == n.Table.ToLower() &&
+                            a.Column.ToLower() == n.Column.ToLower()
+                        );
             }
             throw new Exception("Something supposedly impossible happened within StructureChecker internal logic.");
         }
@@ -825,13 +831,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             _purgedKeys.Clear();
             var needFK = GetNecessaryLinks().ToList();
-            var needFKDict = new Dictionary<string, ScStructuralLink>();
 
-            foreach (var a in needFK) {
-                needFKDict[a.ToString()] = a;
-            }
+            needFK.RemoveAll(a => keys.Any(b => CheckMatch(a, b)));
 
-            needFK = needFKDict.Values.ToList();
+            //var needFKDict = new Dictionary<string, ScStructuralLink>();
+            //foreach (var a in needFK) {
+            //    needFKDict[a.ToString()] = a;
+            //}
+
+            //needFK = needFKDict.Values.ToList();
 
             //foreach (var t in workingTypes) {
             //    foreach (var f in ReflectionTool.FieldsWithAttribute<FieldAttribute>(t)) {

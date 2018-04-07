@@ -94,6 +94,7 @@ namespace Figlotech.Core.InAppServiceHosting
                 t.IsBackground = !service.IsCritical;
                 t.Name = $"fthservice_{idgen++}_{service.GetType().Name}";
                 t.Start();
+                Services.Add(service);
                 ServiceThreads[service] = t;
                 ServiceInfos[service] = new FthServiceInfo(service);
             }

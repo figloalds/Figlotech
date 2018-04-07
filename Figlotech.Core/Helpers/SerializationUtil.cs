@@ -64,7 +64,7 @@ namespace Figlotech.Core.Helpers
             return retv;
         }
 
-        public static object FromJsonFile<T>(object obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+        public static T FromJsonFile<T>(IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
             return (T)FromJsonFile(typeof(T), fs, fileName, options);
         }
         public static object FromJsonFile(Type t, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {

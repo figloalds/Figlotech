@@ -135,19 +135,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            if (rootConditions != null) {
-                Query.Append("WHERE ");
-                Query.Append(rootConditions);
-            }
-            if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-            }
-            if (limit != null) {
-                Query.Append($"LIMIT");
-                if (skip != null)
-                    Query.Append($"{skip},");
-                Query.Append($"{limit}");
-            }
+            //if (rootConditions != null) {
+            //    Query.Append("WHERE ");
+            //    Query.Append(rootConditions);
+            //}
+            //if (orderingMember != null) {
+            //    Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
+            //}
+            //if (limit != null) {
+            //    Query.Append($"LIMIT");
+            //    if (skip != null)
+            //        Query.Append($"{skip},");
+            //    Query.Append($"{limit}");
+            //}
             Query.Append($"");
             Query.Append($") AS {prefixes[0]}\n");
             
@@ -250,7 +250,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append($"@{cod}{i + 1}", val);
             }
             return Query;
-
         }
 
 
@@ -272,11 +271,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var members = GetMembers(typeof(T));
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             int x = 0;
+            string sid = IntEx.GenerateShortRid();
             for (var i = 0; i < members.Count; i++) {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
-                    string sid = IntEx.GenerateShortRid();
                     Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");

@@ -1493,7 +1493,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Benchmarker?.Mark("Execute SELECT");
             var mapFn = Query<T>(transaction, selectQuery);
             transaction.Benchmarker?.Mark("Run AfterLoads");
-            var retv = RunAfterLoads(mapFn).ToList();
+            var retv = RunAfterLoads(mapFn);
 
             return retv;
         }
