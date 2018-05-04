@@ -77,7 +77,12 @@ namespace Figlotech.Core {
         private Thread _supervisor;
         Queue<WorkJob> workQueue = new Queue<WorkJob>();
         List<WorkJob> holdJobs = new List<WorkJob>();
+        List<WorkJob> currentJobs = new List<WorkJob>();
         List<Thread> workers = new List<Thread>();
+        List<Thread> detectedLongWorkThreads = new List<Thread>();
+        decimal avgTaskResolutionTime = 1;
+        decimal totTaskResolutionTime = 1;
+        decimal totTasksResolved = 0;
 
         public int GcInterval = 5000;
 
@@ -193,11 +198,35 @@ namespace Figlotech.Core {
             }
         }
 
+        public int ExtraWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount - 1);
         public int ExtraWorkerTimeout { get; set; } = 7000;
         public int MainWorkerTimeout { get; set; } = 60000;
         public int MinWorkers { get; set; } = 0;
-        private void SpawnWorker() {
+        bool inited = false;
+        private void SpawnWorker(bool force = false) {
+            if (inited && !force) {
+                return;
+            }
+            inited = true;
             lock (workers) {
+                lock (detectedLongWorkThreads) {
+                    WorkJob dlw = null;
+                    detectedLongWorkThreads.RemoveAll(t => !t.IsAlive);
+                    if (detectedLongWorkThreads.Count < ExtraWorkers) {
+                        lock (currentJobs) {
+                            currentJobs.FirstOrDefault(j => j.dequeued != null && j.completed == null && DateTime.UtcNow.Subtract(j.dequeued.Value) > TimeSpan.FromMilliseconds(ExtraWorkerTimeout * 2));
+                            if (dlw != null) {
+                                Fi.Tech.WriteLine($"{dlw.Name}({dlw.id}) has been running for too long, removing from main queuer");
+                                workers.Remove(dlw.AssignedThread);
+                                detectedLongWorkThreads.Add(dlw.AssignedThread);
+                            } else {
+                                var tpm = avgTaskResolutionTime > 0 ? 60 * 1000 / avgTaskResolutionTime : 0;
+                                Fi.Tech.WriteLine($"{this.Name}::{this.QID} worker overload {workQueue.Count} tasks to complete, {workers.Count + detectedLongWorkThreads.Count} threads resolving average {tpm.ToString("0.00")}tpm");
+                            }
+                        }
+                    }
+                }
+
                 if (workers.Count >= parallelSize) {
                     return;
                 }
@@ -217,10 +246,12 @@ namespace Figlotech.Core {
                                 // This is to prevent GC from spawning crazy during operations.
                                 lock (holdJobs)
                                     holdJobs.Add(job);
+                                lock (currentJobs)
+                                    currentJobs.Add(job);
                             }
-                            if (workQueue.Count > workers.Count && workers.Count < parallelSize) {
-                                SpawnWorker();
-                            }
+                        }
+                        if (workQueue.Count > workers.Count && workers.Count < parallelSize) {
+                            SpawnWorker(true);
                         }
                         List<Exception> exes = new List<Exception>();
 
@@ -242,23 +273,30 @@ namespace Figlotech.Core {
                         lock (job) {
 
                             job.dequeued = DateTime.Now;
-                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
+                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
 
                             try {
                                 job?.action?.Invoke();
                                 job.status = WorkJobStatus.Finished;
                                 job?.finished?.Invoke();
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                             } catch (Exception x) {
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.QID}/{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                                var callPoint = job?.action?.Method.DeclaringType?.Name;
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
+                                var callPoint = job?.action?.Method.DeclaringType?.DeclaringType?.Name;
+                                //var callPoint = job?.action?.Method.DeclaringType?.Name;
                                 var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
                                 var msg = $"Error executing WorkJob {this.Name}/{jobdescription}@{callPoint}: {x.Message}";
                                 job?.handling?.Invoke(new Exception(msg, x));
                             }
                             job.status = WorkJobStatus.Finished;
+                            totTasksResolved++;
+                            var thisTaskResolutionTime = (decimal) (job.completed.Value - job.enqueued.Value).TotalMilliseconds;
+                            avgTaskResolutionTime -= avgTaskResolutionTime / totTasksResolved;
+                            avgTaskResolutionTime += thisTaskResolutionTime / totTasksResolved;
+                            lock(currentJobs)
+                                currentJobs.Remove(job);
                             WorkDone++;
                             lastJobProcessedStamp = DateTime.UtcNow;
                         }
@@ -266,6 +304,9 @@ namespace Figlotech.Core {
                     }
                     lock (workers) {
                         workers.Remove(Thread.CurrentThread);
+                        if(workers.Count == 0) {
+                            inited = false;
+                        }
                     }
                 });
                 workerThread.Priority = DefaultWorkerPriority;
@@ -329,7 +370,9 @@ namespace Figlotech.Core {
             lock (workQueue) {
                 workQueue.Enqueue(retv);
             }
-            SpawnWorker();
+            if(!inited) {
+                SpawnWorker();
+            }
             InitSupervisor();
 
             return retv;

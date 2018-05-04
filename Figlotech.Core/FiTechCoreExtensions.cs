@@ -13,6 +13,7 @@ using Figlotech.Core.Interfaces;
 using System.Security.Cryptography;
 using System.IO;
 using System.Threading;
+using Figlotech.Core.Extensions;
 
 namespace Figlotech.Core {
     public delegate dynamic ComputeField(dynamic o);
@@ -25,10 +26,16 @@ namespace Figlotech.Core {
         private static Object _readLock = new Object();
         private static int _generalId = 0;
         public static ILogger ApiLogger;
-        public static bool EnableDebug {get;set;} = false;
+        public static bool EnableDebug { get; set; } = false;
 
         public static object Null(this Fi _selfie) {
             return null;
+        }
+
+        public static T CopyOf<T>(this Fi _selfie, T other) where T : new() {
+            T retv = new T();
+            retv.CopyFrom(other);
+            return retv;
         }
 
         private static bool CheckParams(IEnumerable<Type> types, IEnumerable<object> vals) {
@@ -809,8 +816,94 @@ namespace Figlotech.Core {
             MainThreadHandler = Thread.CurrentThread;
         }
 
-        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", 2000, true) { MinWorkers = 12, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
+        static List<Task> FiredTasksPreventGC = new List<Task>();
 
+        public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+            FireTask<T>(_selfie, task, handling, executeAnywaysWhenFinished);
+        }
+        public static Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+            // Could just call the other function here
+            // Decided to CTRL+C in favor of runtime performance.
+            bool success = false;
+            var retv = Task.Run(() => {
+                if (task != null) {
+                    try {
+                        task.Invoke();
+                    } catch (Exception x) {
+                        try {
+                            handling?.Invoke(x);
+                        } catch (Exception z) { }
+                    } finally {
+                        try {
+                            executeAnywaysWhenFinished?.Invoke(success);
+                            lock (FiredTasksPreventGC) {
+                                var tasksToDispose = FiredTasksPreventGC.Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted).ToList();
+                                tasksToDispose.Iterate(t => {
+                                    if (t.Exception != null) {
+                                        Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
+                                        // "Handling" need not apply maybe.
+                                        // It probably didn't even throw an exception.
+                                        // I'm checking this just to tell the .Net API to not crash the application
+                                        // When this task is GC'ed
+                                        // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
+                                        // the entire program. I don't like that at all.
+                                    }
+                                    FiredTasksPreventGC.Remove(t);
+                                });
+                                tasksToDispose.Clear();
+                            }
+                        } catch(Exception x) {
+
+                        }
+                    }
+                }
+            });
+            lock (FiredTasksPreventGC)
+                FiredTasksPreventGC.Add(retv);
+            return retv;
+        }
+        public static Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+            bool success = false;
+            var retv = Task.Run<T>(() => {
+                if (task != null) {
+                    try {
+                        return task.Invoke();
+                    } catch (Exception x) {
+                        try {
+                            handling?.Invoke(x);
+                        } catch (Exception z) { }
+                    } finally {
+                        try {
+                            executeAnywaysWhenFinished?.Invoke(success);
+                            lock (FiredTasksPreventGC) {
+                                var tasksToDispose = FiredTasksPreventGC.Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted).ToList();
+                                tasksToDispose.Iterate(t => {
+                                    if (t.Exception != null) {
+                                        Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
+                                        // "Handling" need not apply maybe.
+                                        // It probably didn't even throw an exception.
+                                        // I'm checking this just to tell the .Net API to not crash the application
+                                        // When this task is GC'ed
+                                        // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
+                                        // the entire program. I don't like that at all.
+                                    }
+                                    FiredTasksPreventGC.Remove(t);
+                                });
+                                tasksToDispose.Clear();
+                            }
+                        } catch (Exception x) {
+
+                        }
+                    }
+                }
+                return default(T);
+            });
+            lock (FiredTasksPreventGC)
+                FiredTasksPreventGC.Add(retv);
+            return retv;
+        }
+
+        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount * 128, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
         public static WorkJob RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
             var wj = FiTechRAF.Enqueue(job, handler, then);
             wj.Name = name;
@@ -830,7 +923,6 @@ namespace Figlotech.Core {
                 numArray[index] = (byte)random.Next(256);
             return numArray;
         }
-
 
         public static String GenerateIdString(this Fi _selfie, String uniqueId, int numDigits = 128) {
             char[] retval = new char[numDigits];

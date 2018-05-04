@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,6 +38,13 @@ namespace Figlotech.Core.DomainEvents {
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
 
+        public void Raise(IDomainEvent domainEvent) {
+
+        }
+
+        public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
+            domainEvents.Iterate(evt => Raise(evt));
+        }
         public void Raise<T>(T domainEvent) where T : IDomainEvent {
             // Cache event
             EventCache.Add(domainEvent);

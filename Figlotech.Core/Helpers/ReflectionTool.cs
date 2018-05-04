@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.Core.Extensions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -6,6 +7,25 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
+    public static class BadassReflectionExtensions {
+        public static bool Implements(this Type t, Type interfaceType) {
+            return ReflectionTool.TypeImplements(t, interfaceType);
+        }
+        public static bool DerivesFrom(this Type t, Type ancestorType) {
+            return ReflectionTool.TypeDerivesFrom(t, ancestorType);
+        }
+        public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(this Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
+            var members = ReflectionTool.FieldsAndPropertiesOf(type);
+            if (act == null) {
+                return new List<MemberInfo>();
+            }
+            return members.Where(m => {
+                var vatt = m.GetCustomAttribute<T>();
+                return vatt != null && act.Invoke(m, vatt);
+            });
+        }
+    }
+
     public class ReflectionTool {
         public static bool StrictMode { get; set; } = false;
         public static List<MemberInfo> FieldsAndPropertiesOf(Type type) {
@@ -13,6 +33,21 @@ namespace Figlotech.Core.Helpers {
             members.AddRange(type.GetFields());
             members.AddRange(type.GetProperties());
             return members;
+        }
+
+        public static bool TypeImplements(Type t, Type interfaceType) {
+            if (t != null && interfaceType.IsInterface) {
+                if (t != typeof(Object)) {
+                    return t.GetInterfaces().Any(i => i == interfaceType) || TypeImplements(t.BaseType, interfaceType);
+                }
+            }
+            return false;
+        }
+        public static bool TypeDerivesFrom(Type t, Type ancestorType) {
+            if (t != null && t != typeof(Object)) {
+                return t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType);
+            }
+            return false;
         }
 
         public static IEnumerable<Type> GetLoadableTypesFrom(Assembly assembly) {
@@ -83,6 +118,26 @@ namespace Figlotech.Core.Helpers {
         public static List<MemberInfo> FieldsWithAttribute<T>(Type type) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
             return members.Where((p) => p.GetCustomAttribute<T>() != null).ToList();
+        }
+        public static void ForAttributedMembers<T>(Type type, Action<MemberInfo, T> act) where T : Attribute {
+            var members = FieldsAndPropertiesOf(type);
+            members
+                .Iterate(m => {
+                    var att = m.GetCustomAttribute<T>();
+                    if (att != null) {
+                        act(m, att);
+                    }
+                });
+        }
+        public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
+            var members = FieldsAndPropertiesOf(type);
+            if (act == null) {
+                return new List<MemberInfo>();
+            }
+            return members.Where(m => {
+                var vatt = m.GetCustomAttribute<T>();
+                return vatt != null && act.Invoke(m, vatt);
+            });
         }
 
         public static Object GetMemberValue(MemberInfo member, Object target) {
