@@ -287,14 +287,18 @@ namespace Figlotech.BDados.Helpers {
                             } else {
                                 var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name);
                                 var info3 = ReflectionTool.GetAttributeFrom<AggregateObjectAttribute>(mem);
+                                var altName = ReflectionTool.GetAttributeFrom<OverrideColumnNameOnWhere>(mem);
+                                var memberName = altName?.Name ?? member.Name;
                                 if (info3 != null) {
                                     var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                                                                                                                                 //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
-                                    strBuilder.Append($"{prefix}.{expr.Member.Name}");
+                                    
+                                    //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+
+                                    strBuilder.Append($"{prefix}.{memberName}");
                                     Fi.Tech.WriteLine(info3.ToString());
                                 } else {
                                     var prefix = GetPrefixOfExpression(expr);
-                                    strBuilder.Append($"{prefix}.{expr.Member.Name}");
+                                    strBuilder.Append($"{prefix}.{memberName}");
                                 }
 
                             }

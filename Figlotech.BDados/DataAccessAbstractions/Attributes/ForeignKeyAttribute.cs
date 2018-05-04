@@ -29,7 +29,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public String RefColumn { get; set; }
         public String ConstraintName { get; set; }
         public String FTechConstraintName => $"fk_{Column}_{RefTable}_{RefColumn}".ToLower();
-        internal Type RefType { get; set; }
+        public Type RefType { get; set; }
 
         public override string ToString() {
             return $"{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();

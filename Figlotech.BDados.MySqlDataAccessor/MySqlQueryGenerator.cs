@@ -38,7 +38,23 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var members = GetMembers(inputObject.GetType());
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             for (int i = 0; i < members.Count; i++) {
-                query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
+                var val = ReflectionTool.GetMemberValue(members[i], inputObject);
+                if(val == null) {
+                    var pc = members[i].GetCustomAttribute<PreemptiveCounter>();
+                    var ic = members[i].GetCustomAttribute<IncrementalCounter>();
+
+                    if (pc != null) {
+                        query.Append(pc.OnInsertSubQuery(inputObject.GetType(), members[i]));
+                    } else
+                    if (ic != null) {
+                        query.Append(ic.OnInsertSubQuery(inputObject.GetType(), members[i]));
+                    } else {
+                        query.Append($"@{i + 1}", val);
+                    }
+                } else {
+                    query.Append($"@{i + 1}", val);
+                }
+
                 if (i < members.Count - 1) {
                     query.Append(",");
                 }
@@ -112,7 +128,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<String> onclauses = (from a in inputJoin.Joins select a.Args).ToList();
             List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
             List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
-            
+
             QueryBuilder Query = new QbFmt("SELECT sub.*\n");
             Query.Append($"\t FROM (SELECT\n");
             for (int i = 0; i < tables.Count; i++) {
@@ -150,12 +166,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //}
             Query.Append($"");
             Query.Append($") AS {prefixes[0]}\n");
-            
+
             for (int i = 1; i < tables.Count; i++) {
 
                 Query.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
             }
-            
+
             if (conditions != null && !conditions.IsEmpty) {
                 Query.Append("\tWHERE");
                 Query.Append(conditions);
@@ -201,8 +217,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
-            if(limit != null || skip != null) {
-                Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");
+            if (limit != null || skip != null) {
+                Query.Append($"LIMIT {(skip != null ? $"{skip}," : "")} {limit ?? Int32.MaxValue}");
             }
             Query.Append(";");
             return Query;
@@ -398,7 +414,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
-            if(!isNullable) {
+            if (!isNullable) {
                 return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
                 return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");

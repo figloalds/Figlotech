@@ -141,9 +141,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (this.CurrentTransaction == null) {
                 var stf = "";
                 WriteLog("Opening Transaction");
-                if (FiTechCoreExtensions.EnableDebug) {
-                    WriteLog(Environment.StackTrace);
-                }
+                //if (FiTechCoreExtensions.EnableDebug) {
+                //    WriteLog(Environment.StackTrace);
+                //}
                 var connection = Plugin.GetNewConnection();
                 OpenConnection(connection);
                 this.CurrentTransaction = new ConnectionInfo();
@@ -525,15 +525,37 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public T Access<T>(Func<ConnectionInfo, T> functions, Action<Exception> handler = null, bool useTransaction = false) {
             if (functions == null) return default(T);
+            
             //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
             //    return functions.Invoke(transaction);
             //}
             int aid = accessId;
             return UseTransaction((transaction) => {
                 aid = ++accessId;
+                
                 if (transaction.Benchmarker == null) {
                     transaction.Benchmarker = new Benchmarker($"---- Access [{++aid}]");
                     transaction.Benchmarker.WriteToStdout = FiTechCoreExtensions.EnableStdoutLogs;
+                }
+                if (FiTechCoreExtensions.EnableDebug) {
+                    try {
+                        int maxFrames = 2;
+                        var stack = new StackTrace();
+                        foreach (var f in stack.GetFrames()) {
+                            var m = f.GetMethod();
+                            var mName = m.Name;
+                            var t = m.DeclaringType;
+                            var tName = t.Name;
+                            if (f.GetMethod().DeclaringType.Assembly != this.GetType().Assembly) {
+                                transaction?.Benchmarker.Mark($"Database Access from {tName}->{mName}");
+                                if (maxFrames-- <= 0) {
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception) {
+
+                    }
                 }
 
                 var retv = functions.Invoke(transaction);
@@ -609,6 +631,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             this.BeginTransaction(useTransaction);
             var b = new Benchmarker("Database Access");
+            if (FiTechCoreExtensions.EnableDebug) {
+                try {
+                    int maxFrames = 2;
+                    var stack = new StackTrace();
+                    foreach (var f in stack.GetFrames()) {
+                        var m = f.GetMethod();
+                        var mName = m.Name;
+                        var t = m.DeclaringType;
+                        var tName = t.Name;
+                        if (f.GetMethod().DeclaringType.Assembly != this.GetType().Assembly) {
+                            b.Mark($"Database Access from {tName}->{mName}");
+                            if (maxFrames-- <= 0) {
+                                break;
+                            }
+                        }
+                    }
+                } catch (Exception) {
+
+                }
+            }
             try {
                 this.CurrentTransaction.Benchmarker = b;
                 b.Mark("Run User Code");
@@ -1180,7 +1222,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var join = MakeJoin(
                     (q) => {
                         // Starting with T itself
-                        q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name, String.Empty)).As(p.GetAliasFor("root", typeof(T).Name, String.Empty));
+                        var jh = q.AggregateRoot<T>(p.GetAliasFor("root", typeof(T).Name, String.Empty)).As(p.GetAliasFor("root", typeof(T).Name, String.Empty));
+                        jh.OnlyFields(
+                            ReflectionTool.FieldsWithAttribute<FieldAttribute>(typeof(T))
+                            .Select(a => a.Name)
+                        );
                         MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, String.Empty, p, false);
                     });
 

@@ -19,7 +19,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             AutoPersist = autoPersist;
         }
 
-        public T GetItemOffline(Expression<Func<T, bool>> expr, Func<T> customInit = null) {
+        public T GetItemOrDefault(Expression<Func<T, bool>> expr, Func<T> customInit = null) {
 
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null && customInit != null) {
