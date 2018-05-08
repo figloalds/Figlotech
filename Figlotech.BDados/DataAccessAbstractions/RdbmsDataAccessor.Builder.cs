@@ -184,7 +184,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var ridcol = Fi.Tech.GetRidColumn<T>();
-            //join.Relations = ValidateRelations(join);
             transaction?.Benchmarker?.Mark("Execute Query");
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
@@ -193,28 +192,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     for (int i = 0; i < fieldNames.Length; i++)
                         fieldNames[i] = reader.GetName(i);
                     var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
-                    if (true) {
-                        bool isNew;
-                        var constructionCache = new Dictionary<string, Dictionary<string, object>>();
-                        constructionCache.Add(myRidCol, new Dictionary<string, object>());
-                        transaction?.Benchmarker?.Mark("Build Result");
-                        while (reader.Read()) {
-                            isNew = true;
-                            T newObj;
-                            if (!constructionCache[myRidCol].ContainsKey(reader[myRidCol] as string)) {
-                                newObj = new T();
-                                constructionCache[myRidCol][reader[myRidCol] as string] = newObj;
-                                retv.Add(newObj);
-                            } else {
-                                newObj = (T)constructionCache[myRidCol][reader[myRidCol] as string];
-                                isNew = false;
-                            }
-
-                            BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, join, thisIndex, isNew, constructionCache);
+                    bool isNew;
+                    var constructionCache = new Dictionary<string, Dictionary<string, object>>();
+                    constructionCache.Add(myRidCol, new Dictionary<string, object>());
+                    transaction?.Benchmarker?.Mark("Build Result");
+                    while (reader.Read()) {
+                        isNew = true;
+                        T newObj;
+                        if (!constructionCache[myRidCol].ContainsKey(reader[myRidCol] as string)) {
+                            newObj = new T();
+                            constructionCache[myRidCol][reader[myRidCol] as string] = newObj;
+                            retv.Add(newObj);
+                        } else {
+                            newObj = (T)constructionCache[myRidCol][reader[myRidCol] as string];
+                            isNew = false;
                         }
-                        constructionCache.Clear();
-                        transaction?.Benchmarker?.Mark("--");
+
+                        BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, join, thisIndex, isNew, constructionCache);
                     }
+                    constructionCache.Clear();
+                    transaction?.Benchmarker?.Mark("--");
                 }
             }
 
