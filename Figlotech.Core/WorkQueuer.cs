@@ -288,7 +288,11 @@ namespace Figlotech.Core {
                                 //var callPoint = job?.action?.Method.DeclaringType?.Name;
                                 var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
                                 var msg = $"Error executing WorkJob {this.Name}/{jobdescription}@{callPoint}: {x.Message}";
-                                job?.handling?.Invoke(new Exception(msg, x));
+                                try {
+                                    job?.handling?.Invoke(new Exception(msg, x));
+                                } catch(Exception y) {
+                                    // TODO add core new FTH logic here.
+                                }
                             }
                             job.status = WorkJobStatus.Finished;
                             totTasksResolved++;

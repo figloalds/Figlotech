@@ -34,7 +34,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
+    public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
         public ILogger Logger { get; set; }
 
         public static int DefaultMaxOpenAttempts { get; set; } = 30;
@@ -1266,7 +1266,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Retv List");
-                var retv = Plugin.GetObjectList<T>(command);
+                var retv = this.GetObjectList<T>(command);
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
 
                 try {
@@ -1490,7 +1490,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         this.WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
                     }
-                    var retv = Plugin.BuildAggregateListDirect<T>(transaction, command, join, 0);
+                    var retv = this.BuildAggregateListDirect<T>(transaction, command, join, 0);
                     return retv;
                 }
 
@@ -1573,7 +1573,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
-                DataSet ds = Plugin.GetDataSet(command);
+                DataSet ds = this.GetDataSet(command);
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
 
                 try {

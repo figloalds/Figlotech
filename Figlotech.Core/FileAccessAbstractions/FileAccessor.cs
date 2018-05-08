@@ -331,10 +331,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                     absMkDirs(Path.GetDirectoryName(WorkingDirectory));
                 }
-                using (FileStream fs = new FileStream(WorkingDirectory, FileMode.Create)) {
-                    var cbytes = Encoding.UTF8.GetBytes(content);
-                    fs.Write(cbytes, 0, cbytes.Length);
-                }
+                File.WriteAllText(WorkingDirectory, content);
             });
         }
 

@@ -25,8 +25,7 @@ namespace System
             
             Fi.Tech.MemberwiseCopy(other, me);
         }
-
-
+        
         public static T InvokeGenericMethod<T>(this Object me, string GenericMethodName, Type genericType, params object[] args) {
             return (T) me.GetType()
                 .GetMethod(nameof(FiTechCoreExtensions.MapMeta))
@@ -44,6 +43,7 @@ namespace System
                     dr);
             Fi.Tech.Map(me, dr, meta);
         }
+
         public static void ValuesToDataRow(this Object me, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> meta = null) {
             var type = me.GetType();
             if (meta == null)
