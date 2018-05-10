@@ -862,6 +862,41 @@ namespace Figlotech.Core {
                 FiredTasksPreventGC.Add(retv);
             return retv;
         }
+
+        public static void SafeReadKeyOrIgnore(this Fi __selfie) {
+            TryIf(__selfie, ()=> !Console.IsInputRedirected, () => { Console.ReadKey(); });
+        }
+
+        public static event Action<Exception> OnUltimatelyUnhandledException;
+
+        public static void Try(this Fi __selfie, Action Try, Action<Exception> Catch, Action<bool> Finally) {
+            bool success = false;
+            try {
+                Try?.Invoke();
+                success = true;
+            } catch(Exception x) { 
+                try {
+                    Catch?.Invoke(x);
+                } catch(Exception y) {
+
+                }
+            } finally {
+                try {
+                    Finally?.Invoke(success);
+                } catch(Exception y) {
+
+                }
+            }
+        }
+
+        public static void TryIf(this Fi __selfie, Func<bool> condition, Action Try, Action<Exception> Catch = null, Action<bool> Finally = null) {
+            FiTechCoreExtensions.Try(__selfie, () => {
+                if (Try != null && condition != null && condition.Invoke()) {
+                    Try?.Invoke();
+                }
+            }, Catch, Finally);
+        }
+
         public static Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             bool success = false;
             var retv = Task.Run<T>(() => {

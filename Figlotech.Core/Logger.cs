@@ -3,6 +3,7 @@ using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.Core {
@@ -68,52 +69,38 @@ namespace Figlotech.Core {
                 return;
             try {
                 FileAccessor.AppendAllLines(
-                    DateTime.UtcNow.ToString("yyyy-MM-dd") + ".txt",
+                    FileName, 
                     new String[] {
                         "","",""
                     });
             } catch (Exception) { }
         }
 
+        private string FileName => DateTime.UtcNow.ToString("yyyy-MM-dd") + ".txt";
+
+        public void WriteEx(Exception x, StreamWriter sw) {
+            sw.WriteLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
+            sw.WriteLine(x.StackTrace);
+            sw.WriteLine(new String('-', 20));
+            if(x.InnerException != null) {
+                WriteEx(x, sw);
+            }
+            if(x is AggregateException ag) {
+                foreach(var agex in ag.InnerExceptions) {
+                    WriteEx(agex, sw);
+                }
+            }
+        }
+
         public void WriteLog(Exception x) {
             if (!Enabled)
                 return;
-            try {
-
-                Fi.Tech.RunAndForget(() => {
-
-                    lock ("BDADOS_LOG_LOCK") {
-
-                        var y = x;
-                        while (y != null) {
-                            if (EnableConsoleLogging)
-                                Console.Error.WriteLine(y.Message);
-                            y = y.InnerException;
-                        }
-                        try {
-                            List<String> trace = new List<String>();
-                            StackTrace s = new StackTrace(x, true);
-                            StackFrame[] Frames = s.GetFrames();
-                            trace.Add(DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss") + " ---- Exception ---------------------------------- ");
-                            for (int i = 0; i < Frames.Length; i++) {
-                                if (Frames[i].GetMethod().DeclaringType.Name.Contains("BDados") || Frames[i].GetMethod().DeclaringType.Name.Contains("MySql"))
-                                    continue;
-                                trace.Add(String.Format("-- {0}, Linha {1}", Frames[i].GetFileName(), Frames[i].GetFileLineNumber()));
-                            }
-                            trace.Add("--------------------------------------------------------------------- ");
-                            FileAccessor.AppendAllLines(
-                                DateTime.UtcNow.ToString("yyyy-MM-dd") + ".txt",
-                                new String[] {
-                                DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss ---- Exception ---------------------------------- "),
-                                x.Message,
-                                x.StackTrace,
-                                DateTime.Now.ToString("--------------------------------------------------------------------- ")
-                                });
-                        } catch (Exception) { }
-
-                    }
-                });
-            } catch (Exception) { }
+            
+            FileAccessor.Write(FileName, (stream) => {
+                using (StreamWriter sw = new StreamWriter(stream)) {
+                    WriteEx(x, sw);
+                }
+            });
         }
 
         public void SetLocation(string location) {

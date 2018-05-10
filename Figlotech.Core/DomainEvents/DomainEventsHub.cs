@@ -37,18 +37,16 @@ namespace Figlotech.Core.DomainEvents {
         
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
-
-        public void Raise(IDomainEvent domainEvent) {
-
-        }
-
+        
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
             domainEvents.Iterate(evt => Raise(evt));
         }
         public void Raise<T>(T domainEvent) where T : IDomainEvent {
             // Cache event
-            EventCache.Add(domainEvent);
-            EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
+            lock(EventCache) {
+                EventCache.Add(domainEvent);
+                EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
+            }
 
             // Raise event on all listeners.
             Listeners.RemoveAll(l => l == null);
@@ -117,10 +115,14 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public IEnumerable<IDomainEvent> GetEventsSince(long Id) {
-            return EventCache.Where(e => e.Id > Id);
+            lock (EventCache) {
+                return EventCache.Where(e => e.Id > Id).ToArray();
+            }
         }
         public IEnumerable<IDomainEvent> GetEventsSince(DateTime Stamp) {
-            return EventCache.Where(e => e.Time > Stamp.Ticks);
+            lock (EventCache) {
+                return EventCache.Where(e => e.Time > Stamp.Ticks).ToArray();
+            }
         }
 
         public async Task<List<IDomainEvent>> PollForEventsSince<T>(TimeSpan maximumPollTime, long Id, Predicate<T> filter) {
