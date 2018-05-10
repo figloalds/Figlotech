@@ -52,7 +52,7 @@ namespace Figlotech.Core.DomainEvents {
             Listeners.RemoveAll(l => l == null);
             foreach (var listener in Listeners) {
                 if (listener is IDomainEventListener<T> correctListener) {
-                    EventTasks.Add(Task.Run(async () => {
+                    EventTasks.Add(Fi.Tech.FireTask(async () => {
                         try {
                             var t = correctListener.OnEventTriggered(domainEvent);
                             if(t != null) {
@@ -130,7 +130,7 @@ namespace Figlotech.Core.DomainEvents {
         }
         public async Task<List<IDomainEvent>> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
-            return await Task.Run(async () => {
+            return await await Fi.Tech.FireTask(async () => {
                 List<IDomainEvent> retv = new List<IDomainEvent>();
                 do {
                     var events = GetEventsSince(Id).ToList();
@@ -152,7 +152,7 @@ namespace Figlotech.Core.DomainEvents {
 
         public async Task<List<IDomainEvent>> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
-            return await Task.Run(async () => {
+            return await await Fi.Tech.FireTask(async () => {
                 List<IDomainEvent> retv = new List<IDomainEvent>();
                 do {
                     var events = GetEventsSince(dt).ToList();

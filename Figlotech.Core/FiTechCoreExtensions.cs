@@ -853,7 +853,11 @@ namespace Figlotech.Core {
                                 tasksToDispose.Clear();
                             }
                         } catch(Exception x) {
+                            try {
+                                OnUltimatelyUnhandledException?.Invoke(x);
+                            } catch(Exception y) {
 
+                            }
                         }
                     }
                 }
