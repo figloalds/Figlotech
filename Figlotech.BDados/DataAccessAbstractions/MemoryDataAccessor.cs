@@ -223,7 +223,7 @@
 //                }
 //            }, Environment.ProcessorCount);
 //            RecordSet<T> retv = new RecordSet<T>();
-//            Thread agl = new Thread(() => {
+//            Thread agl = Fi.Tech.SafeCreateThread(() => {
 //                retv.AddRange(DataAccessor.AggregateLoad<T>(cnd, limit, page, PageSize, OrderingMember, Ordering, Linear));
 //                AddCache<T>(retv);
 //            });

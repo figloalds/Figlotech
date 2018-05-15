@@ -56,7 +56,7 @@ namespace Figlotech.BDados.Builders {
         static int pids = 0;
         private static string paramId => $"{defParam}{++pids}";
 
-        private static QbFmt ListQueryFunction<T>(string column, List<T> o, Func<T, object> fn, bool isIn) {
+        private static QbFmt ListQueryFunction<T>(string column, IList<T> o, Func<T, object> fn, bool isIn) {
             if (!o.Any()) {
                 return Qb.Fmt(isIn ? "FALSE" : "TRUE");
             }
@@ -99,19 +99,26 @@ namespace Figlotech.BDados.Builders {
             return Qb.Fmt("AND");
         }
 
-        public static QbFmt In<T>(string column, List<T> o, Func<T, object> fn) {
+        public static QbFmt In<T>(string column, IList<T> o, Func<T, object> fn) {
             return ListQueryFunction(column, o, fn, true);
         }
-        public static QbFmt NotIn<T>(string column, List<T> o, Func<T, object> fn) {
+        public static QbFmt NotIn<T>(string column, IList<T> o, Func<T, object> fn) {
             return ListQueryFunction(column, o, fn, false);
         }
 
-        public static QbListOf<T> List<T>(List<T> o, Func<T, object> fn) {
+        public static QbListOf<T> List<T>(IList<T> o, Func<T, object> fn) {
             return new QbListOf<T>(o, fn);
         }
         public static QbFmt Fmt(String str, params object[] args) {
             return new QbFmt(str, args);
         }
+        static string fmtPrefix = IntEx.GenerateShortRid();
+        static int fmtCnt = 0;
+        public static QbFmt S(FormattableString fmtstr) {
+            var fmt = fmtstr.Format.RegExReplace(@"\{([^\}]*)\}", ()=> $"@{fmtPrefix}{fmtCnt++}");
+            return new QbFmt(fmt, fmtstr.GetArguments());
+        }
+
         public static QbIf If(bool condition, params object[] args) {
             return new QbIf(condition, args);
         }
@@ -130,9 +137,9 @@ namespace Figlotech.BDados.Builders {
         }
     }
     public class QbListOf<T> : QueryBuilder {
-        public List<T> List { get; private set; }
+        public IList<T> List { get; private set; }
         public Func<T, object> Selector { get; private set; }
-        public QbListOf(List<T> list, Func<T, object> fn) {
+        public QbListOf(IList<T> list, Func<T, object> fn) {
             AppendListOf(list, fn);
         }
     }
@@ -201,7 +208,7 @@ namespace Figlotech.BDados.Builders {
 
         }
 
-        public QueryBuilder AppendListOf<T>(List<T> list, Func<T, object> fn) {
+        public QueryBuilder AppendListOf<T>(IList<T> list, Func<T, object> fn) {
             for (int i = 0; i < list.Count; i++) {
                 this.Append("@???", fn(list[i]));
                 if (i < list.Count - 1) {

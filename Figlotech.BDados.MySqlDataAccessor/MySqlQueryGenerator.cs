@@ -269,9 +269,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
 
-        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
+        public IQueryBuilder GenerateMultiUpdate<T>(IList<T> inputRecordset) where T : IDataObject {
             // -- 
-            List<T> workingSet = new List<T>();
+            IList<T> workingSet = new List<T>();
 
             var rid = Fi.Tech.GetRidColumn<T>();
 
@@ -307,8 +307,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
-            List<T> workingSet = new List<T>();
+        public IQueryBuilder GenerateMultiInsert<T>(IList<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+            IList<T> workingSet = new List<T>();
             workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
@@ -452,7 +452,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QbFmt(creationCommand);
         }
 
-        public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
+        public IQueryBuilder QueryIds<T>(IList<T> rs) where T : IDataObject {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
 

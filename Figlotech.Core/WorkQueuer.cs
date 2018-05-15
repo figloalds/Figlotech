@@ -231,7 +231,7 @@ namespace Figlotech.Core {
                     return;
                 }
                 DateTime lastJobProcessedStamp = DateTime.UtcNow;
-                Thread workerThread = new Thread(() => {
+                Thread workerThread = Fi.Tech.SafeCreateThread(() => {
                     //lock (workers) {
                     //    workers.Add(Thread.CurrentThread);
                     //}
@@ -313,6 +313,8 @@ namespace Figlotech.Core {
                         }
                     }
                 });
+                workerThread.CurrentCulture = Thread.CurrentThread.CurrentCulture;
+                workerThread.CurrentUICulture = Thread.CurrentThread.CurrentUICulture;
                 workerThread.Priority = DefaultWorkerPriority;
                 workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
                 workers.Add(workerThread);
@@ -341,7 +343,7 @@ namespace Figlotech.Core {
             //if (_supervisor == null ||
             //   _supervisor.ThreadState == ThreadState.Aborted ||
             //   _supervisor.ThreadState == ThreadState.Stopped) {
-            //    _supervisor = new Thread(() => SupervisorJob());
+            //    _supervisor = Fi.Tech.SafeCreateThread(() => SupervisorJob());
             //    _supervisor.Name = $"FTWQ_{Name}_supervisor";
             //    _supervisor.IsBackground = true;
             //    _supervisor.Priority = ThreadPriority.BelowNormal;

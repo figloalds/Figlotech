@@ -87,11 +87,11 @@ namespace Figlotech.BDados.Builders {
             return new List<IDataObject>(retv).ToList();
         }
 
-        public List<T> BuildAggregateList<T>(Object ParentVal, Relation relation, DataTable dt) where T : IDataObject, new() {
+        public IList<T> BuildAggregateList<T>(Object ParentVal, Relation relation, DataTable dt) where T : IDataObject, new() {
             var type = typeof(T);
             int thisIndex = relation.ChildIndex;
             int parentIndex = relation.ParentIndex;
-            List<T> retv = new List<T>();
+            IList<T> retv = new List<T>();
             var Relacoes = _join.Relations;
             String Prefix = _join.Joins[thisIndex].Prefix;
             String parentPrefix = _join.Joins[parentIndex].Prefix;
@@ -245,7 +245,7 @@ namespace Figlotech.BDados.Builders {
             return _join.Relations;
         }
 
-        public List<T> BuildObject<T>(ConnectionInfo transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
+        public IList<T> BuildObject<T>(ConnectionInfo transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T : IDataObject, new() {
             // May Jesus have mercy on your soul
             // If you intend on messing with this funciton.
 
@@ -262,7 +262,7 @@ namespace Figlotech.BDados.Builders {
             fn(_buildParameters);
             // And validate everything;
             DateTime start = DateTime.Now;
-            List<T> cache = new List<T>();
+            IList<T> cache = new List<T>();
             ValidateRelations();
             var Relations = _join.Relations;
             // Then we do this... Magic...

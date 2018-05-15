@@ -199,7 +199,7 @@
 //                    return;
 //                }
 //                DateTime lastJobProcessedStamp = DateTime.UtcNow;
-//                Thread workerThread = new Thread(() => {
+//                Thread workerThread = Fi.Tech.SafeCreateThread(() => {
 //                    //lock (workers) {
 //                    //    workers.Add(Thread.CurrentThread);
 //                    //}
@@ -290,7 +290,7 @@
 //            if (_supervisor == null ||
 //               _supervisor.ThreadState == ThreadState.Aborted ||
 //               _supervisor.ThreadState == ThreadState.Stopped) {
-//                _supervisor = new Thread(() => SupervisorJob());
+//                _supervisor = Fi.Tech.SafeCreateThread(() => SupervisorJob());
 //                _supervisor.Name = $"FTWQ_{Name}_supervisor";
 //                _supervisor.IsBackground = true;
 //                _supervisor.Priority = ThreadPriority.BelowNormal;

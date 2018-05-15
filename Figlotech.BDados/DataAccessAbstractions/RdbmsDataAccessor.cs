@@ -15,7 +15,6 @@ using Figlotech.Core.Helpers;
 using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
 using Figlotech.BDados.TableNameTransformDefaults;
-using Figlotech.BDados.Extensions;
 using System.Threading;
 using System.Diagnostics;
 using Figlotech.Core.Extensions;
@@ -365,13 +364,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        public List<T> Query<T>(IQueryBuilder query) where T : new() {
+        public IList<T> Query<T>(IQueryBuilder query) where T : new() {
             return Access((transaction) => {
                 return Query<T>(transaction, query);
             });
         }
 
-        public List<T> Query<T>(string queryString, params object[] args) where T : new() {
+        public IList<T> Query<T>(string queryString, params object[] args) where T : new() {
             return Query<T>(Qb.Fmt(queryString, args));
         }
 
@@ -420,36 +419,36 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => LoadByRid<T>(transaction, RID));
         }
 
-        public RecordSet<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
-            return Fetch<T>(Qb.Fmt(where, args)).ToRecordSet();
+        public IList<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
+            return Fetch<T>(Qb.Fmt(where, args)).ToList();
         }
 
 
-        public RecordSet<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(conditions, skip, limit, orderingMember, ordering).ToRecordSet();
+        public IList<T> LoadAll<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(conditions, skip, limit, orderingMember, ordering).ToList();
         }
 
-        public RecordSet<T> LoadAll<T>(IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IList<T> LoadAll<T>(IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
-                return LoadAll<T>(CurrentTransaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
+                return LoadAll<T>(CurrentTransaction, condicoes, skip, limit, orderingMember, ordering).ToList();
             }
             return Access((transaction) => {
-                return LoadAll<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
+                return LoadAll<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToList();
             });
         }
 
-        public List<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
+        public IList<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
             return Fetch<T>(Qb.Fmt(where, args));
         }
 
-        public List<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IList<T> Fetch<T>(Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
                 return Fetch(CurrentTransaction, conditions, skip, limit, orderingMember, ordering);
             }
             return Access((transaction) => Fetch(transaction, conditions, skip, limit, orderingMember, ordering));
         }
 
-        public List<T> Fetch<T>(IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IList<T> Fetch<T>(IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
                 return Fetch<T>(CurrentTransaction, condicoes, skip, limit, orderingMember, ordering);
             }
@@ -462,7 +461,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        private List<T> RunAfterLoads<T>(List<T> target) {
+        private IList<T> RunAfterLoads<T>(IList<T> target) {
             foreach (var a in target) {
                 if (target is IBusinessObject ibo) {
                     ibo.OnAfterLoad();
@@ -750,9 +749,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //}
         }
 
-        //public List<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
+        //public IList<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
         //    DateTime inicio = DateTime.Now;
-        //    List<T> retv = new List<T>();
+        //    IList<T> retv = new List<T>();
         //    this.WriteLog($"[{accessId}] Exec procedure -- ");
 
         //    QueryBuilder query = (QueryBuilder)Plugin.QueryGenerator.GenerateCallProcedure(typeof(T).Name, args);
@@ -1048,7 +1047,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public List<T> AggregateLoad<T>(
+        public IList<T> AggregateLoad<T>(
             Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
             Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
             MemberInfo GroupingMember = null, bool Linear = false) where T : IDataObject, new() {
@@ -1068,7 +1067,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
 
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, IList<T> list) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
                 return DeleteWhereRidNotIn(CurrentTransaction, cnd, list);
             }
@@ -1092,7 +1091,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public bool SaveRecordSet<T>(ConnectionInfo transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public bool SaveList<T>(ConnectionInfo transaction, IList<T> rs, bool recoverIds = false) where T : IDataObject {
             bool retv = true;
             if (rs.Count == 0)
                 return true;
@@ -1108,7 +1107,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int cnt = 0;
             int cut = 500;
             int rst = 0;
-            List<T> temp;
+            IList<T> temp;
             if (rs.Count > cut) {
                 temp = new List<T>();
                 temp.AddRange(rs);
@@ -1177,7 +1176,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public bool DeleteWhereRidNotIn<T>(ConnectionInfo transaction, Expression<Func<T, bool>> cnd, RecordSet<T> list) where T : IDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(ConnectionInfo transaction, Expression<Func<T, bool>> cnd, IList<T> list) where T : IDataObject, new() {
             int retv = 0;
             if (list == null)
                 return true;
@@ -1204,12 +1203,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv > 0;
         }
 
-        public bool SaveRecordSet<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public bool SaveList<T>(IList<T> rs, bool recoverIds = false) where T : IDataObject {
             if (CurrentTransaction != null) {
-                return SaveRecordSet<T>(CurrentTransaction, rs, recoverIds);
+                return SaveList<T>(CurrentTransaction, rs, recoverIds);
             }
             return Access((transaction) => {
-                return SaveRecordSet<T>(transaction, rs, recoverIds);
+                return SaveList<T>(transaction, rs, recoverIds);
             });
         }
 
@@ -1238,7 +1237,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public List<T> Query<T>(ConnectionInfo transaction, IQueryBuilder query) where T : new() {
+        public IList<T> Query<T>(ConnectionInfo transaction, IQueryBuilder query) where T : new() {
             if (query == null || query.GetCommandText() == null) {
                 return new List<T>();
             }
@@ -1256,7 +1255,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var cmdParam = command.CreateParameter();
                     cmdParam.ParameterName = param.Key;
                     cmdParam.Value = param.Value;
+                    
                     command.Parameters.Add(cmdParam);
+
                     var pval = $"'{param.Value?.ToString() ?? "null"}'";
                     if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
                         pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
@@ -1295,12 +1296,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID), null, 1).FirstOrDefault();
         }
 
-        public RecordSet<T> LoadAll<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering).ToRecordSet();
+        public IList<T> LoadAll<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering).ToList();
         }
 
-        public RecordSet<T> LoadAll<T>(ConnectionInfo transaction, IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            return Fetch<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToRecordSet();
+        public IList<T> LoadAll<T>(ConnectionInfo transaction, IQueryBuilder condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+            return Fetch<T>(transaction, condicoes, skip, limit, orderingMember, ordering).ToList();
         }
 
         public bool Delete(ConnectionInfo transaction, IDataObject obj) {
@@ -1421,7 +1422,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public List<T> AggregateLoad<T>
+        public IList<T> AggregateLoad<T>
             (ConnectionInfo transaction,
             Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
             Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
@@ -1514,7 +1515,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return LoadAll<T>(transaction, condicoes, skip, limit, orderingMember, ordering).FirstOrDefault();
         }
 
-        public List<T> Fetch<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IList<T> Fetch<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var query = new ConditionParser().ParseExpression(conditions);
 
             return Fetch<T>(transaction, query, skip, limit, orderingMember, ordering);
@@ -1522,7 +1523,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public int DefaultQueryLimit { get; set; } = 50;
 
-        public List<T> Fetch<T>(ConnectionInfo transaction, IQueryBuilder condicoes, int? skip, int? limit, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
+        public IList<T> Fetch<T>(ConnectionInfo transaction, IQueryBuilder condicoes, int? skip, int? limit, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             if (limit < 0) {
                 limit = DefaultQueryLimit;
             }

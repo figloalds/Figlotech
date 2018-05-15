@@ -154,13 +154,13 @@ namespace Figlotech.Core {
             return DateTime.UtcNow.Subtract(_startupstamp) > ts;
         }
 
-        public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
+        public static IList<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
             if (dt.Rows.Count < 1) return new List<T>();
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
-            List<T> retv = new List<T>();
+            IList<T> retv = new List<T>();
             Parallel.For(0, dt.Rows.Count, i => {
                 var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta, mapReplacements);
                 //yield return val;
@@ -869,6 +869,24 @@ namespace Figlotech.Core {
 
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
             TryIf(__selfie, ()=> !Console.IsInputRedirected, () => { Console.ReadKey(); });
+        }
+
+        public static Action StackActions(this Fi __selfie, params Action[] args) {
+            return () => {
+                args.Iterate(a => a?.Invoke());
+            };
+        }
+
+        public static Thread SafeCreateThread(this Fi __selfie, Action a) {
+            return new Thread(() => {
+                try {
+                    a?.Invoke();
+                } catch (Exception x) {
+                    try {
+                        OnUltimatelyUnhandledException?.Invoke(x);
+                    } catch (Exception) { }
+                }
+            });
         }
 
         public static event Action<Exception> OnUltimatelyUnhandledException;

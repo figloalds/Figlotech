@@ -62,7 +62,7 @@ namespace Figlotech.Core.InAppServiceHosting
         int idgen = 0;
         public void Start(IFthService service) {
             if(!ServiceThreads.ContainsKey(service)) {
-                var t = new Thread(async ()=> {
+                var t = Fi.Tech.SafeCreateThread(async ()=> {
                     try {
                         var rt = service.Run();
                         if (rt != null) {

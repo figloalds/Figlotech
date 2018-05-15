@@ -28,6 +28,19 @@ namespace System
                 return null;
             return Regex.Replace(me, pattern, replace);
         }
+        public static string RegExReplace(this string me, string pattern, Func<string> replace) {
+            if (me == null)
+                return null;
+            var matches = Regex.Matches(me, pattern);
+            StringBuilder retv = new StringBuilder();
+            int cursor = 0;
+            foreach(Match a in matches) {
+                retv.Append(me.Substring(cursor, a.Index - cursor));
+                retv.Append(replace());
+                cursor = a.Index + a.Length;
+            }
+            return retv.ToString();
+        }
 
         public static T ValueTo<T>(this Object me) {
             try {

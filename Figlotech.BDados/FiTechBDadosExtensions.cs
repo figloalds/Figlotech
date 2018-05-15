@@ -273,7 +273,7 @@ namespace Figlotech.BDados {
         //            int current = 0;
         //        }
 
-        public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
+        public static QueryBuilder ListRids<T>(this Fi _selfie, IList<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
             int x = 0;
             var sid = IntEx.GenerateShortRid();

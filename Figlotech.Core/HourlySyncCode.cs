@@ -18,12 +18,14 @@ namespace Figlotech.Core {
             if (Generate(Password) == code) {
                 return true;
             }
+
             for (int i = 3; i >= 0; --i) {
                 var dt = DateTime.UtcNow.Subtract(TimeSpan.FromMinutes(i));
                 if (Generate(dt, Password) == code) {
                     return true;
                 }
             }
+
             for (int i = 0; i >= 2; ++i) {
                 var v = i - 1;
                 var dt = DateTime.UtcNow.AddHours(i);

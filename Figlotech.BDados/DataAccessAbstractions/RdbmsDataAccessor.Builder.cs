@@ -15,7 +15,6 @@ using Figlotech.Core.Helpers;
 using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
 using Figlotech.BDados.TableNameTransformDefaults;
-using Figlotech.BDados.Extensions;
 using System.Threading;
 using System.Diagnostics;
 using Figlotech.Core.Extensions;
@@ -23,9 +22,9 @@ using Figlotech.Core.Extensions;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor {
 
-        public List<T> GetObjectList<T>(IDbCommand command) where T : new() {
+        public IList<T> GetObjectList<T>(IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
-            List<T> retv = new List<T>();
+            IList<T> retv = new List<T>();
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
                     var cols = new string[reader.FieldCount];
@@ -180,8 +179,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
-            List<T> retv = new List<T>();
+        public IList<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
+            IList<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var ridcol = Fi.Tech.GetRidColumn<T>();
             transaction?.Benchmarker?.Mark("Execute Query");

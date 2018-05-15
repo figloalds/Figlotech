@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Data;
 using System.Reflection;
 using System.Linq;
@@ -10,6 +11,7 @@ using System.Diagnostics;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.I18n;
 using Figlotech.Core.Interfaces;
+using System.Text;
 
 namespace Figlotech.Core {
     /// <summary>
@@ -24,6 +26,12 @@ namespace Figlotech.Core {
             for(int i = min; i < max; i+=skip) {
                 yield return i;
             }
+        }
+        
+
+
+        public static string S(FormattableString fs) {
+            return String.Format(CultureInfo.CurrentCulture, fs.Format, fs.GetArguments());
         }
 
     }

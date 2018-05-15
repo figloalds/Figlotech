@@ -120,7 +120,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this;
         }
 
-        public List<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
+        public IList<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
             Clear();
             var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
             if(agl == null || agl.Any(a=> a == null)) {
@@ -140,7 +140,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return agl;
         }
 
-        public List<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+        public IList<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
             LinearLoad = true;
             var retv = Fetch(cnd, skip, limit, true);
             LinearLoad = false;
@@ -156,7 +156,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public bool Save(Action fn = null) {
-            return DataAccessor?.SaveRecordSet(this) ?? false;
+            return DataAccessor?.SaveList(this) ?? false;
         }
 
     }

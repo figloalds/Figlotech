@@ -30,7 +30,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
         public void Start() {
             Init();
-            serverThread = new Thread(() => {
+            serverThread = Fi.Tech.SafeCreateThread(() => {
                 while (!ServerStop) {
                     using (server = new NamedPipeServerStream(pipeName)) {
                         server.WaitForConnection();
