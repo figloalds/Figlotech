@@ -16,6 +16,8 @@ namespace Figlotech.Core.DomainEvents {
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
 
+        public DomainEventsHub EventsHub { get; set; }
+
         static long generateTimeStamp() {
             var retv = DateTime.UtcNow.Ticks;
             retv -= Int16.MaxValue;

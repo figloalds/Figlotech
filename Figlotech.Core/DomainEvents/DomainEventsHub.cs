@@ -26,14 +26,10 @@ namespace Figlotech.Core.DomainEvents {
 
         public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(30);
 
-        private List<IDomainEvent> _eventCache = new List<IDomainEvent>();
-        public List<IDomainEvent> EventCache => _eventCache;
-
-        private List<IDomainEventListener> _listeners = new List<IDomainEventListener>();
-        public List<IDomainEventListener> Listeners => _listeners;
-
-        private List<CustomDomainValidation> _customValidators = new List<CustomDomainValidation>();
-        public List<CustomDomainValidation> CustomValidators => _customValidators;
+        public List<IDomainEvent> EventCache { get; private set; } = new List<IDomainEvent>();
+        private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
+        public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
+        public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
         
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
@@ -41,8 +37,9 @@ namespace Figlotech.Core.DomainEvents {
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
             domainEvents.Iterate(evt => Raise(evt));
         }
-        public void Raise<T>(T domainEvent) where T : IDomainEvent {
+        public void Raise(IDomainEvent domainEvent) {
             // Cache event
+            domainEvent.EventsHub = this;
             lock(EventCache) {
                 EventCache.Add(domainEvent);
                 EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
@@ -51,24 +48,20 @@ namespace Figlotech.Core.DomainEvents {
             // Raise event on all listeners.
             Listeners.RemoveAll(l => l == null);
             foreach (var listener in Listeners) {
-                if (listener is IDomainEventListener<T> correctListener) {
-                    EventTasks.Add(Fi.Tech.FireTask(async () => {
-                        try {
-                            var t = correctListener.OnEventTriggered(domainEvent);
-                            if(t != null) {
-                                await t;
-                            }
-                            if (domainEvent.AllowPropagation) {
-                                parentHub?.Raise(domainEvent);
-                            }
-                        } catch (Exception x) {
-                            var t = correctListener.OnEventHandlingError(x);
-                            if (t != null) {
-                                await t;
-                            }
+                EventTasks.Add(Fi.Tech.FireTask(() => {
+                    try {
+                        listener.OnEventTriggered(domainEvent);
+                        if (domainEvent.AllowPropagation) {
+                            parentHub?.Raise(domainEvent);
                         }
-                    }));
-                }
+                    } catch (Exception x) {
+                        try {
+                            listener.OnEventHandlingError(domainEvent, x);
+                        } catch(Exception y) {
+                            Fi.Tech.Throw(x);
+                        }
+                    }
+                }));
             }
 
             // Clear "Ran to completion" tasks;
@@ -167,12 +160,12 @@ namespace Figlotech.Core.DomainEvents {
             });
         }
 
-        public void SubscribeListener<T>(IDomainEventListener<T> listener) where T : IDomainEvent {
-            _listeners.Add(listener);
+        public void SubscribeListener(IDomainEventListener listener) {
+            Listeners.Add(listener);
         }
 
         public void RemoveListener(IDomainEventListener listener) {
-            _listeners.Remove(listener);
+            Listeners.Remove(listener);
         }
     }
 }

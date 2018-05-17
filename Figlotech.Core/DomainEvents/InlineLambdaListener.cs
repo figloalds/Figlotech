@@ -6,29 +6,29 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
     public static class InlineLambdaListener {
-        public static InlineLambdaListener<T> Create<T>(Action<T> action, Action<Exception> handler) where T : IDomainEvent {
+        public static InlineLambdaListener<T> Create<T>(Action<T> action, Action<T, Exception> handler) where T : IDomainEvent {
             return new InlineLambdaListener<T>(action, handler);
         }
     }
 
-    public class InlineLambdaListener<T> : IDomainEventListener<T> where T : IDomainEvent {
-        public Func<T, Task> OnRaise;
-        public Func<Exception, Task> OnHandle;
-        public InlineLambdaListener(Func<T, Task> action, Func<Exception, Task> handler) {
+    public class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
+        public Action<T> OnRaise;
+        public Action<T, Exception> OnHandle;
+        public DomainEventsHub EventsHub { get; set; }
+        public InlineLambdaListener(Action<T> action, Action<T, Exception> handler = null) {
             OnRaise = action;
             OnHandle = handler;
         }
-        public InlineLambdaListener(Action<T> action, Action<Exception> handler) {
-            OnRaise = (a) => { action?.Invoke(a); return null; };
-            OnHandle = (a) => { handler?.Invoke(a); return null; };
+
+        public override void OnEventTriggered(T evt) {
+            OnRaise?.Invoke(evt);
         }
 
-        public Task OnEventTriggered(T evt) {
-            return OnRaise?.Invoke(evt);
-        }
-
-        public Task OnEventHandlingError(Exception x) {
-            return OnHandle?.Invoke(x);
+        public override void OnEventHandlingError(T evt, Exception x) {
+            if(OnHandle == null) {
+                Fi.Tech.Throw(x);
+            }
+            OnHandle?.Invoke(evt, x);
         }
 
         private DomainEventsHub _registeredHub = null;
