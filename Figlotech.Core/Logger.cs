@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core.FileAcessAbstractions;
+using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
@@ -18,7 +19,9 @@ namespace Figlotech.Core {
         private object BDLogLock = new Object();
 
         public bool EnableConsoleLogging { get; set; } = true;
-        
+
+        public FnVal<String> Filename { get; set; } = FnVal.From(() => DateTime.UtcNow.ToString("yyyy-MM-dd") + $" {Environment.MachineName}.txt");
+
         public Logger() { }
         public Logger(IFileSystem Accessor) {
             FileAccessor = Accessor;
@@ -29,7 +32,7 @@ namespace Figlotech.Core {
                 return;
             try {
                 FileAccessor.AppendAllLines(
-                    "LogConverts.txt", new String[] {
+                    Filename, new String[] {
                         DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss - ") + log
                     });
             } catch (Exception) { }
@@ -54,7 +57,7 @@ namespace Figlotech.Core {
                             Lines.AddRange(BDadosLogCache);
                             Lines.Add(line);
                             FileAccessor.AppendAllLines(
-                                DateTime.UtcNow.ToString("yyyy-MM-dd") + $" {Environment.MachineName}.txt", Lines);
+                                Filename, Lines);
                             BDadosLogCache.Clear();
                         } catch (Exception) {
                         }
@@ -69,15 +72,13 @@ namespace Figlotech.Core {
                 return;
             try {
                 FileAccessor.AppendAllLines(
-                    FileName, 
+                    Filename, 
                     new String[] {
                         "","",""
                     });
             } catch (Exception) { }
         }
-
-        private string FileName => DateTime.UtcNow.ToString("yyyy-MM-dd") + ".txt";
-
+        
         public void WriteEx(Exception x, StreamWriter sw) {
             sw.WriteLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
             sw.WriteLine(x.StackTrace);
@@ -96,7 +97,7 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             
-            FileAccessor.Write(FileName, (stream) => {
+            FileAccessor.Write(Filename, (stream) => {
                 using (StreamWriter sw = new StreamWriter(stream)) {
                     WriteEx(x, sw);
                 }

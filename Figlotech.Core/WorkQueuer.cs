@@ -231,7 +231,11 @@ namespace Figlotech.Core {
                     return;
                 }
                 DateTime lastJobProcessedStamp = DateTime.UtcNow;
+                var CurrentCulture = Thread.CurrentThread.CurrentCulture;
+                var CurrentUICulture = Thread.CurrentThread.CurrentUICulture;
                 Thread workerThread = Fi.Tech.SafeCreateThread(() => {
+                    Thread.CurrentThread.CurrentCulture = CurrentCulture;
+                    Thread.CurrentThread.CurrentUICulture = CurrentCulture;
                     //lock (workers) {
                     //    workers.Add(Thread.CurrentThread);
                     //}
@@ -291,7 +295,7 @@ namespace Figlotech.Core {
                                 try {
                                     job?.handling?.Invoke(new Exception(msg, x));
                                 } catch(Exception y) {
-                                    // TODO add core new FTH logic here.
+                                    Fi.Tech.Throw(y);
                                 }
                             }
                             job.status = WorkJobStatus.Finished;
@@ -313,8 +317,6 @@ namespace Figlotech.Core {
                         }
                     }
                 });
-                workerThread.CurrentCulture = Thread.CurrentThread.CurrentCulture;
-                workerThread.CurrentUICulture = Thread.CurrentThread.CurrentUICulture;
                 workerThread.Priority = DefaultWorkerPriority;
                 workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
                 workers.Add(workerThread);
