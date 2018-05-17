@@ -28,10 +28,8 @@ namespace Figlotech.Core {
             }
         }
         
-
-
-        public static string S(FormattableString fs) {
-            return String.Format(CultureInfo.CurrentCulture, fs.Format, fs.GetArguments());
+        public FnVal<T> V<T>(Func<T> fn) {
+            return new FnVal<T>(fn);
         }
 
     }

@@ -14,6 +14,7 @@ using System.Security.Cryptography;
 using System.IO;
 using System.Threading;
 using Figlotech.Core.Extensions;
+using Figlotech.Core.FileAcessAbstractions;
 
 namespace Figlotech.Core {
     public delegate dynamic ComputeField(dynamic o);
@@ -821,6 +822,23 @@ namespace Figlotech.Core {
         public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             FireTask<T>(_selfie, task, handling, executeAnywaysWhenFinished);
         }
+
+        public static void Throw(this Fi _selfie, Exception x) {
+            try {
+                OnUltimatelyUnhandledException?.Invoke(x);
+            } catch (Exception y) {
+                Fi.Tech.Error(y);
+            }
+        }
+
+        public static Logger logger = new Logger(new FileAccessor(Environment.CurrentDirectory)) {
+            Filename = "fi_uncaughterrors.txt"
+        };
+
+        public static void Error(this Fi _selfie, Exception x) {
+            logger.WriteLog(x);
+        }
+
         public static Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             // Could just call the other function here
             // Decided to CTRL+C in favor of runtime performance.
@@ -882,11 +900,15 @@ namespace Figlotech.Core {
                 try {
                     a?.Invoke();
                 } catch (Exception x) {
-                    try {
-                        OnUltimatelyUnhandledException?.Invoke(x);
-                    } catch (Exception) { }
+                    Fi.Tech.Throw(x);
                 }
             });
+        }
+
+        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
+            if (DateTime.UtcNow > max)
+                return;
+            RunAndForget(__selfie, a, h, t);
         }
 
         public static event Action<Exception> OnUltimatelyUnhandledException;

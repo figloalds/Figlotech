@@ -14,6 +14,9 @@ namespace Figlotech.Core.Helpers {
         public static bool DerivesFrom(this Type t, Type ancestorType) {
             return ReflectionTool.TypeDerivesFrom(t, ancestorType);
         }
+        public static bool DerivesFromGeneric(this Type t, Type ancestorType) {
+            return ReflectionTool.TypeDerivesFromGeneric(t, ancestorType);
+        }
         public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(this Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
             var members = ReflectionTool.FieldsAndPropertiesOf(type);
             if (act == null) {
@@ -36,18 +39,23 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool TypeImplements(Type t, Type interfaceType) {
-            if (t != null && interfaceType.IsInterface) {
-                if (t != typeof(Object)) {
-                    return t.GetInterfaces().Any(i => i == interfaceType) || TypeImplements(t.BaseType, interfaceType);
-                }
-            }
-            return false;
+            return
+                (t != null && interfaceType.IsInterface) &&
+                t != typeof(Object) &&
+                (t.GetInterfaces().Any(i => i == interfaceType) || TypeImplements(t.BaseType, interfaceType));
         }
         public static bool TypeDerivesFrom(Type t, Type ancestorType) {
-            if (t != null && t != typeof(Object)) {
-                return t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType);
-            }
-            return false;
+            return
+                t != null && t != typeof(Object) &&
+                (t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType));
+        }
+        public static bool TypeDerivesFromGeneric(Type t, Type ancestorType) {
+            return 
+                (t != null && t != typeof(Object)) &&
+                (
+                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType || 
+                    TypeDerivesFromGeneric(t.BaseType, ancestorType)
+                );
         }
 
         public static IEnumerable<Type> GetLoadableTypesFrom(Assembly assembly) {

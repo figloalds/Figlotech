@@ -35,5 +35,27 @@ namespace Figlotech.Core.Extensions
                 act?.Invoke(enumerator.Current);
             }
         }
+
+        public static T FirstOrDefaultBefore<T>(this IEnumerable<T> me, Predicate<T> predicate) {
+            var enumerator = me.GetEnumerator();
+            var retv = default(T);
+            while (enumerator.MoveNext()) {
+                if (predicate(enumerator.Current))
+                    return retv;
+                retv = enumerator.Current;
+            }
+            return default(T);
+        }
+        public static T FirstOrDefaultAfter<T>(this IEnumerable<T> me, Predicate<T> predicate) {
+            var enumerator = me.GetEnumerator();
+            while (enumerator.MoveNext()) {
+                if (predicate(enumerator.Current)) {
+                    if(enumerator.MoveNext()) {
+                        return enumerator.Current;
+                    }
+                }
+            }
+            return default(T);
+        }
     }
 }
