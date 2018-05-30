@@ -9,13 +9,7 @@ namespace Figlotech.Core {
     public class RID {
         static Random rng = new Random();
         static CrossRandom mRng = new CrossRandom(777);
-        //// DateTime.UtcNow.Ticks
-        //long Alpha;
-        //// Random number
-        //uint Beta;
-        //// Random initializer + sequential number
-        //uint Gamma;
-
+        
         byte[] Signature = new byte[32];
 
         static uint segmentESequential = 0;
@@ -39,10 +33,7 @@ namespace Figlotech.Core {
                         var segmentB = iface.GetPhysicalAddress().GetAddressBytes();
                         var segmentC = Fi.Range(0, 32 - (segmentA.Length + segmentB.Length)).Select(i => (byte)mRng.Next(256)).ToArray();
                         var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
-
-                        //Alpha = new IntEx(str, IntEx.Hexadecimal).ToLong();
-                        //Beta = (uint)new IntEx(lbis, IntEx.Hexadecimal).ToLong();
-                        //Gamma = 777;
+                        
                         _machineRID = new RID(finalRid);
                         return _machineRID;
                     } catch (Exception x) {
@@ -87,19 +78,14 @@ namespace Figlotech.Core {
 
         public ulong AsULong {
             get {
-                //return new byte[][] {
-                //    Signature.Slice(0, 8).ToArray(),
-                //    Signature.Slice(7, 8).ToArray(),
-                //    Signature.Slice(15, 8).ToArray(),
-                //    Signature.Slice(23, 8).ToArray(),
-                //}
-                //.Select(a=> BitConverter.ToUInt64(a,0))
-                //.Aggregate((a, b) => a ^ b);
-
-                return Fi.Range(0, 32, 8)
-                    .Select(a => Signature.Slice(a, 8))
-                    .Select(a => BitConverter.ToUInt64(a.ToArray(), 0))
-                    .Aggregate((a, b) => a ^ b);
+                return new byte[][] {
+                    Signature.Slice(0, 8).ToArray(),
+                    Signature.Slice(7, 8).ToArray(),
+                    Signature.Slice(15, 8).ToArray(),
+                    Signature.Slice(23, 8).ToArray(),
+                }
+                .Select(a => BitConverter.ToUInt64(a, 0))
+                .Aggregate((a, b) => a ^ b);
             }
         }
 
@@ -124,21 +110,7 @@ namespace Figlotech.Core {
         static Lazy<byte[]> RidSessionSegment = new Lazy<byte[]>(()=>BitConverter.GetBytes(DateTime.UtcNow.Ticks));
         private void NewRid() {
             lock ("GLOBAL_RID_GENERATION") {
-                //Fi.Tech.WriteLine("RID GENERATION CALLED");
 
-                //var segmentA = RidSessionSegment.Value;
-                //var segmentB = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
-                //var segmentC = CSeg;
-                //var segmentD = BitConverter.GetBytes(rng.Next());
-                //var segmentE = BitConverter.GetBytes(segmentEOrigin + ++segmentESequential);
-
-                //Signature = Fi.Tech.CombineArrays(
-                //    segmentA, 
-                //    segmentB, 
-                //    segmentC, 
-                //    segmentD, 
-                //    segmentE
-                //);
                 Buffer.BlockCopy(RidSessionSegment.Value, 0, Signature, 0, 8);
                 Buffer.BlockCopy(BitConverter.GetBytes(DateTime.UtcNow.Ticks), 0, Signature, 8, 8);
                 Buffer.BlockCopy(CSeg, 0, Signature, 16, 8);
