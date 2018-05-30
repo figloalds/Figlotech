@@ -28,7 +28,7 @@ namespace Figlotech.Scripting
                 "from System.Collections.Generic import *",
                 "from Figlotech.Core import *"
             };
-            references.Iterate(r => lines.Add($"clr.AddReference('{r}')"));
+            references.ForEach(r => lines.Add($"clr.AddReference('{r}')"));
 
             Execute(lines, null, false);
             scope.RemoveVariable("clr");

@@ -286,6 +286,9 @@ namespace Figlotech.BDados.Helpers {
                                 strBuilder.Append($"{prefix}.{info2.FarField}");
                             } else {
                                 var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name);
+                                if(mem == null) {
+                                    throw new BDadosException($"Fatal runtime inconsistency error: Cannot find member {expr.Member.Name} in type {(expr.Expression).Type}!");
+                                }
                                 var info3 = ReflectionTool.GetAttributeFrom<AggregateObjectAttribute>(mem);
                                 var altName = ReflectionTool.GetAttributeFrom<OverrideColumnNameOnWhere>(mem);
                                 var memberName = altName?.Name ?? member.Name;

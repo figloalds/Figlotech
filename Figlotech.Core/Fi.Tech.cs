@@ -23,14 +23,33 @@ namespace Figlotech.Core {
         public static Fi Tech = new Fi();
 
         public static IEnumerable<int> Range(int min, int max, int skip = 1) {
-            for(int i = min; i < max; i+=skip) {
-                yield return i;
+            if(skip < 0) {
+                for (int i = max-1; i >= min; i += skip) {
+                    yield return i;
+                }
+            } else {
+                for (int i = min; i < max; i += skip) {
+                    yield return i;
+                }
             }
         }
-        
+                
         public FnVal<T> V<T>(Func<T> fn) {
             return new FnVal<T>(fn);
         }
 
+        public static void Benchmark(params Action[] fn) {
+            if (!FiTechCoreExtensions.EnableBenchMarkers) {
+                fn.ForEach(a => a?.Invoke());
+                return;
+            }
+            Benchmarker bm = new Benchmarker();
+            var i = 0;
+            foreach(var a in fn) {
+                bm.Mark($"{++i}");
+                a?.Invoke();
+            }
+            bm.FinalMark();
+        }
     }
 }

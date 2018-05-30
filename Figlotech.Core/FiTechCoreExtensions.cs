@@ -70,7 +70,7 @@ namespace Figlotech.Core {
             EnableStdoutLogs = status;
         }
 
-        public static void Write(this Fi _selfie, String s = "") {
+        public static void Write(this Fi _selfie, string s = "") {
 
             if (Debugger.IsAttached)
                 Debug.Write(s);
@@ -79,7 +79,7 @@ namespace Figlotech.Core {
 
             Console.Write(s);
         }
-        public static void WriteLine(this Fi _selfie, String s = "") {
+        public static void WriteLine(this Fi _selfie, string s = "") {
             if (EnableStdoutLogs)
                 Console.WriteLine(s);
             //if (Debugger.IsAttached)
@@ -91,7 +91,7 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        //public static T Field<T>(this DataRow dr, String name) {
+        //public static T Field<T>(this DataRow dr, string name) {
         //    var dt = dr.Table;
         //    List<DataColumn> properColumns = new List<DataColumn>();
         //    foreach (DataColumn column in dt.Columns)
@@ -104,7 +104,7 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        public static String GetHashFromStream(this Fi _selfie, Stream stream) {
+        public static string GetHashFromStream(this Fi _selfie, Stream stream) {
             using (var md5 = MD5.Create()) {
                 return Convert.ToBase64String(md5.ComputeHash(stream));
             }
@@ -123,7 +123,17 @@ namespace Figlotech.Core {
             return MapMeta(_selfie, typeof(T), dt);
         }
 
-        public static void Map(this Fi _selfie, object retv, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta, Dictionary<string, string> mapReplacements = null) {
+        public static T ResultOf<T>(this Fi _selfie, Func<T> fn) {
+            return fn.Invoke();
+        }
+        public static B ValueOrInitInDictionary<A,B>(this Fi _selfie, IDictionary<A, B> dict, A key, Func<B> customInit) {
+            if(!dict.ContainsKey(key)) {
+                dict.Add(key, customInit.Invoke());
+            }
+            return dict[key];
+        }
+
+        public static void Map(this Fi _selfie, object retv, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta, Dictionary<String, string> mapReplacements = null) {
             if (preMeta == null) {
                 preMeta = Fi.Tech.MapMeta(retv.GetType(), dr.Table);
             }
@@ -143,7 +153,18 @@ namespace Figlotech.Core {
             }
         }
 
-        public static T Map<T>(this Fi _selfie, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta = null, Dictionary<string, string> mapReplacements = null) where T : new() {
+        public static T[] CombineArrays<T>(this Fi __selfie, params T[][] arrays) {
+            var final = new T[arrays.Sum(a=> a.Length)];
+            int offset = 0;
+            foreach (var a in arrays) {
+                Buffer.BlockCopy(a, 0, final, offset, a.Length);
+                offset += a.Length;
+            }
+            return final;
+            //return arrays.Flatten().ToArray();
+        }
+        
+        public static T Map<T>(this Fi _selfie, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta = null, Dictionary<String, string> mapReplacements = null) where T : new() {
             var retv = new T();
             Map(_selfie, retv, dr, preMeta, mapReplacements);
             return retv;
@@ -155,7 +176,7 @@ namespace Figlotech.Core {
             return DateTime.UtcNow.Subtract(_startupstamp) > ts;
         }
 
-        public static IList<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<string, string> mapReplacements = null) where T : new() {
+        public static IList<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
             if (dt.Rows.Count < 1) return new List<T>();
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -172,21 +193,21 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static Lazy<IBDadosStringsProvider> _strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
-        public static IBDadosStringsProvider Strings { get => _strings.Value; set { _strings = new Lazy<IBDadosStringsProvider>(() => value); } }
+        public static Lazy<IBDadosStringsProvider> _Strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
+        public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
         private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
         public static int currentBDadosConnections = 0;
 
-        public static List<string> RanChecks = new List<string>();
+        public static List<String> RanChecks = new List<String>();
 
         public static string DefaultLogRepository = "Logs\\Fi.TechLogs";
 
-        public static String DefaultBackupStore { get; set; } = "../Backups/";
+        public static string DefaultBackupStore { get; set; } = "../Backups/";
 
-        public static String Version {
+        public static string Version {
             get {
                 return Assembly.GetExecutingAssembly().GetName().Version.ToString();
             }
@@ -194,7 +215,7 @@ namespace Figlotech.Core {
 
         public static bool EnableBenchMarkers { get; set; } = false;
 
-        public static String GetVersion(this Fi _selfie) {
+        public static string GetVersion(this Fi _selfie) {
             return Version;
         }
 
@@ -209,14 +230,14 @@ namespace Figlotech.Core {
         }
 
         public static IBDadosStringsProvider GetStrings(this Fi _selfie) {
-            return Strings;
+            return strings;
         }
 
         public static void SetStrings(this Fi _selfie, IBDadosStringsProvider provider) {
-            Strings = provider;
+            strings = provider;
         }
 
-        private static IDictionary<string, string> _mappings = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase) {
+        private static IDictionary<String, string> _mappings = new Dictionary<String, string>(StringComparer.InvariantCultureIgnoreCase) {
 
         #region Big freaking list of mime types
         // combination of values from Windows 7 Registry and 
@@ -787,7 +808,7 @@ namespace Figlotech.Core {
         };
 
         public static string GetMimeType(this Fi _selfie, string filename) {
-            String extension = filename;
+            string extension = filename;
             while (extension.Contains(".")) {
                 extension = extension.Substring(extension.IndexOf('.') + 1);
             }
@@ -804,7 +825,7 @@ namespace Figlotech.Core {
 
         const int keySize = 16;
 
-        public static int IntSeedFromString(this Fi _selfie, String SeedStr) {
+        public static int IntSeedFromString(this Fi _selfie, string SeedStr) {
             int Seed = 0;
             for (int i = 0; i < SeedStr.Length; i++) {
                 Seed ^= SeedStr[i] * (int)MathUtils.PrimeNumbers().ElementAt(1477);
@@ -819,9 +840,6 @@ namespace Figlotech.Core {
 
         static List<Task> FiredTasksPreventGC = new List<Task>();
 
-        public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
-            FireTask<T>(_selfie, task, handling, executeAnywaysWhenFinished);
-        }
 
         public static void Throw(this Fi _selfie, Exception x) {
             try {
@@ -839,50 +857,57 @@ namespace Figlotech.Core {
             logger.WriteLog(x);
         }
 
-        public static Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+        public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+            var t = FireTask<T>(_selfie, task, handling, executeAnywaysWhenFinished);
+        }
+
+        public static async Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+            await FireTask<int>(_selfie, () => { task?.Invoke(); return 0; }, handling, executeAnywaysWhenFinished);
+        }
+        public static async Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             // Could just call the other function here
             // Decided to CTRL+C in favor of runtime performance.
             bool success = false;
-            var retv = Task.Run(() => {
+            Task<T> retv = Task.Run<T>(() => {
                 if (task != null) {
                     try {
-                        task.Invoke();
+                        return task.Invoke();
                     } catch (Exception x) {
                         try {
                             handling?.Invoke(x);
-                        } catch (Exception z) { }
+                        } catch (Exception z) {
+                            Fi.Tech.Throw(z);
+                        }
                     } finally {
                         try {
                             executeAnywaysWhenFinished?.Invoke(success);
                             lock (FiredTasksPreventGC) {
-                                var tasksToDispose = FiredTasksPreventGC.Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted).ToList();
-                                tasksToDispose.Iterate(t => {
-                                    if (t.Exception != null) {
-                                        Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
-                                        // "Handling" need not apply maybe.
-                                        // It probably didn't even throw an exception.
-                                        // I'm checking this just to tell the .Net API to not crash the application
-                                        // When this task is GC'ed
-                                        // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
-                                        // the entire program. I don't like that at all.
-                                    }
-                                    FiredTasksPreventGC.Remove(t);
-                                });
-                                tasksToDispose.Clear();
+                                FiredTasksPreventGC
+                                    .Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted)
+                                    .ForEach(t => {
+                                        if (t.Exception != null) {
+                                            Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
+                                            // "Handling" need not apply maybe.
+                                            // It probably didn't even throw an exception.
+                                            // I'm checking this just to tell the .Net API to not crash the application
+                                            // When this task is GC'ed
+                                            // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
+                                            // the entire program. I don't like that at all.
+                                            Fi.Tech.Throw(t.Exception);
+                                        }
+                                        FiredTasksPreventGC.Remove(t);
+                                    });
                             }
                         } catch(Exception x) {
-                            try {
-                                OnUltimatelyUnhandledException?.Invoke(x);
-                            } catch(Exception y) {
-
-                            }
+                            Fi.Tech.Throw(x);
                         }
                     }
                 }
+                return default(T);
             });
             lock (FiredTasksPreventGC)
                 FiredTasksPreventGC.Add(retv);
-            return retv;
+            return await retv;
         }
 
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
@@ -891,7 +916,7 @@ namespace Figlotech.Core {
 
         public static Action StackActions(this Fi __selfie, params Action[] args) {
             return () => {
-                args.Iterate(a => a?.Invoke());
+                args.ForEach(a => a?.Invoke());
             };
         }
 
@@ -941,49 +966,36 @@ namespace Figlotech.Core {
             }, Catch, Finally);
         }
 
-        public static Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
-            bool success = false;
-            var retv = Task.Run<T>(() => {
-                if (task != null) {
-                    try {
-                        return task.Invoke();
-                    } catch (Exception x) {
-                        try {
-                            handling?.Invoke(x);
-                        } catch (Exception z) { }
-                    } finally {
-                        try {
-                            executeAnywaysWhenFinished?.Invoke(success);
-                            lock (FiredTasksPreventGC) {
-                                var tasksToDispose = FiredTasksPreventGC.Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted).ToList();
-                                tasksToDispose.Iterate(t => {
-                                    if (t.Exception != null) {
-                                        Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
-                                        // "Handling" need not apply maybe.
-                                        // It probably didn't even throw an exception.
-                                        // I'm checking this just to tell the .Net API to not crash the application
-                                        // When this task is GC'ed
-                                        // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
-                                        // the entire program. I don't like that at all.
-                                    }
-                                    FiredTasksPreventGC.Remove(t);
-                                });
-                                tasksToDispose.Clear();
-                            }
-                        } catch (Exception x) {
-
-                        }
-                    }
+        public static void BackgroundProcessList<T>(this Fi _selfie, IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
+            RunAndForgetTasks(_selfie, (wq) => {
+                try {
+                    preWork?.Invoke();
+                } catch(Exception x) {
+                    preWorkExceptionHandling?.Invoke(x);
+                    return;
                 }
-                return default(T);
+                list.ForEach(i=> wq.Enqueue(()=> work?.Invoke(i), perWorkExceptionHandler));
+                try {
+                    postWork?.Invoke();
+                } catch (Exception x) {
+                    postWorkExceptionHandling?.Invoke(x);
+                    return;
+                }
             });
-            lock (FiredTasksPreventGC)
-                FiredTasksPreventGC.Add(retv);
-            return retv;
+        }
+
+        public static void RunAndForgetTasks(this Fi _selfie, Action<WorkQueuer> action, string name = "Annonymous_multi_tasks") {
+            RunAndForget(_selfie, () => {
+                var wq = new WorkQueuer(name, Environment.ProcessorCount);
+                action?.Invoke(wq);
+                wq.Stop(true);
+            }, x=> {
+                Throw(_selfie, x);
+            });
         }
 
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount * 128, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
-        public static WorkJob RunAndForget(this Fi _selfie, String name, Action job, Action<Exception> handler = null, Action then = null) {
+        public static WorkJob RunAndForget(this Fi _selfie, string name, Action job, Action<Exception> handler = null, Action then = null) {
             var wj = FiTechRAF.Enqueue(job, handler, then);
             wj.Name = name;
             return wj;
@@ -1003,7 +1015,7 @@ namespace Figlotech.Core {
             return numArray;
         }
 
-        public static String GenerateIdString(this Fi _selfie, String uniqueId, int numDigits = 128) {
+        public static string GenerateIdString(this Fi _selfie, string uniqueId, int numDigits = 128) {
             char[] retval = new char[numDigits];
             Random r = new Random();
             Random r2 = new Random(Fi.Tech.IntSeedFromString(uniqueId));
@@ -1013,7 +1025,7 @@ namespace Figlotech.Core {
                     pos = IntEx.Base36.Length - 1;
                 retval[i] = IntEx.Base36[pos];
             }
-            return new String(retval);
+            return new string(retval);
         }
 
         public static void MemberwiseCopy(this Fi _selfie, object origin, object destination) {
@@ -1031,11 +1043,11 @@ namespace Figlotech.Core {
             });
         }
 
-        private static String GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
+        private static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
             char[] vector = new char[numDigits];
             List<char> map = new List<char>();
-            String numbers = "0123456789";
-            String digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            string numbers = "0123456789";
+            string digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
             map.AddRange(numbers.ToCharArray());
             Random rng = new Random();
             if (useLetters) {
@@ -1053,7 +1065,7 @@ namespace Figlotech.Core {
                 int randomDigit = rng.Next(0, secondMap.Length);
                 vector[i] = secondMap[randomDigit];
             }
-            return new String(vector);
+            return new string(vector);
         }
     }
 }

@@ -28,9 +28,27 @@ namespace Figlotech.Core {
             return (int)StatusCode >= 200 && (int)StatusCode < 300;
         }
 
-        public static async Task<FiHttpResult> InitFrom(HttpWebRequest req) {
+        public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req) {
             var retv = new FiHttpResult();
             try {
+                using (var resp = await req.GetResponseAsync()) {
+                    retv.Init(resp);
+                }
+            } catch (WebException wex) {
+                using (var resp = wex.Response) {
+                    retv.Init(resp);
+                }
+            }
+            return retv;
+        }
+        public static async Task<FiHttpResult> InitFromPost(HttpWebRequest req, Func<Stream, Task> UploadRequestStream) {
+            var retv = new FiHttpResult();
+            try {
+                using (var reqStream = req.GetRequestStream()) {
+                    var t = UploadRequestStream?.Invoke(reqStream);
+                    if (t != null)
+                        await t;
+                }
                 using (var resp = await req.GetResponseAsync()) {
                     retv.Init(resp);
                 }
@@ -153,7 +171,7 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "GET";
             req.UserAgent = UserAgent;
-            return await FiHttpResult.InitFrom(req);
+            return await FiHttpResult.InitFromGet(req);
         }
 
         public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
@@ -185,7 +203,7 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "POST";
             req.UserAgent = UserAgent;
-            headers.Iterate((h) => {
+            headers.ForEach((h) => {
                 switch(h.Key) {
                     case "Content-Type":
                         req.ContentType = h.Value;
@@ -201,12 +219,7 @@ namespace Figlotech.Core {
                 }
             });
 
-            using (var reqStream = req.GetRequestStream()) {
-                var t = UploadRequestStream?.Invoke(reqStream);
-                if (t != null)
-                    await t;
-            }
-            return await FiHttpResult.InitFrom(req);
+            return await FiHttpResult.InitFromPost(req, UploadRequestStream);
         }
 
         public async Task<FiHttpResult> Post<T>(String Url, T postData) {

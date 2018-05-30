@@ -71,7 +71,7 @@ namespace Figlotech.Core.Helpers {
             return method.MakeGenericMethod(type).Invoke(input, args);
         }
 
-        public static object RunGeneric(object input, String methodName, Type type, params object[] args) {
+        public static object RunGeneric(object input, string methodName, Type type, params object[] args) {
             object retv = null;
             var methods = input.GetType().GetMethods().Where(
                 (m) => m.Name == methodName);
@@ -107,7 +107,7 @@ namespace Figlotech.Core.Helpers {
             return member ?? GetMember(t.BaseType, fieldName, target);
         }
 
-        public static bool SetValue(Object target, String fieldName, Object value) {
+        public static bool SetValue(Object target, string fieldName, Object value) {
             try {
                 MemberInfo member = GetMember(target?.GetType(), fieldName, target);
                 if (member == null) {
@@ -129,8 +129,7 @@ namespace Figlotech.Core.Helpers {
         }
         public static void ForAttributedMembers<T>(Type type, Action<MemberInfo, T> act) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
-            members
-                .Iterate(m => {
+            members.ForEach(m => {
                     var att = m.GetCustomAttribute<T>();
                     if (att != null) {
                         act(m, att);
@@ -205,20 +204,14 @@ namespace Figlotech.Core.Helpers {
                 if (value == null && t.IsValueType) {
                     return;
                 }
-                if (t == typeof(bool) || t == typeof(Boolean)) {
-                    if (value is String str) {
-                        if (str.ToUpper() == "YES")
-                            value = true;
-                        if (str.ToUpper() == "NO")
-                            value = false;
-                    }
-                }
+
                 if(t.IsEnum && value as int? != null) {
                     value = Enum.ToObject(t, (int) value);
                 }
                 if (value != null && !value.GetType().IsAssignableFrom(t)) {
                     value = Convert.ChangeType(value, t);
                 }
+
                 if (member is PropertyInfo pi) {
                     ((PropertyInfo)member).SetValue(target, value);
                 }
@@ -242,7 +235,7 @@ namespace Figlotech.Core.Helpers {
             return typeof(Object);
         }
 
-        public static bool TypeContains(Type type, String field) {
+        public static bool TypeContains(Type type, string field) {
             try {
                 var members = new List<MemberInfo>();
                 members.AddRange(type.GetFields());
@@ -258,7 +251,7 @@ namespace Figlotech.Core.Helpers {
             return false;
         }
 
-        public static Object GetValue(Object target, String fieldName) {
+        public static Object GetValue(Object target, string fieldName) {
             try {
                 var retv = GetMemberValue(GetMember(target?.GetType(), fieldName, target), target);
                 return retv;

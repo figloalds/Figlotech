@@ -35,7 +35,7 @@ namespace Figlotech.Core.DomainEvents {
         List<Task> EventTasks = new List<Task>();
         
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
-            domainEvents.Iterate(evt => Raise(evt));
+            domainEvents.ForEach(evt => Raise(evt));
         }
         public void Raise(IDomainEvent domainEvent) {
             // Cache event

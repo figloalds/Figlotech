@@ -64,7 +64,11 @@ namespace System
             }
             return new ObjectReflector(me);
         }
-
+        
+        public static List<T> ToSingleElementList<T>(this T me) {
+            return new List<T> { me };
+        }
+        
         public static Dictionary<string, object> ValuesToDictionary(this Object me) {
             if (me == null) {
                 throw new NullReferenceException("Figlotech ToDictionary Extension method called on a null value, this is a natural NullReferenceException");

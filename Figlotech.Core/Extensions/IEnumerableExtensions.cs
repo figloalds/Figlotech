@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.BusinessModel;
+﻿using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -7,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Extensions
+namespace System
 {
     public static class IEnumerableExtensions
     {
@@ -29,11 +30,86 @@ namespace Figlotech.Core.Extensions
             return dt;
         }
 
-        public static void Iterate<T>(this IEnumerable<T> me, Action<T> act) {
+        public static void ForEach<T>(this IEnumerable<T> me, Action<T> act) {
             var enumerator = me.GetEnumerator();
             while(enumerator.MoveNext()) {
                 act?.Invoke(enumerator.Current);
             }
+        }
+
+        public static IEnumerable<T> Slice<T>(this IEnumerable<T> t, int start, int end) {
+            return t.Skip(start).Take(end);
+        }
+        public static IEnumerable<T> Flatten<T>(this IEnumerable<IEnumerable<T>> t) {
+            foreach(var a in t) {
+                foreach(var b in a) {
+                    yield return b;
+                }
+            }
+        }
+
+        public static IEnumerable<IEnumerable<T>> Fracture<T>(this IEnumerable<T> t, int max) {
+            List<T> li = new List<T>();
+            foreach(var a in t) {
+                li.Add(a);
+                if (li.Count == max) {
+                    yield return li.ToArray();
+                    li.Clear();
+                }
+            }
+            if (li.Count > 0) {
+                yield return li.ToArray();
+                li.Clear();
+            }
+        }
+
+        public static IEnumerable<T> Combine<T>(this IEnumerable<T> t, IEnumerable<T> other) {
+            foreach (var a in t) {
+                yield return a;
+            }
+            foreach (var a in other) {
+                yield return a;
+            }
+        }
+        public static IEnumerable<T> Combine<T>(this IEnumerable<T> t, T other) {
+            foreach (var a in t) {
+                yield return a;
+            }
+            yield return other;
+        }
+
+        public static T MinBy<T, A>(this IEnumerable<T> me, Func<T, A> fn) where A : IComparable {
+            var min = default(T);
+            var minVal = default(A);
+            var enumerator = me.GetEnumerator();
+            int i = 0;
+            while (enumerator.MoveNext()) {
+                var val = fn(enumerator.Current);
+                if (val.CompareTo(minVal) < 0) {
+                    minVal = val;
+                    min = enumerator.Current;
+                }
+            }
+            return min;
+        }
+
+        public static T MaxBy<T, A>(this IEnumerable<T> me, Func<T, A> fn) where A : IComparable {
+            var max = default(T);
+            var maxVal = default(A);
+            var enumerator = me.GetEnumerator();
+            int i = 0;
+            while (enumerator.MoveNext()) {
+                var val = fn(enumerator.Current);
+                if (val.CompareTo(maxVal) > 0) {
+                    maxVal = val;
+                    max = enumerator.Current;
+                }
+            }
+            return max;
+        }
+
+        public static void ParallelForEach<T>(this IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
+            Fi.Tech.BackgroundProcessList(list, work, perWorkExceptionHandler, preWork, postWork, preWorkExceptionHandling, postWorkExceptionHandling);
         }
 
         public static T FirstOrDefaultBefore<T>(this IEnumerable<T> me, Predicate<T> predicate) {
