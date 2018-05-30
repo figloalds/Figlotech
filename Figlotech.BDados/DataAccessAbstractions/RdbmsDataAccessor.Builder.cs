@@ -69,7 +69,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Type t, IDataReader reader, ObjectReflector refl,
             object obj, string[] fieldNames, JoinDefinition join,
             int thisIndex, bool isNew,
-            Dictionary<string, Dictionary<string, object>> constructionCache) {
+            Dictionary<string, object> constructionCache) {
             var myPrefix = join.Joins[thisIndex].Prefix;
             refl.Slot(obj);
             if (isNew) {
@@ -126,14 +126,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 continue;
                             }
                             bool isUlNew = false;
-                            if (!constructionCache.ContainsKey(childRidCol))
-                                constructionCache.Add(childRidCol, new Dictionary<string, object>());
-                            if (constructionCache[childRidCol].ContainsKey(childRid)) {
-                                newObj = constructionCache[childRidCol][childRid];
+                            //if (!constructionCache.ContainsKey(childRidCol))
+                            //    constructionCache.Add(childRidCol, new Dictionary<string, object>());
+                            if (constructionCache.ContainsKey(childRid)) {
+                                newObj = constructionCache[childRid];
                             } else {
                                 newObj = Activator.CreateInstance(ulType, new object[] { });
                                 addMethod.Invoke(li, new object[] { newObj });
-                                constructionCache[childRidCol][childRid] = newObj;
+                                constructionCache[childRid] = newObj;
                                 isUlNew = true;
                             }
 
@@ -156,22 +156,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var childRidCol = join.Joins[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
-                            object newObj;
+                            object newObj = null;
                             if (parentRid == null || childRid == null) {
                                 continue;
                             }
                             bool isUlNew = false;
                             if (!constructionCache.ContainsKey(childRidCol))
                                 constructionCache.Add(childRidCol, new Dictionary<string, object>());
-                            if (constructionCache[childRidCol].ContainsKey(childRid)) {
-                                newObj = constructionCache[childRidCol][childRid];
+
+                            if (constructionCache.ContainsKey(childRid)) {
+                                newObj = constructionCache[childRid];
                             } else {
                                 newObj = Activator.CreateInstance(ulType, new object[] { });
-
-                                refl[fieldAlias] = newObj;
-                                constructionCache[childRidCol][childRid] = newObj;
+                                constructionCache[childRid] = newObj;
                                 isUlNew = true;
                             }
+                            refl[fieldAlias] = newObj;
                             BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, join, rel.ChildIndex, isUlNew, constructionCache);
                             break;
                         }
@@ -192,18 +192,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         fieldNames[i] = reader.GetName(i);
                     var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
                     bool isNew;
-                    var constructionCache = new Dictionary<string, Dictionary<string, object>>();
+                    var constructionCache = new Dictionary<string, object>();
                     constructionCache.Add(myRidCol, new Dictionary<string, object>());
                     transaction?.Benchmarker?.Mark("Build Result");
                     while (reader.Read()) {
                         isNew = true;
                         T newObj;
-                        if (!constructionCache[myRidCol].ContainsKey(reader[myRidCol] as string)) {
+                        if (!constructionCache.ContainsKey(reader[myRidCol] as string)) {
                             newObj = new T();
-                            constructionCache[myRidCol][reader[myRidCol] as string] = newObj;
+                            constructionCache[reader[myRidCol] as string] = newObj;
                             retv.Add(newObj);
                         } else {
-                            newObj = (T)constructionCache[myRidCol][reader[myRidCol] as string];
+                            newObj = (T)constructionCache[reader[myRidCol] as string];
                             isNew = false;
                         }
 

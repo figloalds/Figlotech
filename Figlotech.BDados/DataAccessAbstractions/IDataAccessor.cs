@@ -25,6 +25,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool SaveList<T>(IList<T> rs, bool recoverIds = false) where T : IDataObject;
         bool SaveItem(IDataObject objeto);
 
+        bool Test();
+
         Type[] WorkingTypes { get; set; }
 
         IList<T> AggregateLoad<T>(

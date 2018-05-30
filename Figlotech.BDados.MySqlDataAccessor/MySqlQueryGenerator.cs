@@ -115,7 +115,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
-        public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
+        public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
             if (rootConditions == null)
                 rootConditions = new QbFmt("true");
             if (inputJoin.Joins.Count < 1)
@@ -128,6 +128,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<String> onclauses = (from a in inputJoin.Joins select a.Args).ToList();
             List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
             List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
+
+            var isLinedAggregateJoin = false;
 
             QueryBuilder Query = new QbFmt("SELECT sub.*\n");
             Query.Append($"\t FROM (SELECT\n");
@@ -151,20 +153,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            //if (rootConditions != null) {
-            //    Query.Append("WHERE ");
-            //    Query.Append(rootConditions);
-            //}
-            //if (orderingMember != null) {
-            //    Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-            //}
-            //if (limit != null) {
-            //    Query.Append($"LIMIT");
-            //    if (skip != null)
-            //        Query.Append($"{skip},");
-            //    Query.Append($"{limit}");
-            //}
-            Query.Append($"");
+            if(isLinedAggregateJoin) {
+                if (rootConditions != null) {
+                    Query.Append("WHERE ");
+                    Query.Append(rootConditions);
+                }
+                if (orderingMember != null) {
+                    Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
+                }
+                if (skip != null || take != null) {
+                    Query.Append("LIMIT ");
+                    Query.Append(
+                        skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
+                    );
+                }
+                Query.Append($"");
+            }
             Query.Append($") AS {prefixes[0]}\n");
 
             for (int i = 1; i < tables.Count; i++) {
@@ -180,11 +184,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
             }
-            if (limit != null) {
-                Query.Append($"LIMIT");
-                if ((skip ?? 0) > 0)
-                    Query.Append($"{skip}, ");
-                Query.Append($"{limit}");
+            if(!isLinedAggregateJoin) {
+                if (skip != null || take != null) {
+                    Query.Append("LIMIT ");
+                    Query.Append(
+                        skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
+                    );
+                }
             }
             Query.Append(") AS sub\n");
 

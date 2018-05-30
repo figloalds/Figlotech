@@ -11,6 +11,7 @@ using Figlotech.Core.Helpers;
 **/
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -48,13 +49,15 @@ namespace Figlotech.BDados.Builders {
             AppendQuery(args);
         }
 
+
+
         public static QbParam Param(object o) {
             return new QbParam(o);
         }
 
         static readonly string defParam = IntEx.GenerateShortRid();
         static int pids = 0;
-        private static string paramId => $"{defParam}{++pids}";
+        public static string paramId => $"{defParam}{++pids}";
 
         private static QbFmt ListQueryFunction<T>(string column, IList<T> o, Func<T, object> fn, bool isIn) {
             if (!o.Any()) {
@@ -115,7 +118,7 @@ namespace Figlotech.BDados.Builders {
         static string fmtPrefix = IntEx.GenerateShortRid();
         static int fmtCnt = 0;
         public static QbFmt S(FormattableString fmtstr) {
-            var fmt = fmtstr.Format.RegExReplace(@"\{([^\}]*)\}", ()=> $"@{fmtPrefix}{fmtCnt++}");
+            var fmt = fmtstr.Format.RegExReplace(@"\{([^\}]*)\}", () => $"@{fmtPrefix}{fmtCnt++}");
             return new QbFmt(fmt, fmtstr.GetArguments());
         }
 
@@ -151,6 +154,31 @@ namespace Figlotech.BDados.Builders {
         public QueryBuilder() { }
         public QueryBuilder(params object[] args) {
             AppendQuery(args);
+        }
+
+        public IDbCommand ToCommand(IDbConnection connection) {
+            var command = connection.CreateCommand();
+            command.CommandText = this.GetCommandText();
+
+            foreach (KeyValuePair<String, Object> param in this.GetParameters()) {
+                var cmdParam = command.CreateParameter();
+                cmdParam.ParameterName = param.Key;
+                cmdParam.Value = param.Value;
+                command.Parameters.Add(cmdParam);
+            }
+            return command;
+        }
+
+        public T ToCommand<T>(IDbConnection connection) where T: IDbCommand {
+            return (T) ToCommand(connection);
+        }
+
+        public List<T> ToObjectList<T>(IDbConnection connection) where T: new() {
+            using (var cmd = ToCommand(connection)) {
+                using (var reader = cmd.ExecuteReader()) {
+                    return Fi.Tech.MapFromReader<T>(reader).ToList();
+                }
+            }
         }
 
         public QueryBuilder AppendQuery(params object[] args) {

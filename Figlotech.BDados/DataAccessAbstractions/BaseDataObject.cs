@@ -44,6 +44,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         [JsonIgnore]
         public IContextProvider ContextProvider { get; set; }
 
+        public abstract ulong AlteredBy { get; set; }
+        public abstract ulong CreatedBy { get; set; }
+
+        private int _persistedHash = 0;
+        public int PersistedHash {
+            get {
+                if(!IsPersisted) {
+                    return 0;
+                }
+                if (_persistedHash == 0) {
+                    _persistedHash = this.ComputeDataFieldsHash();
+                }
+                return _persistedHash;
+            }
+            set {
+                _persistedHash = value;
+            }
+        }
+
         public void ForceId(long newId) {
             this.Id = newId;
         }
