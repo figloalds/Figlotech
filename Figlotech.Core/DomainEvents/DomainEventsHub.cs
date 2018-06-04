@@ -30,17 +30,18 @@ namespace Figlotech.Core.DomainEvents {
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
         public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
-        
+
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
-        
+
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
             domainEvents.ForEach(evt => Raise(evt));
         }
         public void Raise(IDomainEvent domainEvent) {
+            Fi.Tech.WriteLine("EventHub", $"Raising Event {domainEvent.GetType()}");
             // Cache event
             domainEvent.EventsHub = this;
-            lock(EventCache) {
+            lock (EventCache) {
                 EventCache.Add(domainEvent);
                 EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
             }
@@ -57,7 +58,7 @@ namespace Figlotech.Core.DomainEvents {
                     } catch (Exception x) {
                         try {
                             listener.OnEventHandlingError(domainEvent, x);
-                        } catch(Exception y) {
+                        } catch (Exception y) {
                             Fi.Tech.Throw(x);
                         }
                     }
@@ -78,10 +79,10 @@ namespace Figlotech.Core.DomainEvents {
             ValidationErrors errs = new ValidationErrors();
 
             foreach (var validation in CustomValidators) {
-                if(validation.ValidationPhase == phase) {
+                if (validation.ValidationPhase == phase) {
                     try {
                         validation.Validator.Validate(validationTarget as IBusinessObject, errs);
-                    } catch(Exception x) {
+                    } catch (Exception x) {
                         errs.Add("Application", $"Validation has throw an Exception");
                         Fi.Tech.WriteLine(x.Message);
                         Fi.Tech.WriteLine(x.StackTrace);
@@ -112,53 +113,37 @@ namespace Figlotech.Core.DomainEvents {
                 return EventCache.Where(e => e.Id > Id).ToArray();
             }
         }
+
         public IEnumerable<IDomainEvent> GetEventsSince(DateTime Stamp) {
             lock (EventCache) {
                 return EventCache.Where(e => e.Time > Stamp.Ticks).ToArray();
             }
         }
 
-        public async Task<List<IDomainEvent>> PollForEventsSince<T>(TimeSpan maximumPollTime, long Id, Predicate<T> filter) {
-            return await PollForEventsSince(maximumPollTime, Id, e => e is T evt && filter(evt));
+        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
+            return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(Id), e => filter(e));
         }
-        public async Task<List<IDomainEvent>> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
+
+        private async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
             return await await Fi.Tech.FireTask(async () => {
-                List<IDomainEvent> retv = new List<IDomainEvent>();
                 do {
-                    var events = GetEventsSince(Id).ToList();
-                    retv.AddRange(events.Where(e => filter(e)));
-                    if (events.Any())
-                        Id = events.Max(e => e.Id);
-                    if (!retv.Any()) {
-                        await Task.Delay(500);
-                    }
-                } while (!retv.Any() && DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
+                    var events = getEvents().ToArray();
 
-                return retv;
+                    if (events.Length > 0) {
+                        return events;
+                    }
+                    await Task.Delay(500);
+                } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
+
+                return new IDomainEvent[0];
             });
         }
 
-        public async Task<List<IDomainEvent>> PollForEventsSince<T>(TimeSpan maximumPollTime, DateTime dt, Predicate<T> filter) {
-            return await PollForEventsSince(maximumPollTime, dt, e => e is T evt && filter(evt));
+        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
+            return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(dt), e => filter(e));
         }
 
-        public async Task<List<IDomainEvent>> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
-            DateTime pollStart = DateTime.UtcNow;
-            return await await Fi.Tech.FireTask(async () => {
-                List<IDomainEvent> retv = new List<IDomainEvent>();
-                do {
-                    var events = GetEventsSince(dt).ToList();
-                    retv.AddRange(events.Where(e => filter(e)));
-                    if (events.Any()) dt = new DateTime(events.Max(e => e.Time));
-                    if (!retv.Any()) {
-                        await Task.Delay(400);
-                    }
-                } while (!retv.Any() && DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
-
-                return retv;
-            });
-        }
 
         public void SubscribeListener(IDomainEventListener listener) {
             Listeners.Add(listener);

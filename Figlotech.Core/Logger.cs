@@ -96,12 +96,18 @@ namespace Figlotech.Core {
         public void WriteLog(Exception x) {
             if (!Enabled)
                 return;
-            
-            FileAccessor.Write(Filename, (stream) => {
-                using (StreamWriter sw = new StreamWriter(stream)) {
-                    WriteEx(x, sw);
+
+            WriteLog($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
+            WriteLog(x.StackTrace);
+            WriteLog(new String('-', 20));
+            if (x.InnerException != null) {
+                WriteLog(x);
+            }
+            if (x is AggregateException ag) {
+                foreach (var agex in ag.InnerExceptions) {
+                    WriteLog(agex);
                 }
-            });
+            }
         }
 
         public void SetLocation(string location) {

@@ -102,14 +102,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if(!ido.Any()) {
                 return;
             }
-            var grp = ido.GroupBy(i => i.GetType());
-            foreach(var a in grp) {
-                var l = a.ToList();
-                this.OnDataObjectAltered?.Invoke(a.First().GetType(), l);
-                l.ForEach(i =>
-                    Fi.Tech.WriteLine($"{i.GetType().Name}::{i.RID} altered")
-                );
-            }
+            ido.ForEach(i =>
+                Fi.Tech.WriteLine($"{i.GetType().Name}::{i.RID} altered")
+            );
+            this.OnDataObjectAltered?.Invoke(ido.First().GetType(), ido);
         }
 
         #region **** Global Declaration ****

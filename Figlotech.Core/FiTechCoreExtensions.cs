@@ -79,11 +79,18 @@ namespace Figlotech.Core {
 
             Console.Write(s);
         }
+
         public static void WriteLine(this Fi _selfie, string s = "") {
             if (EnableStdoutLogs)
                 Console.WriteLine(s);
             //if (Debugger.IsAttached)
             //    Debug.WriteLine(s);
+        }
+
+        public static LenientDictionary<string, bool> EnabledSystemLogs { get; private set; } = new LenientDictionary<string, bool>();
+        public static void WriteLine(this Fi _selfie, string origin, string s = "") {
+            if (EnableStdoutLogs || EnabledSystemLogs[origin])
+                Console.WriteLine($"[{origin}] {s}");
         }
 
         //public static T Field<T>(this DataRow dr, int index) {

@@ -280,17 +280,17 @@ namespace Figlotech.Core {
 
                             job.dequeued = DateTime.Now;
                             Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
+                            var callPoint = job?.action?.Method.DeclaringType?.DeclaringType?.Name;
 
                             try {
                                 job?.action?.Invoke();
                                 job.status = WorkJobStatus.Finished;
                                 job?.finished?.Invoke();
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                             } catch (Exception x) {
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                                var callPoint = job?.action?.Method.DeclaringType?.DeclaringType?.Name;
+                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
                                 //var callPoint = job?.action?.Method.DeclaringType?.Name;
                                 var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
                                 var msg = $"Error executing WorkJob {this.Name}/{jobdescription}@{callPoint}: {x.Message}";
