@@ -5,7 +5,8 @@ namespace Figlotech.Core {
         public static String Generate(String Password = null) {
             return Generate(DateTime.UtcNow, Password);
         }
-        private static String Generate(DateTime KeyMomment, String Password = null) {
+
+        public static String Generate(DateTime KeyMomment, String Password = null) {
             CrossRandom cs = new CrossRandom((KeyMomment.Date.AddHours(KeyMomment.Hour)).Ticks);
             byte[] barr = new byte[64];
             for(int i = 0; i < barr.Length; i++) {
@@ -14,7 +15,11 @@ namespace Figlotech.Core {
             return Convert.ToBase64String(barr);
         }
 
-        public static bool Validate(String code, String Password = null) {
+        public static bool Validate(DateTime keyMoment, String code, String Password) {
+            return Validate(code, Password, keyMoment);
+        }
+        public static bool Validate(String code, String Password, DateTime? keyMoment = null) {
+            keyMoment = keyMoment ?? DateTime.UtcNow;
             if (Generate(Password) == code) {
                 return true;
             }

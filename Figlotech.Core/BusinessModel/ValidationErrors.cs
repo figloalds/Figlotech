@@ -1,4 +1,5 @@
 ﻿
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -27,6 +28,14 @@ namespace Figlotech.Core.BusinessModel {
                 retv.Append("\n");
             }
             return retv.ToString();
+        }
+
+        public static ValidationErrors operator +(ValidationErrors verr, (string,string) operand) {
+            verr.Add(new ValidationError() {
+                Key = operand.Item1,
+                Message = operand.Item2
+            });
+            return verr;
         }
     }
 }
