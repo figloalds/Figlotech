@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Interfaces {
     public interface ISaveable {
-        bool Save(Action fn = null);
-        bool Load(Action fn = null);
+        Task<bool> Save();
+        Task<bool> Load();
     }
 }

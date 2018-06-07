@@ -4,6 +4,7 @@ using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public abstract class BaseDataObject : IDataObject, ISaveable {
@@ -75,8 +76,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DataAccessor.Delete(this);
         }
 
-        public abstract bool Save(Action fn = null);
-        public abstract bool Load(Action fn = null);
+        public abstract Task<bool> Save();
+        public abstract Task<bool> Load();
 
         // Optional stuff, override it or don't.
         // The save method will attempt to use them though.

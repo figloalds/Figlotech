@@ -6,6 +6,7 @@ using System.Reflection;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.BusinessModel;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public abstract class DataObject<T> : BaseDataObject, IDataObject, IBusinessObject where T: IDataObject, IBusinessObject, new() {
@@ -70,19 +71,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ve;
         }
 
-        public override bool Save(Action fn = null) {
-            return DataAccessor.SaveItem(this);
+        public override async Task<bool> Save() {
+            return await Fi.Tech.FireTask(() => DataAccessor.SaveItem(this));
         }
 
-        public override bool Load(Action fn = null) {
-            if (this.Id > 0) {
-                Fi.Tech.MemberwiseCopy(
-                    DataAccessor.LoadByRid<T>(this.RID), this);
-                return true;
-            }
-            else {
-                return false;
-            }
+        public override async Task<bool> Load() {
+
+            return await Fi.Tech.FireTask(() => {
+                if (this.Id > 0) {
+                    Fi.Tech.MemberwiseCopy(
+                        DataAccessor.LoadByRid<T>(this.RID), this);
+                    return true;
+                } else {
+                    return false;
+                }
+            });
         }
 
         void CascadingDoForFields<T>(Action<T> process, List<Type> prevList = null) {
