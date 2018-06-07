@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Figlotech.Core.Extensions;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
@@ -10,31 +11,51 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
         private TwoWayRsaPair() {
 
         }
-        public string EncryptionKey { get; private set; }
-        public string DecryptionKey { get; private set; }
+        public byte[] EncryptionKey { get; private set; }
+        public byte[] DecryptionKey { get; private set; }
         public static (TwoWayRsaPair, TwoWayRsaPair) Generate() {
             var RSA1 = new RSACryptoServiceProvider();
             var RSA2 = new RSACryptoServiceProvider();
 
             var Keypair1 = new TwoWayRsaPair {
-                EncryptionKey = Convert.ToBase64String(RSA1.ExportCspBlob(false)),
-                DecryptionKey = Convert.ToBase64String(RSA2.ExportCspBlob(true)),
+                EncryptionKey = RSA1.ExportCspBlob(false),
+                DecryptionKey = RSA2.ExportCspBlob(true),
             };
 
             var Keypair2 = new TwoWayRsaPair {
-                EncryptionKey = Convert.ToBase64String(RSA2.ExportCspBlob(false)),
-                DecryptionKey = Convert.ToBase64String(RSA1.ExportCspBlob(true)),
+                EncryptionKey = RSA2.ExportCspBlob(false),
+                DecryptionKey = RSA1.ExportCspBlob(true),
             };
 
             return (Keypair1, Keypair2);
         }
 
         public override string ToString() {
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(this)));
+            var pack = new byte[2 + 4 + EncryptionKey.Length + DecryptionKey.Length];
+            pack[0] = 0x02;
+            pack[pack.Length-1] = 0x03;
+            Array.Copy(BitConverter.GetBytes((UInt16)EncryptionKey.Length), 0, pack, 1, 2);
+            Array.Copy(BitConverter.GetBytes((UInt16)DecryptionKey.Length), 0, pack, 3 + EncryptionKey.Length, 2);
+
+            Array.Copy(EncryptionKey, 0, pack, 3, EncryptionKey.Length);
+            Array.Copy(DecryptionKey, 0, pack, 5 + EncryptionKey.Length, DecryptionKey.Length);
+
+            return Convert.ToBase64String(pack);
+        }
+
+        public void SetFromString(string input) {
+            var pack = Convert.FromBase64String(input);
+            var encLen = BitConverter.ToUInt16(pack, 1);
+            var decLen = BitConverter.ToUInt16(pack, 3 + encLen);
+
+            this.EncryptionKey = new ArraySegment<byte>(pack, 3, encLen).ToSegmentArray();
+            this.DecryptionKey = new ArraySegment<byte>(pack, 5 + encLen, decLen).ToSegmentArray();
         }
 
         public static TwoWayRsaPair FromString(string input) {
-            return JsonConvert.DeserializeObject<TwoWayRsaPair>(Encoding.UTF8.GetString(Convert.FromBase64String(input)));
+            var retv = new TwoWayRsaPair();
+            retv.SetFromString(input);
+            return retv;
         }
     }
 
@@ -46,13 +67,13 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
 
         public byte[] Decrypt(byte[] en) {
             var rsa = new RSACryptoServiceProvider();
-            rsa.ImportCspBlob(Convert.FromBase64String(KeyPair.DecryptionKey));
+            rsa.ImportCspBlob(KeyPair.DecryptionKey);
             return rsa.Decrypt(en, false);
         }
 
         public byte[] Encrypt(byte[] en) {
             var rsa = new RSACryptoServiceProvider();
-            rsa.ImportCspBlob(Convert.FromBase64String(KeyPair.EncryptionKey));
+            rsa.ImportCspBlob(KeyPair.EncryptionKey);
             return rsa.Encrypt(en, false);
         }
     }
