@@ -35,7 +35,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private List<IDataObject> ObjectsToNotify { get; set; } = new List<IDataObject>();
 
-        public void NotifyChange(List<IDataObject> ido) {
+        public void NotifyChange(IDataObject[] ido) {
            
             if(Transaction == null) {
                 DataAccessor.RaiseForChangeIn(ido);
@@ -61,13 +61,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void Commit() {
             Transaction?.Commit();
-            DataAccessor.RaiseForChangeIn(ObjectsToNotify);
-            ObjectsToNotify.Clear();
+            lock (ObjectsToNotify) {
+                DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
+                ObjectsToNotify.Clear();
+            }
         }
 
         public void Rollback() {
             Transaction?.Rollback();
-            ObjectsToNotify.Clear();
+            lock(ObjectsToNotify)
+                ObjectsToNotify.Clear();
         }
 
         public void EndTransaction() {
@@ -98,7 +101,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        internal void RaiseForChangeIn(List<IDataObject> ido) {
+        internal void RaiseForChangeIn(IDataObject[] ido) {
             if(!ido.Any()) {
                 return;
             }
@@ -576,9 +579,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         int accessId = 0;
 
-        public event Action<Type, List<IDataObject>> OnSuccessfulSave;
-        public event Action<Type, List<IDataObject>, Exception> OnFailedSave;
-        public event Action<Type, List<IDataObject>> OnDataObjectAltered;
+        public event Action<Type, IDataObject[]> OnSuccessfulSave;
+        public event Action<Type, IDataObject[], Exception> OnFailedSave;
+        public event Action<Type, IDataObject[]> OnDataObjectAltered;
 
         public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null, bool useTransaction = false) {
             var i = Access<int>((transaction) => {
@@ -1177,7 +1180,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 } catch (Exception x) {
                     Fi.Tech.RunAndForget(() => {
-                        OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToList(), x);
+                        OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
                     });
                     failedSaves.Add(x);
                 }
@@ -1188,7 +1191,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 } catch (Exception x) {
                     Fi.Tech.RunAndForget(() => {
-                        OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToList(), x);
+                        OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
                     });
                     failedSaves.Add(x);
                 }
@@ -1213,8 +1216,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             it.AlteredBy = RID.MachineRID.AsULong;
                         }
                     });
-                    transaction.NotifyChange(successfulSaves);
-                    OnSuccessfulSave?.Invoke(typeof(T), successfulSaves);
+                    transaction.NotifyChange(successfulSaves.ToArray());
+                    OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
                 });
             }
             if(failedSaves.Any()) {
@@ -1390,7 +1393,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 input.UpdatedTime = DateTime.UtcNow;
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
                 retv = true;
-                transaction.NotifyChange(input.ToSingleElementList());
+                transaction.NotifyChange(input.ToSingleElementList().ToArray());
                 return retv;
             }
 
@@ -1399,7 +1402,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateInsertQuery(input));
             } catch (Exception x) {
                 Fi.Tech.RunAndForget(() => {
-                    OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }, x);
+                    OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
                 }, (xe) => {
 
                 });
@@ -1449,7 +1452,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
                     } catch (Exception x) {
-                        OnFailedSave?.Invoke(input?.GetType(), new List<IDataObject>() { input }, x);
+                        OnFailedSave?.Invoke(input?.GetType(), new List<IDataObject>() { input }.ToArray(), x);
                     }
                 }
                 //}
@@ -1462,12 +1465,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     input.PersistedHash = newHash;
                     input.AlteredBy = RID.MachineRID.AsULong;
                 }
-                transaction.NotifyChange(input.ToSingleElementList());
+                transaction.NotifyChange(input.ToSingleElementList().ToArray());
                 retv = true;
             }
 
             Fi.Tech.RunAndForget(() => {
-                OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input });
+                OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
             }, (x) => {
             });
 

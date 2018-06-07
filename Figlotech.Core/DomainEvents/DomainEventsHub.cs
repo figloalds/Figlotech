@@ -127,9 +127,11 @@ namespace Figlotech.Core.DomainEvents {
         private async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
             return await await Fi.Tech.FireTask(async () => {
+                IDomainEvent[] events;
                 do {
-                    var events = getEvents().ToArray();
-
+                    lock (EventCache) {
+                        events = getEvents().ToArray();
+                    }
                     if (events.Length > 0) {
                         return events;
                     }

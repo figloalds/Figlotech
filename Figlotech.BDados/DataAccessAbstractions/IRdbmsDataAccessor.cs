@@ -12,9 +12,9 @@ using System.Linq.Expressions;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor
     {
-        event Action<Type, List<IDataObject>> OnSuccessfulSave;
-        event Action<Type, List<IDataObject>, Exception> OnFailedSave;
-        event Action<Type, List<IDataObject>> OnDataObjectAltered;
+        event Action<Type, IDataObject[]> OnSuccessfulSave;
+        event Action<Type, IDataObject[], Exception> OnFailedSave;
+        event Action<Type, IDataObject[]> OnDataObjectAltered;
 
         int DefaultQueryLimit { get; set; }
         void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);

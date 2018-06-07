@@ -39,7 +39,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         [JsonIgnore]
-        public IDataAccessor DataAccessor { get; set; }
+        public virtual IDataAccessor DataAccessor { get; set; }
 
         [JsonIgnore]
         public IContextProvider ContextProvider { get; set; }

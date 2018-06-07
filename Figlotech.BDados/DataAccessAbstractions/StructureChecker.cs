@@ -1359,10 +1359,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         type = $"TINYINT(1)";
                         break;
                     case "float":
-                    case "double":
                     case "single":
-                    case "decimal":
                         type = $"FLOAT(16,3)";
+                        break;
+                    case "decimal":
+                        type = $"DECIMAL(20,3)";
+                        break;
+                    case "double":
+                        type = $"DOUBLE(20,3)";
                         break;
                     case "datetime":
                         type = $"DATETIME";

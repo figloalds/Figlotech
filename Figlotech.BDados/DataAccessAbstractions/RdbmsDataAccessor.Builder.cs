@@ -24,7 +24,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IList<T> GetObjectList<T>(IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
-            IList<T> retv = new List<T>();
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
                     var cols = new string[reader.FieldCount];
