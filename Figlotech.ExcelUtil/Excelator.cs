@@ -145,7 +145,7 @@ namespace Figlotech.ExcelUtil
             try {
                 ws.Cells[line, column].Style.Numberformat.Format = value;
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                //Console.WriteLine(x.Message);
             }
         }
         public void Set(int line, int columnFrom, int columnTo, object value) {
@@ -161,7 +161,7 @@ namespace Figlotech.ExcelUtil
                     ws.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
             } catch (Exception x) {
-                Console.WriteLine(x.Message);
+                //Console.WriteLine(x.Message);
             }
         }
 

@@ -72,25 +72,44 @@ namespace Figlotech.Core {
 
         public static void Write(this Fi _selfie, string s = "") {
 
-            if (Debugger.IsAttached)
-                Debug.Write(s);
             if (!EnableStdoutLogs)
                 return;
 
+            if (Debugger.IsAttached)
+                Debug.Write(s);
             Console.Write(s);
         }
 
-        public static void WriteLine(this Fi _selfie, string s = "") {
-            if (EnableStdoutLogs)
-                Console.WriteLine(s);
-            //if (Debugger.IsAttached)
-            //    Debug.WriteLine(s);
+        public static bool StdoutEventHubLogs {
+            get => EnabledSystemLogs["FTH:EventHub"]; set => EnabledSystemLogs["FTH:EventHub"] = value;
+        }
+        public static bool StdoutRdbmsDataAccessorLogs {
+            get => EnabledSystemLogs["FTH:RDB"];
+            set => EnabledSystemLogs["FTH:RDB"] = value;
+        }
+        public static bool StdoutWorkQueuerLogs {
+            get => EnabledSystemLogs["FTH:WorkQueuer"]; set => EnabledSystemLogs["FTH:WorkQueuer"] = value;
         }
 
-        public static LenientDictionary<string, bool> EnabledSystemLogs { get; private set; } = new LenientDictionary<string, bool>();
-        public static void WriteLine(this Fi _selfie, string origin, string s = "") {
-            if (EnableStdoutLogs || EnabledSystemLogs[origin])
-                Console.WriteLine($"[{origin}] {s}");
+        static StreamWriter fthLogStream;
+        public static StreamWriter FTHLogStream {
+            get => fthLogStream ?? (fthLogStream = new StreamWriter(Console.OpenStandardOutput()));
+            set => fthLogStream = value;
+        }
+
+        public static void WriteLine(this Fi _selfie, string s = "") {
+            WriteLine(_selfie, "FTH:Generic", () => s);
+        }
+        public static void WriteLine(this Fi _selfie, string origin, string s) {
+            WriteLine(_selfie, origin, () => s);
+        }
+
+        public static SelfInitializerDictionary<string, bool> EnabledSystemLogs { get; private set; } = new SelfInitializerDictionary<string, bool>((str) => false);
+        public static void WriteLine(this Fi _selfie, string origin, Func<string> s) {
+            lock (FTHLogStream) {
+                if (EnableStdoutLogs && EnabledSystemLogs[origin])
+                    FTHLogStream.WriteLine($"[{origin}] {s()}");
+            }
         }
 
         //public static T Field<T>(this DataRow dr, int index) {
@@ -133,8 +152,8 @@ namespace Figlotech.Core {
         public static T ResultOf<T>(this Fi _selfie, Func<T> fn) {
             return fn.Invoke();
         }
-        public static B ValueOrInitInDictionary<A,B>(this Fi _selfie, IDictionary<A, B> dict, A key, Func<B> customInit) {
-            if(!dict.ContainsKey(key)) {
+        public static B ValueOrInitInDictionary<A, B>(this Fi _selfie, IDictionary<A, B> dict, A key, Func<B> customInit) {
+            if (!dict.ContainsKey(key)) {
                 dict.Add(key, customInit.Invoke());
             }
             return dict[key];
@@ -161,7 +180,7 @@ namespace Figlotech.Core {
         }
 
         public static T[] CombineArrays<T>(this Fi __selfie, params T[][] arrays) {
-            var final = new T[arrays.Sum(a=> a.Length)];
+            var final = new T[arrays.Sum(a => a.Length)];
             int offset = 0;
             foreach (var a in arrays) {
                 Buffer.BlockCopy(a, 0, final, offset, a.Length);
@@ -170,7 +189,7 @@ namespace Figlotech.Core {
             return final;
             //return arrays.Flatten().ToArray();
         }
-        
+
         public static T Map<T>(this Fi _selfie, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> preMeta = null, Dictionary<String, string> mapReplacements = null) where T : new() {
             var retv = new T();
             Map(_selfie, retv, dr, preMeta, mapReplacements);
@@ -861,7 +880,7 @@ namespace Figlotech.Core {
         };
 
         public static void Error(this Fi _selfie, Exception x) {
-            logger.WriteLog(x);
+            //logger.WriteLog(x);
         }
 
         public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
@@ -902,10 +921,10 @@ namespace Figlotech.Core {
                                             // the entire program. I don't like that at all.
                                             Fi.Tech.Throw(t.Exception);
                                         }
-                                        FiredTasksPreventGC.Remove(t);
                                     });
+                                FiredTasksPreventGC.RemoveAll(t => t.IsCanceled || t.IsCompleted || t.IsFaulted);
                             }
-                        } catch(Exception x) {
+                        } catch (Exception x) {
                             Fi.Tech.Throw(x);
                         }
                     }
@@ -918,7 +937,7 @@ namespace Figlotech.Core {
         }
 
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
-            TryIf(__selfie, ()=> !Console.IsInputRedirected, () => { Console.ReadKey(); });
+            TryIf(__selfie, () => !Console.IsInputRedirected, () => { Console.ReadKey(); });
         }
 
         public static Action StackActions(this Fi __selfie, params Action[] args) {
@@ -950,16 +969,16 @@ namespace Figlotech.Core {
             try {
                 Try?.Invoke();
                 success = true;
-            } catch(Exception x) { 
+            } catch (Exception x) {
                 try {
                     Catch?.Invoke(x);
-                } catch(Exception y) {
+                } catch (Exception y) {
 
                 }
             } finally {
                 try {
                     Finally?.Invoke(success);
-                } catch(Exception y) {
+                } catch (Exception y) {
 
                 }
             }
@@ -977,11 +996,11 @@ namespace Figlotech.Core {
             RunAndForgetTasks(_selfie, (wq) => {
                 try {
                     preWork?.Invoke();
-                } catch(Exception x) {
+                } catch (Exception x) {
                     preWorkExceptionHandling?.Invoke(x);
                     return;
                 }
-                list.ForEach(i=> wq.Enqueue(()=> work?.Invoke(i), perWorkExceptionHandler));
+                list.ForEach(i => wq.Enqueue(() => work?.Invoke(i), perWorkExceptionHandler));
                 try {
                     postWork?.Invoke();
                 } catch (Exception x) {
@@ -996,7 +1015,7 @@ namespace Figlotech.Core {
                 var wq = new WorkQueuer(name, Environment.ProcessorCount);
                 action?.Invoke(wq);
                 wq.Stop(true);
-            }, x=> {
+            }, x => {
                 Throw(_selfie, x);
             });
         }
@@ -1041,16 +1060,18 @@ namespace Figlotech.Core {
             if (destination == null)
                 return;
             ObjectReflector.Open(origin, (objA) => {
-                var members = ReflectionTool.FieldsAndPropertiesOf(origin.GetType());
                 ObjectReflector.Open(destination, (objB) => {
-                    foreach (var field in members) {
-                        objB[field.Name] = objA[field];
+                    foreach (var field in objB) {
+                        if (objA.ContainsKey(field.Key.Name)) {
+                            objB[field.Key] = objA[field.Key.Name];
+                        }
                     }
                 });
             });
         }
 
         private static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
+
             char[] vector = new char[numDigits];
             List<char> map = new List<char>();
             string numbers = "0123456789";

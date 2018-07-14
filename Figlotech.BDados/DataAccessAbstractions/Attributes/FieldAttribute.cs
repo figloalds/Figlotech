@@ -30,6 +30,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public object DefaultValue { get; set; }
         public bool AllowNull { get; set; }
         public bool Unique { get; set; }
+        public bool Unsigned { get; set; }
         // --
         public string Table { get; set; }
         public string Name { get; set; }

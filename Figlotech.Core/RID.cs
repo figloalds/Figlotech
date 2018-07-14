@@ -9,45 +9,56 @@ namespace Figlotech.Core {
     public class RID {
         static Random rng = new Random();
         static CrossRandom mRng = new CrossRandom(777);
-        
+
         byte[] Signature = new byte[32];
 
         static uint segmentESequential = 0;
-        static uint segmentEOrigin = (uint) (rng.Next(0, Int32.MaxValue)) + (uint) (rng.Next(0, Int32.MaxValue));
+        static uint segmentEOrigin = (uint)(rng.Next(0, Int32.MaxValue)) + (uint)(rng.Next(0, Int32.MaxValue));
 
         private static RID _machineRID = null;
         public static RID MachineRID {
             get {
-                if(_machineRID != null) {
+                if (_machineRID != null) {
                     return _machineRID;
                 }
 
-                foreach (var iface in NetworkInterface.GetAllNetworkInterfaces()) {
-                    try {
+                try {
+                    foreach (var iface in NetworkInterface.GetAllNetworkInterfaces()) {
                         var lbi = NetworkInterface.LoopbackInterfaceIndex;
-                        var id = NetworkInterface.GetAllNetworkInterfaces()[lbi].Id.Replace("{","").Replace("}","").Replace("-", "");
-                        var segmentA =  Enumerable.Range(0, id.Length)
+                        var id = NetworkInterface.GetAllNetworkInterfaces()[lbi].Id.Replace("{", "").Replace("}", "").Replace("-", "");
+                        var segmentA = Enumerable.Range(0, id.Length)
                              .Where(x => x % 2 == 0)
                              .Select(x => Convert.ToByte(id.Substring(x, 2), 16))
                              .ToArray();
                         var segmentB = iface.GetPhysicalAddress().GetAddressBytes();
                         var segmentC = Fi.Range(0, 32 - (segmentA.Length + segmentB.Length)).Select(i => (byte)mRng.Next(256)).ToArray();
                         var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
-                        
+
+
+
                         _machineRID = new RID(finalRid);
                         return _machineRID;
-                    } catch (Exception x) {
 
                     }
+                } catch (Exception x) {
+
                 }
-                if (!File.Exists("MACHINE.RID")) {
+
+                var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID");
+
+                if (!File.Exists(fileName)) {
                     _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
                     _machineRID = new RID();
-                    File.WriteAllBytes("MACHINE.RID", _machineRID.AsByteArray);
+                    File.WriteAllBytes(fileName, _machineRID.AsByteArray);
                 } else {
-                    _machineRID = new RID(File.ReadAllBytes("MACHINE.RID"));
+                    try {
+                        _machineRID = new RID(File.ReadAllBytes(fileName));
+                    } catch (Exception x) {
+                        File.Delete(fileName);
+                        return MachineRID;
+                    }
                 }
-                File.SetAttributes("MACHINE.RID", FileAttributes.Hidden);
+                File.SetAttributes(fileName, FileAttributes.Hidden);
                 return _machineRID;
             }
         }
@@ -55,7 +66,7 @@ namespace Figlotech.Core {
         byte[] _cSeg = null;
         byte[] CSeg {
             get {
-                if(_cSeg == null) {
+                if (_cSeg == null) {
                     _cSeg = new byte[8];
                     Array.Copy(MachineRID.Signature, 16, _cSeg, 0, 8);
                 }
@@ -96,18 +107,18 @@ namespace Figlotech.Core {
                 return copy;
             }
         }
-    
+
         private RID(bool noAutoInit) {
-            if(!noAutoInit) {
+            if (!noAutoInit) {
                 NewRid();
-            }    
+            }
         }
 
         public RID() {
             NewRid();
         }
 
-        static Lazy<byte[]> RidSessionSegment = new Lazy<byte[]>(()=>BitConverter.GetBytes(DateTime.UtcNow.Ticks));
+        static Lazy<byte[]> RidSessionSegment = new Lazy<byte[]>(() => BitConverter.GetBytes(DateTime.UtcNow.Ticks));
         private void NewRid() {
             lock ("GLOBAL_RID_GENERATION") {
 
@@ -116,7 +127,7 @@ namespace Figlotech.Core {
                 Buffer.BlockCopy(CSeg, 0, Signature, 16, 8);
                 Buffer.BlockCopy(BitConverter.GetBytes(rng.Next()), 0, Signature, 24, 4);
                 Buffer.BlockCopy(BitConverter.GetBytes(segmentEOrigin + ++segmentESequential), 0, Signature, 28, 4);
-                
+
             }
         }
 
@@ -146,7 +157,7 @@ namespace Figlotech.Core {
         public byte[] ToByteArray() {
             return this.AsByteArray;
         }
-        
+
         public static implicit operator String(RID a) {
             return a.AsBase64;
         }

@@ -32,9 +32,28 @@ namespace System
 
         public static void ForEach<T>(this IEnumerable<T> me, Action<T> act) {
             var enumerator = me.GetEnumerator();
-            while(enumerator.MoveNext()) {
-                act?.Invoke(enumerator.Current);
+            while (enumerator.MoveNext()) {
+                if(enumerator.Current != null) {
+                    act?.Invoke(enumerator.Current);
+                }
             }
+        }
+
+        public static void EnqueueRange<T>(this Queue<T> me, IEnumerable<T> range) {
+            range.ForEach(item => me.Enqueue(item));
+        }
+        public static IEnumerable<T> DequeueRangeAsLongAs<T>(this Queue<T> me, Predicate<T> condition) {
+            T next;
+            do {
+                if (me.Count > 0) {
+                    next = me.Peek();
+                    if (condition(next)) {
+                        yield return next;
+                        continue;
+                    }
+                }
+                yield break;
+            } while (true);
         }
 
         public static IEnumerable<T> Slice<T>(this IEnumerable<T> t, int start, int end) {
@@ -109,7 +128,8 @@ namespace System
         }
 
         public static void ParallelForEach<T>(this IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
-            Fi.Tech.BackgroundProcessList(list, work, perWorkExceptionHandler, preWork, postWork, preWorkExceptionHandling, postWorkExceptionHandling);
+            var tempLi = list.ToList();
+            Fi.Tech.BackgroundProcessList(tempLi, work, perWorkExceptionHandler, preWork, postWork, preWorkExceptionHandling, postWorkExceptionHandling);
         }
 
         public static T FirstOrDefaultBefore<T>(this IEnumerable<T> me, Predicate<T> predicate) {

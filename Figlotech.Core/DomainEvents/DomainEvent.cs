@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,10 @@ namespace Figlotech.Core.DomainEvents {
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
 
+        [JsonIgnore]
+        public string d_RaiseOrigin { get; set; }
+        
+        [JsonIgnore]
         public DomainEventsHub EventsHub { get; set; }
 
         static long generateTimeStamp() {

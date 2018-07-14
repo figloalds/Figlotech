@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers
 {
-    public class JoinConfigureHelper<T>
+    public class JoinConfigureHelper
     {
         internal JoinDefinition _join;
         internal int _index;
@@ -20,15 +20,12 @@ namespace Figlotech.BDados.Helpers
             this._join = _join;
             this._index = _index;
         }
-        public JoinConfigureHelper<T> As(String prefix) {
+        public JoinConfigureHelper As(String prefix) {
             _join.Joins[_index].Prefix = prefix;
             return this;
         }
 
-        public delegate void SelectFields<T>(SelectFieldsHelper selector, T entity);
-
-
-        public JoinConfigureHelper<T> OnlyFields(IEnumerable<string> fields) {
+        public JoinConfigureHelper OnlyFields(IEnumerable<string> fields) {
             _join.Joins[_index].Columns.AddRange(
                 fields.Where(a => !_join.Joins[_index].Columns.Contains(a))
             );
@@ -38,7 +35,7 @@ namespace Figlotech.BDados.Helpers
         //    return OnlyFields(fields);
         //}
 
-        public JoinConfigureHelper<T> On(String args)
+        public JoinConfigureHelper On(String args)
         {
             _join.Joins[_index].Args = args;
             return this;

@@ -317,9 +317,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         private void LockRegion(String wd, Action act) {
-            //lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
-            act?.Invoke();
-            //}
+            lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
+                act?.Invoke();
+            }
         }
 
         public void WriteAllText(String relative, String content) {

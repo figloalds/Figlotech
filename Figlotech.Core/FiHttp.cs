@@ -20,9 +20,9 @@ namespace Figlotech.Core {
         public long ContentLength { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
         private MemoryStream ResultStream { get; set; }
-        
+
         internal FiHttpResult() {
-            
+
         }
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
@@ -59,23 +59,21 @@ namespace Figlotech.Core {
         }
 
         void Init(WebResponse resp) {
-            if(resp == null) {
+            if (resp == null) {
                 StatusCode = 0;
                 ResultStream = new MemoryStream();
                 return;
             }
-            if(resp is HttpWebResponse htresp) {
+            if (resp is HttpWebResponse htresp) {
                 StatusCode = htresp.StatusCode;
                 StatusDescription = htresp.StatusDescription;
             }
             ContentType = resp.ContentType;
             ContentLength = resp.ContentLength;
-            using (var ms = new MemoryStream()) {
-                using (var respStream = resp.GetResponseStream()) {
-                    respStream.CopyTo(ms);
-                    this.ResultStream = ms;
-                    this.ResultStream.Seek(0, SeekOrigin.Begin);
-                }
+            using (var respStream = resp.GetResponseStream()) {
+                this.ResultStream = new MemoryStream();
+                respStream.CopyTo(this.ResultStream);
+                this.ResultStream.Seek(0, SeekOrigin.Begin);
             }
             for (int i = 0; i < resp.Headers.Count; ++i) {
                 string key = resp.Headers.GetKey(i);
@@ -94,11 +92,9 @@ namespace Figlotech.Core {
 
         public string AsString() {
             ResultStream.Seek(0, SeekOrigin.Begin);
-            using (ResultStream) {
-                var bytes = ResultStream.ToArray();
-                var retv = Encoding.UTF8.GetString(bytes);
-                return retv;
-            }
+            var bytes = ResultStream.ToArray();
+            var retv = Encoding.UTF8.GetString(bytes);
+            return retv;
         }
 
         public T As<T>() {
@@ -111,6 +107,20 @@ namespace Figlotech.Core {
             } catch (Exception x) {
             }
             return retv;
+        }
+
+        public T Use<T>(Func<FiHttpResult, T> usefn) {
+            using (this) {
+                return usefn(this);
+            }
+        }
+
+        public string UseAsString() {
+            return Use<string>(i => i.AsString());
+        }
+
+        public T UseAs<T>() {
+            return Use<T>(i => i.As<T>());
         }
 
         public void SaveToFile(IFileSystem fs, string fileName) {
@@ -127,7 +137,7 @@ namespace Figlotech.Core {
         IDictionary<string, string> headers = new Dictionary<string, string>();
         public FiHttp(string urlPrefix = null) {
             this.UrlPrefix = urlPrefix;
-            if(this.UrlPrefix != null) {
+            if (this.UrlPrefix != null) {
 
                 if (this.UrlPrefix.EndsWith("/")) {
                     this.UrlPrefix = this.UrlPrefix.Substring(0, this.UrlPrefix.Length - 1);
@@ -138,10 +148,10 @@ namespace Figlotech.Core {
         private string UrlPrefix { get; set; }
 
         private string MapUrl(string Url) {
-            if(string.IsNullOrEmpty(UrlPrefix)) {
+            if (string.IsNullOrEmpty(UrlPrefix)) {
                 return Url;
             }
-            if(Url.ToLower().RegExp("$\\w+\\:")) {
+            if (Url.ToLower().RegExp("$\\w+\\:")) {
                 return Url;
             }
             if (Url.StartsWith("/"))
@@ -150,10 +160,10 @@ namespace Figlotech.Core {
         }
 
         public async Task<bool> Check(string Url) {
-            var st = (int) (await Get(Url)).StatusCode;
+            var st = (int)(await Get(Url)).StatusCode;
             return st >= 200 && st < 300;
         }
-        
+
         public async Task<T> Get<T>(string Url) {
             T retv = default(T);
             await Get(Url, async (status, rstream) => {
@@ -162,7 +172,7 @@ namespace Figlotech.Core {
                     try {
                         T obj = JsonConvert.DeserializeObject<T>(json);
                         retv = obj;
-                    } catch(Exception x) {
+                    } catch (Exception x) {
                     }
                 }
             });
@@ -206,12 +216,12 @@ namespace Figlotech.Core {
             req.Method = "POST";
             req.UserAgent = UserAgent;
             headers.ForEach((h) => {
-                switch(h.Key) {
+                switch (h.Key) {
                     case "Content-Type":
                         req.ContentType = h.Value;
                         break;
                     case "Content-Length":
-                        if(Int64.TryParse(h.Value, out long len)) {
+                        if (Int64.TryParse(h.Value, out long len)) {
                             req.ContentLength = len;
                         }
                         break;

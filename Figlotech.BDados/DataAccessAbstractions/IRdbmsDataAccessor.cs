@@ -39,7 +39,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IQueryGenerator QueryGenerator { get; }
 
-        IJoinBuilder MakeJoin(Action<JoinDefinition> fn);
+        //IJoinBuilder MakeJoin(Action<JoinDefinition> fn);
 
         int Execute(IQueryBuilder Query);
         int Execute(String Query, params object[] args);
@@ -71,6 +71,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool DeleteWhereRidNotIn<T>(ConnectionInfo transaction, Expression<Func<T, bool>> cnd, IList<T> rids) where T : IDataObject, new();
         bool Delete<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condition) where T : IDataObject, new();
         bool Delete(ConnectionInfo transaction, IDataObject obj);
+        bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new();
+        bool Delete<T>(ConnectionInfo transaction, IEnumerable<T> obj) where T : IDataObject, new();
 
 
         IList<T> AggregateLoad<T>(

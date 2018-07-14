@@ -79,7 +79,7 @@ namespace Figlotech.Core.Helpers {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
                 } catch (Exception x) {
-                    Fi.Tech.WriteLine(x.Message);
+                    //Fi.Tech.WriteLine(x.Message);
                 }
             }
             return null;
@@ -196,6 +196,10 @@ namespace Figlotech.Core.Helpers {
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
+                var pi = member as PropertyInfo;
+                if (pi != null && pi.SetMethod == null) {
+                    return;
+                }
 
                 var t = GetTypeOf(member);
                 value = DbEvalValue(value, t);
@@ -208,15 +212,22 @@ namespace Figlotech.Core.Helpers {
                 if(t.IsEnum && value as int? != null) {
                     value = Enum.ToObject(t, (int) value);
                 }
+
+                if(value is string str && t == typeof(bool)) {
+                    value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                }
+
                 if (value != null && !value.GetType().IsAssignableFrom(t)) {
                     value = Convert.ChangeType(value, t);
                 }
 
-                if (member is PropertyInfo pi) {
-                    ((PropertyInfo)member).SetValue(target, value);
+                if (pi != null) {
+                    pi.SetValue(target, value);
+                    return;
                 }
                 if (member is FieldInfo fi) {
-                    ((FieldInfo)member).SetValue(target, value);
+                    fi.SetValue(target, value);
+                    return;
                 }
             } catch (Exception x) {
                 if (StrictMode) {

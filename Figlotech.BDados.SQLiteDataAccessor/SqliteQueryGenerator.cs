@@ -208,7 +208,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var rid = Fi.Tech.GetRidColumn(tabelaInput.GetType());
+            var rid = FiTechBDadosExtensions.RidColumnOf[tabelaInput.GetType()];
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, false));
@@ -257,7 +257,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             // -- 
             IList<T> workingSet = new List<T>();
 
-            var rid = Fi.Tech.GetRidColumn<T>();
+            var rid = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {

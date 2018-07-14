@@ -33,43 +33,37 @@ namespace Figlotech.BDados.Builders {
         public ConditionParametrizer() {
         }
 
-        public ConditionParametrizer AddStringEquality(String target, String inputValue) {
+        public ConditionParametrizer AndEquals(String target, object inputValue) {
             if (inputValue != null)
                 this.AppendCondition($"{target}=@{RandomId}", inputValue);
             return this;
         }
 
-        public ConditionParametrizer AddNulityCondition(String target, bool? inputValue) {
+        public ConditionParametrizer AndIsNull(String target, bool? inputValue) {
             if(inputValue != null)
                 this.AppendCondition($"({target} IS NULL)==@{RandomId}", inputValue);
             return this;
         }
 
-        public ConditionParametrizer AddMaxDate(String target, String maxDateValue) {
+        public ConditionParametrizer AndMaxDate(String target, String maxDateValue) {
             DateTime dt = DateTime.MaxValue;
             if (!DateTime.TryParseExact(maxDateValue, "yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out dt)) {
                 if (!DateTime.TryParseExact(maxDateValue, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out dt)) {
                     return this;
                 }
             }
-            this.AppendCondition($"{target}<==@{RandomId}", dt);
+            this.AppendCondition($"{target}<=@{RandomId}", dt);
             return this;
         }
 
-        public ConditionParametrizer AddMinDate(String target, String minDateValue) {
+        public ConditionParametrizer AndMinDate(String target, String minDateValue) {
             DateTime dt = DateTime.MaxValue;
             if (!DateTime.TryParseExact(minDateValue, "yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out dt)) {
                 if (!DateTime.TryParseExact(minDateValue, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out dt)) {
                     return this;
                 }
             }
-            this.AppendCondition($"{target}<==@{RandomId}", dt);
-            return this;
-        }
-
-        public ConditionParametrizer AddBooleanEquality(String target, bool? inputValue) {
-            if (inputValue != null)
-                this.AppendCondition($"{target}==@{RandomId}", inputValue);
+            this.AppendCondition($"{target}>=@{RandomId}", dt);
             return this;
         }
 

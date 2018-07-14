@@ -139,6 +139,10 @@ namespace Figlotech.Core {
             if (wait) {
                 //_supervisor.Join();
                 while (workers.Count > 0) {
+                    if(workers[workers.Count - 1].ManagedThreadId == Thread.CurrentThread.ManagedThreadId) {
+                        workers.RemoveAt(workers.Count - 1);
+                        continue;
+                    }
                     if(workers[workers.Count-1].IsAlive) {
                         workers[workers.Count - 1].Join();
                     }
@@ -216,12 +220,12 @@ namespace Figlotech.Core {
                         lock (currentJobs) {
                             currentJobs.FirstOrDefault(j => j.dequeued != null && j.completed == null && DateTime.UtcNow.Subtract(j.dequeued.Value) > TimeSpan.FromMilliseconds(ExtraWorkerTimeout * 2));
                             if (dlw != null) {
-                                Fi.Tech.WriteLine($"{dlw.Name}({dlw.id}) has been running for too long, removing from main queuer");
+                                Fi.Tech.WriteLine("FTH:WorkQueuer", $"{dlw.Name}({dlw.id}) has been running for too long, removing from main queuer");
                                 workers.Remove(dlw.AssignedThread);
                                 detectedLongWorkThreads.Add(dlw.AssignedThread);
                             } else {
                                 var tpm = avgTaskResolutionTime > 0 ? 60 * 1000 / avgTaskResolutionTime : 0;
-                                Fi.Tech.WriteLine($"{this.Name}::{this.QID} worker overload {workQueue.Count} tasks to complete, {workers.Count + detectedLongWorkThreads.Count} threads resolving average {tpm.ToString("0.00")}tpm");
+                                Fi.Tech.WriteLine("FTH:WorkQueuer", $"{this.Name}::{this.QID} worker overload {workQueue.Count} tasks to complete, {workers.Count + detectedLongWorkThreads.Count} threads resolving average {tpm.ToString("0.00")}tpm");
                             }
                         }
                     }
@@ -279,7 +283,7 @@ namespace Figlotech.Core {
                         lock (job) {
 
                             job.dequeued = DateTime.Now;
-                            Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
+                            Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {this.Name}:{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
                             var callPoint = job?.action?.Method.DeclaringType?.DeclaringType?.Name;
 
                             try {
@@ -287,10 +291,10 @@ namespace Figlotech.Core {
                                 job.status = WorkJobStatus.Finished;
                                 job?.finished?.Invoke();
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
+                                Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                             } catch (Exception x) {
                                 job.completed = DateTime.Now;
-                                Fi.Tech.WriteLine($"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
+                                Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {this.Name}@{callPoint}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
                                 //var callPoint = job?.action?.Method.DeclaringType?.Name;
                                 var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
                                 var msg = $"Error executing WorkJob {this.Name}/{jobdescription}@{callPoint}: {x.Message}";
@@ -376,7 +380,7 @@ namespace Figlotech.Core {
         public WorkJob Enqueue(Action a, Action<Exception> exceptionHandler = null, Action finished = null) {
             TotalWork++;
             var retv = new WorkJob(a, exceptionHandler, finished);
-            Fi.Tech.WriteLine($"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
+            Fi.Tech.WriteLine("FTH:WorkQueuer", $"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
             lock (workQueue) {
                 workQueue.Enqueue(retv);
             }

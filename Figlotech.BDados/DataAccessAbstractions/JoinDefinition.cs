@@ -61,17 +61,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             // TODO: Adicionar validação dos nomes dos campos depois.
         }
 
-        public JoinConfigureHelper<T> AggregateRoot<T>(String Alias) where T : IDataObject, new() 
+        public JoinConfigureHelper AggregateRoot(Type type, String Alias)
 
         {
             // Tipo junção é ignorado para a primeira tabela, de qualquer forma.
-            Join<T>(Alias, "", JoinType.LEFT);
-            return GenerateNewHelper<T>(Joins.Count-1);
+            Join(type, Alias, "", JoinType.LEFT);
+            return GenerateNewHelper(Joins.Count-1);
         }
 
-        private JoinConfigureHelper<T> GenerateNewHelper<T>(int Index)
+        private JoinConfigureHelper GenerateNewHelper(int Index)
         {
-            return new JoinConfigureHelper<T>(this, Index);
+            return new JoinConfigureHelper(this, Index);
         }
 
         internal List<Relation> GenerateRelations()
@@ -128,22 +128,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="Alias">Table alias</param>
         /// <param name="Args">ON CLAUSE argument</param>
         /// <param name="joinType">Specifies the join type between LEFT, RIGHT or INNER</param>
-        public JoinConfigureHelper<T> Join<T>(String Alias, String Args = "", JoinType joinType = JoinType.LEFT) where T : IDataObject, new() 
+        public JoinConfigureHelper Join(Type type, String Alias, String Args = "", JoinType joinType = JoinType.LEFT)
         {
             Validated = false;
             Relations.Clear();
 
             JoiningTable tj = Joins.FirstOrDefault(t=> t.Alias == Alias) ?? new JoiningTable();
             tj.Alias = Alias;
-            tj.TableName = typeof(T).Name;
-            tj.ValueObject = typeof(T);
+            tj.TableName = type.Name;
+            tj.ValueObject = type;
             tj.Args = Args;
             tj.Type = joinType;
             tj.Prefix = Alias;
             if(!Joins.Contains(tj)) {
                 Joins.Add(tj);
             }
-            return GenerateNewHelper<T>(Joins.IndexOf(tj));
+            return GenerateNewHelper(Joins.IndexOf(tj));
         }
 
         private bool ValidateTableCount()

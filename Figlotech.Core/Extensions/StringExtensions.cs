@@ -56,13 +56,10 @@ namespace System
             return false;
         }
 
-        public static T ValueTo<T>(this Object me) {
-            try {
-                return (T)Convert.ChangeType(me, typeof(T));
-            } catch (Exception) {
-                return default(T);
-            }
+        public static bool IsNullOrEmpty(this string me) {
+            return String.IsNullOrEmpty(me);
         }
+
         
     }
 

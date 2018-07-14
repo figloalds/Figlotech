@@ -33,9 +33,9 @@ namespace System {
             if (!self.Active)
                 return 0;
             try {
-                if (self.marks.Count > 1)
-                    self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
-                self.marks.Add(new TimeMark(self.marks[0].Timestamp, self.myName));
+                if (self.marks.Count < 2)
+                    self.marks.Add(new TimeMark(self.marks[0].Timestamp, self.myName));
+                self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
                 var retv = self.marks[self.marks.Count - 1].Timestamp
                     .Subtract(self.marks[0].Timestamp).TotalMilliseconds;
                 if (self.WriteToStdout) {

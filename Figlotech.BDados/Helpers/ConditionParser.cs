@@ -277,7 +277,7 @@ namespace Figlotech.BDados.Helpers {
                             var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
-                            Fi.Tech.WriteLine(info.ToString());
+                            //Fi.Tech.WriteLine(info.ToString());
                         } else {
                             var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
@@ -298,7 +298,7 @@ namespace Figlotech.BDados.Helpers {
                                     //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
 
                                     strBuilder.Append($"{prefix}.{memberName}");
-                                    Fi.Tech.WriteLine(info3.ToString());
+                                    //Fi.Tech.WriteLine(info3.ToString());
                                 } else {
                                     var prefix = GetPrefixOfExpression(expr);
                                     strBuilder.Append($"{prefix}.{memberName}");
@@ -334,6 +334,20 @@ namespace Figlotech.BDados.Helpers {
             } else
             if (foofun is MethodCallExpression) {
                 var expr = foofun as MethodCallExpression;
+
+                if(expr.Method.DeclaringType == typeof(Qh)) {
+                    var tq = typeof(Qb);
+                    var equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == expr.Method.GetParameters().Length - 1);
+                    if(equivalent != null) {
+                        if(equivalent.ContainsGenericParameters) {
+                            var gmdefTypeArgs = expr.Method.GetGenericArguments();
+                            //var gmdefTypeArgs = gmdef;
+                            equivalent = equivalent.MakeGenericMethod(gmdefTypeArgs);
+                        }
+                        return (QueryBuilder) equivalent.Invoke(null, expr.Arguments.Skip(1).Select(a=> GetValue(a)).ToArray());
+                    }
+                }
+
                 if (expr.Method.Name == "Any") {
                     if (expr.Arguments.Count > 0) {
                         if (expr.Arguments[0] is MemberExpression) {
@@ -345,6 +359,9 @@ namespace Figlotech.BDados.Helpers {
                 }
                 if (expr.Method.Name == "ToLower") {
                     strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                }
+                if (expr.Method.Name == "ToUpper") {
+                    strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
                 }
                 if (expr.Method.Name == "Where") {
                     if (expr.Arguments.Count > 1) {
@@ -360,7 +377,7 @@ namespace Figlotech.BDados.Helpers {
                     }
                 }
             } else {
-
+                Console.Write("");
             }
             if (fullConditions) {
                 return strBuilder;

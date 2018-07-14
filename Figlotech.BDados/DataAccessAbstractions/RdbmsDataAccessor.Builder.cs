@@ -66,10 +66,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void BuildAggregateObject(
             Type t, IDataReader reader, ObjectReflector refl,
-            object obj, string[] fieldNames, JoinDefinition join,
+            object obj, string[] fieldNames, JoiningTable[] joinTables, Relation[] joinRelations,
             int thisIndex, bool isNew,
-            Dictionary<string, object> constructionCache) {
-            var myPrefix = join.Joins[thisIndex].Prefix;
+            Dictionary<string, object> constructionCache, int recDepth) {
+            var myPrefix = joinTables[thisIndex].Prefix;
             refl.Slot(obj);
             if (isNew) {
                 for (int i = 0; i < fieldNames.Length; i++) {
@@ -79,13 +79,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
 
-            var relations = join.Relations.Where(a => a.ParentIndex == thisIndex);
+            var relations = joinRelations.Where(a => a.ParentIndex == thisIndex);
+            //if(!isNew) {
+            //    relations = relations.Where(r => r.AggregateBuildOption == AggregateBuildOptions.AggregateList);
+            //}
             foreach (var rel in relations) {
                 switch (rel.AggregateBuildOption) {
                     // Aggregate fields are the beautiful easy ones to deal
                     case AggregateBuildOptions.AggregateField: {
 
-                            String childPrefix = join.Joins[rel.ChildIndex].Prefix;
+                            String childPrefix = joinTables[rel.ChildIndex].Prefix;
                             var value = reader[childPrefix + "_" + rel.Fields[0]];
                             String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
                             refl[name] = reader[childPrefix + "_" + rel.Fields[0]];
@@ -95,19 +98,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     // this one is RAD and the most cpu intensive
                     // Sure needs optimization.
                     case AggregateBuildOptions.AggregateList: {
-                            String fieldAlias = rel.NewName ?? join.Joins[rel.ChildIndex].Alias;
-                            var objectType = ReflectionTool.GetTypeOf(
-                                ReflectionTool.FieldsAndPropertiesOf(t)
-                                .Where(m => m.Name == fieldAlias)
-                                .FirstOrDefault());
-                            var ulType = objectType
-                                .GetGenericArguments().FirstOrDefault();
-                            if (ulType == null) {
-                                continue;
-                            }
-                            var addMethod = objectType.GetMethods()
-                                .Where(m => m.Name == "Add")
-                                .FirstOrDefault();
+                            String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
+                            var objectType = ObjectTypeCache[t][fieldAlias];
+                            var ulType = UlTypeCache[objectType];
+                            var addMethod = AddMethodCache[objectType];
                             if (addMethod == null)
                                 continue;
 
@@ -116,9 +110,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 refl[fieldAlias] = newLi;
                             }
                             var li = refl[fieldAlias];
-                            var ridCol = Fi.Tech.GetRidColumn(ulType);
-                            var childRidCol = join.Joins[rel.ChildIndex].Prefix + "_" + ridCol;
-                            string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
+                            var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                            var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
+                            string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
                             object newObj;
                             if (parentRid == null || childRid == null) {
@@ -136,24 +130,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 isUlNew = true;
                             }
 
-                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, join, rel.ChildIndex, isUlNew, constructionCache);
+                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
                             break;
                         }
 
                     // this one is almost the same as previous one.
                     case AggregateBuildOptions.AggregateObject: {
-                            String fieldAlias = rel.NewName ?? join.Joins[rel.ChildIndex].Alias;
-                            var ulType = ReflectionTool.GetTypeOf(
-                                ReflectionTool.FieldsAndPropertiesOf(t)
-                                .Where((f) => f.GetCustomAttribute<AggregateObjectAttribute>() != null)
-                                .Where(m => m.Name == fieldAlias)
-                                .FirstOrDefault());
+                            String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
+                            var ulType = ObjectTypeCache[t][fieldAlias];
                             if (ulType == null) {
                                 continue;
                             }
-                            var ridCol = Fi.Tech.GetRidColumn(ulType);
-                            var childRidCol = join.Joins[rel.ChildIndex].Prefix + "_" + ridCol;
-                            string parentRid = ReflectionTool.DbDeNull(reader[join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
+                            var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                            var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
+                            string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
                             object newObj = null;
                             if (parentRid == null || childRid == null) {
@@ -171,17 +161,39 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 isUlNew = true;
                             }
                             refl[fieldAlias] = newObj;
-                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, join, rel.ChildIndex, isUlNew, constructionCache);
+                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
                             break;
                         }
                 }
             }
         }
 
+        public static SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>> ObjectTypeCache = new SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>>(
+            t => 
+                new SelfInitializerDictionary<string, Type>(fieldAlias => {
+                    var objectType = ReflectionTool.GetTypeOf(
+                                    ReflectionTool.FieldsAndPropertiesOf(t)
+                                    .Where(m => m.Name == fieldAlias)
+                                    .FirstOrDefault());
+                    return objectType;
+                })
+        );
+        public static SelfInitializerDictionary<Type, Type> UlTypeCache = new SelfInitializerDictionary<Type, Type>(
+            objectType => objectType
+                    .GetGenericArguments().FirstOrDefault()
+        );
+        public static SelfInitializerDictionary<Type, MethodInfo> AddMethodCache = new SelfInitializerDictionary<Type, MethodInfo>(
+            objectType => objectType.GetMethods()
+                    .Where(m => m.Name == "Add")
+                    .FirstOrDefault()
+        );
+
         public IList<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
             IList<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
-            var ridcol = Fi.Tech.GetRidColumn<T>();
+            var joinTables = join.Joins.ToArray();
+            var joinRelations = join.Relations.ToArray();
+            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
             transaction?.Benchmarker?.Mark("Execute Query");
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
@@ -206,7 +218,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             isNew = false;
                         }
 
-                        BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, join, thisIndex, isNew, constructionCache);
+                        BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, thisIndex, isNew, constructionCache, 0);
                     }
                     constructionCache.Clear();
                     transaction?.Benchmarker?.Mark("--");

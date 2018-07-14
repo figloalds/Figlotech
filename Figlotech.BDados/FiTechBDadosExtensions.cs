@@ -26,8 +26,8 @@ namespace Figlotech.BDados {
 
         //        public static bool EnableStdoutLogs { get; set; } = false;
 
-        public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
-        public static String GetRidColumn(this Fi _selfie, Type type) {
+        private static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
+        private static String GetRidColumn(this Fi _selfie, Type type) {
             var fields = new List<FieldInfo>();
             do {
                 fields.AddRange(type.GetFields());
@@ -41,6 +41,9 @@ namespace Figlotech.BDados {
                 ?? "RID";
             return retv;
         }
+
+        public static SelfInitializerDictionary<Type, String> RidColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t));
+        public static SelfInitializerDictionary<Type, String> IdColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetIdColumn(t));
 
         public static String GetIdColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
         public static String GetIdColumn(this Fi _selfie, Type type) {
@@ -184,7 +187,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetMethod("Limit").Invoke(o, new object[] { val });
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine("Error in SetPageSizeOfRecordSet" + x.Message);
             }
         }
 
@@ -192,7 +195,7 @@ namespace Figlotech.BDados {
             try {
                 return (int)o.GetType().GetProperties().Where((p) => p.Name == "Count").FirstOrDefault().GetValue(o);
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine("Error in GetCountOfRecordSet" + x.Message);
             }
             return -1;
         }
@@ -200,7 +203,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetProperties().Where((p) => p.Name == "DataAccessor").FirstOrDefault().SetValue(o, da);
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine("Error in SetAccessorOfRecordSet" + x.Message);
             }
         }
 
@@ -221,7 +224,7 @@ namespace Figlotech.BDados {
                 return finalMethod?.Invoke(da, new object[] { null, p, limit });
                 //o.GetType().GetMethod("Find").Invoke(o, new object[] { null, p });
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine("Error in FindOfType" + x.Message);
             }
             return null;
         }
@@ -264,7 +267,7 @@ namespace Figlotech.BDados {
             try {
                 o.GetType().GetMethod("Save").Invoke(o, new object[1]);
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                Fi.Tech.WriteLine("Error in SaveRecordSet" + x.Message);
             }
         }
         //        public class CopyProgressReport {
@@ -272,15 +275,16 @@ namespace Figlotech.BDados {
         //            int max = 1;
         //            int current = 0;
         //        }
-
+        static int gid = 0;
+        static string sid = IntEx.GenerateShortRid();
         public static QueryBuilder ListRids<T>(this Fi _selfie, IList<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
             int x = 0;
-            var sid = IntEx.GenerateShortRid();
+            int ggid = ++gid;
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder().Append(
-                        $"@{sid}{x++}",
+                        $"@{sid}_{ggid}_{x++}",
                         set[i].RID
                     )
                 );

@@ -9,6 +9,7 @@ namespace Figlotech.Core.DomainEvents
     public interface IDomainEvent {
         DomainEventsHub EventsHub { get; set; }
         bool AllowPropagation { get; set; }
+        string d_RaiseOrigin { get; set; }
         long Time { get; }
         long Id { get; }
     }

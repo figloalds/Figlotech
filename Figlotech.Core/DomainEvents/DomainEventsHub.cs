@@ -35,21 +35,30 @@ namespace Figlotech.Core.DomainEvents {
         List<Task> EventTasks = new List<Task>();
 
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
-            domainEvents.ForEach(evt => Raise(evt));
+            var tempLi = domainEvents.ToList();
+            tempLi.ForEach(evt => Raise(evt));
         }
+
+        private void WriteLog(string log) {
+            Fi.Tech.WriteLine("FTH:EventHub", log);
+        }
+
         public void Raise(IDomainEvent domainEvent) {
-            Fi.Tech.WriteLine("EventHub", $"Raising Event {domainEvent.GetType()}");
+            WriteLog($"Raising Event {domainEvent.GetType()}");
             // Cache event
+            if(FiTechCoreExtensions.StdoutEventHubLogs) {
+                domainEvent.d_RaiseOrigin = Environment.StackTrace;
+            }
             domainEvent.EventsHub = this;
             lock (EventCache) {
-                EventCache.Add(domainEvent);
                 EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
             }
 
             // Raise event on all listeners.
             Listeners.RemoveAll(l => l == null);
+            var eventTask = new List<Task>();
             foreach (var listener in Listeners) {
-                EventTasks.Add(Fi.Tech.FireTask(() => {
+                eventTask.Add(Fi.Tech.FireTask(() => {
                     try {
                         listener.OnEventTriggered(domainEvent);
                         if (domainEvent.AllowPropagation) {
@@ -64,9 +73,19 @@ namespace Figlotech.Core.DomainEvents {
                     }
                 }));
             }
+            lock(EventTasks) {
+                EventTasks.AddRange(eventTask);
+                EventTasks.Add(Fi.Tech.FireTask(async () => {
+                    await Task.WhenAll(eventTask.ToArray());
+                    lock(EventCache)
+                        EventCache.Add(domainEvent);
+                }));
+            }
 
             // Clear "Ran to completion" tasks;
-            EventTasks.RemoveAll(t => t.IsCompleted || t.IsFaulted || t.IsCanceled);
+            lock(EventTasks) {
+                EventTasks.RemoveAll(t => t.IsCompleted || t.IsFaulted || t.IsCanceled);
+            }
         }
 
         /// <summary>
@@ -84,8 +103,8 @@ namespace Figlotech.Core.DomainEvents {
                         validation.Validator.Validate(validationTarget as IBusinessObject, errs);
                     } catch (Exception x) {
                         errs.Add("Application", $"Validation has throw an Exception");
-                        Fi.Tech.WriteLine(x.Message);
-                        Fi.Tech.WriteLine(x.StackTrace);
+                        this.WriteLog(x.Message);
+                        this.WriteLog(x.StackTrace);
                     }
                 }
             }
@@ -133,11 +152,13 @@ namespace Figlotech.Core.DomainEvents {
                         events = getEvents().ToArray();
                     }
                     if (events.Length > 0) {
+                        WriteLog($"Event pooling returned  {events.Length} {String.Join(", ", events.Select(e=> e.GetType().Name))}");
                         return events;
                     }
+
                     await Task.Delay(500);
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
-
+                WriteLog($"Event pooling returned no events");
                 return new IDomainEvent[0];
             });
         }

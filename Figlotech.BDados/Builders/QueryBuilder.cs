@@ -76,6 +76,24 @@ namespace Figlotech.BDados.Builders {
             return retv;
         }
 
+        public static QueryBuilder Compose(params IQueryBuilder[] args) {
+            var Qb = new Qb();
+            args.ForEach(
+                a => Qb.Append(a)
+            );
+            return Qb;
+        }
+
+        public static QueryBuilder Wrap(params IQueryBuilder[] args) {
+            var Qb = new Qb();
+            Qb.Append("(");
+            args.ForEach(
+                a => Qb.Append(a)
+            );
+            Qb.Append(")");
+            return Qb;
+        }
+
         public static QbFmt Eq(string column, object value) {
             return Qb.Fmt($"{column}=@{paramId}", value);
         }
@@ -100,6 +118,14 @@ namespace Figlotech.BDados.Builders {
         }
         public static QbFmt And() {
             return Qb.Fmt("AND");
+        }
+        public static QueryBuilder Or(IQueryBuilder left, IQueryBuilder right) {
+            var customOr = Wrap(left, Or(), right);
+            return customOr;
+        }
+        public static QueryBuilder And(IQueryBuilder left, IQueryBuilder right) {
+            var customAnd = Wrap(left, And(), right);
+            return customAnd;
         }
 
         public static QbFmt In<T>(string column, IList<T> o, Func<T, object> fn) {

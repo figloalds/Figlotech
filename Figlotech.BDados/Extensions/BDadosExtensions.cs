@@ -55,7 +55,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
 
         public static void AddRange<T>(this IList<T> me, IEnumerable<T> range) {
-            range.ForEach(i => me.Add(i));
+            range.ForEach(i => {
+                if(i != null) {
+                    me.Add(i);
+                }
+            });
         }
         public static void RemoveAll<T>(this IList<T> me, Predicate<T> predicate) {
             int i = me.Count-1;
@@ -67,10 +71,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static List<T> ToList<T>(this IList<T> me) {
-            if (me is List<T> li)
+            if (me is List<T> li && me != null)
                 return li;
-            else
-                return (me as IEnumerable<T>).ToList();
+            if (me is IEnumerable<T> ien) {
+                ien.ToList();
+            }
+            return new List<T>();
         }
     }
 

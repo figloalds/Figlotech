@@ -39,7 +39,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             for (int i = 0; i < members.Count; i++) {
                 var val = ReflectionTool.GetMemberValue(members[i], inputObject);
-                if(val == null) {
+                if (val == null) {
                     var pc = members[i].GetCustomAttribute<PreemptiveCounter>();
                     var ic = members[i].GetCustomAttribute<IncrementalCounter>();
 
@@ -129,7 +129,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
             List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
 
-            var isLinedAggregateJoin = false;
+            var isLinedAggregateJoin = conditions.GetCommandText() == rootConditions.GetCommandText() && conditions.GetParameters().SequenceEqual(rootConditions.GetParameters());
 
             QueryBuilder Query = new QbFmt("SELECT sub.*\n");
             Query.Append($"\t FROM (SELECT\n");
@@ -153,7 +153,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            if(isLinedAggregateJoin) {
+            if (isLinedAggregateJoin) {
                 if (rootConditions != null) {
                     Query.Append("WHERE ");
                     Query.Append(rootConditions);
@@ -176,15 +176,15 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
             }
 
-            if (conditions != null && !conditions.IsEmpty) {
-                Query.Append("\tWHERE");
-                Query.Append(conditions);
+            if (!isLinedAggregateJoin) {
+                if (conditions != null && !conditions.IsEmpty) {
+                    Query.Append("\tWHERE");
+                    Query.Append(conditions);
 
-            }
-            if (orderingMember != null) {
-                Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
-            }
-            if(!isLinedAggregateJoin) {
+                }
+                if (orderingMember != null) {
+                    Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
+                }
                 if (skip != null || take != null) {
                     Query.Append("LIMIT ");
                     Query.Append(
@@ -231,7 +231,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var rid = Fi.Tech.GetRidColumn(tabelaInput.GetType());
+            var rid = FiTechBDadosExtensions.RidColumnOf[tabelaInput.GetType()];
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, false));
@@ -274,12 +274,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
+        static string sid = IntEx.GenerateShortRid();
+        static int gid = 0;
 
         public IQueryBuilder GenerateMultiUpdate<T>(IList<T> inputRecordset) where T : IDataObject {
             // -- 
             IList<T> workingSet = new List<T>();
 
-            var rid = Fi.Tech.GetRidColumn<T>();
+            var rid = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
@@ -293,12 +295,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var members = GetMembers(typeof(T));
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             int x = 0;
-            string sid = IntEx.GenerateShortRid();
+            int ggid = ++gid;
             for (var i = 0; i < members.Count; i++) {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
-                    Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
+                    Query.Append($"WHEN {rid}=@{sid}_{ggid}_{++x} THEN @{sid}_{ggid}_{++x}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {

@@ -26,7 +26,7 @@ namespace Figlotech.BDados.Helpers {
         internal List<ObjectHoningOption> _honingParameters = new List<ObjectHoningOption>();
         internal DataTable _dataTable;
 
-        internal BuildParametersHelper(ref JoinDefinition join, DataTable table) {
+        internal BuildParametersHelper(JoinDefinition join, DataTable table) {
             _join = join;
             _dataTable = table;
         }
