@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core.Extensions;
+using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
@@ -12,21 +13,18 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public class FiHttpResult {
+    public class FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
         public String ContentType { get; set; }
         public long ContentLength { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
         private MemoryStream ResultStream { get; set; }
-        private bool resultIsRead = false;
         
         internal FiHttpResult() {
             
         }
-        public bool IsSuccess() {
-            return (int)StatusCode >= 200 && (int)StatusCode < 300;
-        }
+        public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
         public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req) {
             var retv = new FiHttpResult();
@@ -94,30 +92,34 @@ namespace Figlotech.Core {
             }
         }
 
-        public string ResultAsString() {
-            if (resultIsRead) {
-                return null;
-            }
+        public string AsString() {
+            ResultStream.Seek(0, SeekOrigin.Begin);
             using (ResultStream) {
                 var bytes = ResultStream.ToArray();
                 var retv = Encoding.UTF8.GetString(bytes);
-                this.resultIsRead = true;
                 return retv;
             }
         }
-        public T ResultAs<T>() {
-            if(resultIsRead) {
-                return default(T);
-            }
+
+        public T As<T>() {
+            ResultStream.Seek(0, SeekOrigin.Begin);
             T retv = default(T);
-            var json = this.ResultAsString();
+            var json = this.AsString();
             try {
                 T obj = JsonConvert.DeserializeObject<T>(json);
                 retv = obj;
-                resultIsRead = true;
             } catch (Exception x) {
             }
             return retv;
+        }
+
+        public void SaveToFile(IFileSystem fs, string fileName) {
+            ResultStream.Seek(0, SeekOrigin.Begin);
+            fs.Write(fileName, stream => ResultStream.CopyTo(stream));
+        }
+
+        public void Dispose() {
+            ResultStream?.Dispose();
         }
     }
 
