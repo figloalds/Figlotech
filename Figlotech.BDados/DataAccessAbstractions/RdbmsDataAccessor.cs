@@ -1521,26 +1521,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }    
         );
 
+        static SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoinLinear = new SelfInitializerDictionary<Type, JoinDefinition>(
+            type => {
+                var retv = CacheAutomaticJoinBuilderLinear[type].GetJoin();
+                var _buildParameters = new BuildParametersHelper(retv);
+                MakeBuildAggregations(_buildParameters, type, "root", type.Name, String.Empty, CacheAutoPrefixerLinear[type], true);
+
+                return retv;
+            }
+        );
         static SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoin = new SelfInitializerDictionary<Type, JoinDefinition>(
-            type => 
-                CacheAutomaticJoinBuilder[type].GetJoin()
-        );
-        static SelfInitializerDictionary<Type, BuildParametersHelper> CacheBuildParams = new SelfInitializerDictionary<Type, BuildParametersHelper>(
             type => {
-                var builder = new BuildParametersHelper(CacheAutoJoin[type], null);
-                MakeBuildAggregations(builder, type, "root", type.Name, String.Empty, CacheAutoPrefixer[type], false);
+                var retv = CacheAutomaticJoinBuilder[type].GetJoin();
+                var _buildParameters = new BuildParametersHelper(retv);
+                MakeBuildAggregations(_buildParameters, type, "root", type.Name, String.Empty, CacheAutoPrefixer[type], false);
 
-                return builder;
+                return retv;
             }
         );
-        static SelfInitializerDictionary<Type, BuildParametersHelper> CacheBuildParamsLinear = new SelfInitializerDictionary<Type, BuildParametersHelper>(
-            type => {
-                var builder = new BuildParametersHelper(CacheAutoJoin[type], null);
-                MakeBuildAggregations(builder, type, "root", type.Name, String.Empty, CacheAutoPrefixerLinear[type], true);
 
-                return builder;
-            }
-        );
         static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
             type => {
                 var prefixer = CacheAutoPrefixer[type];
@@ -1601,7 +1600,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
 
                 transaction?.Benchmarker?.Mark("Construct Join Definition");
-                //var joinBuilder = Linear ? CacheAutomaticJoinBuilderLinear[typeof(T)] : CacheAutomaticJoinBuilder[typeof(T)];
 
                 var builtConditions = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd));
                 var builtConditionsRoot = (cnd == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(cnd, false));
@@ -1611,7 +1609,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("--");
 
                 using (var command = transaction?.CreateCommand()) {
-                    var join = CacheAutoJoin[typeof(T)];
+                    var join = Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
                     transaction?.Benchmarker?.Mark("Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
