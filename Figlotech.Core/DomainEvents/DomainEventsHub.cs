@@ -26,6 +26,14 @@ namespace Figlotech.Core.DomainEvents {
 
         public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(30);
 
+        public DateTime LastEventDateTime {
+            get {
+                lock(EventCache) {
+                    return EventCache.Count == 0 ? DateTime.MinValue : EventCache[EventCache.Count - 1]?.TimeStamp ?? DateTime.MinValue;
+                }
+            }
+        }
+
         public List<IDomainEvent> EventCache { get; private set; } = new List<IDomainEvent>();
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
