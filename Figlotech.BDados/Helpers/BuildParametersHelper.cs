@@ -24,50 +24,48 @@ namespace Figlotech.BDados.Helpers {
     public class BuildParametersHelper {
         internal JoinDefinition _join;
         internal List<ObjectHoningOption> _honingParameters = new List<ObjectHoningOption>();
-        internal DataTable _dataTable;
 
-        internal BuildParametersHelper(JoinDefinition join, DataTable table) {
+        internal BuildParametersHelper(JoinDefinition join) {
             _join = join;
-            _dataTable = table;
         }
 
-        public RecordSet<T> CaptureEntities<T>(String Alias, int parentId) where T : IDataObject, new() {
-            var thisEntity = (from a in _join.Joins where a.Alias == Alias select a).FirstOrDefault();
-            if (thisEntity == null)
-                throw new BDadosException("Invalid alias.");
-            RecordSet<T> tabs = new RecordSet<T>();
-            int myIndex = _join.Joins.IndexOf(thisEntity);
-            String childKey = null;
-            String parentKey = null;
-            int parentIndex = -1;
-            foreach (var rel in _join.Relations) {
-                if (rel.ChildIndex == myIndex) {
-                    childKey = rel.ChildKey;
-                    parentKey = rel.ParentKey;
-                    parentIndex = rel.ParentIndex;
-                }
-            }
-            if (parentIndex != -1) {
-                var rows = new List<DataRow>();
-                foreach (DataRow dr in _dataTable.Rows)
-                    rows.Add(dr);
-                rows = rows.Where((a) => {
-                    int? id = (int?) a[_join.Joins[myIndex].Prefix + "_" + childKey];
-                    return id.ToString() == parentId.ToString();
-                })
-                    .GroupBy(c => c[_join.Joins[myIndex].Prefix + "_id"]).Select(grp => grp.First()).ToList();
-                foreach (DataRow dr in rows) {
-                    var newInstance = Activator.CreateInstance(typeof(T));
-                    T thisValue = (T)newInstance;
-                    foreach (var f in newInstance.GetType().GetFields()) {
-                        f.SetValue(thisValue, dr[_join.Joins[myIndex].Prefix + "_" + f.Name]);
-                    }
-                    tabs.Add(thisValue);
-                }
-            }
+        //public RecordSet<T> CaptureEntities<T>(String Alias, int parentId) where T : IDataObject, new() {
+        //    var thisEntity = (from a in _join.Joins where a.Alias == Alias select a).FirstOrDefault();
+        //    if (thisEntity == null)
+        //        throw new BDadosException("Invalid alias.");
+        //    RecordSet<T> tabs = new RecordSet<T>();
+        //    int myIndex = _join.Joins.IndexOf(thisEntity);
+        //    String childKey = null;
+        //    String parentKey = null;
+        //    int parentIndex = -1;
+        //    foreach (var rel in _join.Relations) {
+        //        if (rel.ChildIndex == myIndex) {
+        //            childKey = rel.ChildKey;
+        //            parentKey = rel.ParentKey;
+        //            parentIndex = rel.ParentIndex;
+        //        }
+        //    }
+        //    if (parentIndex != -1) {
+        //        var rows = new List<DataRow>();
+        //        foreach (DataRow dr in _dataTable.Rows)
+        //            rows.Add(dr);
+        //        rows = rows.Where((a) => {
+        //            int? id = (int?) a[_join.Joins[myIndex].Prefix + "_" + childKey];
+        //            return id.ToString() == parentId.ToString();
+        //        })
+        //            .GroupBy(c => c[_join.Joins[myIndex].Prefix + "_id"]).Select(grp => grp.First()).ToList();
+        //        foreach (DataRow dr in rows) {
+        //            var newInstance = Activator.CreateInstance(typeof(T));
+        //            T thisValue = (T)newInstance;
+        //            foreach (var f in newInstance.GetType().GetFields()) {
+        //                f.SetValue(thisValue, dr[_join.Joins[myIndex].Prefix + "_" + f.Name]);
+        //            }
+        //            tabs.Add(thisValue);
+        //        }
+        //    }
 
-            return tabs;
-        }
+        //    return tabs;
+        //}
 
         public void ComputeField(String Alias, String newField, ComputeField function) {
             _honingParameters.Add(new ObjectHoningOption(Alias, newField, newField, function));
