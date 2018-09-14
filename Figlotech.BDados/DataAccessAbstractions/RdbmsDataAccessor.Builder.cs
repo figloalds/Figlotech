@@ -224,6 +224,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("--");
                 }
             }
+            var dlc = new DataLoadContext {
+                DataAccessor = this,
+                IsAggregateLoad = true
+            };
+            if (retv.Any()) {
+                var a = retv.First();
+                if (a is IBusinessObject<T> ibo) {
+                    ibo.OnAfterAggregateLoad(dlc, retv);
+                }
+            }
+            foreach (var a in retv) {
+                if(a is IBusinessObject ibo) {
+                    ibo.OnAfterLoad(dlc);
+                }
+            }
 
             return retv;
         }

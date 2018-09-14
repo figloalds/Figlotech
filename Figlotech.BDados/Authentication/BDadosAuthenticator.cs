@@ -2,6 +2,7 @@
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
+using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;

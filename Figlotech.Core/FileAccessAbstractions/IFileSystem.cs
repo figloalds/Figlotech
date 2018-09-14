@@ -45,6 +45,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         bool IsFile(string relative);
 
         void AppendAllLines(string relative, IEnumerable<string> content);
-
+        void Hide(string relative);
+        void Show(string relative);
     }
 }

@@ -48,6 +48,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public abstract ulong AlteredBy { get; set; }
         public abstract ulong CreatedBy { get; set; }
 
+        public bool IsReceivedFromSync { get; set; }
+
+        static readonly string instance_rid = new RID().AsBase36;
+        public string instance_id { get; set; } = instance_rid;
+
+        public bool IsLocalInstance => instance_id == instance_rid;
+
         private int _persistedHash = 0;
         public int PersistedHash {
             get {
@@ -55,7 +62,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     return 0;
                 }
                 if (_persistedHash == 0) {
-                    _persistedHash = this.ComputeDataFieldsHash();
+                    _persistedHash = this.SpFthComputeDataFieldsHash();
                 }
                 return _persistedHash;
             }
@@ -94,7 +101,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public virtual void OnAfterPersist() { }
 
-        public virtual void OnAfterLoad() { }
+        public virtual void OnAfterLoad(DataLoadContext context) { }
 
         public virtual void Init() { }
     }

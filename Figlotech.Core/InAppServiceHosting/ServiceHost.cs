@@ -62,31 +62,33 @@ namespace Figlotech.Core.InAppServiceHosting
         int idgen = 0;
         public void Start(IFthService service) {
             if(!ServiceThreads.ContainsKey(service)) {
-                var t = Fi.Tech.SafeCreateThread(async ()=> {
+                var t = Fi.Tech.SafeCreateThread(()=> {
                     try {
                         var rt = service.Run();
                         if (rt != null) {
-                            await rt;
+                            rt?.Wait();
                         }
                         if(service is IFthCyclicService cServ) {
                             var rt2 = cServ.MainLoopInit();
                             if (rt2 != null) {
-                                await rt2;
+                                rt2?.Wait();
                             }
 
                             cServ.BreakMainLoop = false;
                             cServ.InterruptIssued = false;
+                            Task[] lt = new Task[512];
+                            int l = 0;
                             while (!cServ.BreakMainLoop && !cServ.InterruptIssued) {
-                                var lt = cServ.MainLoopIteration();
-                                if (lt != null) {
-                                    await lt;
+                                lt[l] = cServ.MainLoopIteration();
+                                if (lt[l] != null) {
+                                    lt[l].Wait();
                                 }
+                                l = (l + 1) % lt.Length;
+                                Task.Delay(cServ.IterationDelay).Wait();
                             }
                         }
                     } catch(Exception x) {
-                        Fi.Tech.WriteLine();
-                        Fi.Tech.WriteLine();
-                        Fi.Tech.WriteLine();
+
                         Fi.Tech.WriteLine($"Error Executing Service {service.GetType().Name} {x.Message}");
                         OnServiceError?.Invoke(service, x);
                     }

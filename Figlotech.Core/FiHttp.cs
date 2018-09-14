@@ -183,6 +183,17 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "GET";
             req.UserAgent = UserAgent;
+            headers.ForEach((h) => {
+                switch (h.Key) {
+                    case "Content-Type":
+                        break;
+                    case "Content-Length":
+                        break;
+                    default:
+                        req.Headers.Add(h.Key, h.Value);
+                        break;
+                }
+            });
             return await FiHttpResult.InitFromGet(req);
         }
 
@@ -190,6 +201,18 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "GET";
             req.UserAgent = UserAgent;
+            headers.ForEach((h) => {
+                switch (h.Key) {
+                    case "Content-Type":
+                        break;
+                    case "Content-Length":
+                        break;
+                    default:
+                        req.Headers.Add(h.Key, h.Value);
+                        break;
+                }
+            });
+
             try {
                 using (var resp = req.GetResponse() as HttpWebResponse) {
                     using (var stream = resp.GetResponseStream()) {

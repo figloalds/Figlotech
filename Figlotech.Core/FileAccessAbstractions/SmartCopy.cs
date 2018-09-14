@@ -60,19 +60,103 @@ namespace Figlotech.Core.FileAcessAbstractions {
             remote = remoteAccessor;
         }
 
-        private static string GetHash(Stream stream) {
+        public static string GetHash(Stream stream) {
             using (var md5 = MD5.Create()) {
                 return Convert.ToBase64String(md5.ComputeHash(stream));
             }
         }
 
-        private String GetHash(IFileSystem fa, String path) {
+        public static String GetHash(IFileSystem fa, String path) {
             string hash = "";
             fa.Read(path, (stream) => {
                 hash = GetHash(stream);
             });
 
             return hash;
+        }
+
+        public IEnumerable<FileData> EnumerateFilesToDownload(string path = "") {
+            if (remote == null) {
+                throw new NullReferenceException("The Remote server was not specified, do call SetRemote(IFileAccessor) to specify it.");
+            }
+            if (options.UseHashList) {
+                return EnumerateDownloadableFilesFromHashList(path);
+            } else {
+                return EnumerateDownloadableFiles(remote, local, path);
+            }
+        }
+
+        private IEnumerable<FileData> EnumerateDownloadableFiles(IFileSystem origin, IFileSystem destination, string path = "", bool isRecursing = false) {
+
+            if (!isRecursing && options.UseHashList) {
+                HashList = SmartCopy.GetHashList(this.remote);
+            }
+
+            workedFiles = 0;
+            var adds = new Queue<FileData>();
+            origin.ForFilesIn(path, (f) => {
+                if (f == HASHLIST_FILENAME) {
+                    return;
+                }
+                if (Excludes.Any(excl => CheckMatch(f, excl))) {
+                    return;
+                }
+
+                var changed = CopyDecisionCriteria != null ?
+                    CopyDecisionCriteria(f) :
+                    Changed(origin, destination, f);
+
+                if (changed) {
+                    adds.Enqueue(new FileData {
+                        RelativePath = f,
+                        Date = origin.GetLastModified(f)?.Ticks ?? 0,
+                        Hash = "", // GetHash(origin, f),
+                        Length = origin.GetSize(f)
+                    });
+                }
+            });
+
+            if (options.Recursive) {
+                origin.ForDirectoriesIn(path, (dir) => {
+                    destination.MkDirs(dir);
+                    var newAdds = EnumerateDownloadableFiles(origin, destination, dir);
+                    foreach(var a in newAdds) {
+                        adds.Enqueue(a);
+                    }
+                });
+            }
+
+            while (adds.Count > 0) {
+                yield return adds.Dequeue();
+            }
+
+            if (!isRecursing) {
+
+            }
+        }
+
+        private IEnumerable<FileData> EnumerateDownloadableFilesFromHashList(string path) {
+            HashList = SmartCopy.GetHashList(remote);
+            List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
+            OnReportTotalFilesCount?.Invoke(workingList.Count);
+            var retv = new List<FileData>();
+            foreach (var a in HashList) {
+                string hash = "";
+                if (local.Exists(a.RelativePath)) {
+                    local.Read(a.RelativePath, (stream) => {
+                        hash = GetHash(stream);
+                    });
+                }
+
+                var gzSuffix = "";
+                if (options.UseGZip)
+                    gzSuffix = GZIP_FILE_SUFFIX;
+                while ((a.Hash != hash || !local.Exists(a.RelativePath))) {
+                    if (remote.Exists(a.RelativePath + gzSuffix)) {
+                        yield return a;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -217,7 +301,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void MirrorFromList(string path) {
-            GetHashList(remote);
+            HashList = SmartCopy.GetHashList(remote);
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
             var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
             var bufferSize = (int)options.BufferSize / options.NumWorkers;
@@ -241,15 +325,34 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     int maxTries = 10;
                     while ((a.Hash != hash || !local.Exists(a.RelativePath)) && maxTries-- > 0) {
                         processed = true;
+                        if(local.Exists(a.RelativePath + "_$ft_old")) {
+                            try {
+                                local.Delete(a.RelativePath + "_$ft_old");
+                            } catch (Exception x) {
+                                // Deletes the file if in use, else just hide it
+                                local.Hide(a.RelativePath + "_$ft_old");
+                            }
+                        }
                         if (remote.Exists(a.RelativePath + gzSuffix)) {
                             remote.Read(a.RelativePath + gzSuffix, (downStream) => {
-                                local.Delete(a.RelativePath);
-                                local.Write(a.RelativePath, (fileStream) => {
+                                //local.Delete(a.RelativePath);
+                                local.Write(a.RelativePath + "_$ft_new", (fileStream) => {
                                     if (options.UseGZip)
                                         downStream = new GZipStream(downStream, CompressionMode.Decompress);
 
                                     downStream.CopyTo(fileStream, bufferSize);
                                 });
+                                local.Rename(a.RelativePath, a.RelativePath + "_$ft_old");
+                                local.Rename(a.RelativePath + "_$ft_new", a.RelativePath);
+                                try {
+                                    local.Delete(a.RelativePath + "_$ft_old");
+                                } catch(Exception x) {
+                                    // Deletes the file if in use, else just hide it
+                                    local.Hide(a.RelativePath + "_$ft_old");
+                                }
+                                if (a.RelativePath.EndsWith(".dll")) {
+
+                                }
                             });
                         }
 
@@ -286,12 +389,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         const string HASHLIST_FILENAME = ".hashlist.json";
 
-        private void GetHashList(IFileSystem destination) {
+        public static List<FileData> GetHashList(IFileSystem destination) {
             try {
                 var txt = destination.ReadAllText(HASHLIST_FILENAME);
-                HashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
-            } catch (Exception) {
-
+                var hashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
+                return hashList;
+            } catch (Exception x) {
+                throw x;
             }
         }
 
@@ -303,7 +407,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             if (!isRecursing && options.UseHashList) {
-                GetHashList(destination);
+                HashList = SmartCopy.GetHashList(destination);
             }
 
             workedFiles = 0;

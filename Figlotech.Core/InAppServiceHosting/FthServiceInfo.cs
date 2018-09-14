@@ -14,6 +14,7 @@ namespace Figlotech.Core.InAppServiceHosting
             this.Name = service.GetType().Name;
         }
 
+        public IFthService Instance => service;
         public string Name { get; internal set; }
         public DateTime Started => _started;
         public TimeSpan ExecutingTime => DateTime.UtcNow.Subtract(Started);

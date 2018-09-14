@@ -153,6 +153,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
+            
             if (isLinedAggregateJoin) {
                 if (rootConditions != null) {
                     Query.Append("WHERE ");
@@ -180,7 +181,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 if (conditions != null && !conditions.IsEmpty) {
                     Query.Append("\tWHERE");
                     Query.Append(conditions);
-
                 }
                 if (orderingMember != null) {
                     Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");

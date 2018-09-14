@@ -26,8 +26,7 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 
 namespace Figlotech.BDados.Builders {
-    public class JoinObjectBuilder : IJoinBuilder
-    {
+    public class JoinObjectBuilder : IJoinBuilder {
         private JoinDefinition _join = new JoinDefinition();
         private BuildParametersHelper _buildParameters;
         //private IRdbmsDataAccessor _dataAccessor;
@@ -73,144 +72,146 @@ namespace Figlotech.BDados.Builders {
         //    return dt;
         //}
 
-        private List<IDataObject> BuildAggregateList(Type type, Object ParentVal, Relation relation, DataTable dt) {
-            var method = GetType().GetMethods()
-                .Where(m =>
-                    m.Name == "BuildAggregateList" &&
-                    m.GetGenericArguments().Length > 0)
-                .FirstOrDefault();
-            var retv = (IEnumerable<IDataObject>)
-                method
-                ?.MakeGenericMethod(type)
-                .Invoke(this, new object[] { ParentVal, relation, dt });
+        //private List<IDataObject> BuildAggregateList(Type type, Object ParentVal, Relation relation, DataTable dt) {
+        //    var method = GetType().GetMethods()
+        //        .Where(m =>
+        //            m.Name == "BuildAggregateList" &&
+        //            m.GetGenericArguments().Length > 0)
+        //        .FirstOrDefault();
+        //    var retv = (IEnumerable<IDataObject>)
+        //        method
+        //        ?.MakeGenericMethod(type)
+        //        .Invoke(this, new object[] { ParentVal, relation, dt });
 
-            return new List<IDataObject>(retv).ToList();
-        }
+        //    return new List<IDataObject>(retv).ToList();
+        //}
 
-        public IList<T> BuildAggregateList<T>(Object ParentVal, Relation relation, DataTable dt) where T : IDataObject, new() {
-            var type = typeof(T);
-            int thisIndex = relation.ChildIndex;
-            int parentIndex = relation.ParentIndex;
-            IList<T> retv = new List<T>();
-            var Relacoes = _join.Relations;
-            String Prefix = _join.Joins[thisIndex].Prefix;
-            String parentPrefix = _join.Joins[parentIndex].Prefix;
-            string rid = FiTechBDadosExtensions.RidColumnOf[type];
-            List<DataRow> rs = new List<DataRow>();
-            List<object> ids = new List<object>();
-            for (int i = 0; i < dt.Rows.Count; i++) {
-                // 
-                Object val = dt.Rows[i][Prefix + "_" + relation.ChildKey];
-                if (val != null && val.ToString() == ParentVal.ToString()) {
-                    object RID = dt.Rows[i][Prefix + $"_{rid}"];
-                    if (!ids.Contains(RID)) {
-                        rs.Add(dt.Rows[i]);
-                        ids.Add(RID);
-                    }
-                }
-            }
-            MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
-                .Where(at =>
-                    at.GetCustomAttribute<FieldAttribute>() != null
-                )
-                .ToArray();
-            foreach (DataRow dr in rs) {
-                T thisObject = new T();
-                var objBuilder = new ObjectReflector(thisObject);
-                // -- Add aggregate values
-                for (int i = 0; i < fields.Length; i++) {
-                    if (!_join.Joins[thisIndex].Columns.Contains(fields[i].Name))
-                        continue;
-                    var colName = Prefix + "_" + fields[i].Name;
-                    if (!dt.Columns.Contains(colName)) continue;
-                    var o = dr[colName];
+        //public IList<T> BuildAggregateList<T>(Object ParentVal, Relation relation, DataTable dt) where T : IDataObject, new() {
+        //    var type = typeof(T);
+        //    int thisIndex = relation.ChildIndex;
+        //    int parentIndex = relation.ParentIndex;
+        //    IList<T> retv = new List<T>();
+        //    var Relacoes = _join.Relations;
+        //    String Prefix = _join.Joins[thisIndex].Prefix;
+        //    String parentPrefix = _join.Joins[parentIndex].Prefix;
+        //    string rid = FiTechBDadosExtensions.RidColumnOf[type];
+        //    List<DataRow> rs = new List<DataRow>();
+        //    List<object> ids = new List<object>();
+        //    for (int i = 0; i < dt.Rows.Count; i++) {
+        //        // 
+        //        Object val = dt.Rows[i][Prefix + "_" + relation.ChildKey];
+        //        if (val != null && val.ToString() == ParentVal.ToString()) {
+        //            object RID = dt.Rows[i][Prefix + $"_{rid}"];
+        //            if (!ids.Contains(RID)) {
+        //                rs.Add(dt.Rows[i]);
+        //                ids.Add(RID);
+        //            }
+        //        }
+        //    }
+        //    MemberInfo[] fields = ReflectionTool.FieldsAndPropertiesOf(type)
+        //        .Where(at =>
+        //            at.GetCustomAttribute<FieldAttribute>() != null
+        //        )
+        //        .ToArray();
+        //    foreach (DataRow dr in rs) {
+        //        T thisObject = new T();
+        //        var objBuilder = new ObjectReflector(thisObject);
+        //        // -- Add aggregate values
+        //        for (int i = 0; i < fields.Length; i++) {
+        //            if (!_join.Joins[thisIndex].Columns.Contains(fields[i].Name))
+        //                continue;
+        //            var colName = Prefix + "_" + fields[i].Name;
+        //            if (!dt.Columns.Contains(colName)) continue;
+        //            var o = dr[colName];
 
-                    objBuilder[fields[i].Name] = o;
-                }
+        //            objBuilder[fields[i].Name] = o;
+        //        }
 
-                // Here is where Recursivity gets real.
-                foreach (var rel in (from a in Relacoes where a.ParentIndex == thisIndex select a)) {
-                    switch (rel.AggregateBuildOption) {
-                        case AggregateBuildOptions.AggregateField: {
+        //        // Here is where Recursivity gets real.
+        //        foreach (var rel in (from a in Relacoes where a.ParentIndex == thisIndex select a)) {
+        //            switch (rel.AggregateBuildOption) {
+        //                case AggregateBuildOptions.AggregateField: {
 
-                                String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
-                                var value = dr[childPrefix + "_" + rel.Fields[0]];
-                                String fieldName = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                objBuilder[fieldName] = dr[childPrefix + "_" + rel.Fields[0]];
+        //                        String childPrefix = _join.Joins[rel.ChildIndex].Prefix;
+        //                        var value = dr[childPrefix + "_" + rel.Fields[0]];
+        //                        String fieldName = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
+        //                        objBuilder[fieldName] = dr[childPrefix + "_" + rel.Fields[0]];
 
-                                break;
-                            }
-                        case AggregateBuildOptions.AggregateList: {
-                                String fieldAlias = rel.NewName ?? _join.Joins[rel.ChildIndex].Alias;
-                                var objectType = ReflectionTool.GetTypeOf(
-                                    ReflectionTool.FieldsAndPropertiesOf(type)
-                                    .Where(m => m.Name == fieldAlias)
-                                    .FirstOrDefault());
-                                var ulType = objectType
-                                    .GetGenericArguments().FirstOrDefault();
-                                if (ulType == null) {
-                                    continue;
-                                }
-                                var addMethod = objectType.GetMethods()
-                                    .Where(m => m.Name == "Add")
-                                    .FirstOrDefault();
+        //                        break;
+        //                    }
+        //                case AggregateBuildOptions.AggregateList: {
+        //                        String fieldAlias = rel.NewName ?? _join.Joins[rel.ChildIndex].Alias;
+        //                        var objectType = ReflectionTool.GetTypeOf(
+        //                            ReflectionTool.FieldsAndPropertiesOf(type)
+        //                            .Where(m => m.Name == fieldAlias)
+        //                            .FirstOrDefault());
+        //                        var ulType = objectType
+        //                            .GetGenericArguments().FirstOrDefault();
+        //                        if (ulType == null) {
+        //                            continue;
+        //                        }
+        //                        var addMethod = objectType.GetMethods()
+        //                            .Where(m => m.Name == "Add")
+        //                            .FirstOrDefault();
 
-                                Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
-                                var newList = BuildAggregateList(ulType, parentRid, rel, dt);
-                                if (addMethod == null)
-                                    continue;
-                                if (objBuilder[fieldAlias] == null) {
-                                    objBuilder[fieldAlias] = Activator.CreateInstance(objectType);
-                                }
-                                foreach (var a in newList) {
-                                    var inVal = Convert.ChangeType(a, ulType);
+        //                        Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
+        //                        var newList = BuildAggregateList(ulType, parentRid, rel, dt);
+        //                        if (addMethod == null)
+        //                            continue;
+        //                        if (objBuilder[fieldAlias] == null) {
+        //                            objBuilder[fieldAlias] = Activator.CreateInstance(objectType);
+        //                        }
+        //                        foreach (var a in newList) {
+        //                            var inVal = Convert.ChangeType(a, ulType);
 
-                                    addMethod.Invoke(objBuilder[fieldAlias], new object[] { inVal });
-                                }
-                                break;
-                            }
-                        case AggregateBuildOptions.AggregateObject: {
-                                String fieldAlias = rel.NewName ?? _join.Joins[rel.ChildIndex].Alias;
-                                var objectType = ReflectionTool.GetTypeOf(
-                                    ReflectionTool.FieldsAndPropertiesOf(type)
-                                    .Where(m => m.Name == fieldAlias)
-                                    .FirstOrDefault());
-                                if (objectType == null) {
-                                    continue;
-                                }
-                                Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
-                                if (parentRid == null)
-                                    continue;
+        //                            addMethod.Invoke(objBuilder[fieldAlias], new object[] { inVal });
+        //                        }
+        //                        break;
+        //                    }
+        //                case AggregateBuildOptions.AggregateObject: {
+        //                        String fieldAlias = rel.NewName ?? _join.Joins[rel.ChildIndex].Alias;
+        //                        var objectType = ReflectionTool.GetTypeOf(
+        //                            ReflectionTool.FieldsAndPropertiesOf(type)
+        //                            .Where(m => m.Name == fieldAlias)
+        //                            .FirstOrDefault());
+        //                        if (objectType == null) {
+        //                            continue;
+        //                        }
+        //                        Object parentRid = ReflectionTool.DbDeNull(dr[_join.Joins[rel.ParentIndex].Prefix + "_" + rel.ParentKey]);
+        //                        if (parentRid == null)
+        //                            continue;
 
-                                var newObject = BuildAggregateList(type, parentRid, rel, dt).FirstOrDefault();
-                                objBuilder[fieldAlias] = newObject;
+        //                        var newObject = BuildAggregateList(type, parentRid, rel, dt).FirstOrDefault();
+        //                        objBuilder[fieldAlias] = newObject;
 
-                                break;
-                            }
-                    }
-                }
+        //                        break;
+        //                    }
+        //            }
+        //        }
 
-                String Alias = _join.Joins[thisIndex].Alias;
-                foreach (var finalTransform in _buildParameters._honingParameters) {
-                    if (finalTransform.Alias == Alias) {
-                        if (finalTransform.Function == null) {
-                            if (finalTransform.NewField != finalTransform.OldField) {
-                                objBuilder[finalTransform.NewField] = objBuilder[finalTransform.OldField];
-                            }
-                        }
-                        else {
-                            objBuilder[finalTransform.NewField] = finalTransform.Function(thisObject);
-                        }
-                    }
-                }
+        //        String Alias = _join.Joins[thisIndex].Alias;
+        //        foreach (var finalTransform in _buildParameters._honingParameters) {
+        //            if (finalTransform.Alias == Alias) {
+        //                if (finalTransform.Function == null) {
+        //                    if (finalTransform.NewField != finalTransform.OldField) {
+        //                        objBuilder[finalTransform.NewField] = objBuilder[finalTransform.OldField];
+        //                    }
+        //                } else {
+        //                    objBuilder[finalTransform.NewField] = finalTransform.Function(thisObject);
+        //                }
+        //            }
+        //        }
 
-                if (thisObject is IBusinessObject bo) {
-                    bo.OnAfterLoad();
-                }
-                retv.Add(thisObject);
-            }
-            return retv;
-        }
+        //        if (thisObject is IBusinessObject bo) {
+        //            bo.OnAfterLoad(new DataLoadContext {
+        //                DataAccessor = this,
+        //                IsAggregateLoad = true
+        //            });
+        //        }
+        //        retv.Add(thisObject);
+        //    }
+        //    return retv;
+        //}
 
         internal List<Relation> ValidateRelations() {
             for (int i = 1; i < _join.Joins.Count; ++i) {

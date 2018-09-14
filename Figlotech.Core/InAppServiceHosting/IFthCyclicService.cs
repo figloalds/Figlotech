@@ -15,6 +15,6 @@ namespace Figlotech.Core.InAppServiceHosting
         bool BreakMainLoop { get; set; }
         Task MainLoopInit();
         Task MainLoopIteration();
-
+        int IterationDelay { get; }
     }
 }

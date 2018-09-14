@@ -122,10 +122,11 @@ namespace Figlotech.ExcelUtil
         public T Get<T>(int line, int column) {
             var o = Get(line, column);
             try {
-                if(o.GetType() == typeof(T)) {
+                if(o == null && o is T obj) {
+                    return obj;
+                }
+                if(typeof(T).IsAssignableFrom(o.GetType())) {
                     return (T)o;
-                } else {
-                    return (T) Convert.ChangeType(o, typeof(T));
                 }
             } catch(Exception) {
 
@@ -133,6 +134,9 @@ namespace Figlotech.ExcelUtil
             return default(T);
         }
         public object Get(int line, int column) {
+            if(line > NumRows + 1 || column > NumCols +1) {
+                return null;
+            }
             return ws.Cells[line, column].Value;
         }
         public void SetFormat(int line, int column, String value) {

@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core.Interfaces;
 using System;
 
 namespace Figlotech.BDados.Authentication

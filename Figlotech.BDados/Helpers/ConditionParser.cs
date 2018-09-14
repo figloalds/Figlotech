@@ -155,6 +155,9 @@ namespace Figlotech.BDados.Helpers {
         }
 
         private object GetValue(Expression member) {
+            //if(member is MemberExpression memex) {
+            //    return GetValue(memex.Expression);
+            //}
             var objectMember = Expression.Convert(member, typeof(object));
             
             var getterLambda = Expression.Lambda<Func<object>>(objectMember);
@@ -203,7 +206,11 @@ namespace Figlotech.BDados.Helpers {
                     GetValue(expr.Right).GetType() == typeof(string) &&
                     (expr.Left is MemberExpression)
                 ) {
-                    var comparisonType = (expr.Left as MemberExpression).Member.GetCustomAttribute<QueryComparisonAttribute>()?.Type;
+                    var member = (expr.Left as MemberExpression).Member;
+                    var comparisonType = member.GetCustomAttribute<QueryComparisonAttribute>()?.Type;
+                    //if (Debugger.IsAttached) {
+                    //    Debugger.Break();
+                    //}
                     if (GetValue(expr.Right).GetType() == typeof(string)) {
                         strBuilder.Append("(");
                         strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
@@ -359,6 +366,14 @@ namespace Figlotech.BDados.Helpers {
                 }
                 if (expr.Method.Name == "ToLower") {
                     strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                }
+                if (expr.Method.Name == "Equals") {
+                    var memberEx = expr.Object as MemberExpression;
+                    var pre = GetPrefixOfExpression(memberEx);
+                    var column = memberEx.Member.Name;
+                    strBuilder.Append($"{pre}.{column}=(");
+                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                    strBuilder.Append(")");
                 }
                 if (expr.Method.Name == "ToUpper") {
                     strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");

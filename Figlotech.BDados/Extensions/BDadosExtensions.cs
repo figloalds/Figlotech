@@ -10,6 +10,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using Figlotech.Core.Interfaces;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -21,7 +22,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static int PageSize { get; set; } = DefaultPageSize;
         public static bool LinearLoad = false;
         
-        public static Qb ListRids<T>(this IList<T> me, Func<T, String> fn) where T: IDataObject, new() {
+        public static Qb ListRids<T>(this IList<T> me) where T: IDataObject, new() {
             Qb retv = new Qb();
             var uni = IntEx.GenerateShortRid();
             for (int i = 0; i < me.Count; i++) {
@@ -86,23 +87,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             rs.AddRange(me);
             return rs;
         }
-
-        static SelfInitializerDictionary<Type, MemberInfo[]> membersList = new SelfInitializerDictionary<Type, MemberInfo[]>(
-            (t) => ReflectionTool.FieldsAndPropertiesOf(t).Where(f => f.GetCustomAttribute<FieldAttribute>() != null).ToArray()
-        );
-
-        internal static int ComputeDataFieldsHash(this IDataObject self) {
-            if(self == null) {
-                return 0;
-            }
-            var retv = 0;
-            var t = self.GetType();
-            MemberInfo[] li = membersList[t];
-            li.ForEach(i => retv ^= i?.GetHashCode() ?? 0);
-            
-            return retv;
-        }
-
+                
         public static void MakeUnique(this IDataObject self) {
             self.Id = 0;
             self.RID = null;

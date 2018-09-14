@@ -7,6 +7,7 @@ using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.BusinessModel;
 using System.Threading.Tasks;
+using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public abstract class DataObject<T> : BaseDataObject, IDataObject, IBusinessObject where T: IDataObject, IBusinessObject, new() {

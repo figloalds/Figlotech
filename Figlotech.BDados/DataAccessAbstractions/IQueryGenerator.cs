@@ -8,6 +8,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);

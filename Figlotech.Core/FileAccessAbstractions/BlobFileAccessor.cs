@@ -3,6 +3,7 @@ using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public DateTime LastWrite;
     }
 
+    public class BlobsCredentials {
+        public string AccountName { get; set; }
+        public string AccountKey { get; set; }
+
+        public static BlobsCredentials Annonymous(String accountName) {
+            return new BlobsCredentials { AccountName = accountName };
+        }
+    }
+
     public class BlobFileAccessor : IFileSystem {
 
         private static int gid = 0;
@@ -24,39 +34,47 @@ namespace Figlotech.Core.FileAcessAbstractions {
         String AccountName { get; set; }
         String AccountKey { get; set; }
         String ContainerName { get; set; }
+        bool IsReadOnly { get; set; } = true;
         CloudBlobContainer BlobContainer;
 
         public void InitBlobFileAccessor(string host, string accountName, string containerName, string accountKey) {
 
             AccountName = accountName;
-            AccountKey = containerName;
+            AccountKey = accountKey;
             ContainerName = containerName;
 
-            string connectionString =
-                (host != null ?
-                    "UseDevelopmentStorage=true;" +
-                    $"BlobEndpoint=http://{host}/{accountName};" 
-                    :
-                    (accountName != null ? $"AccountName={accountName};" : "") +
-                    "DefaultEndpointsProtocol=https;"
-                ) +
-                (accountKey != null ? $"AccountKey={accountKey};" : "");
+            CloudBlobClient cloudBlobClient;
 
-            CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(connectionString);
+            IsReadOnly = AccountKey == null;
+            
+            if (!IsReadOnly) {
+                string connectionString =
+                    (host != null ?
+                        //"UseDevelopmentStorage=true;" +
+                        $"BlobEndpoint=http://{host}/{accountName};"
+                        :
+                        "DefaultEndpointsProtocol=https;"
+                    ) +
+                    (accountName != null && AccountKey != null ? $"AccountName={accountName};AccountKey={accountKey};" : "");
 
-            CloudBlobClient cloudBlobClient = cloudStorageAccount.CreateCloudBlobClient();
-
+                CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(connectionString);
+                cloudBlobClient = cloudStorageAccount.CreateCloudBlobClient();
+            } else {
+                var uri = new Uri($@"https://{AccountName}.blob.core.windows.net");
+                cloudBlobClient = new CloudBlobClient(uri);
+            }
             BlobContainer = cloudBlobClient.GetContainerReference(containerName);
 
-            BlobContainer.CreateIfNotExistsAsync().Wait();
-
+            if (!IsReadOnly) {
+                BlobContainer.CreateIfNotExistsAsync().Wait();
+            }
         }
 
-        public BlobFileAccessor(string host, string storageAccountName, string containerName, string storageAccountKey) {
-            InitBlobFileAccessor(host, storageAccountName, containerName, storageAccountKey);
+        public BlobFileAccessor(string host, BlobsCredentials credentials, string containerName) {
+            InitBlobFileAccessor(host, credentials?.AccountName, containerName, credentials?.AccountKey);
         }
-        public BlobFileAccessor(string storageAccountName, string storageAccountKey, string containerName) {
-            InitBlobFileAccessor(null, storageAccountName, containerName, storageAccountKey);
+        public BlobFileAccessor(BlobsCredentials credentials, string containerName) {
+            InitBlobFileAccessor(null, credentials?.AccountName, containerName, credentials?.AccountKey);
         }
 
         private void AbsMkDirs(string dir) {
@@ -364,6 +382,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             } else {
                 return blob.OpenReadAsync().Result;
             }
+        }
+
+        public void Hide(string relative) {
+            // Blob accessor doesn't do that
+        }
+
+        public void Show(string relative) {
+            // Blob accessor doesn't do that
         }
     }
 }

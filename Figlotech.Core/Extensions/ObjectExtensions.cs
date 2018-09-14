@@ -69,10 +69,20 @@ namespace System
         }
 
         public static T InvokeGenericMethod<T>(this Object me, string GenericMethodName, Type genericType, params object[] args) {
-            return (T) me.GetType()
-                .GetMethod(nameof(FiTechCoreExtensions.MapMeta))
-                .MakeGenericMethod(genericType)
-                .Invoke(null, args);
+            return (T)InvokeGenericMethod(me, GenericMethodName, genericType, args);
+        }
+        public static object InvokeGenericMethod(this Object me, string GenericMethodName, Type genericType, params object[] args) {
+            var method = me.GetType()
+                .GetMethods().FirstOrDefault(
+                    m => m.Name == (GenericMethodName) &&
+                    m.GetParameters().Length == args.Length &&
+                    m.GetGenericArguments().Length == 1
+                    );
+            if(method == null) {
+                throw new MissingMethodException($"Generic method not found: {me.GetType()}::{GenericMethodName}<{genericType.Name}>({string.Join(",", args.Select(a=> a?.GetType()?.Name))})");
+            }
+            return method.MakeGenericMethod(genericType)
+                .Invoke(me, args);
         }
 
         public static void ValuesFromDataRow(this Object me, DataRow dr, Tuple<List<MemberInfo>, List<DataColumn>> meta = null) {

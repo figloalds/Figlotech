@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Linq.Expressions;
+using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsDataAccessor : IDataAccessor

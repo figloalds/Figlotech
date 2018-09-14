@@ -4,6 +4,7 @@ using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;

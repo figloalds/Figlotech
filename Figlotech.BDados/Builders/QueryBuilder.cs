@@ -51,8 +51,8 @@ namespace Figlotech.BDados.Builders {
 
 
 
-        public static QbParam Param(object o) {
-            return new QbParam(o);
+        public static Qb Param(object o) {
+            return new Qb($"@{paramId}", o);
         }
 
         static readonly string defParam = IntEx.GenerateShortRid();

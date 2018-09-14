@@ -380,11 +380,11 @@ namespace Figlotech.Core {
         public WorkJob Enqueue(Action a, Action<Exception> exceptionHandler = null, Action finished = null) {
             TotalWork++;
             var retv = new WorkJob(a, exceptionHandler, finished);
-            Fi.Tech.WriteLine("FTH:WorkQueuer", $"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
+            //Fi.Tech.WriteLine("FTH:WorkQueuer", $"{this.Name}({this.QID}) Job: {this.QID}/{retv.id}");
             lock (workQueue) {
                 workQueue.Enqueue(retv);
             }
-            if(!inited) {
+            if(!inited || this.workers.Count == 0) {
                 SpawnWorker();
             }
             InitSupervisor();

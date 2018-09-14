@@ -68,6 +68,11 @@ namespace Figlotech.Core {
 
         public static void StdoutLogs(this Fi _selfie, bool status) {
             EnableStdoutLogs = status;
+            if(status) {
+                FthLogStreamWriter.Start();
+            } else {
+                FthLogStreamWriter.Stop(false);
+            }
         }
 
         public static void Write(this Fi _selfie, string s = "") {
@@ -92,23 +97,26 @@ namespace Figlotech.Core {
         }
 
         static StreamWriter fthLogStream;
+        static WorkQueuer FthLogStreamWriter = new WorkQueuer("FTHLogStreamWriter", 1, false);
         public static StreamWriter FTHLogStream {
             get => fthLogStream ?? (fthLogStream = new StreamWriter(Console.OpenStandardOutput()));
             set => fthLogStream = value;
         }
 
         public static void WriteLine(this Fi _selfie, string s = "") {
-            WriteLine(_selfie, "FTH:Generic", () => s);
+            WriteLineInternal(_selfie, "FTH:Generic", () => s);
         }
         public static void WriteLine(this Fi _selfie, string origin, string s) {
-            WriteLine(_selfie, origin, () => s);
+            WriteLineInternal(_selfie, origin, () => s);
         }
 
         public static SelfInitializerDictionary<string, bool> EnabledSystemLogs { get; private set; } = new SelfInitializerDictionary<string, bool>((str) => false);
-        public static void WriteLine(this Fi _selfie, string origin, Func<string> s) {
+        internal static void WriteLineInternal(this Fi _selfie, string origin, Func<string> s) {
             lock (FTHLogStream) {
-                if (EnableStdoutLogs && EnabledSystemLogs[origin])
+                if (EnableStdoutLogs && EnabledSystemLogs[origin]) {
                     FTHLogStream.WriteLine($"[{origin}] {s()}");
+                    FTHLogStream.Flush();
+                }
             }
         }
 
@@ -203,6 +211,9 @@ namespace Figlotech.Core {
         }
 
         public static IList<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
+            if(dt == null) {
+                throw new NullReferenceException("Input DataTable to Map<T> cannot be null");
+            }
             if (dt.Rows.Count < 1) return new List<T>();
             var init = DateTime.UtcNow;
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -1019,11 +1030,31 @@ namespace Figlotech.Core {
                 Throw(_selfie, x);
             });
         }
-
+        public static bool InlineRunAndForget { get; set; }
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount * 128, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 12000 };
         public static WorkJob RunAndForget(this Fi _selfie, string name, Action job, Action<Exception> handler = null, Action then = null) {
+            if(InlineRunAndForget) {
+                try {
+                    job?.Invoke();
+                } catch(Exception x) {
+                    try {
+                        handler?.Invoke(x);
+                    } catch (Exception y) {
+                        Throw(_selfie, y);
+                    }
+                } finally {
+                    try {
+                        then?.Invoke();
+                    } catch(Exception y) {
+                        Throw(_selfie, y);
+                    }
+                }
+                return null;
+            }
+
             var wj = FiTechRAF.Enqueue(job, handler, then);
             wj.Name = name;
+            FiTechRAF.Start();
             return wj;
         }
 
@@ -1043,12 +1074,11 @@ namespace Figlotech.Core {
 
         public static string GenerateIdString(this Fi _selfie, string uniqueId, int numDigits = 128) {
             char[] retval = new char[numDigits];
-            Random r = new Random();
+            Random r = new Random(8547 + (numDigits * 11));
             Random r2 = new Random(Fi.Tech.IntSeedFromString(uniqueId));
             for (int i = 0; i < retval.Length; i++) {
                 int pos = r.Next(IntEx.Base36.Length / 2) + r2.Next(IntEx.Base36.Length / 2);
-                if (pos > IntEx.Base36.Length - 1)
-                    pos = IntEx.Base36.Length - 1;
+                pos = pos % IntEx.Base36.Length;
                 retval[i] = IntEx.Base36[pos];
             }
             return new string(retval);

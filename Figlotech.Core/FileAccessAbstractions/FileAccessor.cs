@@ -416,5 +416,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int)bufferLength);
         }
+
+        public void Hide(string relative) {
+            FixRel(ref relative);
+            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            if (File.Exists(WorkingDirectory)) {
+                File.SetAttributes(WorkingDirectory, File.GetAttributes(WorkingDirectory) | FileAttributes.Hidden);
+            }
+        }
+
+        public void Show(string relative) {
+            FixRel(ref relative);
+            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            if (File.Exists(WorkingDirectory)) {
+                File.SetAttributes(WorkingDirectory, File.GetAttributes(WorkingDirectory) & ~FileAttributes.Hidden);
+            }
+        }
     }
 }

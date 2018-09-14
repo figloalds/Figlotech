@@ -14,12 +14,10 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public enum OrderingType {
-        Asc,
-        Desc
-    }
+    
     public class RecordSet<T> : List<T>, IEnumerable<T>
         where T : IDataObject, new() {
 

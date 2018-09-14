@@ -212,5 +212,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 a.WriteAllText(relative, content);
             });
         }
+
+        public void Hide(string relative) {
+            Parallel.ForEach(accessors, (a) => {
+                a.Hide(relative);
+            });
+        }
+
+        public void Show(string relative) {
+            Parallel.ForEach(accessors, (a) => {
+                a.Show(relative);
+            });
+        }
     }
 }
