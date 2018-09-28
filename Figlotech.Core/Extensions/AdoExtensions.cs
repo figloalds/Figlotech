@@ -11,8 +11,14 @@ namespace System.Data {
 
         public static IEnumerable<T> ToEnumerable<T>(this DataColumn dc) {
             var dt = dc.Table;
-            for(int i = 0; i < dt.Rows.Count;i++) {
-                yield return (T) ReflectionTool.DbEvalValue(dt.Rows[i][dc], typeof(T));
+            for (int i = 0; i < dt.Rows.Count; i++) {
+                yield return (T)ReflectionTool.DbEvalValue(dt.Rows[i][dc], typeof(T));
+            }
+        }
+
+        public static IEnumerable<DataRow> ToEnumerable(this DataRowCollection drc) {
+            for (int i = 0; i < drc.Count; i++) {
+                yield return drc[i];
             }
         }
     }

@@ -180,7 +180,7 @@ namespace Figlotech.BDados {
                 var retv = Activator.CreateInstance(typeof(RecordSet<>).MakeGenericType(t), da);
                 return retv;
             } catch (Exception x) {
-                //Fi.Tech.WriteLine(x.Message);
+
             }
             return null;
         }

@@ -284,7 +284,6 @@ namespace Figlotech.BDados.Helpers {
                             var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
-                            //Fi.Tech.WriteLine(info.ToString());
                         } else {
                             var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
@@ -301,11 +300,8 @@ namespace Figlotech.BDados.Helpers {
                                 var memberName = altName?.Name ?? member.Name;
                                 if (info3 != null) {
                                     var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                    
                                     //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
-
                                     strBuilder.Append($"{prefix}.{memberName}");
-                                    //Fi.Tech.WriteLine(info3.ToString());
                                 } else {
                                     var prefix = GetPrefixOfExpression(expr);
                                     strBuilder.Append($"{prefix}.{memberName}");
@@ -392,7 +388,7 @@ namespace Figlotech.BDados.Helpers {
                     }
                 }
             } else {
-                Console.Write("");
+
             }
             if (fullConditions) {
                 return strBuilder;

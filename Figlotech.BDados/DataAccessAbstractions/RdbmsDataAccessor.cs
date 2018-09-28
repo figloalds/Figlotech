@@ -1,23 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
-using System.Reflection;
-using System.Linq;
-using System.Linq.Expressions;
-using Figlotech.Core.Interfaces;
-using Figlotech.BDados.Builders;
+﻿using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
-using Figlotech.Core.Helpers;
 using Figlotech.Core;
-using Figlotech.BDados.TableNameTransformDefaults;
-using System.Threading;
-using System.Diagnostics;
-using Figlotech.Core.Extensions;
 using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
@@ -43,9 +41,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } else {
                 lock (ObjectsToNotify)
                     ObjectsToNotify.AddRange(ido);
-                ido.ForEach(i =>
-                    Fi.Tech.WriteLine($"{i.GetType().Name}::{i.RID} staged")
-                );
             }
         }
 
@@ -107,10 +102,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (!ido.Any()) {
                 return;
             }
-            ido.ForEach(i =>
-                Fi.Tech.WriteLine($"{i.GetType().Name}::{i.RID} altered")
-            );
-            this.OnDataObjectAltered?.Invoke(ido.First().GetType(), ido);
+            OnDataObjectAltered?.Invoke(ido.First().GetType(), ido);
         }
 
         #region **** Global Declaration ****
@@ -180,7 +172,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 Execute("SELECT 1");
                 return isOnline = true;
-            } catch (Exception x) {
+            } catch (Exception) {
                 return isOnline = false;
             }
         }
@@ -208,8 +200,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             //lock (this) {
-            if (this.CurrentTransaction == null) {
-                var stf = "";
+            if (CurrentTransaction == null) {
                 WriteLog("Opening Transaction");
                 //if (FiTechCoreExtensions.EnableDebug) {
                 //    WriteLog(Environment.StackTrace);
@@ -217,9 +208,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var connection = Plugin.GetNewConnection
                     ();
                 OpenConnection(connection);
-                this.CurrentTransaction = new ConnectionInfo(this, connection);
-                this.CurrentTransaction?.BeginTransaction(useTransaction, ilev);
-                this.CurrentTransaction.Benchmarker = new Benchmarker("Database Access");
+                CurrentTransaction = new ConnectionInfo(this, connection);
+                CurrentTransaction?.BeginTransaction(useTransaction, ilev);
+                CurrentTransaction.Benchmarker = new Benchmarker("Database Access");
                 WriteLog("Transaction Open");
             }
             //}
@@ -227,22 +218,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void EndTransaction() {
             //lock (this) {
-            if (this.CurrentTransaction != null) {
+            if (CurrentTransaction != null) {
                 WriteLog("Ending Transaction");
-                this.CurrentTransaction?.EndTransaction();
+                CurrentTransaction?.EndTransaction();
 
-                this.CurrentTransaction?.Benchmarker.FinalMark();
-                this.CurrentTransaction = null;
+                CurrentTransaction?.Benchmarker.FinalMark();
+                CurrentTransaction = null;
                 WriteLog("Transaction ended");
             }
             //}
         }
 
         public void Commit() {
-            if (this.CurrentTransaction != null && this.CurrentTransaction.IsUsingRdbmsTransaction) {
+            if (CurrentTransaction != null && CurrentTransaction.IsUsingRdbmsTransaction) {
                 WriteLog("Committing Transaction");
-                lock ($"DATA_ACCESSOR_COMMIT_{this.myId}") {
-                    this.CurrentTransaction?.Commit();
+                lock ($"DATA_ACCESSOR_COMMIT_{myId}") {
+                    CurrentTransaction?.Commit();
                 }
 
                 WriteLog("Commit OK");
@@ -250,10 +241,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Rollback() {
-            if (this.CurrentTransaction != null && this.CurrentTransaction.IsUsingRdbmsTransaction) {
+            if (CurrentTransaction != null && CurrentTransaction.IsUsingRdbmsTransaction) {
                 WriteLog("Rolling back Transaction");
                 //lock (this)
-                this.CurrentTransaction?.Rollback();
+                CurrentTransaction?.Rollback();
                 WriteLog("Rollback OK");
             }
         }
@@ -430,8 +421,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => {
                 return SaveItem(transaction, input);
             }, (x) => {
-                this.WriteLog(x.Message);
-                this.WriteLog(x.StackTrace);
+                //this.WriteLog(x.Message);
+                //this.WriteLog(x.StackTrace);
                 throw x;
             });
         }
@@ -518,8 +509,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => {
                 return Fetch<T>(transaction, condicoes, skip, limit, orderingMember, ordering);
             }, (x) => {
-                this.WriteLog(x.Message);
-                this.WriteLog(x.StackTrace);
+                WriteLog(x.Message);
+                WriteLog(x.StackTrace);
                 throw x;
             });
         }
@@ -616,7 +607,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 var retv = functions.Invoke(transaction);
                 var total = transaction.Benchmarker?.FinalMark();
-                this.WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
+                WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
                 return retv;
             }, handler, useTransaction);
         }
@@ -679,17 +670,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             if (func == null) return default(T);
 
-            if (this.CurrentTransaction != null) {
+            if (CurrentTransaction != null) {
                 try {
-                    return func.Invoke(this.CurrentTransaction);
+                    return func.Invoke(CurrentTransaction);
                 } catch (Exception x) {
                     handler?.Invoke(x);
                 }
                 return default(T);
             }
 
-            this.BeginTransaction(useTransaction);
-            var b = this.CurrentTransaction.Benchmarker;
+            BeginTransaction(useTransaction);
+            var b = CurrentTransaction.Benchmarker;
             if (FiTechCoreExtensions.EnableDebug) {
                 try {
                     int maxFrames = 2;
@@ -699,7 +690,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var mName = m.Name;
                         var t = m.DeclaringType;
                         var tName = t.Name;
-                        if (f.GetMethod().DeclaringType.Assembly != this.GetType().Assembly) {
+                        if (f.GetMethod().DeclaringType.Assembly != GetType().Assembly) {
                             b.Mark($"Database Access from {tName}->{mName}");
                             if (maxFrames-- <= 0) {
                                 break;
@@ -711,14 +702,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             try {
-                this.CurrentTransaction.Benchmarker = b;
+                CurrentTransaction.Benchmarker = b;
                 b.Mark("Run User Code");
-                var retv = func.Invoke(this.CurrentTransaction);
+                var retv = func.Invoke(CurrentTransaction);
 
                 if (useTransaction) {
                     WriteLog($"[{accessId}] Committing");
                     b.Mark($"[{accessId}] Begin Commit");
-                    this.Commit();
+                    Commit();
                     b.Mark($"[{accessId}] End Commit");
                     WriteLog($"[{accessId}] Commited OK ");
                 }
@@ -727,7 +718,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (useTransaction) {
                     WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
                     b.Mark($"[{accessId}] Begin Rollback");
-                    this.Rollback();
+                    Rollback();
                     b.Mark($"[{accessId}] End Rollback");
                     WriteLog($"[{accessId}] Transaction rolled back ");
                 }
@@ -737,7 +728,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     throw x;
                 }
             } finally {
-                this.EndTransaction();
+                EndTransaction();
                 b.FinalMark();
             }
 
@@ -1140,19 +1131,40 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             bool retv = true;
             if (rs.Count == 0)
                 return true;
+            if (rs.Count == 1) {
+                return SaveItem(transaction, rs.First());
+            }
             for (int it = 0; it < rs.Count; it++) {
                 if (rs[it].RID == null) {
                     rs[it].RID = new RID().ToString();
                 }
             }
 
+            rs.ForEach(item => {
+                item.IsPersisted = false;
+                if(!item.IsReceivedFromSync) {
+                    item.UpdatedTime = DateTime.UtcNow;
+                }
+            });
+            List<T> conflicts = new List<T>();
+            var persistedMap = Query(transaction, Plugin.QueryGenerator.QueryIds(rs));
+            foreach (DataRow a in persistedMap.Rows) {
+                var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == ((long) Convert.ChangeType(a[0], typeof(long))) || item.RID == a[1] as String);
+                if (rowEquivalentObject != null) {
+                    if(rowEquivalentObject.RID != a[1] as String) {
+                        rowEquivalentObject.RID = a[1] as String;
+                    }
+                    rowEquivalentObject.IsPersisted = true;
+                }
+            }
+
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i2 = 0;
-            int cnt = 0;
             int cut = 500;
             int rst = 0;
             IList<T> temp;
+
             if (rs.Count > cut) {
                 temp = new List<T>();
                 temp.AddRange(rs);
@@ -1162,13 +1174,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             List<Exception> failedSaves = new List<Exception>();
             List<IDataObject> successfulSaves = new List<IDataObject>();
+            List<IDataObject> failedObjects = new List<IDataObject>();
             transaction?.Benchmarker.Mark($"Begin SaveList process");
             WorkQueuer wq = rs.Count > cut ? new WorkQueuer("SaveList_Annonymous_Queuer", Environment.ProcessorCount, true) : null;
             while (i2 * cut < rs.Count) {
                 int i = i2;
                 Action WorkFn = () => {
                     List<T> sub;
-                    lock(temp)
+                    lock (temp)
                         sub = temp.Skip(i * cut).Take(Math.Min(rs.Count - (i * cut), cut)).ToList();
                     var inserts = sub.Where(it => !it.IsPersisted).ToArray();
                     var updates = sub.Where(it => it.IsPersisted).ToArray();
@@ -1177,7 +1190,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Length} items");
                             var query = Plugin.QueryGenerator.GenerateMultiInsert(inserts, false);
                             transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Length}");
-                            lock(transaction)
+                            lock (transaction)
                                 rst += Execute(transaction, query);
                             lock (successfulSaves)
                                 successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
@@ -1185,10 +1198,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             Fi.Tech.RunAndForget(() => {
                                 OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
                             });
+
                             lock (failedSaves)
                                 failedSaves.Add(x);
                         }
+                        var queryIds = Query(transaction, QueryGenerator.QueryIds(inserts));
+                        foreach (DataRow dr in queryIds.Rows) {
+                            var psave = inserts.FirstOrDefault(it => it.RID == dr[1] as String);
+                            if (psave == null) {
+                                psave.Id = Int64.Parse(dr[0] as String);
+                            }
+                        }
                     }
+
                     if (updates.Length > 0) {
                         try {
                             transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Length} items");
@@ -1222,10 +1244,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark($"Dispatch Successful Save events");
             if (successfulSaves.Any()) {
                 if (recoverIds) {
-                    var q = this.Query(transaction, QueryGenerator.QueryIds(rs));
+                    var q = Query(transaction, QueryGenerator.QueryIds(rs));
                     foreach (DataRow dr in q.Rows) {
                         successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = Int64.Parse(dr[0] as String);
                     }
+                    failedObjects.AddRange(successfulSaves.Where(a => a.Id <= 0).Select(a => (IDataObject)a));
+                    successfulSaves.RemoveAll(a => a.Id <= 0);
                 }
                 Fi.Tech.RunAndForget(() => {
                     int newHash = 0;
@@ -1242,7 +1266,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
-                throw new BDadosException("Not everything could be saved", new AggregateException(failedSaves));
+                throw new BDadosException("Not everything could be saved", failedObjects, new AggregateException(failedSaves));
+            }
+            if (failedObjects.Any()) {
+                var ex = new BDadosException("Some objects did not persist correctly", failedObjects, null);
+                Fi.Tech.RunAndForget(() => {
+                    OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
+                });
             }
 
             return retv;
@@ -1272,9 +1302,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.Append(") sub)");
             }
             if (list.Count > 0) {
-                
+
                 query += Qb.And();
-                query += Qb.NotIn(rid, list, l => l.RID); 
+                query += Qb.NotIn(rid, list, l => l.RID);
                 //for (var i = 0; i < list.Count; i++) {
                 //    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
                 //    if (i < list.Count - 1)
@@ -1284,9 +1314,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             var results = Query<T>(transaction, query);
-            if(results.Any()) {
-                this.OnObjectsDeleted?.Invoke(typeof(T), results.Select(t => t as IDataObject).ToArray());
-                var query2 = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(rid, results, r=> r.RID);
+            if (results.Any()) {
+                OnObjectsDeleted?.Invoke(typeof(T), results.Select(t => t as IDataObject).ToArray());
+                var query2 = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(rid, results, r => r.RID);
                 retv = Execute(transaction, query2);
                 return retv > 0;
             }
@@ -1385,14 +1415,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 command.CommandText = QueryText;
                 command.CommandTimeout = Plugin.CommandTimeout;
-                int i = 0;
-                this.WriteLog($"[{accessId}] -- Query: {QueryText}");
+                WriteLog($"[{accessId}] -- Query: {QueryText}");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Prepare Statement");
                 // Adiciona os parametros
                 foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                     var cmdParam = command.CreateParameter();
                     cmdParam.ParameterName = param.Key;
-                    if(param.Value is String str) {
+                    if (param.Value is String str) {
                         cmdParam.Value = str;
                         cmdParam.DbType = DbType.String;
                         var paramRefl = new ObjectReflector(cmdParam);
@@ -1409,7 +1438,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     command.Parameters.Add(cmdParam);
-                    this.WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
+                    WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
                     //if (Debugger.IsAttached) {
                     //    Debugger.Break();
                     //}
@@ -1418,9 +1447,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Retv List");
                 IList<T> retv;
                 lock (transaction) {
-                    retv = this.GetObjectList<T>(command);
+                    retv = GetObjectList<T>(command);
                 }
-                if(retv == null) {
+                if (retv == null) {
                     throw new Exception("Null list generated");
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
@@ -1428,15 +1457,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     int resultados = 0;
                     resultados = retv.Count;
-                    this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
+                    WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
                     return retv;
                 } catch (Exception x) {
-                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                    this.WriteLog(x.Message);
-                    this.WriteLog(x.StackTrace);
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog(x.Message);
+                    WriteLog(x.StackTrace);
                     throw x;
                 } finally {
-                    this.WriteLog("------------------------------------");
+                    WriteLog("------------------------------------");
                 }
             }
         }
@@ -1469,13 +1498,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (ridcol != null) {
                 ridname = ridcol;
             }
-            this.OnObjectsDeleted(obj.GetType(), obj.ToSingleElementList().ToArray());
+            OnObjectsDeleted(obj.GetType(), obj.ToSingleElementList().ToArray());
             var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
             retv = Execute(transaction, query) > 0;
             return retv;
         }
 
-        public bool Delete<T>(ConnectionInfo transaction, IEnumerable<T> obj) where T:IDataObject, new() {
+        public bool Delete<T>(ConnectionInfo transaction, IEnumerable<T> obj) where T : IDataObject, new() {
             bool retv = false;
 
             var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
@@ -1483,13 +1512,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (ridcol != null) {
                 ridname = ridcol;
             }
-            this.OnObjectsDeleted(typeof(T), obj.Select(t=> t as IDataObject).ToArray());
-            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, obj.ToList(), o=> o.RID);
+            OnObjectsDeleted(typeof(T), obj.Select(t => t as IDataObject).ToArray());
+            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, obj.ToList(), o => o.RID);
             retv = Execute(transaction, query) > 0;
             return retv;
         }
 
         public bool SaveItem(ConnectionInfo transaction, IDataObject input) {
+
+            if (input == null) {
+                throw new ArgumentNullException("Input to SaveItem must be not-null");
+            }
+
             bool retv = false;
 
             int rs = -33;
@@ -1500,6 +1534,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (!input.IsReceivedFromSync) {
                 input.UpdatedTime = DateTime.UtcNow;
             }
+
+            input.IsPersisted = false;
+            var persistedMap = Query(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList()));
+            foreach (DataRow a in persistedMap.Rows) {
+                if (input.RID == a[1] as String) {
+                    input.IsPersisted = true;
+                }
+            }
+
+
             if (input.IsPersisted) {
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));
                 retv = true;
@@ -1518,63 +1562,67 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw x;
             }
             if (rs == 0) {
-                this.WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
+                WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
 
             retv = rs > 0;
             if (retv && !input.IsPersisted) {
-                long retvId = 0;
-                //var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+                if (input.Id <= 0) {
+                    long retvId = 0;
 
-                //if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
-                //    try {
-                //        var query = (IQueryBuilder)Plugin.QueryGenerator
-                //            .GetType()
-                //            .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                //            .MakeGenericMethod(input.GetType())
-                //            .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                //        var gid = ScalarQuery(transaction, query);
-                //        if (gid is long l)
-                //            retvId = l;
-                //        if (gid is string s) {
-                //            if (Int64.TryParse(s, out retvId)) {
-                //            }
-                //        }
-                //    } catch (Exception x) {
-                //        this.WriteLog("Error in SaveItemBuildGeneric" + x.Message);
-                //    }
-                //}
+                    //var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
 
-                if (retvId <= 0) {
-                    try {
-                        var query = (IQueryBuilder)Plugin.QueryGenerator
-                            .GetType()
-                            .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
-                            .MakeGenericMethod(input.GetType())
-                            .Invoke(Plugin.QueryGenerator, new Object[0]);
-                        retvId = ((long?)ScalarQuery(transaction, query)) ?? 0;
-                        if(retvId <= 0) {
+                    if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
+                        try {
+                            var query = (IQueryBuilder)Plugin.QueryGenerator
+                                .GetType()
+                                .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
+                                .MakeGenericMethod(input.GetType())
+                                .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
                             var gid = ScalarQuery(transaction, query);
                             if (gid is long l)
                                 retvId = l;
                             if (gid is string s) {
-                                if (Int64.TryParse(s, out retvId)) {
+                                Int64.TryParse(s, out retvId);
+                            }
+                        } catch (Exception) {
+
+                        }
+                    }
+
+                    if (retvId <= 0) {
+                        try {
+                            var query = (IQueryBuilder)Plugin.QueryGenerator
+                                .GetType()
+                                .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
+                                .MakeGenericMethod(input.GetType())
+                                .Invoke(Plugin.QueryGenerator, new Object[0]);
+                            var gid1 = ScalarQuery(transaction, query);
+                            if (gid1 is long l)
+                                retvId = l;
+                            if (retvId <= 0) {
+                                var gid = ScalarQuery(transaction, query);
+                                if (gid is long l2)
+                                    retvId = l2;
+                                if (gid is string s) {
+                                    if (Int64.TryParse(s, out retvId)) {
+                                    }
                                 }
                             }
+                        } catch (Exception x) {
+                            Fi.Tech.RunAndForget(() => {
+                                OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                            }, (xe) => {
+                                Fi.Tech.Throw(xe);
+                            });
                         }
-                    } catch (Exception x) {
-                        Fi.Tech.RunAndForget(() => {
-                            OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
-                        }, (xe) => {
-                            Fi.Tech.Throw(xe);
-                        });
+                    }
+
+                    if (retvId > 0) {
+                        input.Id = retvId;
                     }
                 }
-                //}
-                if (retvId > 0) {
-                    input.Id = retvId;
-                } else {
-                }
+
                 var newHash = input.SpFthComputeDataFieldsHash();
                 if (input.PersistedHash != newHash) {
                     input.PersistedHash = newHash;
@@ -1601,7 +1649,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixerLinear = new SelfInitializerDictionary<Type, PrefixMaker>(
             type => {
                 return new PrefixMaker();
-            }    
+            }
         );
 
         static SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoinLinear = new SelfInitializerDictionary<Type, JoinDefinition>(
@@ -1677,7 +1725,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     break;
             }
 
-            this.WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {Linear}");
+            WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {Linear}");
             // CLUMSY
             if (hasAnyAggregations) {
                 var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
@@ -1698,7 +1746,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark("--");
                     command.CommandText = query.GetCommandText();
-                    this.WriteLog($"[{accessId}] {command.CommandText}");
+                    WriteLog($"[{accessId}] {command.CommandText}");
                     foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                         var cmdParam = command.CreateParameter();
                         cmdParam.ParameterName = param.Key;
@@ -1710,7 +1758,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         } else {
                             cmdParam.Value = param.Value;
                         }
-                        
+
                         var pval = $"'{param.Value?.ToString() ?? "null"}'";
                         if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
                             pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
@@ -1718,22 +1766,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
 
                         command.Parameters.Add(cmdParam);
-                        this.WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
+                        WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
                     }
-                    var retv = this.BuildAggregateListDirect<T>(transaction, command, join, 0);
+                    var retv = BuildAggregateListDirect<T>(transaction, command, join, 0);
                     return retv;
                 }
 
-                // Yay.
-                // Confusing but effective. Okay das.
-                //List<T> list = dynamicJoinJumble.Qualify<T>();
-                //for (int i = 0; i < list.Count; i++) {
-                //    list[i].DataAccessor = this;
-                //    list[i].SelfCompute(i > 0 ? list[i - 1] : default(T));
-                //    retv.Add(list[i]);
-                //}
             } else {
-                this.WriteLog(cnd?.ToString());
+                WriteLog(cnd?.ToString());
                 var pm = new PrefixMaker();
                 var cndb = new ConditionParser(pm).ParseExpression<T>(cnd);
                 return Fetch<T>(transaction, cndb, skip, limit, orderingMember, otype).ToList();
@@ -1745,9 +1785,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public IList<T> Fetch<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            Fi.Tech.WriteLine($"Before generating WHERE Clause from {conditions?.ToString()}");
             var query = new ConditionParser().ParseExpression(conditions);
-            Fi.Tech.WriteLine($"Generated WHERE Clause: {query._queryString}");
             return Fetch<T>(transaction, query, skip, limit, orderingMember, ordering);
         }
 
@@ -1789,8 +1827,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 command.CommandText = QueryText;
                 command.CommandTimeout = Plugin.CommandTimeout;
-                int i = 0;
-                this.WriteLog($"[{accessId}] -- Query: {QueryText}");
+                WriteLog($"[{accessId}] -- Query: {QueryText}");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Prepare Statement");
                 // Adiciona os parametros
                 foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
@@ -1804,7 +1841,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     } else {
                         cmdParam.Value = param.Value;
                     }
-                    
+
                     var pval = $"'{param.Value?.ToString() ?? "null"}'";
                     if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
                         pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
@@ -1812,13 +1849,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     command.Parameters.Add(cmdParam);
-                    this.WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
+                    WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
                 }
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
                 DataSet ds;
                 lock (transaction) {
-                    ds = this.GetDataSet(command);
+                    ds = GetDataSet(command);
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
 
@@ -1828,15 +1865,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         throw new BDadosException("Database did not return any table.");
                     }
                     resultados = ds.Tables[0].Rows.Count;
-                    this.WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
+                    WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
                     return ds.Tables[0];
                 } catch (Exception x) {
-                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                    this.WriteLog(x.Message);
-                    this.WriteLog(x.StackTrace);
-                    throw x;
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog(x.Message);
+                    WriteLog(x.StackTrace);
+                    var ex = new BDadosException("Error executing Query", x);
+                    ex.Data["query"] = query;
+                    throw ex;
                 } finally {
-                    this.WriteLog("------------------------------------");
+                    WriteLog("------------------------------------");
                 }
             }
         }
@@ -1847,9 +1886,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int result = -1;
             transaction.Benchmarker?.Mark($"[{accessId}] Prepare statement");
             transaction.Benchmarker?.Mark("--");
-            this.WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
+            WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
             foreach (var param in query.GetParameters()) {
-                this.WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
+                WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
             }
             using (var command = transaction.CreateCommand()) {
                 try {
@@ -1871,26 +1910,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
                             pval = $"'{pval}'";
                         }
-                        this.WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
+                        WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
 
                         command.Parameters.Add(cmdParam);
                     }
                     command.CommandTimeout = Plugin.CommandTimeout;
-                    this.WriteLog(command.CommandText);
+                    WriteLog(command.CommandText);
                     transaction.Benchmarker?.Mark($"[{accessId}] Execute");
-                    lock(transaction) {
+                    lock (transaction) {
                         result = command.ExecuteNonQuery();
                     }
                     var elaps = transaction.Benchmarker?.Mark("--");
-                    this.WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
+                    WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                 } catch (Exception x) {
-                    this.WriteLog($"[{accessId}] -------- Error: {x.Message} ([{transaction.Benchmarker?.Mark("Error")} ms]");
-                    this.WriteLog(x.Message);
-                    this.WriteLog(x.StackTrace);
-                    this.WriteLog($"BDados Execute: {x.Message}");
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{transaction.Benchmarker?.Mark("Error")} ms]");
+                    WriteLog(x.Message);
+                    WriteLog(x.StackTrace);
+                    WriteLog($"BDados Execute: {x.Message}");
                     throw x;
                 } finally {
-                    this.WriteLog("------------------------------------");
+                    WriteLog("------------------------------------");
                 }
             }
             return result;
