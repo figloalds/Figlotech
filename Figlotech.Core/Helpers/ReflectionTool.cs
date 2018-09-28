@@ -79,7 +79,7 @@ namespace Figlotech.Core.Helpers {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
                 } catch (Exception x) {
-                    //Fi.Tech.WriteLine(x.Message);
+
                 }
             }
             return null;

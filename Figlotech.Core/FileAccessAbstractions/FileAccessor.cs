@@ -48,7 +48,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             try {
                 Directory.CreateDirectory(dir);
             } catch (Exception x) {
-                Fi.Tech.WriteLine(x.Message);
+                //Fi.Tech.WriteLine(x.Message);
             }
         }
 

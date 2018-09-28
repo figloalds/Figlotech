@@ -113,10 +113,14 @@ namespace Figlotech.Core {
             var final = preempt.ToString();
             return final.Length <= 64 ? final : final.Substring(0, 64);
         }
-        private static IntEx progRids = 42;
+        static int _progRids = 0;
+        private static int progRids {
+            get => (_progRids > 0) ? _progRids : (_progRids = (r.Next(5000) * 7));
+            set => _progRids = value > 0 ? value : (_progRids = (r.Next(5000) * 7));
+        }
         public static String GenerateShortRid() {
-            progRids += 7;
-            return progRids.ToString(IntEx.Base36);
+            progRids += 7 * r.Next(2);
+            return progRids.ToString();
         }
 
         public static IntEx operator +(IntEx a, IntEx b) {

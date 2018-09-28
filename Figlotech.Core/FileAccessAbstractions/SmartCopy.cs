@@ -325,14 +325,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     int maxTries = 10;
                     while ((a.Hash != hash || !local.Exists(a.RelativePath)) && maxTries-- > 0) {
                         processed = true;
-                        if(local.Exists(a.RelativePath + "_$ft_old")) {
-                            try {
-                                local.Delete(a.RelativePath + "_$ft_old");
-                            } catch (Exception x) {
-                                // Deletes the file if in use, else just hide it
-                                local.Hide(a.RelativePath + "_$ft_old");
-                            }
-                        }
                         if (remote.Exists(a.RelativePath + gzSuffix)) {
                             remote.Read(a.RelativePath + gzSuffix, (downStream) => {
                                 //local.Delete(a.RelativePath);
@@ -342,10 +334,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                                     downStream.CopyTo(fileStream, bufferSize);
                                 });
-                                local.Rename(a.RelativePath, a.RelativePath + "_$ft_old");
+                                var oldTempName = a.RelativePath + "_$ft_old-"+IntEx.GenerateShortRid();
+                                if (local.Exists(a.RelativePath)) {
+                                    local.Rename(a.RelativePath, oldTempName);
+                                }
                                 local.Rename(a.RelativePath + "_$ft_new", a.RelativePath);
                                 try {
-                                    local.Delete(a.RelativePath + "_$ft_old");
+                                    if(local.Exists(a.RelativePath + "_$ft_old"))
+                                        local.Delete(a.RelativePath + "_$ft_old");
                                 } catch(Exception x) {
                                     // Deletes the file if in use, else just hide it
                                     local.Hide(a.RelativePath + "_$ft_old");
@@ -367,7 +363,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                 }, (ex) => {
                     OnFileCopyException?.Invoke(a.RelativePath, ex);
-                    Fi.Tech.WriteLine(ex.Message);
                 }, () => {
 
                 });
@@ -443,7 +438,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     OnReportProcessedFile?.Invoke(changed, f);
                 }, (x) => {
                     OnFileCopyException?.Invoke(f, x);
-                    Console.WriteLine(x.Message);
+                    //Console.WriteLine(x.Message);
                 }, () => {
                 });
             });

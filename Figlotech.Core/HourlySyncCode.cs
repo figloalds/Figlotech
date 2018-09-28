@@ -3,8 +3,8 @@ using System.Linq;
 
 namespace Figlotech.Core {
     public class HourlySyncCode {
-        public static HourlySyncCode Generate(String Password = null) {
-            return Generate(DateTime.UtcNow, Password);
+        public static HourlySyncCode Generate(String Password = null, DateTime? KeyMoment = null) {
+            return Generate(KeyMoment??DateTime.UtcNow, Password);
         }
 
         private HourlySyncCode(byte[] code) {
@@ -14,7 +14,7 @@ namespace Figlotech.Core {
         byte[] Code { get; set; }
 
         public static implicit operator String(HourlySyncCode code) {
-            return Convert.ToBase64String(code.Code);
+            return code.ToString();
         }
         public static implicit operator HourlySyncCode(String code) {
             return new HourlySyncCode(Convert.FromBase64String(code));
@@ -25,6 +25,10 @@ namespace Figlotech.Core {
         }
         public static implicit operator HourlySyncCode(byte[] code) {
             return new HourlySyncCode(code);
+        }
+
+        public override string ToString() {
+            return Convert.ToBase64String(this.Code);
         }
 
         public static HourlySyncCode Generate(DateTime KeyMomment, String Password = null) {

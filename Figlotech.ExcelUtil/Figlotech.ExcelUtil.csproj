@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net462;netstandard2.0</TargetFrameworks>
@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
+    <PackageReference Include="EPPlus" Version="4.5.2.1" />
   </ItemGroup>
 
   <!-- GIMMICKY PRECOMPILER CONSTANTS -->
@@ -23,11 +24,10 @@
 
   <!-- NETSTANDARD REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="EPPlus.Core" Version="1.5.2" />
+    
   </ItemGroup>
   <!-- NET462 REFS -->
   <ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
-    <PackageReference Include="EPPlus" Version="4.1.1" />
     <Reference Include="mscorlib" />
     <Reference Include="System" />
     <Reference Include="System.Core" />

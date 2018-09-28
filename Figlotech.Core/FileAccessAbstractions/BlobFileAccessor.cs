@@ -181,7 +181,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     .Where((a) => a.Count((b) => b == '/') == 0)
                     .GroupBy((a) => a)
                     .First();
-                //Fi.Tech.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
                 Parallel.ForEach(list, (a) => {
                     try {
                         execFunc(a);
@@ -200,7 +199,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     .Where((a) => a.Count((b) => b == '/') == 0)
                     .GroupBy((a) => a)
                     .First();
-                //Fi.Tech.WriteLine($"List Blobs {relative} {blobs.Count((a) => true)} blobs");
                 foreach (var a in list) {
                     try {
                         execFunc(a);

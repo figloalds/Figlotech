@@ -24,6 +24,7 @@ namespace Figlotech.Core {
         internal FiHttpResult() {
 
         }
+
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
         public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req) {
@@ -134,6 +135,7 @@ namespace Figlotech.Core {
     }
 
     public class FiHttp {
+        public string SyncKeyCodePassword { get; set; } = null;
         IDictionary<string, string> headers = new Dictionary<string, string>();
         public FiHttp(string urlPrefix = null) {
             this.UrlPrefix = urlPrefix;
@@ -179,10 +181,18 @@ namespace Figlotech.Core {
             return retv;
         }
 
+        private void UpdateSyncCode() {
+            if (!SyncKeyCodePassword.IsNullOrEmpty()) {
+                var hsc = HourlySyncCode.Generate(SyncKeyCodePassword).ToString();
+                this["SyncKeyCode"] = hsc;
+            }
+        }
+
         public async Task<FiHttpResult> Get(string Url) {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "GET";
             req.UserAgent = UserAgent;
+            UpdateSyncCode();
             headers.ForEach((h) => {
                 switch (h.Key) {
                     case "Content-Type":
@@ -201,6 +211,7 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "GET";
             req.UserAgent = UserAgent;
+            UpdateSyncCode();
             headers.ForEach((h) => {
                 switch (h.Key) {
                     case "Content-Type":
@@ -238,6 +249,7 @@ namespace Figlotech.Core {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
             req.Method = "POST";
             req.UserAgent = UserAgent;
+            UpdateSyncCode();
             headers.ForEach((h) => {
                 switch (h.Key) {
                     case "Content-Type":

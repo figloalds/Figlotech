@@ -31,6 +31,14 @@ namespace Figlotech.Core.Helpers {
                 .Any(m => m.Name == key);
         }
 
+        public object this[KeyValuePair<MemberInfo, object> key] {
+            get {
+                return ReflectionTool.GetMemberValue(key.Key, target);
+            }
+            set {
+                ReflectionTool.SetMemberValue(key.Key, target, value);
+            }
+        }
 
         public object this[MemberInfo key] {
             get {
