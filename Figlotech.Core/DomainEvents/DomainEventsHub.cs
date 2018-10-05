@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
@@ -16,9 +17,18 @@ namespace Figlotech.Core.DomainEvents {
         public int? ValidationPhase { get; set; } = null;
     }
 
+    public class CustomFlushOrderToken {
+        public bool IsFlushIssued { get; set; } = false;
+        public bool IsReleased { get; set; } = false;
+    }
+
     public class DomainEventsHub {
         public static DomainEventsHub Global = new DomainEventsHub();
         private readonly DomainEventsHub parentHub;
+
+        private bool IsTerminationIssued = false;
+
+        List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
 
         public DomainEventsHub(DomainEventsHub parentHub = null) {
             this.parentHub = parentHub;
@@ -45,6 +55,14 @@ namespace Figlotech.Core.DomainEvents {
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
             var tempLi = domainEvents.ToList();
             tempLi.ForEach(evt => Raise(evt));
+        }
+
+        public void FlushAllInlineListeners() {
+            lock("FLUSH_SWITCH") {
+                foreach (var a in FlushOrderTokens) {
+                    a.IsFlushIssued = true;
+                }
+            }
         }
 
         private void WriteLog(string log) {
@@ -155,6 +173,8 @@ namespace Figlotech.Core.DomainEvents {
             DateTime pollStart = DateTime.UtcNow;
             return await Task.Run<IDomainEvent[]>(async () => {
                 IDomainEvent[] events;
+                var flushOrder = new CustomFlushOrderToken();
+                FlushOrderTokens.Add(flushOrder);
                 do {
                     lock (EventCache) {
                         events = getEvents().ToArray();
@@ -163,9 +183,14 @@ namespace Figlotech.Core.DomainEvents {
                         WriteLog($"Event pooling returned  {events.Length} {String.Join(", ", events.Select(e=> e.GetType().Name))}");
                         return events;
                     }
-
+                    if(flushOrder.IsFlushIssued) {
+                        WriteLog($"Event flushing issued {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
+                        return events;
+                    }
                     await Task.Delay(500);
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
+                flushOrder.IsReleased = true;
+                FlushOrderTokens.Remove(flushOrder);
                 WriteLog($"Event pooling returned no events");
                 return new IDomainEvent[0];
             });
