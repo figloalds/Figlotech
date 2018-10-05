@@ -119,7 +119,7 @@ namespace Figlotech.Core {
             set => _progRids = value > 0 ? value : (_progRids = (r.Next(5000) * 7));
         }
         public static String GenerateShortRid() {
-            progRids += 7 * r.Next(2);
+            progRids = Math.Max(0, progRids) + 7 * (1 + r.Next(2));
             return progRids.ToString();
         }
 
