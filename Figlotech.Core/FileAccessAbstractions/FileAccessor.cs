@@ -95,6 +95,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             Directory.Delete(relative);
         }
 
+        public string MapPathTo(string relative) {
+            FixRel(ref relative);
+            return Path.Combine(RootDirectory, relative);
+        }
+
         public void Rename(string relative, string newName) {
             FixRel(ref relative);
             FileAttributes attr = File.GetAttributes(Path.Combine(RootDirectory, relative));
@@ -263,7 +268,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return LockRegion(WorkingDirectory, () => {
                 using (Stream fs = Open(relative, FileMode.Open, FileAccess.Read)) {
                     func(fs);
-                    fs.Close();
                 }
                 return true;
             });

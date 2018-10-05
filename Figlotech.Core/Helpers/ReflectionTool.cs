@@ -93,7 +93,7 @@ namespace Figlotech.Core.Helpers {
             return member.GetCustomAttribute<T>();
         }
 
-        public static MemberInfo GetMember(Type t, string fieldName, object target) {
+        public static MemberInfo GetMember(Type t, string fieldName) {
             if (t == null) return null;
             MemberInfo member = ((MemberInfo)
                 t
@@ -104,12 +104,12 @@ namespace Figlotech.Core.Helpers {
                     .GetProperties()
                     .Where((field) => field.Name == fieldName)
                     .FirstOrDefault());
-            return member ?? GetMember(t.BaseType, fieldName, target);
+            return member ?? GetMember(t.BaseType, fieldName);
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {
             try {
-                MemberInfo member = GetMember(target?.GetType(), fieldName, target);
+                MemberInfo member = GetMember(target?.GetType(), fieldName);
                 if (member == null) {
                     return false;
                 }
@@ -264,7 +264,7 @@ namespace Figlotech.Core.Helpers {
 
         public static Object GetValue(Object target, string fieldName) {
             try {
-                var retv = GetMemberValue(GetMember(target?.GetType(), fieldName, target), target);
+                var retv = GetMemberValue(GetMember(target?.GetType(), fieldName), target);
                 return retv;
             } catch (Exception) {
 
