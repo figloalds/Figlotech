@@ -116,9 +116,13 @@ namespace System
             }
             return new ObjectReflector(me);
         }
-        
+
         public static List<T> ToSingleElementList<T>(this T me) {
             return new List<T> { me };
+        }
+
+        public static Any<T> ToAny<T>(this T me) {
+            return new Any<T>(me);
         }
 
         public static T ValueTo<T>(this Object me) {

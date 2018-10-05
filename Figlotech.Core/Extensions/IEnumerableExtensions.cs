@@ -33,9 +33,15 @@ namespace System
         public static void ForEach<T>(this IEnumerable<T> me, Action<T> act) {
             var enumerator = me.GetEnumerator();
             while (enumerator.MoveNext()) {
-                if(enumerator.Current != null) {
+                if (enumerator.Current != null) {
                     act?.Invoke(enumerator.Current);
                 }
+            }
+        }
+
+        public static void ForEachReverse<T>(this IList<T> me, Action<T> act) {
+            for(int i = me.Count; i >= 0; i--) {
+                act?.Invoke(me[i]);
             }
         }
 
