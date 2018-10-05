@@ -27,8 +27,8 @@ namespace Figlotech.BDados {
 
         //        public static bool EnableStdoutLogs { get; set; } = false;
 
-        private static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
-        private static String GetRidColumn(this Fi _selfie, Type type) {
+        public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
+        public static String GetRidColumn(this Fi _selfie, Type type) {
             var fields = new List<FieldInfo>();
             do {
                 fields.AddRange(type.GetFields());
@@ -120,18 +120,21 @@ namespace Figlotech.BDados {
 
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader) where T : new() {
             var cols = new string[reader.FieldCount];
-            for (int i = 0; i < cols.Length; i++)
-                cols[i] = reader.GetName(i);
             var refl = new ObjectReflector();
+            var members = new MemberInfo[cols.Length];
+            for (int i = 0; i < cols.Length; i++) {
+                cols[i] = reader.GetName(i);
+                members[i] = ReflectionTool.GetMember(typeof(T), cols[i]);
+            }
             while (reader.Read()) {
                 T obj = new T();
                 refl.Slot(obj);
                 for (int i = 0; i < cols.Length; i++) {
                     var o = reader.GetValue(i);
                     if (o is string str) {
-                        refl[cols[i]] = reader.GetString(i);
+                        refl[members[i]] = reader.GetString(i);
                     } else {
-                        refl[cols[i]] = o;
+                        refl[members[i]] = o;
                     }
                 }
                 yield return (T) refl.Retrieve();
