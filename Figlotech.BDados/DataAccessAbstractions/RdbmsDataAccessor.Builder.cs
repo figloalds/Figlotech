@@ -1,35 +1,25 @@
-﻿using System;
+﻿using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
+using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
-using System.Reflection;
 using System.Linq;
-using System.Linq.Expressions;
-using Figlotech.Core.Interfaces;
-using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados.Helpers;
-using Figlotech.Core.Helpers;
-using Figlotech.Core;
-using Figlotech.Core.BusinessModel;
-using Figlotech.BDados.TableNameTransformDefaults;
-using System.Threading;
-using System.Diagnostics;
-using Figlotech.Core.Extensions;
+using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor {
 
-        public IList<T> GetObjectList<T>(IDbCommand command) where T : new() {
+        public IList<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
             lock (command) {
+                transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query");
                 using (var reader = command.ExecuteReader()) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
-
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List");
                     return Fi.Tech.MapFromReader<T>(reader).ToList();
                 }
             }
@@ -169,7 +159,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>> ObjectTypeCache = new SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>>(
-            t => 
+            t =>
                 new SelfInitializerDictionary<string, Type>(fieldAlias => {
                     var objectType = ReflectionTool.GetTypeOf(
                                     ReflectionTool.FieldsAndPropertiesOf(t)
@@ -220,6 +210,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                         BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, thisIndex, isNew, constructionCache, 0);
                     }
+                    var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count}");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
+
                     constructionCache.Clear();
                     transaction?.Benchmarker?.Mark("--");
                 }
@@ -235,7 +228,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             foreach (var a in retv) {
-                if(a is IBusinessObject ibo) {
+                if (a is IBusinessObject ibo) {
                     ibo.OnAfterLoad(dlc);
                 }
             }

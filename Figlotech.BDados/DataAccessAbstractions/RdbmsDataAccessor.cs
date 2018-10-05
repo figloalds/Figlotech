@@ -1444,15 +1444,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //}
                 }
                 // --
-                transaction?.Benchmarker?.Mark($"[{accessId}] Build Retv List");
                 IList<T> retv;
                 lock (transaction) {
-                    retv = GetObjectList<T>(command);
+                    retv = GetObjectList<T>(transaction, command);
                 }
                 if (retv == null) {
                     throw new Exception("Null list generated");
                 }
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
+                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count}");
+                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double) elaps / (double) retv.Count).ToString("0.00")}ms/item");
 
                 try {
                     int resultados = 0;
