@@ -294,7 +294,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             // -- 
             var members = GetMembers(typeof(T));
-            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            members.RemoveAll(
+                m => 
+                    m.GetCustomAttribute<PrimaryKeyAttribute>() != null ||
+                    m.GetCustomAttribute<ReliableIdAttribute>() != null
+                    );
             int x = 0;
             int ggid = ++gid;
             for (var i = 0; i < members.Count; i++) {
