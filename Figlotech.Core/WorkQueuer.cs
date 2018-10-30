@@ -76,7 +76,7 @@ namespace Figlotech.Core {
         decimal avgTaskResolutionTime = 1;
         decimal totTaskResolutionTime = 1;
         decimal totTasksResolved = 0;
-        AutoResetEvent QueueResetEvent { get; set; } = new AutoResetEvent(false);
+        ManualResetEvent QueueResetEvent { get; set; } = new ManualResetEvent(false);
 
         public int GcInterval = 5000;
 
@@ -142,8 +142,16 @@ namespace Figlotech.Core {
                 //    }
                 //}
                 //workers.Clear();
-                while(ActivatedWorkQueue.Count > 0) {
-                    ActivatedWorkQueue.Peek().Await();
+                WorkJob peekJob = null;
+                while(true) {
+                    lock(ActivatedWorkQueue) {
+                        if(ActivatedWorkQueue.Count > 0) {
+                            peekJob = ActivatedWorkQueue.Peek();
+                        } else {
+                            break;
+                        }
+                    }
+                    peekJob?.Await();
                 }
             }
             isRunning = false;
@@ -242,9 +250,13 @@ namespace Figlotech.Core {
                     //}
                     WorkJob job;
                     int wqc = 1;
+                    bool isFoulEntry = false;
                     while (true) {
                         job = null;
                         lock (ActivatedWorkQueue) {
+                            if(workers.Count > ActivatedWorkQueue.Count + 1) {
+                                break;
+                            }
                             if (ActivatedWorkQueue.Count > workers.Count && workers.Count < parallelSize) {
                                 SpawnWorker(true);
                             }
@@ -259,10 +271,23 @@ namespace Figlotech.Core {
                             }
                         }
                         if(job == null) {
+                            if(isFoulEntry) {
+                                break;
+                            }
+                            Thread.Sleep(100);
                             Thread.CurrentThread.IsBackground = true;
-                            QueueResetEvent.WaitOne();
+                            var cnt = 0;
+                            lock (ActivatedWorkQueue) {
+                                cnt = this.ActivatedWorkQueue.Count;
+                            }
+                            if(cnt < 1) {
+                                isFoulEntry = true;
+                                var timeout = workers.Count > MinWorkers ? this.ExtraWorkerTimeout : this.MainWorkerTimeout;
+                                QueueResetEvent.WaitOne(timeout);
+                            }
                             continue;
                         }
+                        isFoulEntry = false;
                         List<Exception> exes = new List<Exception>();
 
                         Thread.CurrentThread.IsBackground = false;
