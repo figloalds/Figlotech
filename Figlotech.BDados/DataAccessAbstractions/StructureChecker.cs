@@ -1061,6 +1061,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     case "datetime":
                         type = $"DATETIME";
                         break;
+                    case "FnVal`1":
+                        var underlying = field.GetType().GetProperty("Value");
+                        type = GetDatabaseType(underlying, info, size);
+                        break;
                 }
             }
             return type;

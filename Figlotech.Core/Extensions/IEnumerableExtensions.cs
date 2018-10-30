@@ -39,10 +39,23 @@ namespace System
             }
         }
 
+        public static IDictionary<TKey, TValue> ToIndex<TKey, TValue>(this IEnumerable<TValue> self, Func<TValue, TKey> keyFn) {
+            Dictionary<TKey, TValue> retv = new Dictionary<TKey, TValue>();
+            foreach(var v in self) {
+                var k = keyFn(v);
+                if(k != null && !retv.ContainsKey(k)) {
+                    retv.Add(k, v);
+                }
+            }
+
+            return retv;
+        }
+
         public static void ForEachReverse<T>(this IList<T> me, Action<T> act) {
             for(int i = me.Count; i >= 0; i--) {
                 act?.Invoke(me[i]);
             }
+            
         }
 
         public static void EnqueueRange<T>(this Queue<T> me, IEnumerable<T> range) {

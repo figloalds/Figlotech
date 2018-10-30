@@ -251,6 +251,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     if (hash != match.Hash) {
                         Fi.Tech.WriteLine($"SmartCopy: Hash Changed: {f} ({hash}) ({match.Hash})");
                         var idx = HashList.IndexOf(match);
+                        HashList[idx].Date = o.GetLastModified(f)?.Ticks ?? 0;
+                        HashList[idx].Length = o.GetSize(f);
                         HashList[idx].Hash = hash;
                         return true;
                     } else {
@@ -305,7 +307,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
             var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
             var bufferSize = (int)options.BufferSize / options.NumWorkers;
-            if (bufferSize < 0) bufferSize = Int32.MaxValue;
+            if (bufferSize < 0) bufferSize = 256 * 1024;
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {

@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core.Extensions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -196,6 +197,7 @@ namespace Figlotech.Core.Helpers {
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
+
                 var pi = member as PropertyInfo;
                 if (pi != null && pi.SetMethod == null) {
                     return;
@@ -205,6 +207,15 @@ namespace Figlotech.Core.Helpers {
                 value = DbEvalValue(value, t);
                 t = ToUnderlying(t);
                 if (t == null) return;
+
+                if(t.IsGenericType) {
+                    if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+                        target = GetMemberValue(member, target);
+                        member = t.GetProperty("Value");
+                        t = t.GetGenericArguments()[0];
+                    }
+                }
+
                 if (value == null && t.IsValueType) {
                     return;
                 }
@@ -221,16 +232,21 @@ namespace Figlotech.Core.Helpers {
                     value = Convert.ChangeType(value, t);
                 }
 
-                if (pi != null) {
+                if(pi != null) {
                     pi.SetValue(target, value);
                     return;
                 }
-                if (member is FieldInfo fi) {
+
+                if(member is FieldInfo fi) {
                     fi.SetValue(target, value);
-                    return;
                 }
+
             } catch (Exception x) {
                 if (StrictMode) {
+                    Console.WriteLine($"RTSV Error | {target?.GetType()?.Name}::{member?.Name}={value?.ToString()} ({value?.GetType()?.Name})");
+                    if(Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
                     throw x;
                 }
             }

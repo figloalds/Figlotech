@@ -24,6 +24,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 .Replace("//", "/")
                 .Replace('/', S);
         }
+        public String UnFixRel(ref string relative) {
+            return relative = relative.Replace(S, '/')
+                .Replace($"{S}", "/");
+        }
 
         public FileAccessor(String workingPath) {
             RootDirectory = Path.GetFullPath(workingPath);
@@ -70,7 +74,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 }
                 using (Stream fs = Open(relative, FileMode.Truncate, FileAccess.Write)) {
                     func(fs);
-                    fs.Close();
                 }
             });
         }
@@ -164,7 +167,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (s.StartsWith("\\")) {
                     s = s.Substring(1);
                 }
-                this.FixRel(ref s);
+                s = this.UnFixRel(ref s);
                 execFunc(s);
             }));
         }
@@ -183,7 +186,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     if (s.StartsWith("\\")) {
                         s = s.Substring(1);
                     }
-                    FixRel(ref s);
+                    s = this.UnFixRel(ref s);
                     execFunc?.Invoke(s);
                 } catch (Exception x) {
                     if (handler != null) {
@@ -209,7 +212,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         if (s.StartsWith("\\")) {
                             s = s.Substring(1);
                         }
-                        return this.FixRel(ref s);
+                        return this.UnFixRel(ref s);
                     }));
         }
 
@@ -224,7 +227,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (s.StartsWith("\\")) {
                     s = s.Substring(1);
                 }
-                this.FixRel(ref s);
+                s = this.UnFixRel(ref s);
                 execFunc(s);
             }));
         }
@@ -239,7 +242,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (s.StartsWith("\\")) {
                     s = s.Substring(1);
                 }
-                FixRel(ref s);
+                s = this.UnFixRel(ref s);
                 execFunc(s);
             }
         }
@@ -377,6 +380,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public bool Exists(String relative) {
+            FixRel(ref relative);
             return IsFile(relative) || IsDirectory(relative);
         }
 

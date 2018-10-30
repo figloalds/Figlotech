@@ -5,6 +5,7 @@ using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -50,7 +51,6 @@ namespace Figlotech.Core.Extensions {
 
             StreamOptions
                 .Process(rawStream, (usableStream) => {
-
                     using (var reader = new StreamReader(usableStream, Encoding.UTF8)) {
                         var json = reader.ReadToEnd();
                         try {

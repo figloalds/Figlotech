@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Extensions;
+﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
@@ -96,6 +97,28 @@ namespace Figlotech.Core {
             var bytes = ResultStream.ToArray();
             var retv = Encoding.UTF8.GetString(bytes);
             return retv;
+        }
+
+        public string AsDecodedString(IEncryptionMethod method) {
+            ResultStream.Seek(0, SeekOrigin.Begin);
+            var bytes = ResultStream.ToArray();
+            var retv = Encoding.UTF8.GetString(method.Decrypt(bytes));
+            return retv;
+        }
+
+        public Stream AsStream() {
+            ResultStream.Seek(0, SeekOrigin.Begin);
+            return ResultStream;
+        }
+
+        public byte[] AsBuffer() {
+            ResultStream.Seek(0, SeekOrigin.Begin);
+            return ResultStream.ToArray();
+        }
+
+        public byte[] AsDecodedBuffer(IEncryptionMethod method) {
+            ResultStream.Seek(0, SeekOrigin.Begin);
+            return method.Decrypt(ResultStream.ToArray());
         }
 
         public T As<T>() {
