@@ -3,23 +3,23 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2036
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados", "Figlotech.BDados\Figlotech.BDados.csproj", "{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.MySqlDataAccessor", "Figlotech.BDados.MySqlDataAccessor\Figlotech.BDados.MySqlDataAccessor.csproj", "{C74700AD-FB33-404F-AAB8-B0769198C863}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.ExcelUtil", "Figlotech.ExcelUtil\Figlotech.ExcelUtil.csproj", "{394EA7B2-090B-4A2C-B885-72386735226E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.SqliteDataAccessor", "Figlotech.BDados.SQLiteDataAccessor\Figlotech.BDados.SqliteDataAccessor.csproj", "{3A643DFA-70F1-423E-97D9-30C2D182AFF3}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.PgSQLDataAccessor", "Figlotech.BDados.PostgreSQLDataAccessor\Figlotech.BDados.PgSQLDataAccessor.csproj", "{BE40474C-2AD1-4B1F-BB68-F98B66ED3A6E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "test", "test\test.csproj", "{3AB1E5ED-95CD-4A0B-A2AE-A43423AB33A2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "test", "test\test.csproj", "{3AB1E5ED-95CD-4A0B-A2AE-A43423AB33A2}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Scripting", "Figlotech.Scripting\Figlotech.Scripting.csproj", "{4025789D-8349-479F-9F88-A192666E2AF1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestConcepts", "TestConcepts\TestConcepts.csproj", "{FC1F837A-7E26-41CB-8162-3456DBE204D4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.ECSEngine", "TestConcepts\Figlotech.ECSEngine.csproj", "{FC1F837A-7E26-41CB-8162-3456DBE204D4}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados", "Figlotech.BDados\Figlotech.BDados.csproj", "{0BDED071-A0D5-41FE-A9D6-2781114766CC}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.MySqlDataAccessor", "Figlotech.BDados.MySqlDataAccessor\Figlotech.BDados.MySqlDataAccessor.csproj", "{D7F9379B-CDD0-49DF-A3B9-618041162BA6}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Core", "Figlotech.Core\Figlotech.Core.csproj", "{0B252F65-CA6A-4428-9DE3-13123D249F1D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,18 +27,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2B6ECAA1-19CF-44DD-84F3-F738FB1F9CE3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C74700AD-FB33-404F-AAB8-B0769198C863}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C74700AD-FB33-404F-AAB8-B0769198C863}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C74700AD-FB33-404F-AAB8-B0769198C863}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C74700AD-FB33-404F-AAB8-B0769198C863}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B5116945-2F19-40A2-8ECE-FAA2B6E062F1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{394EA7B2-090B-4A2C-B885-72386735226E}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -63,6 +51,18 @@ Global
 		{FC1F837A-7E26-41CB-8162-3456DBE204D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FC1F837A-7E26-41CB-8162-3456DBE204D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FC1F837A-7E26-41CB-8162-3456DBE204D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0BDED071-A0D5-41FE-A9D6-2781114766CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0BDED071-A0D5-41FE-A9D6-2781114766CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0BDED071-A0D5-41FE-A9D6-2781114766CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0BDED071-A0D5-41FE-A9D6-2781114766CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7F9379B-CDD0-49DF-A3B9-618041162BA6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7F9379B-CDD0-49DF-A3B9-618041162BA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7F9379B-CDD0-49DF-A3B9-618041162BA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7F9379B-CDD0-49DF-A3B9-618041162BA6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B252F65-CA6A-4428-9DE3-13123D249F1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B252F65-CA6A-4428-9DE3-13123D249F1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B252F65-CA6A-4428-9DE3-13123D249F1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B252F65-CA6A-4428-9DE3-13123D249F1D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

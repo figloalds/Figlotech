@@ -26,7 +26,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public String Type { get; set; }
         public String Options { get; set; }
         public bool PrimaryKey { get; set; }
-        public int Size { get; set; } = 128;
+        public long Size { get; set; } = 0;
         public object DefaultValue { get; set; }
         public bool AllowNull { get; set; }
         public bool Unique { get; set; }

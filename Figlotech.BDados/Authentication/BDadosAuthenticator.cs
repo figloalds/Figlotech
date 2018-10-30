@@ -13,7 +13,7 @@ namespace Figlotech.BDados.Authentication {
     public class Attempt {
         public String User;
         public bool Lock = false;
-        public DateTime Timestamp = DateTime.UtcNow;
+        public DateTime Timestamp = Fi.Tech.GetUtcTime();
 
         public static int maxAttemptsToLock = 12;
         public static TimeSpan lockTime = TimeSpan.FromMinutes(3);
@@ -66,7 +66,7 @@ namespace Figlotech.BDados.Authentication {
 
         public void TrackAttempt(String user, bool Success) {
             TrackAttempts.RemoveAll(a =>
-                    DateTime.UtcNow.Subtract(a.Timestamp) > Attempt.lockTime);
+                    Fi.Tech.GetUtcTime().Subtract(a.Timestamp) > Attempt.lockTime);
 
             var atts = TrackAttempts.Where(
                 (a) =>
@@ -117,7 +117,7 @@ namespace Figlotech.BDados.Authentication {
                     User = user.RID,
                     isActive = true,
                     Token = Fi.Tech.GenerateIdString($"Login:{user.Username};"),
-                    StartTime = DateTime.UtcNow,
+                    StartTime = Fi.Tech.GetUtcTime(),
                     EndTime = null,
                 };
                 if (DataAccessor.SaveItem(sess)) {

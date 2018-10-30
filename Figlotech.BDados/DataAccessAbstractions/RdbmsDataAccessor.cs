@@ -32,6 +32,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Connection = connection;
         }
 
+        public List<string[]> FrameHistory { get; private set; } = new List<string[]>();
+
         private List<IDataObject> ObjectsToNotify { get; set; } = new List<IDataObject>();
 
         public void NotifyChange(IDataObject[] ido) {
@@ -42,9 +44,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 lock (ObjectsToNotify)
                     ObjectsToNotify.AddRange(ido);
             }
+
         }
 
         public IDbCommand CreateCommand() {
+            try {
+                StackTrace trace = new StackTrace(0, true);
+                var frames = trace.GetFrames();
+                int i = 0;
+                while(frames[i].GetMethod().DeclaringType == typeof(RdbmsDataAccessor)) {
+                    i++;
+                }
+                FrameHistory.Add(trace.GetFrames().Skip(i).Take(20).Select((frame)=> {
+                    var type = frame.GetMethod().DeclaringType;
+                    return $"{(type?.Name ?? "")} -> " + frame.ToString();
+                }).ToArray());
+            } catch (Exception) {
+
+            }
             var retv = Connection?.CreateCommand();
             retv.Transaction = Transaction;
             return retv;
@@ -1129,6 +1146,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public bool SaveList<T>(ConnectionInfo transaction, IList<T> rs, bool recoverIds = false) where T : IDataObject {
             bool retv = true;
+
             if (rs.Count == 0)
                 return true;
             if (rs.Count == 1) {
@@ -1142,18 +1160,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             rs.ForEach(item => {
                 item.IsPersisted = false;
-                if(!item.IsReceivedFromSync) {
-                    item.UpdatedTime = DateTime.UtcNow;
+                if (!item.IsReceivedFromSync) {
+                    item.UpdatedTime = Fi.Tech.GetUtcTime();
                 }
             });
             List<T> conflicts = new List<T>();
             var persistedMap = Query(transaction, Plugin.QueryGenerator.QueryIds(rs));
             foreach (DataRow a in persistedMap.Rows) {
-                var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == ((long) Convert.ChangeType(a[0], typeof(long))) || item.RID == a[1] as String);
+                var rowEquivalentObject = rs.FirstOrDefault(item => item.RID == a[1] as String);
                 if (rowEquivalentObject != null) {
-                    if(rowEquivalentObject.RID != a[1] as String) {
-                        rowEquivalentObject.RID = a[1] as String;
-                    }
                     rowEquivalentObject.IsPersisted = true;
                 }
             }
@@ -1188,7 +1203,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (inserts.Length > 0) {
                         try {
                             transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Length} items");
-                            var query = Plugin.QueryGenerator.GenerateMultiInsert(inserts, false);
+                            var query = Plugin.QueryGenerator.GenerateMultiInsert(inserts, true);
                             transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Length}");
                             lock (transaction)
                                 rst += Execute(transaction, query);
@@ -1202,11 +1217,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             lock (failedSaves)
                                 failedSaves.Add(x);
                         }
-                        var queryIds = Query(transaction, QueryGenerator.QueryIds(inserts));
-                        foreach (DataRow dr in queryIds.Rows) {
-                            var psave = inserts.FirstOrDefault(it => it.RID == dr[1] as String);
-                            if (psave == null) {
-                                psave.Id = Int64.Parse(dr[0] as String);
+                        if(recoverIds) {
+                            var queryIds = Query(transaction, QueryGenerator.QueryIds(inserts));
+                            foreach (DataRow dr in queryIds.Rows) {
+                                var psave = inserts.FirstOrDefault(it => it.RID == dr[1] as String);
+                                if (psave != null) {
+                                    psave.Id = Int64.Parse(dr[0] as String);
+                                }
                             }
                         }
                     }
@@ -1243,14 +1260,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             transaction?.Benchmarker.Mark($"Dispatch Successful Save events");
             if (successfulSaves.Any()) {
-                if (recoverIds) {
-                    var q = Query(transaction, QueryGenerator.QueryIds(rs));
-                    foreach (DataRow dr in q.Rows) {
-                        successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = Int64.Parse(dr[0] as String);
-                    }
-                    failedObjects.AddRange(successfulSaves.Where(a => a.Id <= 0).Select(a => (IDataObject)a));
-                    successfulSaves.RemoveAll(a => a.Id <= 0);
-                }
+                //if (recoverIds) {
+                //    var q = Query(transaction, QueryGenerator.QueryIds(rs));
+                //    foreach (DataRow dr in q.Rows) {
+                //        successfulSaves.FirstOrDefault(it => it.RID == dr[1] as String).Id = Int64.Parse(dr[0] as String);
+                //    }
+                //    failedObjects.AddRange(successfulSaves.Where(a => a.Id <= 0).Select(a => (IDataObject)a));
+                //    successfulSaves.RemoveAll(a => a.Id <= 0);
+                //}
                 Fi.Tech.RunAndForget(() => {
                     int newHash = 0;
                     successfulSaves.ForEach(it => {
@@ -1266,10 +1283,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
-                throw new BDadosException("Not everything could be saved", failedObjects, new AggregateException(failedSaves));
+                throw new BDadosException("Not everything could be saved", transaction.FrameHistory, failedObjects, new AggregateException(failedSaves));
             }
             if (failedObjects.Any()) {
-                var ex = new BDadosException("Some objects did not persist correctly", failedObjects, null);
+                var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);
                 Fi.Tech.RunAndForget(() => {
                     OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
                 });
@@ -1452,7 +1469,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     throw new Exception("Null list generated");
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count}");
-                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double) elaps / (double) retv.Count).ToString("0.00")}ms/item");
+                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
 
                 try {
                     int resultados = 0;
@@ -1532,7 +1549,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var rid = GetRidColumn(input.GetType());
 
             if (!input.IsReceivedFromSync) {
-                input.UpdatedTime = DateTime.UtcNow;
+                input.UpdatedTime = Fi.Tech.GetUtcTime();
             }
 
             input.IsPersisted = false;
