@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace TestConcepts {
+namespace Figlotech.ECSEngine {
     public class Program {
         public static class V {
             public static IValueExpression<T> val<T>(T t) {
