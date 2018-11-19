@@ -42,9 +42,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
         private string WildcardToRegex(String input) {
             input.Replace("*", "////WCASTER////");
             input.Replace("%", "////WCPCT////");
+            input.Replace("?", "////WCQUEST////");
             var escaped = Regex.Escape(input);
             escaped.Replace("////WCASTER////", "[.]{0,}");
             escaped.Replace("////WCPCT////", "[.]{0,1}");
+            input.Replace("////WCPCT////", "[.]{1}");
             return escaped;
         }
 
@@ -309,9 +311,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var bufferSize = (int)options.BufferSize / options.NumWorkers;
             if (bufferSize < 0) bufferSize = 256 * 1024;
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
+            workingList = workingList.GroupBy(f => f.RelativePath).Select(g => g.First()).ToList();
+            workingList.RemoveAll(f => Excludes.Any(excl=> CheckMatch(f.RelativePath, excl)));
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {
                 wq.Enqueue(() => {
+                    if (a.RelativePath == HASHLIST_FILENAME || Excludes.Any(excl => CheckMatch(a.RelativePath, excl))) {
+                        return;
+                    }
                     string hash = "";
                     if (local.Exists(a.RelativePath)) {
                         local.Read(a.RelativePath, (stream) => {
@@ -341,12 +348,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
                                     local.Rename(a.RelativePath, oldTempName);
                                 }
                                 local.Rename(a.RelativePath + "_$ft_new", a.RelativePath);
+                                if (local.Exists(a.RelativePath)) {
+                                    local.Read(a.RelativePath, (stream) => {
+                                        hash = GetHash(stream);
+                                    });
+                                }
                                 try {
-                                    if(local.Exists(a.RelativePath + "_$ft_old"))
-                                        local.Delete(a.RelativePath + "_$ft_old");
+                                    if(local.Exists(oldTempName))
+                                        local.Delete(oldTempName);
                                 } catch(Exception x) {
-                                    // Deletes the file if in use, else just hide it
-                                    local.Hide(a.RelativePath + "_$ft_old");
+                                    local.Hide(oldTempName);
                                 }
                                 if (a.RelativePath.EndsWith(".dll")) {
 
@@ -390,6 +401,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             try {
                 var txt = destination.ReadAllText(HASHLIST_FILENAME);
                 var hashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
+                hashList = hashList.GroupBy(a => a.RelativePath).Select(a => a.First()).ToList();
                 return hashList;
             } catch (Exception x) {
                 throw x;
