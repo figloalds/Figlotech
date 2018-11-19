@@ -1,8 +1,11 @@
-﻿using Figlotech.Core.FileAcessAbstractions;
+﻿using Figlotech.Core;
+using Figlotech.Core.FileAcessAbstractions;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using OfficeOpenXml.Style.Dxf;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -28,46 +31,158 @@ namespace Figlotech.ExcelUtil
             return excelator.Get<T>(line, column);
         }
     }
-    public class ExcelatorLineWriter {
-        int line;
-        Excelator excelator;
-        public ExcelatorLineWriter(int ln, Excelator parent) {
-            line = ln;
+    
+    public class ExcelatorRowRangeWriter {
+        int row;
+        int ColFrom;
+        int ColTo;
+
+        Excelator Excelator;
+        ExcelatorRowWriter rowWriter;
+
+        public ExcelatorRowWriter Row => rowWriter ?? new ExcelatorRowWriter(row, Excelator);
+
+        public ExcelatorRowRangeWriter(Excelator excelator, int row, int cf, int ct) {
+            this.Excelator = excelator;
+            this.row = row;
+            this.ColFrom = cf;
+            this.ColFrom = ct;
+        }
+        internal ExcelatorRowRangeWriter(ExcelatorRowWriter lw, int cf, int ct) {
+            this.Excelator = lw.excelator;
+            this.row = lw.Row;
+            this.ColFrom = cf;
+            this.ColTo = ct;
+            rowWriter = lw;
+        }
+
+        public ExcelatorRowRangeWriter RowSum(int columnFrom, int columnTo) {
+            var cf = new IntEx(columnFrom).ToString(IntEx.Base26);
+            var ct = new IntEx(columnTo).ToString(IntEx.Base26);
+            Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({cf}{row}:{ct}{row})");
+            return this;
+        }
+        public ExcelatorRowRangeWriter ColSum(int rowFrom, int rowTo) {
+            var c = new IntEx(ColFrom).ToString(IntEx.Base26);
+            Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({c}{rowFrom}:{c}{rowTo})");
+            return this;
+        }
+        public ExcelatorRowRangeWriter Value(object value) {
+            Excelator.Set(row, ColFrom, ColTo, value);
+            //ColTo = ColFrom;
+            return this;
+        }
+        public ExcelatorRowRangeWriter Formula(string formula) {
+            Excelator.SetFormula(row, ColFrom, ColTo, formula);
+            return this;
+        }
+        public ExcelatorRowRangeWriter Style(Action<ExcelStyle> es) {
+            Excelator.Style(row, row, ColFrom, ColTo, es);
+            return this;
+        }
+        public ExcelatorRowRangeWriter Bold() {
+            Excelator.Style(row, row, ColFrom, ColTo, es => es.Font.Bold = true);
+            return this;
+        }
+        public ExcelatorRowRangeWriter CenterH() {
+            Excelator.Style(row, row, ColFrom, ColTo, es => es.HorizontalAlignment = ExcelHorizontalAlignment.Center);
+            return this;
+        }
+
+    }
+
+    public class ExcelatorRowWriter {
+        internal int Row;
+        internal Excelator excelator;
+        public ExcelatorRowWriter(int ln, Excelator parent) {
+            Row = ln;
             excelator = parent;
         }
-        public void Set(int column, object value, Action<ExcelStyle> es = null) {
-            excelator.Set(line, column, column, value);
+
+        public ExcelatorRowWriter SetFormula(int column, string formula) {
+            excelator.SetFormula(Row, column, column, formula);
+            return this;
+        }
+        public ExcelatorRowWriter Set(int column, object value, Action<ExcelStyle> es = null) {
+            excelator.Set(Row, column, column, value);
             if (es != null) {
                 Style(column, column, es);
             }
+            return this;
         }
 
-        public void Set(int columnFrom, int columnTo, object value, Action<ExcelStyle> es = null) {
-            excelator.Set(line, columnFrom, columnTo, value);
+        public ExcelatorRowWriter Set(int columnFrom, int columnTo, object value, Action<ExcelStyle> es = null) {
+            excelator.Set(Row, columnFrom, columnTo, value);
             if (es != null) {
                 Style(columnFrom, columnTo, es);
             }
+            return this;
+        }
+        
+        public ExcelatorRowWriter IterateThrough<T>(IEnumerable<T> values, Action<T> fn) {
+            foreach(var a in values) {
+                fn(a);
+                EndLine();
+            }
+
+            return this;
         }
 
-        public void Style(int col, Action<ExcelStyle> es) {
-            Style(col, col, es);
-        }
-        public void Style(int colf, int colt, Action<ExcelStyle> es) {
-            excelator.Style(line, line, colf, colt, es);
-        }
-        public void SetFormat(int column, string value) {
-            excelator.SetFormat(line, column, value);
+        public ExcelatorRowWriter PutValues<T>(int startingColumn, T[,] values, Action<int> ctrlFn) {
+            for (int l = 0; l < values.GetLength(0); l++) {
+                for (int c = 0; c < values.GetLength(1); c++) {
+                    Set(c + startingColumn, values[l, c]);
+                }
+                ctrlFn?.Invoke(l);
+                EndLine();
+            }
+            return this;
         }
 
-        public void ConditionalFormat(int col, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
+        public ExcelatorRowRangeWriter PutValues(int startingColumn, IEnumerable<object> values) {
+            int c = startingColumn;
+            foreach (var value in values) {
+                Set(c++, value);
+            }
+            return Range(startingColumn, c);
+        }
+        
+        public ExcelatorRowRangeWriter Cell(int column) {
+            return new ExcelatorRowRangeWriter(this, column, column);
+        }
+        public ExcelatorRowRangeWriter Range(int columnFrom, int columnTo) {
+            return new ExcelatorRowRangeWriter(this, columnFrom, columnTo);
+        }
+         
+        public ExcelatorRowWriter Style(int column, Action<ExcelStyle> es) {
+            Style(column, column, es);
+            return this;
+        }
+        public ExcelatorRowWriter Style(int colf, int colt, Action<ExcelStyle> es) {
+            excelator.Style(Row, Row, colf, colt, es);
+            return this;
+        }
+        public ExcelatorRowWriter SetFormat(int column, string value) {
+            excelator.SetFormat(Row, column, value);
+            return this;
+        }
+
+        public ExcelatorRowWriter ConditionalFormat(int col, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
             ConditionalFormat(col, col, statement, fn);
+            return this;
         }
-        public void ConditionalFormat(int fc, int tc, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
-            excelator.ConditionalFormat(line, line, fc, tc, statement, fn);
+        public ExcelatorRowWriter ConditionalFormat(int fc, int tc, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
+            excelator.ConditionalFormat(Row, Row, fc, tc, statement, fn);
+            return this;
         }
 
-        public void EndLine() {
-            line++;
+        public ExcelatorRowWriter EndLine() {
+            Row++;
+            return this;
+        }
+        public ExcelatorRowWriter Rewind() {
+            Row = 1;
+            return this;
         }
     }
 
@@ -108,8 +223,25 @@ namespace Figlotech.ExcelUtil
             }
         }
 
+        public void FillMatrix(int column, int row, object[,] values) {
+            for (int x = 0; x < values.GetLength(1); x++) {
+                for (int y = 0; y < values.GetLength(0); y++) {
+                    Set(row + y, column + x, column + x, values[x, y]);
+                }
+            }
+        }
+
         public void Style(int fr, int tr, int fc, int tc, Action<ExcelStyle> fn) {
-            fn(ws.Cells[fr, fc, tr, tc].Style);
+            EnsureColumnRange(fc, tc);
+            EnsureRowRange(fr, tr);
+            try {
+                fn(ws.Cells[fr, fc, tr, tc].Style);
+            } catch(Exception x) {
+                if(Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                throw x;
+            }
         }
         public void ConditionalFormat(int fr, int tr, int fc, int tc, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
             var formatRangeAddress = new ExcelAddress(fr, fc, tr, tc);
@@ -128,6 +260,10 @@ namespace Figlotech.ExcelUtil
                 if(typeof(T).IsAssignableFrom(o.GetType())) {
                     return (T)o;
                 }
+                if(Nullable.GetUnderlyingType(typeof(T)) != null) {
+                    return (T)Convert.ChangeType(o, Nullable.GetUnderlyingType(typeof(T)));
+                }
+                return (T) Convert.ChangeType(o, typeof(T));
             } catch(Exception) {
 
             }
@@ -140,12 +276,8 @@ namespace Figlotech.ExcelUtil
             return ws.Cells[line, column].Value;
         }
         public void SetFormat(int line, int column, String value) {
-            if ((ws.Dimension?.Rows ?? 0) < line - 1) {
-                ws.InsertRow(line, 4);
-            }
-            if ((ws.Dimension?.Columns ?? 0) < column - 1) {
-                ws.InsertColumn(column, 4);
-            }
+            EnsureColumnRange(line, line);
+            EnsureRowRange(column, column);
             try {
                 ws.Cells[line, column].Style.Numberformat.Format = value;
             } catch (Exception x) {
@@ -153,18 +285,52 @@ namespace Figlotech.ExcelUtil
             }
         }
         public void Set(int line, int columnFrom, int columnTo, object value) {
-            if ((ws.Dimension?.Rows ?? 0) < line - 1) {
-                ws.InsertRow(line, 4);
-            }
-            if ((ws.Dimension?.Columns ?? 0) < columnTo - 1) {
-                ws.InsertColumn(columnTo, 4);
-            }
+            EnsureColumnRange(line, line);
+            EnsureRowRange(columnFrom, columnTo);
             try {
                 ws.Cells[line, columnFrom, line, columnTo].Value = value;
                 if (columnFrom != columnTo) {
                     ws.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
-            } catch (Exception x) {
+            }
+            catch (Exception x) {
+                //Console.WriteLine(x.Message);
+            }
+        }
+
+        public void EnsureColumnRange(int columnFrom, int columnTo) {
+            var wdc = (ws.Dimension?.Columns ?? 0);
+            if (wdc < columnFrom - 1) {
+                ws.InsertColumn(columnFrom, columnFrom - wdc);
+            }
+            if(columnTo > columnFrom) {
+                if (wdc < columnTo - 1) {
+                    ws.InsertColumn(columnTo, columnTo - wdc);
+                }
+            }
+        }
+        public void EnsureRowRange(int rowFrom, int rowTo) {
+            var wdr = (ws.Dimension?.Rows ?? 0);
+            if (wdr < rowFrom - 1) {
+                ws.InsertRow(rowFrom, rowFrom - wdr);
+            }
+            if(rowTo > rowFrom) {
+                if (wdr < rowTo - 1) {
+                    ws.InsertRow(rowTo, rowTo - wdr);
+                }
+            }
+        }
+
+        public void SetFormula(int line, int columnFrom, int columnTo, string value) {
+            EnsureRowRange(line, line);
+            EnsureColumnRange(columnFrom, columnTo);
+            try {
+                ws.Cells[line, columnFrom, line, columnTo].Formula = value;
+                if (columnFrom != columnTo) {
+                    ws.Cells[line, columnFrom, line, columnTo].Merge = true;
+                }
+            }
+            catch (Exception x) {
                 //Console.WriteLine(x.Message);
             }
         }
@@ -187,12 +353,12 @@ namespace Figlotech.ExcelUtil
             }
         }
 
-        public void Write(Action<ExcelatorLineWriter> lineFun, int skipLines = 0) {
-            lineFun(new ExcelatorLineWriter(1 + skipLines, this));
+        public void Write(Action<ExcelatorRowWriter> lineFun, int skipLines = 0) {
+            lineFun(new ExcelatorRowWriter(1 + skipLines, this));
         }
 
-        public async Task WriteAsync(Func<ExcelatorLineWriter, Task> lineFun, int skipLines = 0) {
-            await lineFun(new ExcelatorLineWriter(1 + skipLines, this));
+        public async Task WriteAsync(Func<ExcelatorRowWriter, Task> lineFun, int skipLines = 0) {
+            await lineFun(new ExcelatorRowWriter(1 + skipLines, this));
         }
 
         public void ReadAll(Action<ExcelatorLineReader> lineFun, int skipLines = 0, Action<Exception> handler = null) {
