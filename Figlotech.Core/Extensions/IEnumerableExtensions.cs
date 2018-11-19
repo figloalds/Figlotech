@@ -51,11 +51,34 @@ namespace System
             return retv;
         }
 
-        public static void ForEachReverse<T>(this IList<T> me, Action<T> act) {
-            for(int i = me.Count; i >= 0; i--) {
-                act?.Invoke(me[i]);
+        public static void ForEachReverse<T>(this IEnumerable<T> me, Action<T> act) {
+            var stack = new Stack<T>();
+            foreach(var item in me) {
+                stack.Push(item);
             }
-            
+
+            while(stack.Count > 0) {
+                act?.Invoke(stack.Pop());
+            }
+        }
+
+        public static IEnumerable<T> ToColumn<T>(this T[,] me, int index) {
+            for (int i = 0; i < me.GetLength(0); i++) {
+                yield return me[i, index];
+            }
+        }
+        public static IEnumerable<T> ToRow<T>(this T[,] me, int index) {
+            for (int i = 0; i < me.GetLength(1); i++) {
+                yield return me[index, i];
+            }
+        }
+
+        public static IEnumerable<int> ToRange<T>(this IEnumerable<T> me) {
+            int i = -1;
+            foreach(var a in me) {
+                yield return ++i;
+            }
+            yield break;
         }
 
         public static void EnqueueRange<T>(this Queue<T> me, IEnumerable<T> range) {
