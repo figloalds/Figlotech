@@ -12,7 +12,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace Figlotech.BDados {
+namespace Figlotech.BDados.DataAccessAbstractions {
     public class Settings : Dictionary<String, Object> { }
 
     /// <summary>

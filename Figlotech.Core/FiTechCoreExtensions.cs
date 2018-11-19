@@ -196,6 +196,27 @@ namespace Figlotech.Core {
             }
         }
 
+        public static T[,] DoubleGroupingToMatrix<T>(List<IGrouping<string, T>> groupingA, List<IGrouping<string, T>> groupingB, Func<T, T, bool> JoiningClause, Func<IEnumerable<T>, T> aggregator) {
+
+            var tbl = new T[groupingA.Count, groupingB.Count];
+            for (int i = 0; i < groupingA.Count; i++) {
+                for (int v = 0; v < groupingB.Count; v++) {
+                    tbl[i, v] = aggregator(groupingA[i].Where(id => JoiningClause.Invoke(id, groupingB[v].First())));
+                }
+            }
+
+            return tbl;
+        }
+
+        public static string BytesToString(this Fi __selfie, long bytes) {
+            int mult = 0;
+            while (bytes > 1024 && mult < Fi.ByteNames.Length - 1) {
+                bytes /= 1024;
+                mult++;
+            }
+            return $"{bytes} {Fi.ByteNames[mult]}";
+        }
+
         //public static T Field<T>(this DataRow dr, int index) {
         //    object o = dr.ItemArray[index];
         //    return (T)o;

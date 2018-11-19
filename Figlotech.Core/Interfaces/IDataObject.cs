@@ -27,6 +27,20 @@ namespace Figlotech.Core.Interfaces {
 
             return retv;
         }
+
+        public static T CloneIntoNewDataObject<T>(this T self) where T : IDataObject, new() {
+            if(self == null) {
+                return default(T);
+            }
+            var retv = new T();
+            retv.CopyFrom(self);
+            retv.RID = null;
+            retv.RID = retv.RID;
+            if(retv.RID == null) {
+                retv.RID = new RID().AsBase36;
+            }
+            return retv;
+        }
     }
 
     public interface IDataObject : ISaveable

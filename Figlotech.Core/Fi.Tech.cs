@@ -37,7 +37,9 @@ namespace Figlotech.Core {
         public FnVal<T> V<T>(Func<T> fn) {
             return new FnVal<T>(fn);
         }
-
+        public static readonly String[] ByteNames = {
+            "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"
+        };
         public static void Benchmark(params Action[] fn) {
             if (!FiTechCoreExtensions.EnableBenchMarkers) {
                 fn.ForEach(a => a?.Invoke());

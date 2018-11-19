@@ -1,4 +1,4 @@
-﻿using Figlotech.BDados.Builders;
+using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core;
@@ -750,115 +750,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             return default(T);
-
-            //using (var connection = Plugin.GetNewConnection()) {
-            //    lock (connection) {
-            //        OpenConnection(connection);
-            //        var connInfo = new ConnectionInfo();
-            //        CurrentTransaction = connInfo;
-            //        connInfo.Connection = connection;
-            //        var b = new Benchmarker("Database Access");
-            //        connInfo.Benchmarker = b;
-            //        b.WriteToStdout = FiTechCoreExtensions.EnableStdoutLogs;
-            //        b.Mark($"INIT Use Transaction: ({useTransaction})");
-
-            //        if (useTransaction)
-            //            connInfo.Transaction = connection.BeginTransaction();
-            //        //lock (connInfo) {
-            //        try {
-            //            b.Mark("Run User Code");
-            //            var retv = func.Invoke(connInfo);
-            //            if (useTransaction) {
-            //                WriteLog($"[{accessId}] Committing");
-            //                b.Mark($"[{accessId}] Begin Commit");
-            //                connInfo?.Transaction?.Commit();
-            //                b.Mark($"[{accessId}] End Commit");
-            //                WriteLog($"[{accessId}] Commited OK ");
-            //            }
-            //            return retv;
-            //        } catch (Exception x) {
-            //            var ex = x;
-            //            if (useTransaction) {
-            //                WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
-            //                b.Mark($"[{accessId}] Begin Rollback");
-            //                connInfo?.Transaction?.Rollback();
-            //                b.Mark($"[{accessId}] End Rollback");
-            //                WriteLog($"[{accessId}] Transaction rolled back ");
-            //            }
-
-            //            this.WriteLog("Exception Details:");
-            //            var depth = 1;
-            //            while (ex != null && ex.InnerException != ex) {
-            //                this.WriteLog($"{new String('-', depth)} ERROR [{accessId}]{ex.Message}");
-            //                this.WriteLog($"{new String('-', depth)} STACKTRACE [{accessId}] {ex.StackTrace}");
-            //                this.WriteLog($"{new String('-', depth)}>");
-            //                depth++;
-            //                ex = ex.InnerException;
-            //            }
-
-
-            //            if (handler != null) {
-            //                handler.Invoke(x);
-            //            } else {
-            //                throw x;
-            //            }
-
-            //            return default(T);
-            //        } finally {
-            //            CurrentTransaction = null;
-            //            b.Mark($"[{accessId}] Dispose objects");
-            //            if (useTransaction)
-            //                connInfo.Transaction.Dispose();
-
-            //            b.FinalMark();
-            //        }
-            //        //}
-            //    }
-            //}
         }
-
-        //public IList<T> ExecuteProcedure<T>(params object[] args) where T : ProcedureResult {
-        //    DateTime inicio = DateTime.Now;
-        //    IList<T> retv = new List<T>();
-        //    this.WriteLog($"[{accessId}] Exec procedure -- ");
-
-        //    QueryBuilder query = (QueryBuilder)Plugin.QueryGenerator.GenerateCallProcedure(typeof(T).Name, args);
-        //    DataTable dt = Query(query);
-        //    foreach (DataRow r in dt.Rows) {
-        //        T newval = Activator.CreateInstance<T>();
-        //        foreach (FieldInfo f in newval.GetType().GetFields()) {
-        //            try {
-        //                Object v = r[f.Name];
-        //                if (v == null) {
-        //                    f.SetValue(newval, null);
-        //                } else {
-        //                    f.SetValue(newval, r[f.Name]);
-        //                }
-        //            } catch (Exception x) {
-        //                throw x;
-        //            }
-        //        }
-        //        foreach (PropertyInfo p in newval.GetType().GetProperties()) {
-        //            try {
-        //                Object v = r[p.Name];
-        //                if (v == null) {
-        //                    p.SetValue(newval, null);
-        //                } else if (Nullable.GetUnderlyingType(p.PropertyType) != null) {
-        //                    p.SetValue(newval, r[p.Name]);
-        //                } else {
-        //                    p.SetValue(newval, Convert.ChangeType(r[p.Name], p.PropertyType));
-        //                }
-        //            } catch (Exception x) {
-        //                throw x;
-        //            }
-        //        }
-        //        retv.Add(newval);
-        //    }
-
-        //    this.WriteLog($"[{accessId}] Total Procedure [{DateTime.Now.Subtract(inicio).TotalMilliseconds} ms] -- ");
-        //    return retv;
-        //}
-
 
         //private PrefixMaker prefixer = new PrefixMaker();
         /*
@@ -1395,34 +1287,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        //public DbType GetDbTypeOf(object value) {
-        //    if(value != null) {
-        //        switch(value) {
-        //            case String s:
-        //                return DbType.String;
-        //            case short s:
-        //                return DbType.Int16;
-        //            case int i:
-        //                return DbType.Int32;
-        //            case long l:
-        //                return DbType.Int64;
-        //            case float f:
-        //                return DbType.Single;
-        //            case double d:
-        //            case decimal m:
-        //                return DbType.Double;
-        //            case DateTime dt:
-        //                return DbType.DateTime;
-        //            case bool b:
-        //                return DbType.Boolean;
-        //        }
-        //        if(value.GetType().IsEnum) {
-        //            return DbType.Int32;
-        //        }
-        //    }
-        //    return DbType.Object;
-        //}
-
         public IList<T> Query<T>(ConnectionInfo transaction, IQueryBuilder query) where T : new() {
             if (query == null || query.GetCommandText() == null) {
                 return new List<T>();
@@ -1559,7 +1423,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     input.IsPersisted = true;
                 }
             }
-
 
             if (input.IsPersisted) {
                 rs = Execute(transaction, Plugin.QueryGenerator.GenerateUpdateQuery(input));

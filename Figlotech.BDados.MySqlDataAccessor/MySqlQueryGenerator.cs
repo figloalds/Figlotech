@@ -131,7 +131,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
             List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
 
-            var isLinedAggregateJoin = conditions.GetCommandText() == rootConditions.GetCommandText() && conditions.GetParameters().SequenceEqual(rootConditions.GetParameters());
+            var isLinedAggregateJoin = false; // && conditions.GetCommandText() == rootConditions.GetCommandText() && conditions.GetParameters().SequenceEqual(rootConditions.GetParameters());
 
             QueryBuilder Query = new QbFmt("SELECT sub.*\n");
             Query.Append($"\t FROM (SELECT\n");
@@ -155,7 +155,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            
+
             if (isLinedAggregateJoin) {
                 if (rootConditions != null) {
                     Query.Append("WHERE ");
