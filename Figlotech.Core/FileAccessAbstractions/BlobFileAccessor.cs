@@ -31,6 +31,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
         private static int gid = 0;
         private static int myid = ++gid;
 
+        public bool IsCaseSensitive => false;
+
         String AccountName { get; set; }
         String AccountKey { get; set; }
         String ContainerName { get; set; }

@@ -5,6 +5,8 @@ using System.IO;
 namespace Figlotech.Core.FileAcessAbstractions {
     public interface IFileSystem {
 
+        bool IsCaseSensitive { get; }
+
         void Write(string relative, Action<Stream> func);
 
         void ForFilesIn(string relative, Action<string> execFunc, Action<String, Exception> handler = null);

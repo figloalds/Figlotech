@@ -14,6 +14,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             accessors.AddRange(inputAccessors);
         }
 
+        public bool IsCaseSensitive => false;
 
         public void AppendAllLines(string relative, IEnumerable<string> content) {
             Parallel.ForEach(accessors, (a) => {
