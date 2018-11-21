@@ -31,7 +31,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             get {
                 switch (this.Type) {
                     case ScStructuralKeyType.ForeignKey:
-                        return $"fk_{Column}_{RefTable}_{RefColumn}".ToLower();
+                        return $"fk_{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
                     case ScStructuralKeyType.Index:
                         return $"{(IsUnique ? "uk_" : "idx_")}{Column}".ToLower();
                     case ScStructuralKeyType.PrimaryKey:
