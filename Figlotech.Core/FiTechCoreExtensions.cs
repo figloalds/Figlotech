@@ -208,13 +208,15 @@ namespace Figlotech.Core {
             return tbl;
         }
 
-        public static string BytesToString(this Fi __selfie, long bytes) {
+        public static string BytesToString(this Fi __selfie, Fi.DataUnitGeneralFormat format, long value) {
             int mult = 0;
-            while (bytes > 1024 && mult < Fi.ByteNames.Length - 1) {
-                bytes /= 1024;
+            var unitNames = Fi.DataUnitNames[format.ToString()];
+            var duf = Fi.DataUnitFactors[format.ToString()];
+            while (value > duf && mult < unitNames.Length - 1) {
+                value /= duf;
                 mult++;
             }
-            return $"{bytes} {Fi.ByteNames[mult]}";
+            return $"{value} {unitNames[mult]}";
         }
 
         //public static T Field<T>(this DataRow dr, int index) {
