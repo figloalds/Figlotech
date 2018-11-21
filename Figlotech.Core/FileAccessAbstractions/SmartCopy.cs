@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -40,18 +41,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public List<String> Excludes = new List<String>();
 
         private string WildcardToRegex(String input) {
-            input.Replace("*", "////WCASTER////");
-            input.Replace("%", "////WCPCT////");
-            input.Replace("?", "////WCQUEST////");
+            input = input.Replace("*", "____WCASTER____");
+            input = input.Replace("%", "____WCPCT____");
+            input = input.Replace("?", "____WCQUEST____");
             var escaped = Regex.Escape(input);
-            escaped.Replace("////WCASTER////", "[.]{0,}");
-            escaped.Replace("////WCPCT////", "[.]{0,1}");
-            input.Replace("////WCPCT////", "[.]{1}");
+            escaped = escaped.Replace("____WCASTER____", "[.]{0,}");
+            escaped = escaped.Replace("____WCPCT____", "[.]{0,1}");
+            escaped = escaped.Replace("____WCPCT____", "[.]{1}");
             return escaped;
         }
 
         private bool CheckMatch(string file, string criteria) {
-            return Regex.Match(file, WildcardToRegex(criteria), RegexOptions.IgnoreCase).Success;
+            var regex = WildcardToRegex(criteria);
+            return Regex.Match(file, regex, RegexOptions.IgnoreCase).Success;
         }
 
         /// <summary>
@@ -91,7 +93,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         private IEnumerable<FileData> EnumerateDownloadableFiles(IFileSystem origin, IFileSystem destination, string path = "", bool isRecursing = false) {
 
             if (!isRecursing && options.UseHashList) {
-                HashList = SmartCopy.GetHashList(this.remote);
+                HashList = SmartCopy.GetHashList(this.remote, true);
             }
 
             workedFiles = 0;
@@ -138,7 +140,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private IEnumerable<FileData> EnumerateDownloadableFilesFromHashList(string path) {
-            HashList = SmartCopy.GetHashList(remote);
+            HashList = SmartCopy.GetHashList(remote, true);
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             var retv = new List<FileData>();
@@ -305,7 +307,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void MirrorFromList(string path) {
-            HashList = SmartCopy.GetHashList(remote);
+            HashList = SmartCopy.GetHashList(remote, true);
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
             var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
             var bufferSize = (int)options.BufferSize / options.NumWorkers;
@@ -379,11 +381,32 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 }, () => {
 
                 });
-
             }
-
+            
             wq.Start();
             wq.Stop();
+
+            DeleteExtras(local, path, workingList, true);
+        }
+
+        public void DeleteExtras(IFileSystem fs, string path, List<FileData> workinglist, bool recursive) {
+            Func<FileData, string, bool> cmpFn = (wl,file) => wl.RelativePath == file;
+            if (!fs.IsCaseSensitive) {
+                cmpFn = (wl, file) => wl.RelativePath?.ToLower() == file?.ToLower();
+            }
+            fs.ForFilesIn(path, file => {
+                if (!workinglist.Any(wl=> cmpFn(wl, file))) {
+                    try {
+                        fs.Delete(file);
+                    }
+                    catch (Exception x) {
+
+                    }
+                }
+            });
+            if(recursive) {
+                fs.ForDirectoriesIn(path, dir => DeleteExtras(fs, dir, workinglist, recursive));
+            }
         }
 
         int workedFiles = 0;
@@ -397,14 +420,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         const string HASHLIST_FILENAME = ".hashlist.json";
 
-        public static List<FileData> GetHashList(IFileSystem destination) {
+        public static List<FileData> GetHashList(IFileSystem destination, bool ThrowOnError) {
             try {
                 var txt = destination.ReadAllText(HASHLIST_FILENAME);
                 var hashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
                 hashList = hashList.GroupBy(a => a.RelativePath).Select(a => a.First()).ToList();
                 return hashList;
             } catch (Exception x) {
-                throw x;
+                if(ThrowOnError) {
+                    throw x;
+                }
+                return new List<FileData>();
             }
         }
 
@@ -416,7 +442,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             if (!isRecursing && options.UseHashList) {
-                HashList = SmartCopy.GetHashList(destination);
+                HashList = SmartCopy.GetHashList(destination, way == MirrorWay.Down);
             }
 
             workedFiles = 0;
