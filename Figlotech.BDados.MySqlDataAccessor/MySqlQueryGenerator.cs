@@ -137,12 +137,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             Query.Append($"\t FROM (SELECT\n");
             for (int i = 0; i < tables.Count; i++) {
                 Query.Append($"\t\t-- Table {tableNames[i]}\n");
-                var fields = ReflectionTool.FieldsAndPropertiesOf(
-                    tables[i])
-                    .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-                    .ToArray();
-                if (!columns[i].Contains("RID"))
-                    columns[i].Add("RID");
+                var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
+                if (!columns[i].Any(c=> c.ToUpper() == ridF.ToUpper()))
+                    columns[i].Add(ridF);
                 var nonexcl = columns[i];
                 for (int j = 0; j < nonexcl.Count; j++) {
                     Query.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
@@ -236,7 +233,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var rid = FiTechBDadosExtensions.RidColumnOf[tabelaInput.GetType()];
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
-            Query.Append(GenerateUpdateValueParams(tabelaInput, false));
+            Query.Append(GenerateUpdateValueParams(tabelaInput, true));
             Query.Append($" WHERE {rid} = @rid;", tabelaInput.RID);
             return Query;
         }
@@ -405,8 +402,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
         }
 
-        public IQueryBuilder AddLocalIndexForFK(string table, string column, string refTable, string refColumn, string constraintName) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column});");
+        public IQueryBuilder AddIndex(string table, string column, string constraintName) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX {constraintName} ({column});");
         }
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
@@ -415,7 +412,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"alter table {table} ADD INDEX {column} ({column});");
+            return new QueryBuilder().Append($"alter table {table} ADD INDEX {constraintName} ({column});");
         }
         public IQueryBuilder AddUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
@@ -425,7 +422,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder AddPrimaryKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} PRIMARY KEY({column})");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT PRIMARY KEY({column})");
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
