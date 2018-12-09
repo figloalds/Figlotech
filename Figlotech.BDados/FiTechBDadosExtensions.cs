@@ -356,19 +356,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
+        static SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]> FieldMembers = new SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]>(t => {
+            return ReflectionTool.FieldsAndPropertiesOf(t).Select(fp => {
+                return (fp, fp.GetCustomAttribute<FieldAttribute>());
+            })
+            .Where(tup=> tup.Item2 != null)
+            .ToArray();
+        });
         public static String[] GetFieldNames(this Fi _selfie, Type t) {
-            var members = ReflectionTool.FieldsAndPropertiesOf(t)
-                .Where(m => m.GetCustomAttribute<FieldAttribute>() != null);
+            var members = FieldMembers[t];
             List<String> retv = new List<String>();
             foreach (var a in members) {
-                retv.Add(a.Name);
+                retv.Add(a.Item1.Name);
             }
             return retv.ToArray();
         }
 
         public static bool FindColumn(this Fi _selfie, string ChaveA, Type type) {
-            var members = ReflectionTool.FieldsAndPropertiesOf(type);
-            return members.Any((f) => f.GetCustomAttribute<FieldAttribute>() != null && f.Name == ChaveA);
+            var members = FieldMembers[type];
+            return members.Any((f) => f.Item1.Name == ChaveA);
         }
 
         const int keySize = 16;

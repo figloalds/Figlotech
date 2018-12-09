@@ -83,12 +83,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (objectName == null || objectName.Length == 0)
                 return null;
             QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
-            for (int i = 0; i < members.Count; i++) {
+            for (int i = 0; i < members.Length; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
                 CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options ?? "");
-                if (i != members.Count - 1) {
+                if (i != members.Length - 1) {
                     CreateTable.Append(", \n");
                 }
             }
@@ -117,6 +117,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
+        static Dictionary<JoinDefinition, QueryBuilder> AutoJoinCache = new Dictionary<JoinDefinition, QueryBuilder>();
         public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
             if (rootConditions == null)
                 rootConditions = new QbFmt("true");
@@ -133,48 +134,55 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             var isLinedAggregateJoin = false; // && conditions.GetCommandText() == rootConditions.GetCommandText() && conditions.GetParameters().SequenceEqual(rootConditions.GetParameters());
 
-            QueryBuilder Query = new QbFmt("SELECT sub.*\n");
-            Query.Append($"\t FROM (SELECT\n");
-            for (int i = 0; i < tables.Count; i++) {
-                Query.Append($"\t\t-- Table {tableNames[i]}\n");
-                var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
-                if (!columns[i].Any(c=> c.ToUpper() == ridF.ToUpper()))
-                    columns[i].Add(ridF);
-                var nonexcl = columns[i];
-                for (int j = 0; j < nonexcl.Count; j++) {
-                    Query.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
-                    if (true || j < nonexcl.Count - 1 || i < tables.Count - 1) {
-                        Query.Append(",");
+            QueryBuilder Query = new QueryBuilder();
+
+            if(!AutoJoinCache.ContainsKey(inputJoin)) {
+                // By caching this heavy process I might gain loads of performance
+                // When redoing the same queries.
+                QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");
+                autoJoinMain.Append($"\t FROM (SELECT\n");
+                for (int i = 0; i < tables.Count; i++) {
+                    autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
+                    var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
+                    if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
+                        columns[i].Add(ridF);
+                    var nonexcl = columns[i];
+                    for (int j = 0; j < nonexcl.Count; j++) {
+                        autoJoinMain.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
+                        if (true || j < nonexcl.Count - 1 || i < tables.Count - 1) {
+                            autoJoinMain.Append(",");
+                        }
+                        autoJoinMain.Append("\n");
                     }
-                    Query.Append("\n");
+                    autoJoinMain.Append("\n");
                 }
-                Query.Append("\n");
+
+                autoJoinMain.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
+
+                if (isLinedAggregateJoin) {
+                    if (rootConditions != null) {
+                        autoJoinMain.Append("WHERE ");
+                        autoJoinMain.Append(rootConditions);
+                    }
+                    if (orderingMember != null) {
+                        autoJoinMain.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
+                    }
+                    if (skip != null || take != null) {
+                        autoJoinMain.Append("LIMIT ");
+                        autoJoinMain.Append(
+                            skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
+                        );
+                    }
+                    autoJoinMain.Append($"");
+                }
+                autoJoinMain.Append($") AS {prefixes[0]}\n");
+
+                for (int i = 1; i < tables.Count; i++) {
+                    autoJoinMain.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+                }
+                AutoJoinCache[inputJoin] = (autoJoinMain);
             }
-
-            Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-
-            if (isLinedAggregateJoin) {
-                if (rootConditions != null) {
-                    Query.Append("WHERE ");
-                    Query.Append(rootConditions);
-                }
-                if (orderingMember != null) {
-                    Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-                }
-                if (skip != null || take != null) {
-                    Query.Append("LIMIT ");
-                    Query.Append(
-                        skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
-                    );
-                }
-                Query.Append($"");
-            }
-            Query.Append($") AS {prefixes[0]}\n");
-
-            for (int i = 1; i < tables.Count; i++) {
-
-                Query.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
-            }
+            Query.Append(AutoJoinCache[inputJoin]);
 
             if (!isLinedAggregateJoin) {
                 if (conditions != null && !conditions.IsEmpty) {
@@ -191,6 +199,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     );
                 }
             }
+
+
             Query.Append(") AS sub\n");
 
             return Query;
@@ -201,20 +211,34 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new() {
-            var type = typeof(T);
-            QueryBuilder Query = new QbFmt("SELECT ");
-            Query.Append(GenerateFieldsString(type, false));
-            Query.Append($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty)};");
+            var alias = "tba";
+            QueryBuilder Query = new QueryBuilder();
+            if (!AutoSelectCache.ContainsKey(typeof(T))) {
+                QueryBuilder baseSelect = new QbFmt("SELECT ");
+                baseSelect.Append(GenerateFieldsString(typeof(T), false));
+                baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
+                AutoSelectCache[typeof(T)] = baseSelect;
+            }
+
+            Query.Append(AutoSelectCache[typeof(T)]);
             return Query;
         }
 
+        static Dictionary<Type, QueryBuilder> AutoSelectCache = new Dictionary<Type, QueryBuilder>();
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            var type = typeof(T);
-            var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty);
-            Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
-            QueryBuilder Query = new QbFmt("SELECT ");
-            Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format($"FROM {type.Name} AS { alias }"));
+            
+            var alias = "tba";
+            QueryBuilder Query = new QueryBuilder();
+            if (!AutoSelectCache.ContainsKey(typeof(T))) {
+                Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
+                QueryBuilder baseSelect = new QbFmt("SELECT ");
+                baseSelect.Append(GenerateFieldsString(typeof(T), false));
+                baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
+                AutoSelectCache[typeof(T)] = baseSelect;
+            }
+
+            Query.Append(AutoSelectCache[typeof(T)]);
+
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);

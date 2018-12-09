@@ -1649,7 +1649,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {Linear}");
             // CLUMSY
             if (hasAnyAggregations) {
-                var membersOfT = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
 
                 transaction?.Benchmarker?.Mark("Construct Join Definition");
 
