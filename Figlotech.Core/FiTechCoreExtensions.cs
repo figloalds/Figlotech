@@ -251,7 +251,7 @@ namespace Figlotech.Core {
             foreach (DataColumn column in columns)
                 properColumns.Add(column);
 
-            return new Tuple<List<MemberInfo>, List<DataColumn>>(fields, properColumns);
+            return new Tuple<List<MemberInfo>, List<DataColumn>>(fields.ToList(), properColumns);
         }
         public static Tuple<List<MemberInfo>, List<DataColumn>> MapMeta<T>(this Fi _selfie, DataTable dt) {
             return MapMeta(_selfie, typeof(T), dt);

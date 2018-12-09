@@ -65,12 +65,12 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (objectName == null || objectName.Length == 0)
                 return null;
             QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
-            for (int i = 0; i < members.Count; i++) {
+            for (int i = 0; i < members.Length; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
                 CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options ?? "");
-                if (i != members.Count - 1) {
+                if (i != members.Length - 1) {
                     CreateTable.Append(", \n");
                 }
             }
