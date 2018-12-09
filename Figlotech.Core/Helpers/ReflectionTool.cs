@@ -31,12 +31,21 @@ namespace Figlotech.Core.Helpers {
     }
 
     public class ReflectionTool {
+
+        public static LenientDictionary<Type, MemberInfo[]> MembersCache = new Dictionary<Type, MemberInfo[]>();
+
         public static bool StrictMode { get; set; } = false;
-        public static List<MemberInfo> FieldsAndPropertiesOf(Type type) {
-            var members = new List<MemberInfo>();
-            members.AddRange(type.GetFields());
-            members.AddRange(type.GetProperties());
-            return members;
+        public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
+            if(!MembersCache.ContainsKey(type)) {
+                var members = new List<MemberInfo>();
+                members.AddRange(type.GetFields());
+                members.AddRange(type.GetProperties());
+                MembersCache[type] = members.ToArray();
+            }
+            // It is not clear rather the .Net Runtime caches or not 
+            // the member info or if they do lookups all the time
+            // It could be good to cache this, but I'm not sure yet.
+            return MembersCache[type];
         }
 
         public static bool TypeImplements(Type t, Type interfaceType) {
@@ -197,9 +206,12 @@ namespace Figlotech.Core.Helpers {
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
-
                 var pi = member as PropertyInfo;
+                var fi = member as FieldInfo;
                 if (pi != null && pi.SetMethod == null) {
+                    return;
+                }
+                if (fi != null && fi.IsInitOnly) {
                     return;
                 }
 
@@ -208,16 +220,31 @@ namespace Figlotech.Core.Helpers {
                 t = ToUnderlying(t);
                 if (t == null) return;
 
+                if (value == null) {
+                    if (t.IsValueType) {
+                        return;
+                    }
+                    else {
+                        if (pi != null) {
+                            pi.SetValue(target, null);
+                            return;
+                        }
+
+                        if (fi != null) {
+                            fi.SetValue(target, null);
+                            return;
+                        }
+                    }
+                    return;
+                }
+
+
                 if(t.IsGenericType) {
                     if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
                         target = GetMemberValue(member, target);
                         member = t.GetProperty("Value");
                         t = t.GetGenericArguments()[0];
                     }
-                }
-
-                if (value == null && t.IsValueType) {
-                    return;
                 }
 
                 if(t.IsEnum && value as int? != null) {
@@ -228,8 +255,12 @@ namespace Figlotech.Core.Helpers {
                     value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
                 }
 
-                if (value != null && !value.GetType().IsAssignableFrom(t)) {
-                    value = Convert.ChangeType(value, t);
+                if (!t.IsAssignableFrom(value.GetType())) {
+                    if(value.GetType().Implements(typeof(IConvertible))) {
+                        value = Convert.ChangeType(value, t);
+                    } else {
+                        return;
+                    }
                 }
 
                 if(pi != null) {
@@ -237,7 +268,7 @@ namespace Figlotech.Core.Helpers {
                     return;
                 }
 
-                if(member is FieldInfo fi) {
+                if(fi != null) {
                     fi.SetValue(target, value);
                 }
 
