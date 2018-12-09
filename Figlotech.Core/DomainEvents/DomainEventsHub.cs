@@ -22,6 +22,12 @@ namespace Figlotech.Core.DomainEvents {
         public bool IsReleased { get; set; } = false;
     }
 
+    public static class DomainEventsHubExtensions {
+        public static void SubscribeInline<T>(this DomainEventsHub self, Action<T> fn, Action<T, Exception> handler = null) where T: IDomainEvent {
+            self.SubscribeListener(InlineLambdaListener.Create<T>(fn, handler));
+        }
+    }
+
     public class DomainEventsHub {
         public static DomainEventsHub Global = new DomainEventsHub();
         private readonly DomainEventsHub parentHub;

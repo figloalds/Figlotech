@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
 using Newtonsoft.Json;
 using System;
@@ -13,6 +14,13 @@ using System.Threading.Tasks;
 
 namespace System
 {
+    public class ProgressEvent {
+        public long Current { get; set; }
+        public long Total { get; set; }
+
+        public decimal Percentage => ((decimal)Current / (decimal)Total) * 100m;
+    }
+
     public static class ObjectExtensions {
         public static void CopyFrom(this Object me, object other) {
             if (me == null) {
@@ -26,6 +34,25 @@ namespace System
 
             Fi.Tech.MemberwiseCopy(other, me);
         }
+
+        public static void CopyFile(this IFileSystem fs, string relative, IFileSystem other, string relative2, Action<ProgressEvent> onProgress = null) {
+            fs.Read(relative, input => {
+                other.Write(relative2, output => {
+                    int bufferSize = 81920;
+                    byte[] buffer = new byte[bufferSize];
+                    int read;
+                    long totalRead = 0;
+                    var pe = new ProgressEvent();
+                    pe.Total = input.Length;
+                    while ((read = input.Read(buffer, 0, buffer.Length)) != 0) {
+                        output.Write(buffer, 0, read);
+                        pe.Current += read;
+                        onProgress?.Invoke(pe);
+                    }
+                });
+            });
+        }
+
         public static void CopyFromAndMergeLists(this Object me, object other) {
             if (me == null) {
                 throw new NullReferenceException("Figlotech CopyFrom Extension method called on a null value, this is a natural NullReferenceException");

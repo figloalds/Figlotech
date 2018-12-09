@@ -216,7 +216,8 @@ namespace Figlotech.Core {
                 value /= duf;
                 mult++;
             }
-            return $"{value} {unitNames[mult]}";
+            var plu = value > 1 ? "s" : "";
+            return $"{value} {unitNames[mult]}{plu}";
         }
 
         //public static T Field<T>(this DataRow dr, int index) {
@@ -1198,15 +1199,14 @@ namespace Figlotech.Core {
                 });
             });
         }
-
-        private static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
+        static Random rng = new Random();
+        public static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
 
             char[] vector = new char[numDigits];
             List<char> map = new List<char>();
             string numbers = "0123456789";
             string digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
             map.AddRange(numbers.ToCharArray());
-            Random rng = new Random();
             if (useLetters) {
                 map.AddRange(digits.ToUpper().ToCharArray());
                 map.AddRange(digits.ToLower().ToCharArray());

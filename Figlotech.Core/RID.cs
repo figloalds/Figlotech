@@ -34,8 +34,6 @@ namespace Figlotech.Core {
                         var segmentC = Fi.Range(0, 32 - (segmentA.Length + segmentB.Length)).Select(i => (byte)mRng.Next(256)).ToArray();
                         var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
 
-
-
                         _machineRID = new RID(finalRid);
                         return _machineRID;
 
@@ -43,9 +41,19 @@ namespace Figlotech.Core {
                 } catch (Exception x) {
 
                 }
+                var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
+                if (!string.IsNullOrEmpty(envRid)) {
+                    var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
+                    if(itx.Length == 32) {
+                        _machineRID = new RID(itx);
+                        return _machineRID;
+                    }
+                }
 
                 var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID");
-
+                if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
+                    Directory.CreateDirectory(Path.GetDirectoryName(fileName));
+                }
                 if (!File.Exists(fileName)) {
                     _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
                     _machineRID = new RID();
