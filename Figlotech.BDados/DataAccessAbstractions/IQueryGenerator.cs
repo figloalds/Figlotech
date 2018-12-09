@@ -34,7 +34,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder DropPrimary(string target, string constraint);
         IQueryBuilder AddColumn(string tableName, string columnDefinition);
         IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName);
-        IQueryBuilder AddLocalIndexForFK(string table, string column, string refTable, string refColumn, string constraintName);
+        IQueryBuilder AddIndex(string table, string column, string constraintName);
         IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName);
         IQueryBuilder AddUniqueKey(string table, string column, string constraintName);
         IQueryBuilder AddPrimaryKey(string table, string column, string constraintName);

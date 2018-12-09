@@ -51,7 +51,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool IsReceivedFromSync { get; set; }
 
         static readonly string instance_rid = new RID().AsBase36;
-        public string instance_id { get; set; } = instance_rid;
+        private string instance_id { get; set; } = instance_rid;
 
         public bool IsLocalInstance => instance_id == instance_rid;
 

@@ -374,8 +374,8 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD COLUMN {columnDefinition};");
         }
 
-        public IQueryBuilder AddLocalIndexForFK(string table, string column, string refTable, string refColumn, string constraintName) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column});");
+        public IQueryBuilder AddIndex(string table, string column, string constraintName) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX {constraintName} ({column});");
         }
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX idx_{table.ToLower()}_{column.ToLower()} ({column}), ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
