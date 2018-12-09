@@ -8,10 +8,10 @@ using System.Text;
 using System.IO;
 using Figlotech.Core.Autokryptex.EncryptMethods;
 
-namespace Figlotech.BDados.NpgsqlDataAccessor
+namespace Figlotech.BDados.PgSQLDataAccessor
 {
 
-    public class NpgsqlPluginConfiguration {
+    public class PgSQLPluginConfiguration {
         public String Host { get; set; }
         public String Database { get; set; }
         public String User { get; set; }
@@ -33,7 +33,7 @@ namespace Figlotech.BDados.NpgsqlDataAccessor
 
             File.WriteAllBytes(path, encryptedBytes);
         }
-        public static NpgsqlPluginConfiguration LoadFromFile(String path, String password) {
+        public static PgSQLPluginConfiguration LoadFromFile(String path, String password) {
             if(!File.Exists(path)) {
                 return null;
             }
@@ -42,7 +42,7 @@ namespace Figlotech.BDados.NpgsqlDataAccessor
             var autokryptex = new AutokryptexEncryptor(password);
             var decryptedBytes = autokryptex.Decrypt(bytes);
             var json = Encoding.UTF8.GetString(decryptedBytes);
-            var obj = JsonConvert.DeserializeObject<NpgsqlPluginConfiguration>(json);
+            var obj = JsonConvert.DeserializeObject<PgSQLPluginConfiguration>(json);
 
             return obj;
         }
