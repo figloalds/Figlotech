@@ -24,16 +24,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public String Column { get; set; }
         public String RefTable { get; set; }
         public String RefColumn { get; set; }
-        public String KeyName { get => _linkName ?? this.FTechKeyName; set => _linkName = value; }
+        public String KeyName { get => _linkName ?? this.FiTechKeyName; set => _linkName = value; }
         public bool IsUnique { get; set; } = false;
 
-        public String FTechKeyName {
+        public String FiTechKeyName {
             get {
                 switch (this.Type) {
                     case ScStructuralKeyType.ForeignKey:
-                        return $"fk_{Table}_{Column}_{RefTable}_{RefColumn}".ToLower();
+                        return $"fk_{Table}_{Column}".ToLower();
                     case ScStructuralKeyType.Index:
-                        return $"{(IsUnique ? "uk_" : "idx_")}{Column}".ToLower();
+                        return $"{(IsUnique ? "uk_" : "idx_")}{Table}_{Column}".ToLower();
                     case ScStructuralKeyType.PrimaryKey:
                         return "PRIMARY";
                 }
@@ -153,7 +153,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return Exec(DataAccessor.QueryGenerator.AddUniqueKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             } else {
-                return Exec(DataAccessor.QueryGenerator.AddIndexForUniqueKey(
+                return Exec(DataAccessor.QueryGenerator.AddIndex(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             }
         }
@@ -193,10 +193,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute() {
             int v = 0;
-            try {
-                v += Exec(DataAccessor.QueryGenerator.AddLocalIndexForFK(
-                    keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
-            } catch (Exception x) { }
+            //try {
+            //    v += Exec(DataAccessor.QueryGenerator.AddIndex(
+            //        keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+            //} catch (Exception x) { }
             v += Exec(DataAccessor.QueryGenerator.AddForeignKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
             return v;
@@ -411,7 +411,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         );
                 case ScStructuralKeyType.ForeignKey:
                     return
-                        (a.KeyName?.ToLower() == n.KeyName?.ToLower()) ||
                         (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
                             a.Table.ToLower() == n.Table.ToLower() &&
                             a.Column.ToLower() == n.Column.ToLower() &&
@@ -654,7 +653,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return new ScStructuralLink {
                 Table = fk.Table,
                 Column = fk.Column,
-                KeyName = $"idx_{fk.Table.ToLower()}_{fk.Column.ToLower()}"
+                KeyName = $"idx_{fk.Table.ToLower()}_{fk.Column.ToLower()}",
+                Type = ScStructuralKeyType.Index
             };
         }
 
