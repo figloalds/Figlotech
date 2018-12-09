@@ -5,6 +5,7 @@ using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
@@ -54,35 +55,51 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public void BuildAggregateObject(
+        public void BuildAggregateObject(ConnectionInfo transaction,
             Type t, IDataReader reader, ObjectReflector refl,
-            object obj, string[] fieldNames, JoiningTable[] joinTables, Relation[] joinRelations,
+            object obj, Dictionary<string, (int[], string[])> fieldNamesDict, JoiningTable[] joinTables, IDictionary<int, Relation[]> joinRelations,
             int thisIndex, bool isNew,
             Dictionary<string, object> constructionCache, int recDepth) {
-            var myPrefix = joinTables[thisIndex].Prefix;
+            var myPrefix = joinTables[thisIndex].Prefix.ToLower();
             refl.Slot(obj);
             if (isNew) {
-                for (int i = 0; i < fieldNames.Length; i++) {
-                    if (fieldNames[i].StartsWith($"{myPrefix}_")) {
-                        refl[fieldNames[i].Substring(myPrefix.Length + 1)] = reader.GetValue(i);
-                    }
+                //transaction.Benchmarker.Mark($"Enter Build Object {myPrefix}");
+                if(!fieldNamesDict.ContainsKey(myPrefix)) {
+                    Debugger.Break();
                 }
+                var fieldNames = fieldNamesDict[myPrefix];
+                for (int i = 0; i < fieldNames.Item1.Length; i++) {
+                    var val = reader.GetValue(fieldNames.Item1[i]);
+                    string kind = "";
+                    if (val is DateTime dt && dt.Kind != DateTimeKind.Utc) {
+                        kind = dt.Kind.ToString();
+                        // I reluctantly admit that I'm using this horrible gimmick
+                        // It pains my soul to do this, because the MySQL Connector doesn't support
+                        // Timezone field in the connection string
+                        // And besides, this is code is supposed to be abstract for all ADO plugins
+                        // But I'll go with "If it isn't UTC, then you're saving dates wrong"
+                        val = new DateTime(dt.Ticks, DateTimeKind.Utc);
+                    }
+                    refl[fieldNames.Item2[i]] = val;
+                }
+                //transaction.Benchmarker.Mark($"End Build Object {myPrefix}");
             }
 
-            var relations = joinRelations.Where(a => a.ParentIndex == thisIndex);
+            var relations = joinRelations[thisIndex];
             //if(!isNew) {
             //    relations = relations.Where(r => r.AggregateBuildOption == AggregateBuildOptions.AggregateList);
             //}
+            //transaction.Benchmarker.Mark($"Enter Relations for {myPrefix}");
             foreach (var rel in relations) {
                 switch (rel.AggregateBuildOption) {
                     // Aggregate fields are the beautiful easy ones to deal
                     case AggregateBuildOptions.AggregateField: {
-
                             String childPrefix = joinTables[rel.ChildIndex].Prefix;
                             var value = reader[childPrefix + "_" + rel.Fields[0]];
                             String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
                             refl[name] = reader[childPrefix + "_" + rel.Fields[0]];
 
+                            //transaction.Benchmarker.Mark($"Aggregate Field {myPrefix}::{name}");
                             break;
                         }
                     // this one is RAD and the most cpu intensive
@@ -120,13 +137,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 isUlNew = true;
                             }
 
-                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+                            //transaction.Benchmarker.Mark($"Aggregate List Enter Item {myPrefix}::{childRid}");
+                            BuildAggregateObject(transaction, ulType, reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+
                             break;
                         }
 
                     // this one is almost the same as previous one.
                     case AggregateBuildOptions.AggregateObject: {
                             String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
+                            //transaction.Benchmarker.Mark($"Aggregate Object Enter Item {myPrefix}::{fieldAlias}");
                             var ulType = ObjectTypeCache[t][fieldAlias];
                             if (ulType == null) {
                                 continue;
@@ -151,11 +171,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 isUlNew = true;
                             }
                             refl[fieldAlias] = newObj;
-                            BuildAggregateObject(ulType, reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+
+                            BuildAggregateObject(transaction, ulType, reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
                             break;
                         }
                 }
             }
+            //transaction.Benchmarker.Mark($"End Relations for {myPrefix}");
         }
 
         public static SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>> ObjectTypeCache = new SelfInitializerDictionary<Type, SelfInitializerDictionary<string, Type>>(
@@ -178,6 +200,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
+        static Dictionary<Type, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<Type, Dictionary<string, (int[], string[])>>();
+
         public IList<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
             IList<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
@@ -187,16 +211,42 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark("Execute Query");
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
-                    transaction?.Benchmarker?.Mark("--");
-                    var fieldNames = new string[reader.FieldCount];
-                    for (int i = 0; i < fieldNames.Length; i++)
-                        fieldNames[i] = reader.GetName(i);
-                    var myRidCol = fieldNames.FirstOrDefault(f => f == $"{myPrefix}_{ridcol}");
+                    transaction?.Benchmarker?.Mark("Prepare caches");
+                    Dictionary<string, (int[], string[])> fieldNamesDict;
+                    if (true || !_autoAggregateCache.ContainsKey(typeof(T))) {
+                        // This is only ever used in the auto aggregations
+                        // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
+                        var fieldNames = new string[reader.FieldCount];
+                        for (int i = 0; i < fieldNames.Length; i++)
+                            fieldNames[i] = reader.GetName(i);
+                        int idx = 0;
+                        // With this I make a reusable cache and reduce the "per-object" field 
+                        // probing when copying values from the reader
+                        var newEntry = fieldNames.Select<string, (string, int, string)>(name => {
+                            var prefix = name.Split('_')[0].ToLower();
+                            return (prefix, idx++, name.Replace($"{prefix}_", ""));
+                        })
+                        .GroupBy(i => i.Item1)
+                        .ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                        _autoAggregateCache[typeof(T)] = newEntry;
+                    }
+                    if (!_autoAggregateCache.ContainsKey(typeof(T))) {
+                        Debugger.Break();
+                    }
+                    fieldNamesDict = _autoAggregateCache[typeof(T)];
+
+                    var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
+                        return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
+                    });
+                    
+                    var myRidCol = $"{myPrefix}_{ridcol}";
                     bool isNew;
                     var constructionCache = new Dictionary<string, object>();
                     constructionCache.Add(myRidCol, new Dictionary<string, object>());
-                    transaction?.Benchmarker?.Mark("Build Result");
+                    transaction?.Benchmarker?.Mark("Enter Build Result");
+                    int row = 0;
                     while (reader.Read()) {
+                        //transaction.Benchmarker.Mark($"Enter result row {row}");
                         isNew = true;
                         T newObj;
                         if (!constructionCache.ContainsKey(reader[myRidCol] as string)) {
@@ -208,10 +258,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             isNew = false;
                         }
 
-                        BuildAggregateObject(typeof(T), reader, new ObjectReflector(), newObj, fieldNames, joinTables, joinRelations, thisIndex, isNew, constructionCache, 0);
+                        BuildAggregateObject(transaction, typeof(T), reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
+
+                        //transaction.Benchmarker.Mark($"End result row {row}");
+                        row++;
                     }
-                    var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count}");
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
+                    var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                     constructionCache.Clear();
                     transaction?.Benchmarker?.Mark("--");
