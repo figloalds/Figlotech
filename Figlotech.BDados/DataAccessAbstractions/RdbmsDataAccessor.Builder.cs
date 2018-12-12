@@ -266,14 +266,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
                     transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
+                    transaction?.Benchmarker?.Mark("Clear cache");
                     constructionCache.Clear();
-                    transaction?.Benchmarker?.Mark("--");
                 }
             }
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true
             };
+            transaction?.Benchmarker?.Mark("Run afterloads");
             if (retv.Any()) {
                 var a = retv.First();
                 if (a is IBusinessObject<T> ibo) {
@@ -285,7 +286,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     ibo.OnAfterLoad(dlc);
                 }
             }
-
+            transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
     }

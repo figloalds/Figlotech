@@ -116,6 +116,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static int DefaultMaxOpenAttempts { get; set; } = 30;
         public static int DefaultOpenAttemptInterval { get; set; } = 100;
 
+        public Benchmarker Benchmarker { get; set; }
+
         public Type[] _workingTypes = new Type[0];
         public Type[] WorkingTypes {
             get { return _workingTypes; }
@@ -239,7 +241,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     OpenConnection(connection);
                     CurrentTransaction = new ConnectionInfo(this, connection);
                     CurrentTransaction?.BeginTransaction(useTransaction, ilev);
-                    CurrentTransaction.Benchmarker = bmark ?? new Benchmarker("Database Access");
+                    CurrentTransaction.Benchmarker = bmark ?? this.Benchmarker ?? new Benchmarker("Database Access");
                     CurrentTransaction.usingExternalBenchmarker = bmark != null;
                     WriteLog("Transaction Open");
                 }
@@ -633,7 +635,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 aid = ++accessId;
 
                 if (transaction.Benchmarker == null) {
-                    transaction.Benchmarker = new Benchmarker($"---- Access [{++aid}]");
+                    transaction.Benchmarker = this.Benchmarker ?? new Benchmarker($"---- Access [{++aid}]");
+                    transaction.usingExternalBenchmarker = this.Benchmarker != null;
                     transaction.Benchmarker.WriteToStdout = FiTechCoreExtensions.EnableStdoutLogs;
                 }
 
@@ -738,7 +741,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             try {
-                CurrentTransaction.Benchmarker = b;
                 b.Mark("Run User Code");
                 var retv = func.Invoke(CurrentTransaction);
 
@@ -1664,9 +1666,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, skip, limit, om, otype, builtConditionsRoot);
-                    transaction?.Benchmarker?.Mark("--");
                     command.CommandText = query.GetCommandText();
                     WriteLog($"[{accessId}] {command.CommandText}");
+                    transaction?.Benchmarker?.Mark("Fill query params");
                     foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                         var cmdParam = command.CreateParameter();
                         cmdParam.ParameterName = param.Key;
@@ -1688,7 +1690,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         command.Parameters.Add(cmdParam);
                         WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
                     }
+                    transaction?.Benchmarker?.Mark("Start build AggregateListDirect");
                     var retv = BuildAggregateListDirect<T>(transaction, command, join, 0);
+                    transaction?.Benchmarker?.Mark("Finished building the result");
                     return retv;
                 }
 
