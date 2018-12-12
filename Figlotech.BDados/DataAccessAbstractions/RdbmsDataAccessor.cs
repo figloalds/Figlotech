@@ -722,15 +722,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var b = CurrentTransaction.Benchmarker;
             if (FiTechCoreExtensions.EnableDebug) {
                 try {
-                    int maxFrames = 2;
+                    int maxFrames = 6;
                     var stack = new StackTrace();
                     foreach (var f in stack.GetFrames()) {
                         var m = f.GetMethod();
                         var mName = m.Name;
                         var t = m.DeclaringType;
+                        if(t.IsNested) {
+                            t = t.DeclaringType;
+                        }
                         var tName = t.Name;
-                        if (f.GetMethod().DeclaringType.Assembly != GetType().Assembly) {
-                            b.Mark($"Database Access from {tName}->{mName}");
+                        if (m.DeclaringType.Assembly != GetType().Assembly) {
+                            b.Mark($" at {tName}->{mName}");
                             if (maxFrames-- <= 0) {
                                 break;
                             }
