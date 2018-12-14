@@ -48,18 +48,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public T GetItemOrNull(Expression<Func<T, bool>> expr, Action<T> customInit = null) {
+        public T GetItemOrNull(Expression<Func<T, bool>> expr) {
             var retv = this.FirstOrDefault(expr.Compile());
-            if (retv == null) {
-                retv = new RecordSet<T>(DataAccessor).LoadAll(new Conditions<T>(expr)).FirstOrDefault();
-                if (retv != null) {
-                    lock (listLockObject)
-                        this.Add(retv);
-                } else {
-                    return default(T);
-                }
-            }
-
             return retv;
         }
 
