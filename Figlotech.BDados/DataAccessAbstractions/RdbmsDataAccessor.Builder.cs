@@ -200,7 +200,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
-        static Dictionary<Type, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<Type, Dictionary<string, (int[], string[])>>();
+        static Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
 
         public IList<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
             IList<T> retv = new List<T>();
@@ -213,27 +213,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 using (var reader = command.ExecuteReader()) {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
-                    if (true || !_autoAggregateCache.ContainsKey(typeof(T))) {
-                        // This is only ever used in the auto aggregations
-                        // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
-                        var fieldNames = new string[reader.FieldCount];
-                        for (int i = 0; i < fieldNames.Length; i++)
-                            fieldNames[i] = reader.GetName(i);
-                        int idx = 0;
-                        // With this I make a reusable cache and reduce the "per-object" field 
-                        // probing when copying values from the reader
-                        var newEntry = fieldNames.Select<string, (string, int, string)>(name => {
-                            var prefix = name.Split('_')[0].ToLower();
-                            return (prefix, idx++, name.Replace($"{prefix}_", ""));
-                        })
-                        .GroupBy(i => i.Item1)
-                        .ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-                        _autoAggregateCache[typeof(T)] = newEntry;
+                    lock(join) {
+                        if (!_autoAggregateCache.ContainsKey(join)) {
+                            // This is only ever used in the auto aggregations
+                            // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
+                            var fieldNames = new string[reader.FieldCount];
+                            for (int i = 0; i < fieldNames.Length; i++)
+                                fieldNames[i] = reader.GetName(i);
+                            int idx = 0;
+                            // With this I make a reusable cache and reduce the "per-object" field 
+                            // probing when copying values from the reader
+                            var newEntry = fieldNames.Select<string, (string, int, string)>(name => {
+                                var prefix = name.Split('_')[0].ToLower();
+                                return (prefix, idx++, name.Replace($"{prefix}_", ""));
+                            })
+                            .GroupBy(i => i.Item1)
+                            .ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                            _autoAggregateCache.Add(join, newEntry);
+                        }
                     }
-                    if (!_autoAggregateCache.ContainsKey(typeof(T))) {
-                        Debugger.Break();
-                    }
-                    fieldNamesDict = _autoAggregateCache[typeof(T)];
+                    Benchmarker.Assert(()=> _autoAggregateCache.ContainsKey(join));
+                    fieldNamesDict = _autoAggregateCache[join];
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
