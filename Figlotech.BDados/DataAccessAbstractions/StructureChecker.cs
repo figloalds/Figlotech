@@ -64,8 +64,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.DropForeignKey(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.DropForeignKey(
                     keyInfo.Table, keyInfo.KeyName));
         }
 
@@ -85,8 +85,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.DropPrimary(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.DropPrimary(
                     _table, _constraint));
         }
 
@@ -105,8 +105,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.DropIndex(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.DropIndex(
                     _table, _constraint));
         }
 
@@ -126,8 +126,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.DropUnique(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.DropUnique(
                     _table, _constraint));
         }
 
@@ -147,13 +147,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute() {
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
             int v = 0;
             if(keyInfo.IsUnique) {
-                return Exec(DataAccessor.QueryGenerator.AddUniqueKey(
+                return Exec(DataAccessor, DataAccessor.QueryGenerator.AddUniqueKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             } else {
-                return Exec(DataAccessor.QueryGenerator.AddIndex(
+                return Exec(DataAccessor, DataAccessor.QueryGenerator.AddIndex(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             }
         }
@@ -172,8 +172,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.AddPrimaryKey(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.AddPrimaryKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
         }
 
@@ -191,13 +191,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute() {
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
             int v = 0;
             //try {
             //    v += Exec(DataAccessor.QueryGenerator.AddIndex(
             //        keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             //} catch (Exception x) { }
-            v += Exec(DataAccessor.QueryGenerator.AddForeignKey(
+            v += Exec(DataAccessor, DataAccessor.QueryGenerator.AddForeignKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
             return v;
         }
@@ -224,8 +224,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _isNullable = columnMember.GetCustomAttribute<FieldAttribute>()?.AllowNull ?? true;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.Purge(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.Purge(
                 _table, _column, _refTable, _refColumn, _isNullable));
             return 0;
         }
@@ -248,8 +248,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _columnMember = columnMember;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.AddColumn(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.AddColumn(
                 _table, StructureChecker.GetColumnDefinition(_columnMember)));
         }
 
@@ -269,8 +269,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _newName = newName;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.RenameTable(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameTable(
                 _table, _newName));
         }
 
@@ -292,8 +292,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _columnMember = columnMember;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.RenameColumn(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
                 _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
         }
 
@@ -315,8 +315,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _columnMember = columnMember;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.RenameColumn(
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
                 _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
         }
 
@@ -331,8 +331,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _tableType = tableType;
         }
 
-        public override int Execute() {
-            return Exec(DataAccessor.QueryGenerator.GetCreationCommand(_tableType));
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.GetCreationCommand(_tableType));
         }
 
         public override string ToString() {
@@ -341,16 +341,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public abstract class AbstractIStructureCheckNecessaryAction : IStructureCheckNecessaryAction {
-        public IRdbmsDataAccessor DataAccessor { get; set; }
+
+        public string ActionType => this.GetType().Name;
+        public string Description => this.ToString();
         public string Reason { get; set; }
         public AbstractIStructureCheckNecessaryAction(IRdbmsDataAccessor dataAccessor, String reason) {
-            DataAccessor = dataAccessor;
             this.Reason = reason;
         }
 
-        public abstract int Execute();
+        public abstract int Execute(IRdbmsDataAccessor DataAccessor);
 
-        protected int Exec(IQueryBuilder query) {
+        protected int Exec(IRdbmsDataAccessor DataAccessor, IQueryBuilder query) {
             try {
                 return DataAccessor.Execute(query);
             } catch (Exception x) {
@@ -360,9 +361,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public interface IStructureCheckNecessaryAction {
-        IRdbmsDataAccessor DataAccessor { get; set; }
-        String Reason { get; set; }
-        int Execute();
+        string Description { get;  }
+        string Reason { get;  }
+        int Execute(IRdbmsDataAccessor DataAccessor);
     }
 
     public class StructureChecker {
@@ -611,7 +612,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             while (enny.MoveNext()) {
                 var thisAction = enny.Current;
                 wq.Enqueue(() => {
-                    retv += thisAction.Execute();
+                    retv += thisAction.Execute(DataAccessor);
                     //lock(wq) {
                     int myWent = went++;
                     cliQ.Enqueue(() => {
@@ -958,7 +959,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             continue;
 
                     try {
-                        action.Execute();
+                        action.Execute(DataAccessor);
                         await onActionProcessed?.Invoke(action);
                     } catch (Exception x) {
                         if (onError != null)
