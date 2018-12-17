@@ -136,51 +136,51 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             QueryBuilder Query = new QueryBuilder();
 
-            if(!AutoJoinCache.ContainsKey(inputJoin)) {
-                // By caching this heavy process I might gain loads of performance
-                // When redoing the same queries.
-                QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");
-                autoJoinMain.Append($"\t FROM (SELECT\n");
-                for (int i = 0; i < tables.Count; i++) {
-                    autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
-                    var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
-                    if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
-                        columns[i].Add(ridF);
-                    var nonexcl = columns[i];
-                    for (int j = 0; j < nonexcl.Count; j++) {
-                        autoJoinMain.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
-                        if (true || j < nonexcl.Count - 1 || i < tables.Count - 1) {
-                            autoJoinMain.Append(",");
+            if (!AutoJoinCache.ContainsKey(inputJoin)) {
+                lock (AutoJoinCache) {
+                    if (!AutoJoinCache.ContainsKey(inputJoin)) {
+                        // By caching this heavy process I might gain loads of performance
+                        // When redoing the same queries.
+                        QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");
+                        autoJoinMain.Append($"\t FROM (SELECT\n");
+                        for (int i = 0; i < tables.Count; i++) {
+                            autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
+                            var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
+                            if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
+                                columns[i].Add(ridF);
+                            var nonexcl = columns[i];
+                            for (int j = 0; j < nonexcl.Count; j++) {
+                                autoJoinMain.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]},\n");
+                            }
+                            autoJoinMain.Append("\n");
                         }
-                        autoJoinMain.Append("\n");
-                    }
-                    autoJoinMain.Append("\n");
-                }
 
-                autoJoinMain.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
+                        autoJoinMain.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
 
-                if (isLinedAggregateJoin) {
-                    if (rootConditions != null) {
-                        autoJoinMain.Append("WHERE ");
-                        autoJoinMain.Append(rootConditions);
-                    }
-                    if (orderingMember != null) {
-                        autoJoinMain.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-                    }
-                    if (skip != null || take != null) {
-                        autoJoinMain.Append("LIMIT ");
-                        autoJoinMain.Append(
-                            skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
-                        );
-                    }
-                    autoJoinMain.Append($"");
-                }
-                autoJoinMain.Append($") AS {prefixes[0]}\n");
+                        if (isLinedAggregateJoin) {
+                            if (rootConditions != null) {
+                                autoJoinMain.Append("WHERE ");
+                                autoJoinMain.Append(rootConditions);
+                            }
+                            if (orderingMember != null) {
+                                autoJoinMain.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
+                            }
+                            if (skip != null || take != null) {
+                                autoJoinMain.Append("LIMIT ");
+                                autoJoinMain.Append(
+                                    skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
+                                );
+                            }
+                            autoJoinMain.Append($"");
+                        }
+                        autoJoinMain.Append($") AS {prefixes[0]}\n");
 
-                for (int i = 1; i < tables.Count; i++) {
-                    autoJoinMain.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+                        for (int i = 1; i < tables.Count; i++) {
+                            autoJoinMain.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+                        }
+                        AutoJoinCache[inputJoin] = (autoJoinMain);
+                    }
                 }
-                AutoJoinCache[inputJoin] = (autoJoinMain);
             }
             Query.Append(AutoJoinCache[inputJoin]);
 
