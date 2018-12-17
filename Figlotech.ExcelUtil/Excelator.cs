@@ -89,6 +89,13 @@ namespace Figlotech.ExcelUtil
             Excelator.Style(row, row, ColFrom, ColTo, es);
             return this;
         }
+        public ExcelatorRowRangeWriter SolidFill(Color c) {
+            Excelator.Style(row, row, ColFrom, ColTo, es=> {
+                es.Fill.PatternType = ExcelFillStyle.Solid;
+                es.Fill.BackgroundColor.SetColor(c);
+            });
+            return this;
+        }
         public ExcelatorRowRangeWriter Bold() {
             Excelator.Style(row, row, ColFrom, ColTo, es => es.Font.Bold = true);
             return this;
