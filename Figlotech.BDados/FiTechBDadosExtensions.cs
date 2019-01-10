@@ -27,13 +27,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         //        public static bool EnableStdoutLogs { get; set; } = false;
 
+
+        public static String GetUpdateColumn(this Fi _selfie, Type type) {
+            var fields = ReflectionTool.FieldsAndPropertiesOf(type);
+            var retv = fields
+                .Where((f) => f.GetCustomAttribute<UpdateTimeStampAttribute>() != null)
+                .FirstOrDefault()
+                ?.Name
+                ?? "UpdatedTime";
+            return retv;
+        }
+
         public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
         public static String GetRidColumn(this Fi _selfie, Type type) {
-            var fields = new List<FieldInfo>();
-            do {
-                fields.AddRange(type.GetFields());
-                type = type.BaseType;
-            } while (type != null);
+            var fields = ReflectionTool.FieldsAndPropertiesOf(type);
 
             var retv = fields
                 .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
@@ -42,18 +49,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ?? "RID";
             return retv;
         }
-
+        public static SelfInitializerDictionary<Type, String> UpdateColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetUpdateColumn(t));
         public static SelfInitializerDictionary<Type, String> RidColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t));
         public static SelfInitializerDictionary<Type, String> IdColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetIdColumn(t));
 
         public static String GetIdColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
         public static String GetIdColumn(this Fi _selfie, Type type) {
-            var fields = new List<FieldInfo>();
-            do {
-                fields.AddRange(type.GetFields());
-                type = type.BaseType;
-            } while (type != null);
-
+            var fields = ReflectionTool.FieldsAndPropertiesOf(type);
             var retv = fields
                 .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
                 .FirstOrDefault()
@@ -182,7 +184,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 var retv = Activator.CreateInstance(typeof(RecordSet<>).MakeGenericType(t), da);
                 return retv;
+
             } catch (Exception x) {
+
 
             }
             return null;
@@ -281,14 +285,29 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //        }
         static int gid = 0;
         static string sid = IntEx.GenerateShortRid();
-        public static QueryBuilder ListRids<T>(this Fi _selfie, IList<T> set) where T : IDataObject {
+        public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
+
             int x = 0;
+
             int ggid = ++gid;
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder().Append(
-                        $"@{sid}_{ggid}_{x++}",
+                        $"@r_{i}",
+                        set[i].RID
+                    )
+                );
+                if (i < set.Count - 1)
+                    retv.Append(",");
+            }
+            return retv;
+        }
+        public static QueryBuilder ListRids2<T>(this Fi _selfie, List<T> set) where T : IDataObject {
+            QueryBuilder retv = new QueryBuilder();
+            for (int i = 0; i < set.Count; i++) {
+                retv.Append(
+                    new QueryBuilder().Append(
                         set[i].RID
                     )
                 );

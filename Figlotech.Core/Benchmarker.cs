@@ -27,6 +27,11 @@ namespace System {
                 var retv = self.marks[self.marks.Count - 1]
                     .Timestamp.Subtract(self.marks[self.marks.Count - 2].Timestamp).TotalMilliseconds;
 
+                if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut) {
+                    var r2 = self.marks[self.marks.Count - 1]
+                        .Timestamp.Subtract(self.marks[0].Timestamp).TotalMilliseconds;
+                    Console.WriteLine($"{r2} {txt}");
+                }
                 return retv;
             } catch (Exception) {
             }
@@ -57,8 +62,7 @@ namespace System {
                 self.Mark($"[RegionEndOk] {label}");
             } catch(Exception x) {
                 self.Mark($"[RegionException] {label}", x);
-                retv = default(T);
-                throw x;
+                throw new Exception($"Error in Region {label}", x);
             }
 
             return retv;
@@ -72,7 +76,7 @@ namespace System {
             }
             catch (Exception x) {
                 self.Mark($"[RegionException] {label}", x);
-                throw x;
+                throw new Exception($"Error in Region {label}", x);
             }
         }
 

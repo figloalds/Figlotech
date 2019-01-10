@@ -29,6 +29,6 @@ namespace Figlotech.Core.BusinessModel {
     public interface IBusinessObject<T> : IBusinessObject where T : IDataObject, new() {
         //List<IValidationRule<T>> ValidationRules { get; }
 
-        void OnAfterAggregateLoad(DataLoadContext ctx, IList<T> AggregateLoadResult);
+        void OnAfterAggregateLoad(DataLoadContext ctx, List<T> AggregateLoadResult);
     }
 }

@@ -14,10 +14,21 @@ using Figlotech.Core.Interfaces;
 using System.Text;
 
 namespace Figlotech.Core {
+    public class With<T> {
+        T value;
+        public With(T value) {
+            this.value = value;
+        }
+        public bool Predicate(Predicate<T> predicate) {
+            return predicate.Invoke(value);
+        }
+    }
+
     /// <summary>
     /// This is an utilitarian class, it provides quick static logic 
     /// for the rest of Figlotech Tools to operate
     /// </summary>
+    /// 
     public class Fi {
 
         public static Fi Tech = new Fi();
@@ -32,6 +43,23 @@ namespace Figlotech.Core {
                     yield return i;
                 }
             }
+        }
+
+        /// <summary>
+        /// This is here because ain't nobody got time to write
+        /// FormattableString.Invariant(), it's also a shame this isn't the default for the $"" syntax
+        /// Considering CurrentCulture is a HUGE mess when it goes from the compiled-at machine to a run-at machine
+        /// And then it turns converts special characters that are already correct into garbage making 
+        /// a huge mess. Seriously I wonder why the hell CurrentCulture is default for $"", it's terrible.
+        /// </summary>
+        /// <param name="fms"></param>
+        /// <returns></returns>
+        public static string S(FormattableString fms) {
+            return fms.ToString(CultureInfo.InvariantCulture);
+        }
+
+        public static With<T> With<T>(T value) {
+            return new With<T>(value);
         }
                 
         public FnVal<T> V<T>(Func<T> fn) {

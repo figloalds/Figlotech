@@ -17,6 +17,7 @@ using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Figlotech.Core {
     public delegate dynamic ComputeField(dynamic o);
@@ -27,7 +28,9 @@ namespace Figlotech.Core {
 
     public static class FiTechCoreExtensions {
         private static Object _readLock = new Object();
+
         private static int _generalId = 0;
+
         public static ILogger ApiLogger;
         public static bool EnableDebug { get; set; } = false;
 
@@ -238,7 +241,32 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        public static string GetHashFromStream(this Fi _selfie, Stream stream) {
+        public static byte[] ComputeHash(this Fi _selfie, string str) {
+            using(MemoryStream ms = new MemoryStream(new UTF8Encoding(false).GetBytes(str))) {
+                ms.Seek(0, SeekOrigin.Begin);
+                using (var sha = SHA256.Create()) {
+                    return sha.ComputeHash(ms);
+                }
+            }
+        }
+
+        public static byte[] ComputeHash(this Fi _selfie, Stream stream) {
+            using (var sha = SHA256.Create()) {
+                return sha.ComputeHash(stream);
+            }
+        }
+
+        public static byte[] ComputeHash(this Fi _selfie, Action<Stream> streamFn) {
+            using (var sha = SHA256.Create()) {
+                using (MemoryStream s = new MemoryStream()) {
+                    streamFn(s);
+                    s.Seek(0, SeekOrigin.Begin);
+                    return sha.ComputeHash(s);
+                }
+            }
+        }
+
+        public static string LegacyGetHashFromStream(this Fi _selfie, Stream stream) {
             using (var md5 = MD5.Create()) {
                 return Convert.ToBase64String(md5.ComputeHash(stream));
             }
@@ -310,7 +338,7 @@ namespace Figlotech.Core {
             return DateTime.UtcNow.Subtract(_startupstamp) > ts;
         }
 
-        public static IList<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
+        public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
             if(dt == null) {
                 throw new NullReferenceException("Input DataTable to Map<T> cannot be null");
             }
@@ -319,7 +347,7 @@ namespace Figlotech.Core {
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
-            IList<T> retv = new List<T>();
+            List<T> retv = new List<T>();
             Parallel.For(0, dt.Rows.Count, i => {
                 var val = Fi.Tech.Map<T>(dt.Rows[i], mapMeta, mapReplacements);
                 //yield return val;
@@ -351,6 +379,7 @@ namespace Figlotech.Core {
         }
 
         public static bool EnableBenchMarkers { get; set; } = false;
+        public static bool EnableLiveBenchmarkerStdOut { get; set; } = false;
 
         public static string GetVersion(this Fi _selfie) {
             return Version;
@@ -1057,6 +1086,23 @@ namespace Figlotech.Core {
             };
         }
 
+        public static byte[] BinaryHashPad(this Fi __selfie, byte[] input, int sz) {
+            var retv = new byte[sz];
+            Array.Copy(input, 0, retv, 0, Math.Min(retv.Length, input.Length));
+            if(retv.Length < input.Length) {
+                for(int i = retv.Length; i < input.Length; i++) {
+                    retv[i % retv.Length] ^= input[i];
+                }
+            }
+            return retv;
+        }
+        public static byte[] BinaryPad(this Fi __selfie, byte[] input, int sz) {
+            var retv = new byte[sz];
+            Array.Copy(input, 0, retv, 0, Math.Min(retv.Length, input.Length));
+
+            return retv;
+        }
+
         public static Thread SafeCreateThread(this Fi __selfie, Action a) {
             return new Thread(() => {
                 try {
@@ -1083,13 +1129,17 @@ namespace Figlotech.Core {
             } catch (Exception x) {
                 try {
                     Catch?.Invoke(x);
+
                 } catch (Exception y) {
+
 
                 }
             } finally {
                 try {
                     Finally?.Invoke(success);
+
                 } catch (Exception y) {
+
 
                 }
             }

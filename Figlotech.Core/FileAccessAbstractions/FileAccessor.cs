@@ -422,7 +422,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
             var bufferLength = new FileInfo(WorkingDirectory).Length * .6;
-            bufferLength = Math.Max(256 * 1024, bufferLength);
+            bufferLength = Math.Max(8 * 1024 * 1024, bufferLength);
             bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 
             return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int)bufferLength);

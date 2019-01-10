@@ -89,7 +89,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
+
         void CascadingDoForFields<T>(Action<T> process, List<Type> prevList = null) {
+
             if (prevList == null)
                 prevList = new List<Type>();
             // prevList is a resource I'm using to break the fuck out of

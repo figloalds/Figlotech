@@ -129,6 +129,7 @@ namespace Figlotech.Core {
                 T obj = JsonConvert.DeserializeObject<T>(json);
                 retv = obj;
             } catch (Exception x) {
+
             }
             return retv;
         }
@@ -191,13 +192,17 @@ namespace Figlotech.Core {
 
         public async Task<T> Get<T>(string Url) {
             T retv = default(T);
+
             await Get(Url, async (status, rstream) => {
+
                 using (StreamReader sr = new StreamReader(rstream)) {
                     var json = sr.ReadToEnd();
                     try {
                         T obj = JsonConvert.DeserializeObject<T>(json);
                         retv = obj;
+
                     } catch (Exception x) {
+
                     }
                 }
             });

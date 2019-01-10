@@ -78,7 +78,9 @@ namespace Figlotech.BDados.CustomForms {
 
             DataTable results = rda.Query(BuildSelectByRidQuery(cf, rid));
             var retv = new List<CustomObject>();
+
             for (var i = 0; i < results.Rows.Count; i++) {
+
                 CustomObject co = new CustomObject();
                 co.Set("Id", results.Rows[i]["Id"]);
                 for (var a = 0; a < cf.Fields.Count; a++) {

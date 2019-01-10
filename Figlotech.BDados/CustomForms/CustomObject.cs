@@ -12,7 +12,9 @@ using Figlotech.Core;
 namespace Figlotech.BDados.CustomForms {
     public class CustomObject
     {
+
         IRdbmsDataAccessor DataAccessor;
+
         private IDictionary<String, Object> Object = new Dictionary<String, Object>();
         public CustomObject() {
             Set("RID", IntEx.GenerateUniqueRID());

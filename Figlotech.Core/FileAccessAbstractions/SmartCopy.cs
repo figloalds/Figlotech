@@ -408,7 +408,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 fs.ForDirectoriesIn(path, dir => DeleteExtras(fs, dir, workinglist, recursive));
             }
         }
-
+        
         int workedFiles = 0;
 
         private const string GZIP_FILE_SUFFIX = ".gz";

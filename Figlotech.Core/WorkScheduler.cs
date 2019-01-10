@@ -27,7 +27,9 @@ namespace Figlotech.Core {
 
     public class WorkScheduler : IContinuousExecutor {
         List<WorkSchedule> schedules = new List<WorkSchedule>();
+
         Thread SchedulesThread;
+
         private bool isRunning;
 
         private bool _active = false;

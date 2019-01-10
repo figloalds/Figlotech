@@ -67,14 +67,18 @@ namespace Figlotech.Core {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
         public String Name;
+
         private Thread _supervisor;
+
         Queue<WorkJob> ActivatedWorkQueue = new Queue<WorkJob>();
         List<WorkJob> HeldJobs = new List<WorkJob>();
         List<WorkJob> currentJobs = new List<WorkJob>();
         List<Thread> workers = new List<Thread>();
         List<Thread> detectedLongWorkThreads = new List<Thread>();
         decimal avgTaskResolutionTime = 1;
+
         decimal totTaskResolutionTime = 1;
+
         decimal totTasksResolved = 0;
         ManualResetEvent QueueResetEvent { get; set; } = new ManualResetEvent(false);
 
@@ -97,9 +101,12 @@ namespace Figlotech.Core {
 
         public bool IsClosed { get { return closed; } }
         public bool IsRunning { get { return isRunning; } }
+
         private bool isPaused = false;
 
+
         int parallelSize = 1;
+        public int ParallelSize => parallelSize;
 
         ThreadPriority _defaultWorkerPriority = ThreadPriority.Normal;
         public ThreadPriority DefaultWorkerPriority {
@@ -249,7 +256,9 @@ namespace Figlotech.Core {
                     //    workers.Add(Thread.CurrentThread);
                     //}
                     WorkJob job;
+
                     int wqc = 1;
+
                     bool isFoulEntry = false;
                     while (true) {
                         job = null;
@@ -263,9 +272,6 @@ namespace Figlotech.Core {
                             if (ActivatedWorkQueue.Count > 0) {
                                 job = ActivatedWorkQueue.Dequeue();
                                 Thread.CurrentThread.IsBackground = false;
-                                // This is to prevent GC from spawning crazy during operations.
-                                //lock (holdJobs)
-                                //    holdJobs.Add(job);
                                 lock (currentJobs)
                                     currentJobs.Add(job);
                             }
@@ -318,13 +324,14 @@ namespace Figlotech.Core {
                             }
                             job.status = WorkJobStatus.Finished;
                             totTasksResolved++;
+                            lock(this)
+                                WorkDone++;
                             var thisTaskResolutionTime = (decimal) (job.completed.Value - job.enqueued.Value).TotalMilliseconds;
                             avgTaskResolutionTime -= avgTaskResolutionTime / totTasksResolved;
                             avgTaskResolutionTime += thisTaskResolutionTime / totTasksResolved;
                             job.WaitHandle.Set();
                             lock(currentJobs)
                                 currentJobs.Remove(job);
-                            WorkDone++;
                             lastJobProcessedStamp = DateTime.UtcNow;
                         }
                         job = null;
@@ -393,7 +400,6 @@ namespace Figlotech.Core {
         public int WorkDone = 0;
 
         public WorkJob Enqueue(Action a, Action<Exception> exceptionHandler = null, Action finished = null) {
-            TotalWork++;
             var retv = new WorkJob(a, exceptionHandler, finished);
             if(Active) {
                 lock (ActivatedWorkQueue) {
@@ -407,6 +413,7 @@ namespace Figlotech.Core {
             }
             InitSupervisor();
             QueueResetEvent.Set();
+            TotalWork++;
 
             return retv;
         }

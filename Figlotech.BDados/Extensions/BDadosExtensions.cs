@@ -16,13 +16,13 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.DataAccessAbstractions {
     
 
-    public static class IListBDadosExtensions {
+    public static class ListBDadosExtensions {
 
         public static int DefaultPageSize = 200;
         public static int PageSize { get; set; } = DefaultPageSize;
         public static bool LinearLoad = false;
         
-        public static Qb ListRids<T>(this IList<T> me) where T: IDataObject, new() {
+        public static Qb ListRids<T>(this List<T> me) where T: IDataObject, new() {
             Qb retv = new Qb();
             var uni = IntEx.GenerateShortRid();
             for (int i = 0; i < me.Count; i++) {
@@ -33,7 +33,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         
-        public static void LoadAll<T>(this IList<T> me, IDataAccessor DataAccessor, 
+        public static void LoadAll<T>(this List<T> me, IDataAccessor DataAccessor, 
             Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
             Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
             MemberInfo GroupingMember = null) where T : IDataObject, new() {
@@ -42,7 +42,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             agl.Clear();
         }
 
-        public static void LoadAllLinear<T>(this IList<T> me, IDataAccessor DataAccessor, Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
+        public static void LoadAllLinear<T>(this List<T> me, IDataAccessor DataAccessor, Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
             Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
             MemberInfo GroupingMember = null) where T : IDataObject, new() {
             var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, orderingMember, otype, GroupingMember, true);
@@ -50,28 +50,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             agl.Clear();
         }
 
-        public static bool Save<T>(this IList<T> me, IDataAccessor DataAccessor) where T : IDataObject, new() {
+        public static bool Save<T>(this List<T> me, IDataAccessor DataAccessor) where T : IDataObject, new() {
             return DataAccessor?.SaveList(me) ?? false;
         }
 
 
-        public static void AddRange<T>(this IList<T> me, IEnumerable<T> range) {
+        public static void AddRange<T>(this List<T> me, IEnumerable<T> range) {
             range.ForEach(i => {
                 if(i != null) {
                     me.Add(i);
                 }
             });
         }
-        public static void RemoveAll<T>(this IList<T> me, Predicate<T> predicate) {
-            int i = me.Count-1;
-            while(i-->0) {
-                if (predicate(me[i])) {
-                    me.RemoveAt(i);
-                }
-            }
-        }
 
-        public static List<T> ToList<T>(this IList<T> me) {
+        public static List<T> ToList<T>(this List<T> me) {
             if (me is List<T> li && me != null)
                 return li;
             if (me is IEnumerable<T> ien) {

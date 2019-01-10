@@ -33,6 +33,9 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new SqliteConnection(Config.GetConnectionString());
         }
 
+        public IDbConnection GetNewSchemalessConnection() {
+            return new SqliteConnection(Config.GetConnectionString());
+        }
 
         static long idGen = 0;
         long myId = ++idGen;

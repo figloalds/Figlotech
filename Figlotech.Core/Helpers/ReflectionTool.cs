@@ -1,11 +1,10 @@
-﻿using Figlotech.Core.Extensions;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
     public static class BadassReflectionExtensions {
@@ -36,7 +35,7 @@ namespace Figlotech.Core.Helpers {
 
         public static bool StrictMode { get; set; } = false;
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
-            if(!MembersCache.ContainsKey(type)) {
+            if (!MembersCache.ContainsKey(type)) {
                 var members = new List<MemberInfo>();
                 members.AddRange(type.GetFields());
                 members.AddRange(type.GetProperties());
@@ -60,10 +59,10 @@ namespace Figlotech.Core.Helpers {
                 (t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType));
         }
         public static bool TypeDerivesFromGeneric(Type t, Type ancestorType) {
-            return 
+            return
                 (t != null && t != typeof(Object)) &&
                 (
-                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType || 
+                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType ||
                     TypeDerivesFromGeneric(t.BaseType, ancestorType)
                 );
         }
@@ -82,13 +81,12 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static object RunGeneric(object input, string methodName, Type type, params object[] args) {
-            object retv = null;
             var methods = input.GetType().GetMethods().Where(
                 (m) => m.Name == methodName);
             foreach (var a in methods) {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
-                } catch (Exception x) {
+                } catch (Exception) {
 
                 }
             }
@@ -140,11 +138,11 @@ namespace Figlotech.Core.Helpers {
         public static void ForAttributedMembers<T>(Type type, Action<MemberInfo, T> act) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
             members.ForEach(m => {
-                    var att = m.GetCustomAttribute<T>();
-                    if (att != null) {
-                        act(m, att);
-                    }
-                });
+                var att = m.GetCustomAttribute<T>();
+                if (att != null) {
+                    act(m, att);
+                }
+            });
         }
         public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
@@ -158,11 +156,11 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static Object GetMemberValue(MemberInfo member, Object target) {
-            if (member is PropertyInfo) {
-                return ((PropertyInfo)member).GetValue(target);
+            if (member is PropertyInfo pi) {
+                return pi.GetValue(target);
             }
-            if (member is FieldInfo) {
-                return ((FieldInfo)member).GetValue(target);
+            if (member is FieldInfo fi) {
+                return fi.GetValue(target);
             }
             return null;
         }
@@ -170,9 +168,8 @@ namespace Figlotech.Core.Helpers {
         static object ResolveEnum(Type t, object val) {
             if (!t.IsEnum)
                 return val;
-            int v;
             if (val is string s) {
-                if (Int32.TryParse(s, out v)) {
+                if (Int32.TryParse(s, out int v)) {
                     return Enum.ToObject(t, v);
                 } else {
                     return Enum.Parse(t, s);
@@ -204,6 +201,107 @@ namespace Figlotech.Core.Helpers {
             return value;
         }
 
+        public static object TryCast(object value, Type t) {
+            try {
+                value = DbEvalValue(value, t);
+                t = ToUnderlying(t);
+                if (t == null)
+                    return null;
+
+                if (value == null) {
+                    if (t.IsValueType) {
+                        return Activator.CreateInstance(t);
+                    }
+                    return null;
+                }
+
+                if (t.IsGenericType) {
+                    if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+                        t = t.GetGenericArguments()[0];
+                    }
+                }
+
+                if (t.IsEnum && value as int? != null) {
+                    return Enum.ToObject(t, (int)value);
+                }
+
+                if (value is string str && t == typeof(bool)) {
+                    return str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                }
+
+                if (!t.IsAssignableFrom(value.GetType())) {
+                    if (value.GetType().Implements(typeof(IConvertible))) {
+                        return Convert.ChangeType(value, t);
+                    }
+                }
+
+                if (value.GetType() == typeof(byte[])) {
+                    var vbarr = value as byte[];
+
+                    if (t == typeof(Boolean))
+                        return vbarr[0] != 0 && vbarr[0] != '0';
+                    if (t == typeof(Int16))
+                        return BitConverter.ToInt16(Fi.Tech.BinaryPad(vbarr, sizeof(Int16)), 0);
+                    if (t == typeof(Int32))
+                        return BitConverter.ToInt32(Fi.Tech.BinaryPad(vbarr, sizeof(Int32)), 0);
+                    if (t == typeof(Int64))
+                        return BitConverter.ToInt64(Fi.Tech.BinaryPad(vbarr, sizeof(Int64)), 0);
+                    if (t == typeof(UInt16))
+                        return BitConverter.ToUInt16(Fi.Tech.BinaryPad(vbarr, sizeof(UInt16)), 0);
+                    if (t == typeof(UInt32))
+                        return BitConverter.ToUInt32(Fi.Tech.BinaryPad(vbarr, sizeof(UInt32)), 0);
+                    if (t == typeof(UInt64))
+                        return BitConverter.ToUInt64(Fi.Tech.BinaryPad(vbarr, sizeof(UInt64)), 0);
+                    if (t == typeof(Double))
+                        return BitConverter.ToDouble(Fi.Tech.BinaryPad(vbarr, sizeof(Double)), 0);
+                    if (t == typeof(Decimal))
+                        return (decimal)BitConverter.ToDouble(Fi.Tech.BinaryPad(vbarr, sizeof(Double)), 0);
+                    if (t == typeof(Single))
+                        return BitConverter.ToSingle(Fi.Tech.BinaryPad(vbarr, sizeof(Single)), 0);
+
+                    if (t == typeof(DateTime)) {
+                        var vbarrStr = new UTF8Encoding(false).GetString(vbarr);
+                        if(vbarr.Length <= sizeof(Int64)) {
+                            var v64 = BitConverter.ToInt64(Fi.Tech.BinaryPad(vbarr, sizeof(Int64)), 0);
+                            DateTime dt2;
+                            if(v64 > DateTime.MinValue.Ticks && v64 < DateTime.MaxValue.Ticks) {
+                                dt2 = new DateTime(v64);
+                            } else  {
+                                dt2 = new DateTime(v64 * TimeSpan.TicksPerMillisecond);
+                            }
+                            return dt2;
+                        }
+                        var dt = DateTime.Parse(vbarrStr, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUniversalTime();
+                        return dt;
+                    }
+
+                    if (t == typeof(string)) {
+                        return new UTF8Encoding(false).GetString(value as byte[]);
+                    }
+                    if (t.IsEnum) {
+                        var vEnnyVals = Enum.GetValues(t);
+                        foreach (var v in vEnnyVals) {
+                            var bi32 = BitConverter.ToInt32(Fi.Tech.BinaryPad(vbarr, sizeof(Int32)), 0);
+                            if (bi32 == (int)v) {
+                                return v;
+                            }
+                        }
+                        var strEnum = new UTF8Encoding(false).GetString(value as byte[]);
+                        try {
+                            return Enum.Parse(t, strEnum);
+                        } catch (Exception) {
+
+                        }
+                    }
+                }
+
+                return Activator.CreateInstance(t);
+            } catch (Exception x) {
+
+                throw x;
+            }
+        }
+
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
                 var pi = member as PropertyInfo;
@@ -216,6 +314,11 @@ namespace Figlotech.Core.Helpers {
                 }
 
                 var t = GetTypeOf(member);
+                if(value != null && t == value.GetType()) {
+                    pi?.SetValue(target, value);
+                    fi?.SetValue(target, value);
+                    return;
+                }
                 value = DbEvalValue(value, t);
                 t = ToUnderlying(t);
                 if (t == null) return;
@@ -223,8 +326,7 @@ namespace Figlotech.Core.Helpers {
                 if (value == null) {
                     if (t.IsValueType) {
                         return;
-                    }
-                    else {
+                    } else {
                         if (pi != null) {
                             pi.SetValue(target, null);
                             return;
@@ -239,7 +341,7 @@ namespace Figlotech.Core.Helpers {
                 }
 
 
-                if(t.IsGenericType) {
+                if (t.IsGenericType) {
                     if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
                         target = GetMemberValue(member, target);
                         member = t.GetProperty("Value");
@@ -247,35 +349,35 @@ namespace Figlotech.Core.Helpers {
                     }
                 }
 
-                if(t.IsEnum && value as int? != null) {
-                    value = Enum.ToObject(t, (int) value);
+                if (t.IsEnum && value as int? != null) {
+                    value = Enum.ToObject(t, (int)value);
                 }
 
-                if(value is string str && t == typeof(bool)) {
+                if (value is string str && t == typeof(bool)) {
                     value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
                 }
 
                 if (!t.IsAssignableFrom(value.GetType())) {
-                    if(value.GetType().Implements(typeof(IConvertible))) {
+                    if (value.GetType().Implements(typeof(IConvertible))) {
                         value = Convert.ChangeType(value, t);
                     } else {
                         return;
                     }
                 }
 
-                if(pi != null) {
+                if (pi != null) {
                     pi.SetValue(target, value);
                     return;
                 }
 
-                if(fi != null) {
+                if (fi != null) {
                     fi.SetValue(target, value);
                 }
 
             } catch (Exception x) {
                 if (StrictMode) {
                     Console.WriteLine($"RTSV Error | {target?.GetType()?.Name}::{member?.Name}={value?.ToString()} ({value?.GetType()?.Name})");
-                    if(Debugger.IsAttached) {
+                    if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
                     throw x;

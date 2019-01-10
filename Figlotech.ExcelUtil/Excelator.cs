@@ -10,13 +10,21 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Figlotech.ExcelUtil
-{
+namespace Figlotech.ExcelUtil {
+    public class ReadingStoppedException : Exception {
+        
+    }
     public class ExcelatorLineReader {
         int line;
+        internal bool stopReadingIssued;
         Excelator excelator;
 
         public int LineNumber => line;
+
+        internal int CurrentRow {
+            get => line;
+            set => line = value;
+        }
 
         public bool IsLast => line == excelator.NumRows;
 
@@ -24,11 +32,22 @@ namespace Figlotech.ExcelUtil
             line = ln;
             excelator = parent;
         }
+
         public object Get(int column) {
             return excelator.Get(line, column);
         }
+
         public T Get<T>(int column) {
             return excelator.Get<T>(line, column);
+        }
+
+        public void SkipRemainder() {
+            stopReadingIssued = true;
+        }
+
+        public void StopReading() {
+            stopReadingIssued = true;
+            throw new ReadingStoppedException();
         }
     }
     
@@ -321,7 +340,9 @@ namespace Figlotech.ExcelUtil
             EnsureRowRange(column, column);
             try {
                 ws.Cells[line, column].Style.Numberformat.Format = value;
+
             } catch (Exception x) {
+
                 //Console.WriteLine(x.Message);
             }
         }
@@ -334,7 +355,9 @@ namespace Figlotech.ExcelUtil
                     ws.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
             }
+
             catch (Exception x) {
+
                 //Console.WriteLine(x.Message);
             }
         }
@@ -371,7 +394,9 @@ namespace Figlotech.ExcelUtil
                     ws.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
             }
+
             catch (Exception x) {
+
                 //Console.WriteLine(x.Message);
             }
         }
@@ -410,10 +435,19 @@ namespace Figlotech.ExcelUtil
         }
 
         public void ReadAll(Action<ExcelatorLineReader> lineFun, int skipLines = 0, Action<Exception> handler = null) {
+            ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
             for (var i = 1 + skipLines; i < ws.Dimension.Rows + 1; i++) {
                 try {
-                    lineFun(new ExcelatorLineReader(i, this));
+                    xcl.CurrentRow = i;
+                    lineFun(xcl);
+                    if(xcl.stopReadingIssued) {
+                        break;
+                    }
                 } catch (Exception x) {
+                    Console.WriteLine($"Err reading Excel Row {x.Message}");
+                    if(x is ReadingStoppedException) {
+                        break;
+                    }
                     handler?.Invoke(x);
                 }
             }

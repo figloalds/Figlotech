@@ -29,7 +29,9 @@ namespace Figlotech.BDados.CustomForms {
             } catch(Exception x) {
                 throw new CustomFormsException($"Custom Form was in an invalid format: {x.Message}");
             }
+
             return null;
+
         }
     }
 }

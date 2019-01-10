@@ -7,6 +7,7 @@ namespace Figlotech.BDados.DataAccessAbstractions
 {
     public interface IRdbmsPluginAdapter {
         IDbConnection GetNewConnection();
+        IDbConnection GetNewSchemalessConnection();
         IQueryGenerator QueryGenerator { get; }
         void SetConfiguration(IDictionary<string, object> a);
         bool ContinuousConnection { get; }

@@ -26,7 +26,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public class JoinDefinition
     {
+
         private bool Validated = false;
+
         public List<JoiningTable> Joins = new List<JoiningTable>();
         public List<Relation> Relations = new List<Relation>();
 

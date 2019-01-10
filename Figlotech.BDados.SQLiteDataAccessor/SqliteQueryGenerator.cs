@@ -28,6 +28,9 @@ using Figlotech.Core.Helpers;
 namespace Figlotech.BDados.SqliteDataAccessor {
     public class SqliteQueryGenerator : IQueryGenerator {
 
+        public IQueryBuilder CreateDatabase(string schemaName) {
+            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
+        }
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
@@ -59,9 +62,8 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         public IQueryBuilder GetCreationCommand(Type t) {
             String objectName = t.Name;
 
-            var members = ReflectionTool.FieldsAndPropertiesOf(t);
-            members.RemoveAll(
-                (m) => m?.GetCustomAttribute<FieldAttribute>() == null);
+            var members = ReflectionTool.FieldsAndPropertiesOf(t)
+                .Where((m) => m?.GetCustomAttribute<FieldAttribute>() != null).ToArray();
             if (objectName == null || objectName.Length == 0)
                 return null;
             QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
@@ -253,9 +255,9 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
 
-        public IQueryBuilder GenerateMultiUpdate<T>(IList<T> inputRecordset) where T : IDataObject {
+        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
             // -- 
-            IList<T> workingSet = new List<T>();
+            List<T> workingSet = new List<T>();
 
             var rid = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
 
@@ -291,8 +293,8 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(IList<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
-            IList<T> workingSet = new List<T>();
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+            List<T> workingSet = new List<T>();
             workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
@@ -435,11 +437,15 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
             return new QbFmt(creationCommand);
         }
-        public IQueryBuilder QueryIds<T>(IList<T> rs) where T : IDataObject {
+        public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
 
             return Qb.Fmt($"SELECT {id.Name}, {rid.Name} FROM {typeof(T).Name} WHERE") + Qb.In(rid.Name, rs, i => i.RID);
+        }
+
+        public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {
+            throw new NotImplementedException();
         }
     }
 }

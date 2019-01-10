@@ -180,7 +180,9 @@ namespace Figlotech.BDados.Authentication {
             }
         }
 
+
         public IUser ForceCreateUser<TUser>(string userName, string password, Action<TUser> a = null) where TUser : IUser, new() {
+
             TUser retv = new TUser();
             a?.Invoke(retv);
             retv.Username = userName;
@@ -191,7 +193,9 @@ namespace Figlotech.BDados.Authentication {
             return retv;
         }
 
+
         public IUser CreateUserSecure<TUser>(string userName, string password, string confirmPassword, Action<TUser> a = null) where TUser: IUser, new() {
+
             if (password != confirmPassword) {
                 throw new BusinessValidationException(Fi.Tech.GetStrings().AUTH_PASSWORDS_MUST_MATCH);
             }

@@ -11,7 +11,9 @@ namespace Figlotech.Core {
     public class Logger : ILogger {
         public static int gid = 0;
         private int myid = ++gid;
+
         private int writec = 0;
+
         public bool Enabled { get; set; } = true;
         public IFileSystem FileAccessor { get; set; }
 
@@ -39,7 +41,9 @@ namespace Figlotech.Core {
 
         }
 
+
         int maxBounce = 5;
+
         public void WriteLog(String log) {
             if (!Enabled)
                 return;

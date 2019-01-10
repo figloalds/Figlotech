@@ -21,7 +21,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public class RecordSet<T> : List<T>, IEnumerable<T>
         where T : IDataObject, new() {
 
+
         internal IDataAccessor dataAccessor;
+
 
         public IDataAccessor DataAccessor { get; set; }
 
@@ -118,7 +120,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this;
         }
 
-        public IList<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
+        public List<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
             Clear();
             var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
             if(agl == null || agl.Any(a=> a == null)) {
@@ -138,7 +140,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return agl;
         }
 
-        public IList<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+        public List<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
             LinearLoad = true;
             var retv = Fetch(cnd, skip, limit, true);
             LinearLoad = false;

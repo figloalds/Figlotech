@@ -12,7 +12,7 @@ using System.Reflection;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor {
 
-        public IList<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
+        public List<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
             lock (command) {
                 transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query");
@@ -202,8 +202,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         static Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
 
-        public IList<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
-            IList<T> retv = new List<T>();
+        public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
+            List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins.ToArray();
             var joinRelations = join.Relations.ToArray();
@@ -286,6 +286,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     ibo.OnAfterLoad(dlc);
                 }
             }
+            transaction?.Benchmarker?.Mark("Build process finished");
+            return retv;
+        }
+
+        private List<IDataObject> BuildStateUpdateQueryResult(ConnectionInfo transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
+            var retv = new List<IDataObject>();
+            transaction?.Benchmarker?.Mark("Init Build Result");
+            ObjectReflector refl = new ObjectReflector();
+            while(reader.Read()) {
+                var typename = reader["TypeName"] as String;
+                var type = workingTypes.FirstOrDefault(wt => wt.Name == typename);
+                if(type == null) {
+                    continue;
+                }
+
+                var instance = Activator.CreateInstance(type);
+                refl.Slot(instance);
+                var tFields = fields[type];
+                for(int i = 0; i < tFields.Length; i++) {
+                    refl[tFields[i]] = reader[$"data_{i}"];
+                }
+                retv.Add(refl.Retrieve() as IDataObject);
+            }
+
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }

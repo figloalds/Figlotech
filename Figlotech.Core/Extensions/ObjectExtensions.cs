@@ -69,8 +69,8 @@ namespace System
                             var valA = objA[field.Key.Name];
                             var valB = objB[field.Key.Name];
                             if (
-                                valA.GetType().IsGenericType && valA.GetType().Implements(typeof(IList<>)) &&
-                                valB.GetType().IsGenericType && valB.GetType().Implements(typeof(IList<>))
+                                valA.GetType().IsGenericType && valA.GetType().Implements(typeof(List<>)) &&
+                                valB.GetType().IsGenericType && valB.GetType().Implements(typeof(List<>))
                             ) {
                                 var addMethod = valB.GetType().GetMethods().FirstOrDefault(m => m.Name == "Add" && m.GetParameters().Length == 1);
                                 var enny = (IEnumerator) valA.GetType().GetMethods().FirstOrDefault(e => e.Name == "GetEnumerator")?.Invoke(valA, new object[0]);

@@ -59,7 +59,7 @@ namespace Figlotech.BDados.Builders {
         static int pids = 0;
         public static string paramId => $"{defParam}{++pids}";
 
-        private static QbFmt ListQueryFunction<T>(string column, IList<T> o, Func<T, object> fn, bool isIn) {
+        private static QbFmt ListQueryFunction<T>(string column, List<T> o, Func<T, object> fn, bool isIn) {
             if (!o.Any()) {
                 return Qb.Fmt(isIn ? "FALSE" : "TRUE");
             }
@@ -128,14 +128,14 @@ namespace Figlotech.BDados.Builders {
             return customAnd;
         }
 
-        public static QbFmt In<T>(string column, IList<T> o, Func<T, object> fn) {
+        public static QbFmt In<T>(string column, List<T> o, Func<T, object> fn) {
             return ListQueryFunction(column, o, fn, true);
         }
-        public static QbFmt NotIn<T>(string column, IList<T> o, Func<T, object> fn) {
+        public static QbFmt NotIn<T>(string column, List<T> o, Func<T, object> fn) {
             return ListQueryFunction(column, o, fn, false);
         }
 
-        public static QbListOf<T> List<T>(IList<T> o, Func<T, object> fn) {
+        public static QbListOf<T> List<T>(List<T> o, Func<T, object> fn) {
             return new QbListOf<T>(o, fn);
         }
         public static QbFmt Fmt(String str, params object[] args) {
@@ -166,20 +166,29 @@ namespace Figlotech.BDados.Builders {
         }
     }
     public class QbListOf<T> : QueryBuilder {
-        public IList<T> List { get; private set; }
+        public List<T> List { get; private set; }
         public Func<T, object> Selector { get; private set; }
-        public QbListOf(IList<T> list, Func<T, object> fn) {
+        public QbListOf(List<T> list, Func<T, object> fn) {
             AppendListOf(list, fn);
         }
     }
     public class QueryBuilder : IQueryBuilder {
         private bool _conditionalEngaged = false;
+
         private bool _elseEngaged = false;
+
         private bool _conditionalRetv = false;
+
+        internal StringBuilder _queryString = new StringBuilder(2048);
+        internal Dictionary<String, Object> _objParams = new Dictionary<String, Object>();
 
         public QueryBuilder() { }
         public QueryBuilder(params object[] args) {
             AppendQuery(args);
+        }
+
+        public void PrepareForQueryLength(int capacity) {
+            _queryString.EnsureCapacity(capacity);
         }
 
         public IDbCommand ToCommand(IDbConnection connection) {
@@ -233,8 +242,6 @@ namespace Figlotech.BDados.Builders {
         //    Append(fragment, args);
         //}
 
-        internal StringBuilder _queryString = new StringBuilder();
-        internal Dictionary<String, Object> _objParams = new Dictionary<String, Object>();
         public bool IsEmpty {
             get {
                 return _queryString.Length == 0;
@@ -256,13 +263,15 @@ namespace Figlotech.BDados.Builders {
                     string result = reader.ReadToEnd();
                     return new QbFmt(result, args);
                 }
+
             } catch (Exception x) {
+
                 throw new BDadosException($"QueryBuilder couldn't load resource: {resourceName}");
             }
 
         }
 
-        public QueryBuilder AppendListOf<T>(IList<T> list, Func<T, object> fn) {
+        public QueryBuilder AppendListOf<T>(List<T> list, Func<T, object> fn) {
             for (int i = 0; i < list.Count; i++) {
                 this.Append("@???", fn(list[i]));
                 if (i < list.Count - 1) {
@@ -319,15 +328,17 @@ namespace Figlotech.BDados.Builders {
 
         public IQueryBuilder Append(String fragment, params object[] args) {
             if (!_conditionalEngaged || (_conditionalEngaged && _conditionalRetv)) {
-                var pat = new Regex(Regex.Escape("@???"));
-                var s = false;
+                if(fragment.Contains("@???")) {
+                    var pat = new Regex(Regex.Escape("@???"));
+                    var s = false;
 
-                do {
-                    s = pat.Match(fragment).Success;
-                    fragment = pat.Replace(fragment, $"@{l}", 1);
-                } while (s);
+                    do {
+                        s = pat.Match(fragment).Success;
+                        fragment = pat.Replace(fragment, $"@{l}", 1);
+                    } while (s);
+                }
                 if (_queryString.Length > 0 && !fragment.StartsWith(" "))
-                    fragment = $" {fragment}";
+                    _queryString.Append(" ");
                 _queryString.Append(fragment);
                 var matchcol = Regex.Matches(fragment, "@(?<tagname>[a-zA-Z0-9_]*)");
                 int iterator = -1;
@@ -343,16 +354,15 @@ namespace Figlotech.BDados.Builders {
                     throw new Exception($@"Parameter count mismatch on QueryBuilder.Append
                         Text was: {fragment}
                         Parameters: {string.Join(", ", args)}");
-
                 }
 
                 foreach (Match match in matches) {
                     var pname = match.Groups["tagname"].Value;
-                    if (_objParams.Where((p) => p.Key == pname).Any()) {
-                        continue;
-                    }
                     if (++iterator > args.Length - 1)
                         break;
+                    if (_objParams.ContainsKey(pname)) {
+                        continue;
+                    }
                     _objParams.Add(pname, args[iterator]);
                 }
             }

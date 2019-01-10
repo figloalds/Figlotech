@@ -139,7 +139,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public class CreateIndexScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
+
         bool _unique;
+
 
         public CreateIndexScAction(
             IRdbmsDataAccessor dataAccessor,
@@ -148,7 +150,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
+
             int v = 0;
+
             if(keyInfo.IsUnique) {
                 return Exec(DataAccessor, DataAccessor.QueryGenerator.AddUniqueKey(
                     keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
@@ -165,7 +169,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public class CreatePrimaryKeyScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
+
         int _length;
+
 
         public CreatePrimaryKeyScAction(
             IRdbmsDataAccessor dataAccessor, ScStructuralLink keyInfo, string reason) : base(dataAccessor, reason) {
@@ -227,7 +233,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.Purge(
                 _table, _column, _refTable, _refColumn, _isNullable));
+
             return 0;
+
         }
 
         public override string ToString() {
@@ -389,7 +397,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     ).ToList();
         }
 
+
         Benchmarker Benchmarker;
+
 
         public bool IsDataObject(Type t) {
             if (t == null) return false;
@@ -510,6 +520,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     if (!renamed) {
                         TablesToCreate.Add(type.Name.ToLower());
+                        keys.Add(new ScStructuralLink {
+                            Column = Fi.Tech.GetIdColumn(type),
+                            Type = ScStructuralKeyType.PrimaryKey,
+                            KeyName = "PRIMARY",
+                            IsUnique = true,
+                            Table = type.Name
+                        });
                         yield return new CreateTableScAction(DataAccessor, type, $"Table {type.Name} does not exit in the structure state.");
                     }
                 }
@@ -602,7 +619,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
+
         public async Task<int> ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
+
             var enny = actions.GetEnumerator();
             int retv = 0;
             int went = 0;
@@ -946,7 +965,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Func<int, Task> onReportTotalTasks = null) {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
-
+            DataAccessor.EnsureDatabaseExists();
             DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=0;");
             //DataAccessor.BeginTransaction();
             try {
@@ -960,7 +979,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     try {
                         action.Execute(DataAccessor);
-                        await onActionProcessed?.Invoke(action);
+                        var t = onActionProcessed?.Invoke(action);
+                        if(t != null && t is Task tk) {
+                            await tk;
+                        }
                     } catch (Exception x) {
                         if (onError != null)
                             await onError?.Invoke(action, x);

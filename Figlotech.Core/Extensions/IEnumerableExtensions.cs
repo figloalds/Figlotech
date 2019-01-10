@@ -50,6 +50,12 @@ namespace System
 
             return retv;
         }
+                                                                    // Cus I'm T int T, I'm dynamite.
+        public static void IterateAssign<T>(this T[] me, Func<T, int, T> act) {
+            me.ForEachIndexed((v, idx) => {
+                me[idx] = act(v, idx);
+            });
+        }
 
         public static void ForEachReverse<T>(this IEnumerable<T> me, Action<T> act) {
             var stack = new Stack<T>();
@@ -59,6 +65,13 @@ namespace System
 
             while(stack.Count > 0) {
                 act?.Invoke(stack.Pop());
+            }
+        }
+
+        public static void ForEachIndexed<T>(this IEnumerable<T> me, Action<T, int> action) {
+            int i = 0;
+            foreach(var a in me) {
+                action(a, i++);
             }
         }
 
@@ -172,6 +185,16 @@ namespace System
         public static void ParallelForEach<T>(this IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
             var tempLi = list.ToList();
             Fi.Tech.BackgroundProcessList(tempLi, work, perWorkExceptionHandler, preWork, postWork, preWorkExceptionHandling, postWorkExceptionHandling);
+        }
+
+        public static IEnumerable<T> Splice<T>(this List<T> li, Predicate<T> predicate) {
+            for(int i = li.Count-1; i >= 0; i--) {
+                if(predicate(li[i])) {
+                    var retv = li[i];
+                    li.RemoveAt(i);
+                    yield return retv;
+                }
+            }
         }
 
         public static T FirstOrDefaultBefore<T>(this IEnumerable<T> me, Predicate<T> predicate) {

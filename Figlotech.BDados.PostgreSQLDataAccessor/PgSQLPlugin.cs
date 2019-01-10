@@ -34,6 +34,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new NpgsqlConnection(Config.GetConnectionString());
         }
 
+        public IDbConnection GetNewSchemalessConnection() {
+            var schemalessConfig = new PgSQLPluginConfiguration();
+            schemalessConfig.CopyFrom(Config);
+            schemalessConfig.Database = null;
+            return new NpgsqlConnection(schemalessConfig.GetConnectionString());
+        }
+
         static long idGen = 0;
         long myId = ++idGen;
 
