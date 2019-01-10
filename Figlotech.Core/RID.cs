@@ -1,7 +1,10 @@
 ﻿using Figlotech.Extensions;
+using Newtonsoft.Json;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Net.NetworkInformation;
 using System.Text;
 
@@ -14,7 +17,7 @@ namespace Figlotech.Core {
 
         static uint segmentESequential = 0;
         static uint segmentEOrigin = (uint)(rng.Next(0, Int32.MaxValue)) + (uint)(rng.Next(0, Int32.MaxValue));
-
+        private static RID _mrid2 = null;
         private static RID _machineRID = null;
         public static RID MachineRID {
             get {
@@ -23,30 +26,47 @@ namespace Figlotech.Core {
                 }
 
                 try {
-                    foreach (var iface in NetworkInterface.GetAllNetworkInterfaces()) {
-                        var lbi = NetworkInterface.LoopbackInterfaceIndex;
-                        var id = NetworkInterface.GetAllNetworkInterfaces()[lbi].Id.Replace("{", "").Replace("}", "").Replace("-", "");
-                        var segmentA = Enumerable.Range(0, id.Length)
-                             .Where(x => x % 2 == 0)
-                             .Select(x => Convert.ToByte(id.Substring(x, 2), 16))
-                             .ToArray();
-                        var segmentB = iface.GetPhysicalAddress().GetAddressBytes();
-                        var segmentC = Fi.Range(0, 32 - (segmentA.Length + segmentB.Length)).Select(i => (byte)mRng.Next(256)).ToArray();
-                        var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
 
-                        _machineRID = new RID(finalRid);
-                        return _machineRID;
+                    var di = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System)));
 
-                    }
+                    var lbif = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(i => i.NetworkInterfaceType == NetworkInterfaceType.Loopback);
+                    var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
+
+                        using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
+                            if(Environment.OSVersion.Platform == PlatformID.Win32NT) {
+                                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMedia");
+                                foreach (ManagementObject wmi_HD in searcher.Get()) {
+                                    writer.WriteLine(JsonConvert.SerializeObject(wmi_HD));
+                                }
+                            } else {
+                                writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
+                            }
+                        }
+
+                    }), 32);
+                    var id = lbif.Id.Replace("{", "").Replace("}", "").Replace("-", "");
+                    var segmentA = BitConverter.GetBytes(di.RootDirectory.CreationTimeUtc.Ticks);
+                    var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(lbif.Id), 8);
+                    var segmentC = new byte[32 - (segmentA.Length + segmentB.Length)];
+                    segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng.Next(256))));
+                    var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
+                    finalRid.IterateAssign((v, idx) => (byte)(v ^ hwid[idx]));
+
+                    _mrid2 = new RID(finalRid);
+                    _machineRID = new RID(finalRid);
+                    return _machineRID;
+
                 } catch (Exception x) {
-
+                    Console.WriteLine(x.Message);
                 }
-                var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
-                if (!string.IsNullOrEmpty(envRid)) {
-                    var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
-                    if(itx.Length == 32) {
-                        _machineRID = new RID(itx);
-                        return _machineRID;
+                if(Environment.UserName == "IISAPPPOOL") {
+                    var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
+                    if (!string.IsNullOrEmpty(envRid)) {
+                        var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
+                        if (itx.Length == 32) {
+                            _machineRID = new RID(itx);
+                            return _machineRID;
+                        }
                     }
                 }
 
@@ -58,10 +78,19 @@ namespace Figlotech.Core {
                     _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
                     _machineRID = new RID();
                     File.WriteAllBytes(fileName, _machineRID.AsByteArray);
+                    try {
+                        File.SetAttributes(fileName, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
+
+                    } catch(Exception x) {
+
+
+                    }
                 } else {
                     try {
                         _machineRID = new RID(File.ReadAllBytes(fileName));
+
                     } catch (Exception x) {
+
                         File.Delete(fileName);
                         return MachineRID;
                     }
