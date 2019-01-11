@@ -50,13 +50,20 @@ namespace System
 
             return retv;
         }
-                                                                    // Cus I'm T int T, I'm dynamite.
+
+        public static void MoveAllTo<T>(this List<T> li, List<T> other, Predicate<T> predicate = null) {
+            if (predicate == null) {
+                predicate = (item) => true;
+            }
+            other.AddRange(li.Splice(predicate));
+        }
+                                                        // Cus I'm T int T, I'm dynamite.
         public static void IterateAssign<T>(this T[] me, Func<T, int, T> act) {
             me.ForEachIndexed((v, idx) => {
                 me[idx] = act(v, idx);
             });
         }
-
+        
         public static void ForEachReverse<T>(this IEnumerable<T> me, Action<T> act) {
             var stack = new Stack<T>();
             foreach(var item in me) {

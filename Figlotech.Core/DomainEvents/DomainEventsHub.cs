@@ -75,6 +75,34 @@ namespace Figlotech.Core.DomainEvents {
             Fi.Tech.WriteLine("FTH:EventHub", log);
         }
 
+        Dictionary<Type, List<ILogicHook>> LogicHooks = new Dictionary<Type, List<ILogicHook>>();
+
+        public void RegisterLogicHook(Type t, ILogicHook hook) {
+            if (!LogicHooks.ContainsKey(t)) {
+                LogicHooks.Add(t, new List<ILogicHook>());
+            }
+            if(!LogicHooks[t].Contains(hook)) {
+                LogicHooks[t].Add(hook);
+            }
+        }
+
+        public void RegisterLogicHook<T>(LogicHook<T> hook) {
+            RegisterLogicHook(typeof(T), hook);
+        }
+
+        public void ExecuteLogicHooks<T>(int opcode, T input) {
+            if(!LogicHooks.ContainsKey(typeof(T))) {
+                return;
+            }
+            foreach(var hook in LogicHooks[typeof(T)]) {
+                try {
+                    hook.Execute(opcode, input);
+                } catch(Exception x) {
+                    hook.OnError(opcode, input, x);
+                }
+            }
+        }
+
         public void Raise(IDomainEvent domainEvent) {
             WriteLog($"Raising Event {domainEvent.GetType()}");
             // Cache event
