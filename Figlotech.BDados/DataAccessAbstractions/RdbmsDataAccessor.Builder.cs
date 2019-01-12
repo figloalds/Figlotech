@@ -10,7 +10,7 @@ using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public partial class RdbmsDataAccessor {
+    public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable  {
 
         public List<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
@@ -25,7 +25,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
         }
-
+        
         public DataSet GetDataSet(IDbCommand command) {
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
@@ -202,7 +202,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         static Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
 
-        public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
+        public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins.ToArray();
@@ -272,7 +272,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var dlc = new DataLoadContext {
                 DataAccessor = this,
-                IsAggregateLoad = true
+                IsAggregateLoad = true,
+                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
             transaction?.Benchmarker?.Mark("Run afterloads");
             if (retv.Any()) {

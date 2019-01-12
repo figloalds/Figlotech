@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 using System.Linq.Expressions;
 using Figlotech.Core.Interfaces;
 using System.IO;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
+    
     public interface IRdbmsDataAccessor : IDataAccessor
     {
         event Action<Type, IDataObject[]> OnSuccessfulSave;
@@ -25,10 +27,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);
 
         List<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
-        List<T> Fetch<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
-        List<T> Fetch<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
         //T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new();
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
@@ -72,19 +74,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         DataTable Query(ConnectionInfo transaction, IQueryBuilder Query);
         List<T> Query<T>(ConnectionInfo transaction, IQueryBuilder Query = null) where T : new();
         int Execute(ConnectionInfo transaction, IQueryBuilder Query);
-        List<T> Fetch<T>(ConnectionInfo transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        List<T> LoadAll<T>(ConnectionInfo transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(ConnectionInfo transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
+        List<T> LoadAll<T>(ConnectionInfo transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
         bool SaveItem(ConnectionInfo transaction, IDataObject objeto);
         bool SaveList<T>(ConnectionInfo transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
 
-        T LoadFirstOrDefault<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        T LoadFirstOrDefault<T>(ConnectionInfo transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         T LoadByRid<T>(ConnectionInfo transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(ConnectionInfo transaction, long Id) where T : IDataObject, new();
 
         //T ForceExist<T>(ConnectionInfo transaction, Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
-        List<T> LoadAll<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        List<T> Fetch<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        List<T> LoadAll<T>(ConnectionInfo transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(ConnectionInfo transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
 
         bool DeleteWhereRidNotIn<T>(ConnectionInfo transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new();
         bool Delete<T>(ConnectionInfo transaction, Expression<Func<T, bool>> condition) where T : IDataObject, new();
@@ -92,13 +94,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new();
         bool Delete<T>(ConnectionInfo transaction, IEnumerable<T> obj) where T : IDataObject, new();
 
-
         List<T> AggregateLoad<T>(
             ConnectionInfo transaction, 
-            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
-            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
-            MemberInfo GroupingMember = null,
-            bool Linear = false) where T : IDataObject, new();
+            LoadAllArgs<T> args = null) where T : IDataObject, new();
 
     }
 }

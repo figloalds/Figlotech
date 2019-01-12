@@ -19,6 +19,10 @@ namespace Figlotech.Core.Helpers {
             expression = Expression.OrElse(expression, expr.Body);
         }
 
+        public Expression<Func<T, bool>> ToLambdaExpression() {
+            return Expression.Lambda<Func<T, bool>>(this.expression, Expression.Parameter(typeof(T)));
+        }
+
         public static implicit operator Expression<Func<T, bool>>(Conditions<T> me) {
             return Expression.Lambda<Func<T, bool>>(me.expression, Expression.Parameter(typeof(T)));
         }

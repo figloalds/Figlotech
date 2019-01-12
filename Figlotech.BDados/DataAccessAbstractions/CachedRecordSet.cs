@@ -56,7 +56,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public T GetItem(Expression<Func<T, bool>> expr, Func<T> customInit = null) {
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null) {
-                retv = new RecordSet<T>(DataAccessor).LoadAll(new Conditions<T>(expr)).FirstOrDefault();
+                retv = new RecordSet<T>(DataAccessor).LoadAll(LArgs.Where(expr)).FirstOrDefault();
                 if (retv != null) {
                     lock (listLockObject)
                         this.Add(retv);

@@ -8,7 +8,9 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
-    public class CustomDomainValidation {
+
+
+    public class CustomDomainValidation  {
         public CustomDomainValidation(IValidationRule validator, int? phase) {
             this.Validator = validator;
             this.ValidationPhase = phase;
@@ -53,7 +55,7 @@ namespace Figlotech.Core.DomainEvents {
         public List<IDomainEvent> EventCache { get; private set; } = new List<IDomainEvent>();
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
-        public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
+        //public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
 
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
@@ -75,30 +77,30 @@ namespace Figlotech.Core.DomainEvents {
             Fi.Tech.WriteLine("FTH:EventHub", log);
         }
 
-        Dictionary<Type, List<ILogicHook>> LogicHooks = new Dictionary<Type, List<ILogicHook>>();
+        Dictionary<Type, List<IPlugin>> Plugins = new Dictionary<Type, List<IPlugin>>();
 
-        public void RegisterLogicHook(Type t, ILogicHook hook) {
-            if (!LogicHooks.ContainsKey(t)) {
-                LogicHooks.Add(t, new List<ILogicHook>());
+        public void RegisterPlugin(Type t, IPlugin Plugin) {
+            if (!Plugins.ContainsKey(t)) {
+                Plugins.Add(t, new List<IPlugin>());
             }
-            if(!LogicHooks[t].Contains(hook)) {
-                LogicHooks[t].Add(hook);
+            if(!Plugins[t].Contains(Plugin)) {
+                Plugins[t].Add(Plugin);
             }
         }
 
-        public void RegisterLogicHook<T>(LogicHook<T> hook) {
-            RegisterLogicHook(typeof(T), hook);
+        public void RegisterPlugin<T>(Plugin<T> Plugin) {
+            RegisterPlugin(typeof(T), Plugin);
         }
 
-        public void ExecuteLogicHooks<T>(int opcode, T input) {
-            if(!LogicHooks.ContainsKey(typeof(T))) {
+        public void ExecutePlugins<T>(int opcode, T input) {
+            if(!Plugins.ContainsKey(typeof(T))) {
                 return;
             }
-            foreach(var hook in LogicHooks[typeof(T)]) {
+            foreach(var Plugin in Plugins[typeof(T)]) {
                 try {
-                    hook.Execute(opcode, input);
+                    Plugin.Execute(opcode, input);
                 } catch(Exception x) {
-                    hook.OnError(opcode, input, x);
+                    Plugin.OnError(opcode, input, x);
                 }
             }
         }
@@ -148,40 +150,40 @@ namespace Figlotech.Core.DomainEvents {
             }
         }
 
-        /// <summary>
-        /// Invokes previously registered domain hub validators within the same specified phase.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="validator">The object to run validations against</param>
-        /// <param name="phase">The validation phase to apply, only validation rules in this phase will be invoked.</param>
-        public ValidationErrors RunValidators<T>(T validationTarget, int? phase = null) where T : IBusinessObject, new() {
-            ValidationErrors errs = new ValidationErrors();
+        ///// <summary>
+        ///// Invokes previously registered domain hub validators within the same specified phase.
+        ///// </summary>
+        ///// <typeparam name="T"></typeparam>
+        ///// <param name="validator">The object to run validations against</param>
+        ///// <param name="phase">The validation phase to apply, only validation rules in this phase will be invoked.</param>
+        //public ValidationErrors RunValidators<T>(T validationTarget, int? phase = null) where T : IBusinessObject, new() {
+        //    ValidationErrors errs = new ValidationErrors();
 
-            foreach (var validation in CustomValidators) {
-                if (validation.ValidationPhase == phase) {
-                    try {
-                        validation.Validator.Validate(validationTarget as IBusinessObject, errs);
-                    } catch (Exception x) {
-                        errs.Add("Application", $"Validation has throw an Exception");
-                        this.WriteLog(x.Message);
-                        this.WriteLog(x.StackTrace);
-                    }
-                }
-            }
+        //    foreach (var validation in CustomValidators) {
+        //        if (validation.ValidationPhase == phase) {
+        //            try {
+        //                validation.Validator.Validate(validationTarget as IBusinessObject, errs);
+        //            } catch (Exception x) {
+        //                errs.Add("Application", $"Validation has throw an Exception");
+        //                this.WriteLog(x.Message);
+        //                this.WriteLog(x.StackTrace);
+        //            }
+        //        }
+        //    }
 
-            return errs;
-        }
+        //    return errs;
+        //}
 
-        /// <summary>
-        /// Adds a custom validator to this domain hub, with the option to specify a custom validation phase.
-        /// When Running validations from this same hub, only validations within the same phase will be invoked.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="validator">The validator function to invoke</param>
-        /// <param name="validationPhase">The validation phase in which this validation rule should apply, only validations runs invoking this phase will effectively invoke this rule..</param>
-        public void SubscribeValidator<T>(IValidationRule<T> validator, int? validationPhase = null) where T : IBusinessObject, new() {
-            CustomValidators.Add(new CustomDomainValidation(validator, validationPhase));
-        }
+        ///// <summary>
+        ///// Adds a custom validator to this domain hub, with the option to specify a custom validation phase.
+        ///// When Running validations from this same hub, only validations within the same phase will be invoked.
+        ///// </summary>
+        ///// <typeparam name="T"></typeparam>
+        ///// <param name="validator">The validator function to invoke</param>
+        ///// <param name="validationPhase">The validation phase in which this validation rule should apply, only validations runs invoking this phase will effectively invoke this rule..</param>
+        //public void SubscribeValidator<T>(IValidationRule<T> validator, int? validationPhase = null) where T : IBusinessObject, new() {
+        //    CustomValidators.Add(new CustomDomainValidation(validator, validationPhase));
+        //}
 
         public bool IsTimeInDomainCacheDuration(DateTime dt) {
             return DateTime.UtcNow.Subtract(dt) > EventCacheDuration;

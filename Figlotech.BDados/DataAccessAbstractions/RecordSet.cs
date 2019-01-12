@@ -110,19 +110,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        public RecordSet<T> LoadAll(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
-            AddRange(Fetch(cnd, skip, limit));
+        public RecordSet<T> LoadAll(LoadAllArgs<T> args = null) {
+            AddRange(Fetch(args));
             return this;
         }
 
-        public RecordSet<T> LoadAllLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
-            AddRange(FetchLinear(cnd, skip, limit));
+        public RecordSet<T> LoadAllLinear(LoadAllArgs<T> args = null) {
+            AddRange(FetchLinear(args));
             return this;
         }
 
-        public List<T> Fetch(Expression<Func<T,bool>> cnd = null, int? skip = null, int? limit = null, bool Linear = false) {
+        public List<T> Fetch(LoadAllArgs<T> args = null) {
             Clear();
-            var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, OrderingMember, Ordering, GroupingMember, Linear);
+            var agl = DataAccessor.AggregateLoad<T>(args);
             if(agl == null || agl.Any(a=> a == null)) {
                 throw new BDadosException("CRITICAL DATA MAPPING ERROR!");
             }
@@ -140,9 +140,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return agl;
         }
 
-        public List<T> FetchLinear(Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null) {
+        public List<T> FetchLinear(LoadAllArgs<T> args = null) {
             LinearLoad = true;
-            var retv = Fetch(cnd, skip, limit, true);
+            var retv = Fetch(args.NoLists());
             LinearLoad = false;
             return retv;
         }

@@ -33,19 +33,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         
-        public static void LoadAll<T>(this List<T> me, IDataAccessor DataAccessor, 
-            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
-            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
-            MemberInfo GroupingMember = null) where T : IDataObject, new() {
-            var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, orderingMember, otype, GroupingMember, false);
+        public static void LoadAll<T>(this List<T> me, IDataAccessor DataAccessor,
+            LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            var agl = DataAccessor.AggregateLoad<T>(args);
             agl.ForEach(a=> me.Add(a));
             agl.Clear();
         }
 
-        public static void LoadAllLinear<T>(this List<T> me, IDataAccessor DataAccessor, Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null,
-            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc,
-            MemberInfo GroupingMember = null) where T : IDataObject, new() {
-            var agl = DataAccessor.AggregateLoad<T>(cnd, skip, limit, orderingMember, otype, GroupingMember, true);
+        public static void LoadAllLinear<T>(this List<T> me, IDataAccessor DataAccessor, LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            var agl = DataAccessor.AggregateLoad<T>(args.NoLists());
             agl.ForEach(a => me.Add(a));
             agl.Clear();
         }

@@ -7,6 +7,11 @@ namespace Figlotech.Core.BusinessModel {
     public class DataLoadContext {
         public IDataAccessor DataAccessor { get; set; }
         public bool IsAggregateLoad { get; set; }
+        public object ContextTransferObject { get; set; }
+
+        public T ContextAs<T>() {
+            return (T) ContextTransferObject;
+        }
     }
 
     public interface IBusinessObject {

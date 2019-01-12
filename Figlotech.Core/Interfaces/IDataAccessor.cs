@@ -10,16 +10,136 @@ namespace Figlotech.Core.Interfaces {
         Asc,
         Desc
     }
+    public class LoadAllArgs<T> where T: IDataObject, new() {
+        public Expression<Func<T, bool>> Conditions { get; private set; } = null;
+        public int? RowSkip { get; private set; } = null;
+        public int? RowLimit { get; private set; } = null;
+        public Expression<Func<T, object>> OrderingMember { get; private set; } = null; 
+        public OrderingType OrderingType { get; private set; } = OrderingType.Asc;
+        public MemberInfo GroupingMember { get; private set; } = null;
+        public bool Linear { get; private set; } = false;
+        public object ContextObject { get; set; }
 
+        IDataAccessor DataAccessor { get; set; }
+
+        public LoadAllArgs() {
+
+        }
+
+        public LoadAllArgs(IDataAccessor dataAccessor) {
+            this.DataAccessor = dataAccessor;
+        }
+
+        public LoadAllArgs<T> Where(Expression<Func<T, bool>> conditions) {
+            this.Conditions = conditions;
+            return this;
+        }
+        public LoadAllArgs<T> Skip(int? skip) {
+            RowSkip = skip;
+            return this;
+        }
+        public LoadAllArgs<T> Limit(int? limit) {
+            RowLimit = limit;
+            return this;
+        }
+        public LoadAllArgs<T> OrderBy(Expression<Func<T, object>> orderingMember, OrderingType orderingType = OrderingType.Asc) {
+            OrderingMember = orderingMember;
+            OrderingType = orderingType;
+            return this;
+        }
+        public LoadAllArgs<T> GroupBy(MemberInfo groupingMember) {
+            GroupingMember = groupingMember;
+            return this;
+        }
+        public LoadAllArgs<T> LinearIf(bool linearity) {
+            Linear = linearity;
+            return this;
+        }
+        public LoadAllArgs<T> Full() {
+            Linear = false;
+            return this;
+        }
+        public LoadAllArgs<T> NoLists() {
+            Linear = true;
+            return this;
+        }
+        public LoadAllArgs<T> WithContext(object ContextObject) {
+            this.ContextObject = ContextObject;
+            return this;
+        }
+
+        public List<T> Aggregate() {
+            return DataAccessor.AggregateLoad(this);
+        }
+        public IEnumerable<T> Fetch() {
+            return DataAccessor.Fetch(this);
+        }
+        public IEnumerable<T> Load() {
+            return DataAccessor.LoadAll(this);
+        }
+    }
+    public class IntermediateLargs {
+        public IntermediateLargs(IDataAccessor dataAccessor) {
+            DataAccessor = dataAccessor;
+        }
+
+        private IDataAccessor DataAccessor { get; set; }
+        public LoadAllArgs<T> Select<T>()
+            where T : IDataObject, new() {
+            return new LoadAllArgs<T>(DataAccessor);
+        }
+    }
+    public class LoadAll : LArgs { }
+    public class LArgs {
+
+        public static IntermediateLargs Using(IDataAccessor dataAccessor) {
+            return new IntermediateLargs(dataAccessor);
+        }
+
+        public static LoadAllArgs<T> Where<T>(Expression<Func<T, bool>> conditions) 
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().Where(conditions);
+
+        public static LoadAllArgs<T> Skip<T>(int? skip)
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().Skip(skip);
+
+        public static LoadAllArgs<T> Limit<T>(int? limit)
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().Limit(limit);
+
+        public static LoadAllArgs<T> OrderBy<T>(Expression<Func<T, object>> orderingMember, OrderingType orderingType = OrderingType.Asc)
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().OrderBy(orderingMember, orderingType);
+
+        public static LoadAllArgs<T> GroupBy<T>(MemberInfo groupingMember) 
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().GroupBy(groupingMember);
+        public LoadAllArgs<T> LinearIf<T>(bool linearity)
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().LinearIf(linearity);
+        public static LoadAllArgs<T> Full<T>() 
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().Full();
+
+        public static LoadAllArgs<T> NoLists<T>() 
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().NoLists();
+
+        public LoadAllArgs<T> WithContext<T>(object ContextObject)
+            where T : IDataObject, new()
+            => new LoadAllArgs<T>().WithContext(ContextObject);
+    }
+    
     public interface IDataAccessor
     {
         ILogger Logger { get; set; }
 
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
-        List<T> LoadAll<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        List<T> Fetch<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        List<T> LoadAll<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
+        IEnumerable<T> Fetch<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
 
-        T LoadFirstOrDefault<T>(Expression<Func<T, bool>> condicoes, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
+        T LoadFirstOrDefault<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
         T LoadByRid<T>(String RID) where T : IDataObject, new();
         T LoadById<T>(long Id) where T : IDataObject, new();
 
@@ -34,10 +154,7 @@ namespace Figlotech.Core.Interfaces {
 
         Type[] WorkingTypes { get; set; }
 
-        List<T> AggregateLoad<T>(
-            Expression<Func<T, bool>> cnd = null, int? skip = null, int? limit = null, 
-            Expression<Func<T, object>> orderingMember = null, OrderingType otype = OrderingType.Asc, 
-            MemberInfo GroupingMember = null, bool Linear = false) where T : IDataObject, new();
+        List<T> AggregateLoad<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
 
     }
 }

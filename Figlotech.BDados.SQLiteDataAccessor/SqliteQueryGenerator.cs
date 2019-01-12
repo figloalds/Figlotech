@@ -20,10 +20,10 @@ using System.Reflection;
 using System.Linq.Expressions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.Core;
 using System.Text.RegularExpressions;
 using Figlotech.BDados.Builders;
 using Figlotech.Core.Helpers;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public class SqliteQueryGenerator : IQueryGenerator {

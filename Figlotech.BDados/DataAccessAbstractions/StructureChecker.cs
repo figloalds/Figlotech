@@ -965,7 +965,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Func<int, Task> onReportTotalTasks = null) {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
-            DataAccessor.EnsureDatabaseExists();
+            try {
+                DataAccessor.EnsureDatabaseExists();
+            } catch(Exception x) {
+                // DRAGONS
+
+            }
             DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=0;");
             //DataAccessor.BeginTransaction();
             try {

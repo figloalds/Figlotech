@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using Figlotech.Core.Interfaces;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);
@@ -19,7 +20,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
         IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, int? skip, int? limit, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
-        IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder condicoes, int? p = 1, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null);
+        IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder condicoes, int? p = 0, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null);
         IQueryBuilder GenerateMultiInsert<T>(List<T> conjuntoInput, bool OmmitPk = true) where T : IDataObject;
         IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject;
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
