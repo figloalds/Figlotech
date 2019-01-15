@@ -77,30 +77,30 @@ namespace Figlotech.Core.DomainEvents {
             Fi.Tech.WriteLine("FTH:EventHub", log);
         }
 
-        Dictionary<Type, List<IPlugin>> Plugins = new Dictionary<Type, List<IPlugin>>();
+        List<IExtension> Extensions = new List<IExtension>();
 
-        public void RegisterPlugin(Type t, IPlugin Plugin) {
-            if (!Plugins.ContainsKey(t)) {
-                Plugins.Add(t, new List<IPlugin>());
+        public void RegisterExtension(IExtension Extension) {
+            if(Extension == null) {
+                throw new ArgumentNullException("Trying to register null extension");
             }
-            if(!Plugins[t].Contains(Plugin)) {
-                Plugins[t].Add(Plugin);
+            if(!Extensions.Contains(Extension)) {
+                Extensions.Add(Extension);
             }
         }
 
-        public void RegisterPlugin<T>(Plugin<T> Plugin) {
-            RegisterPlugin(typeof(T), Plugin);
+        public void RegisterExtension<TOpCode, T>(Extension<TOpCode, T> Extension) {
+            RegisterExtension(Extension);
         }
 
-        public void ExecutePlugins<T>(int opcode, T input) {
-            if(!Plugins.ContainsKey(typeof(T))) {
-                return;
-            }
-            foreach(var Plugin in Plugins[typeof(T)]) {
-                try {
-                    Plugin.Execute(opcode, input);
-                } catch(Exception x) {
-                    Plugin.OnError(opcode, input, x);
+        public void ExecuteExtensions<TOpCode, T>(TOpCode opcode, T input) {
+
+            foreach(var Extension in Extensions) {
+                if(Extension is Extension<TOpCode, T> ext) {
+                    try {
+                        ext.Execute(opcode, input);
+                    } catch (Exception x) {
+                        ext.OnError(opcode, input, x);
+                    }
                 }
             }
         }
