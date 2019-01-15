@@ -96,11 +96,7 @@ namespace Figlotech.Core.Interfaces {
         }
     }
 
-    public class LoadAll : FetchData { }
-
-    // This is just to avoid writing the full address to LoadAll on 
-    // classes that has a method named LoadAll
-    public class FetchData {
+    public class LoadAll {
 
         public static LoadAllArgs<T> From<T>() where T : IDataObject, new() {
             return new LoadAllArgs<T>();

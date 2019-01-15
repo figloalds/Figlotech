@@ -208,7 +208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(FetchData.Where<T>(qb));
+            var f = LoadAll<T>(Core.Interfaces.LoadAll.Where<T>(qb));
             if (f.Any()) {
                 return f.First();
             } else {

@@ -10,7 +10,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static List<T> LoadAll<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
             where T : IDataObject, new() {
             return self.LoadAll<T>(
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -20,7 +20,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static T LoadFirstOrDefault<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
            where T : IDataObject, new() {
             return self.LoadFirstOrDefault<T>(
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -30,7 +30,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static IEnumerable<T> Fetch<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
            where T : IDataObject, new() {
             return self.LoadAll<T>(
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -40,7 +40,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static List<T> AggregateLoad<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
            where T : IDataObject, new() {
             return self.AggregateLoad<T>(
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -54,7 +54,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static RecordSet<T> LoadAll<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
             where T : IDataObject, new() {
             return self.LoadAll(
-                FetchData.Where(conditions)
+                Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -63,7 +63,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static RecordSet<T> LoadAllLinear<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
            where T : IDataObject, new() {
             return self.LoadAllLinear(
-                FetchData.Where(conditions)
+                Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -73,7 +73,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static IEnumerable<T> Fetch<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
             where T : IDataObject, new() {
             return self.Fetch(
-                FetchData.Where(conditions)
+                Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -83,7 +83,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static IEnumerable<T> FetchLinear<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
            where T : IDataObject, new() {
             return self.FetchLinear(
-                FetchData.Where(conditions)
+                Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -96,7 +96,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             where T : IDataObject, new() {
             return self.LoadAll<T>(
                 transaction,
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -107,7 +107,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
            where T : IDataObject, new() {
             return self.LoadFirstOrDefault<T>(
                 transaction,
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -118,7 +118,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
            where T : IDataObject, new() {
             return self.LoadAll<T>(
                 transaction,
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
@@ -129,7 +129,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
            where T : IDataObject, new() {
             return self.AggregateLoad<T>(
                 transaction,
-                FetchData.Where<T>(conditions)
+                Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
                     .OrderBy(orderingMember, ordering)
