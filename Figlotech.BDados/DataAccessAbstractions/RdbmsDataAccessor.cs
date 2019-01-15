@@ -54,6 +54,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Step() {
+            if (Connection.State != ConnectionState.Open) {
+                DataAccessor.OpenConnection(Connection);
+            }
             if (!FiTechCoreExtensions.EnableDebug)
                 return;
             try {
@@ -151,8 +154,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         #region **** Global Declaration ****
         protected IRdbmsPluginAdapter Plugin;
 
-        //private DataAccessorPlugin.Config Plugin.Config;
-
         private int _simmultaneoustransactions;
 
 
@@ -174,8 +175,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //
         #region **** General Functions ****
 
-        public RdbmsDataAccessor(IRdbmsPluginAdapter plugin) {
-            Plugin = plugin;
+        public RdbmsDataAccessor(IRdbmsPluginAdapter extension) {
+            Plugin = extension;
         }
 
         public void EnsureDatabaseExists() {
@@ -207,7 +208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(LArgs.Where<T>(qb));
+            var f = LoadAll<T>(FetchData.Where<T>(qb));
             if (f.Any()) {
                 return f.First();
             } else {
@@ -732,7 +733,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        private void OpenConnection(IDbConnection connection) {
+        internal void OpenConnection(IDbConnection connection) {
             int attempts = DefaultMaxOpenAttempts;
             Exception ex = null;
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {

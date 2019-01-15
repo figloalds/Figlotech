@@ -4,17 +4,20 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 
 namespace Figlotech.Core.Interfaces {
     public enum OrderingType {
         Asc,
         Desc
     }
-    public class LoadAllArgs<T> where T: IDataObject, new() {
+
+
+    public class LoadAllArgs<T> where T : IDataObject, new() {
         public Expression<Func<T, bool>> Conditions { get; private set; } = null;
         public int? RowSkip { get; private set; } = null;
         public int? RowLimit { get; private set; } = null;
-        public Expression<Func<T, object>> OrderingMember { get; private set; } = null; 
+        public Expression<Func<T, object>> OrderingMember { get; private set; } = null;
         public OrderingType OrderingType { get; private set; } = OrderingType.Asc;
         public MemberInfo GroupingMember { get; private set; } = null;
         public bool Linear { get; private set; } = false;
@@ -68,35 +71,42 @@ namespace Figlotech.Core.Interfaces {
             return this;
         }
 
-        public List<T> Aggregate() {
-            return DataAccessor.AggregateLoad(this);
-        }
-        public IEnumerable<T> Fetch() {
-            return DataAccessor.Fetch(this);
-        }
-        public IEnumerable<T> Load() {
-            return DataAccessor.LoadAll(this);
+        public IntermediateLoadAllArgs<T> Using(IDataAccessor dataAccessor) {
+            return new IntermediateLoadAllArgs<T>(dataAccessor, this);
         }
     }
-    public class IntermediateLargs {
-        public IntermediateLargs(IDataAccessor dataAccessor) {
+
+    public class IntermediateLoadAllArgs<T> where T : IDataObject, new() {
+        public IntermediateLoadAllArgs(IDataAccessor dataAccessor, LoadAllArgs<T> largs) {
             DataAccessor = dataAccessor;
+            LoadAllArgs = largs;
         }
 
         private IDataAccessor DataAccessor { get; set; }
-        public LoadAllArgs<T> Select<T>()
-            where T : IDataObject, new() {
-            return new LoadAllArgs<T>(DataAccessor);
+        private LoadAllArgs<T> LoadAllArgs { get; set; }
+
+        public List<T> Aggregate() {
+            return DataAccessor.AggregateLoad(LoadAllArgs);
+        }
+        public IEnumerable<T> Fetch() {
+            return DataAccessor.Fetch(LoadAllArgs);
+        }
+        public IEnumerable<T> Load() {
+            return DataAccessor.LoadAll(LoadAllArgs);
         }
     }
-    public class LoadAll : LArgs { }
-    public class LArgs {
 
-        public static IntermediateLargs Using(IDataAccessor dataAccessor) {
-            return new IntermediateLargs(dataAccessor);
+    public class LoadAll : FetchData { }
+
+    // This is just to avoid writing the full address to LoadAll on 
+    // classes that has a method named LoadAll
+    public class FetchData {
+
+        public static LoadAllArgs<T> From<T>() where T : IDataObject, new() {
+            return new LoadAllArgs<T>();
         }
 
-        public static LoadAllArgs<T> Where<T>(Expression<Func<T, bool>> conditions) 
+        public static LoadAllArgs<T> Where<T>(Expression<Func<T, bool>> conditions)
             where T : IDataObject, new()
             => new LoadAllArgs<T>().Where(conditions);
 
@@ -112,17 +122,17 @@ namespace Figlotech.Core.Interfaces {
             where T : IDataObject, new()
             => new LoadAllArgs<T>().OrderBy(orderingMember, orderingType);
 
-        public static LoadAllArgs<T> GroupBy<T>(MemberInfo groupingMember) 
+        public static LoadAllArgs<T> GroupBy<T>(MemberInfo groupingMember)
             where T : IDataObject, new()
             => new LoadAllArgs<T>().GroupBy(groupingMember);
         public LoadAllArgs<T> LinearIf<T>(bool linearity)
             where T : IDataObject, new()
             => new LoadAllArgs<T>().LinearIf(linearity);
-        public static LoadAllArgs<T> Full<T>() 
+        public static LoadAllArgs<T> Full<T>()
             where T : IDataObject, new()
             => new LoadAllArgs<T>().Full();
 
-        public static LoadAllArgs<T> NoLists<T>() 
+        public static LoadAllArgs<T> NoLists<T>()
             where T : IDataObject, new()
             => new LoadAllArgs<T>().NoLists();
 
@@ -130,7 +140,7 @@ namespace Figlotech.Core.Interfaces {
             where T : IDataObject, new()
             => new LoadAllArgs<T>().WithContext(ContextObject);
     }
-    
+
     public interface IDataAccessor
     {
         ILogger Logger { get; set; }

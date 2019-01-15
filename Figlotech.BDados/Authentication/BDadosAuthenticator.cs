@@ -151,7 +151,7 @@ namespace Figlotech.BDados.Authentication {
             if (v.Any())
                 return v.First().Session;
             else {
-                var fetchSession = DataAccessor.LoadAll<TSession>(LArgs.Where<TSession>((us) => us.Token == Token));
+                var fetchSession = DataAccessor.LoadAll<TSession>(FetchData.Where<TSession>((us) => us.Token == Token));
                 if (fetchSession.Any()) {
                     var User = DataAccessor.LoadByRid<TUser>(fetchSession.First().User);
                     UserSession sess = new UserSession(this);

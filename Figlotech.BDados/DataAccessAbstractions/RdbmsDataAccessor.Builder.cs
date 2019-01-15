@@ -76,7 +76,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         // I reluctantly admit that I'm using this horrible gimmick
                         // It pains my soul to do this, because the MySQL Connector doesn't support
                         // Timezone field in the connection string
-                        // And besides, this is code is supposed to be abstract for all ADO plugins
+                        // And besides, this is code is supposed to be abstract for all ADO Plugins
                         // But I'll go with "If it isn't UTC, then you're saving dates wrong"
                         val = new DateTime(dt.Ticks, DateTimeKind.Utc);
                     }
@@ -276,17 +276,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
             transaction?.Benchmarker?.Mark("Run afterloads");
-            if (retv.Any()) {
-                var a = retv.First();
+
+            if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
+                ibo2.OnAfterListAggregateLoad(dlc, retv);
+            }
+            foreach (var a in retv) {
                 if (a is IBusinessObject<T> ibo) {
-                    ibo.OnAfterAggregateLoad(dlc, retv);
+                    ibo.OnAfterAggregateLoad(dlc);
                 }
             }
+
             foreach (var a in retv) {
                 if (a is IBusinessObject ibo) {
                     ibo.OnAfterLoad(dlc);
                 }
             }
+
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
