@@ -1153,6 +1153,17 @@ namespace Figlotech.Core {
             }, Catch, Finally);
         }
 
+        public static List<TDest> CastList<TSrc, TDest>(this Fi __selfie, List<TSrc> input) {
+            return new List<TDest>(input.Select(i => (TDest) (object) i));
+        }
+
+        public static List<T> CastUnknownList<T>(this Fi __selfie, Type src, object o) {
+            return (List<T>) typeof(FiTechCoreExtensions)
+                .GetMethod("CastList")
+                .MakeGenericMethod(src, typeof(T))
+                .Invoke(null, new object[] { null, o });
+        }
+
         public static void BackgroundProcessList<T>(this Fi _selfie, IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
             RunAndForgetTasks(_selfie, (wq) => {
                 try {

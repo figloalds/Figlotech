@@ -35,6 +35,8 @@ namespace Figlotech.Core.Helpers {
 
         public static bool StrictMode { get; set; } = false;
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
+            if (type == null)
+                throw new ArgumentNullException("Cannot get fields and properties of null type!");
             if (!MembersCache.ContainsKey(type)) {
                 var members = new List<MemberInfo>();
                 members.AddRange(type.GetFields());
