@@ -111,6 +111,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //            return v;
         //        }
 
+        public static (string[], MemberInfo[]) GetMapFromReaderMeta<T>(this Fi __selfie, IDataReader reader) {
+            var cols = new string[reader.FieldCount];
+            var members = new MemberInfo[cols.Length];
+            for (int i = 0; i < cols.Length; i++) {
+                cols[i] = reader.GetName(i);
+                members[i] = ReflectionTool.GetMember(typeof(T), cols[i]);
+            }
+
+            return (cols, members);
+        }
+
         /// <summary>
         /// deprecated
         /// this gimmick should barely be used by the data accessors
@@ -119,24 +130,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// </summary>
         /// <param name="valor"></param>
         /// <returns></returns>
-
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader) where T : new() {
-            var cols = new string[reader.FieldCount];
+            var meta = GetMapFromReaderMeta<T>(_selfie, reader);
+
             var refl = new ObjectReflector();
-            var members = new MemberInfo[cols.Length];
-            for (int i = 0; i < cols.Length; i++) {
-                cols[i] = reader.GetName(i);
-                members[i] = ReflectionTool.GetMember(typeof(T), cols[i]);
-            }
             while (reader.Read()) {
                 T obj = new T();
                 refl.Slot(obj);
-                for (int i = 0; i < cols.Length; i++) {
+                for (int i = 0; i < meta.Item2.Length; i++) {
                     var o = reader.GetValue(i);
                     if (o is string str) {
-                        refl[members[i]] = reader.GetString(i);
+                        refl[meta.Item2[i]] = reader.GetString(i);
                     } else {
-                        refl[members[i]] = o;
+                        refl[meta.Item2[i]] = o;
                     }
                 }
                 yield return (T) refl.Retrieve();

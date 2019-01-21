@@ -227,8 +227,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 Execute("SELECT 1");
                 return isOnline = true;
-            } catch (Exception) {
-                return isOnline = false;
+            } catch (Exception x) {
+                throw new BDadosException ("Error testing connection to the database", x);
             }
         }
 
@@ -567,7 +567,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (CurrentTransaction != null) {
                 return Fetch(CurrentTransaction, args);
             }
-            return Access((transaction) => Fetch(transaction, args));
+            return Access((transaction) => Fetch(transaction, args).ToList() );
         }
 
         public IEnumerable<T> Fetch<T>(IQueryBuilder conditions, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new() {
@@ -2065,19 +2065,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK");
 
-                var resultados = 0;
+                var results = 0;
                 using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
                     transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List");
                     foreach (var item in Fi.Tech.MapFromReader<T>(reader)) {
-                        resultados++;
+                        results++;
                         yield return RunAfterLoad(item, false, transferObject ?? transaction?.ContextTransferObject);
                     }
                 }
                 double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                WriteLog($"[{accessId}] -------- Fetch [OK] ({resultados} results) [{elaps} ms]");
+                WriteLog($"[{accessId}] -------- Fetch [OK] ({results} results) [{elaps} ms]");
             }
             transaction.Benchmarker?.Mark("Run AfterLoads");
             yield break;

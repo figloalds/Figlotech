@@ -65,7 +65,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (isNew) {
                 //transaction.Benchmarker.Mark($"Enter Build Object {myPrefix}");
                 if(!fieldNamesDict.ContainsKey(myPrefix)) {
-                    Debugger.Break();
+                    throw new BDadosException($"Failed to build aggregate list: Aggregated reference {myPrefix} of type {joinTables[thisIndex].ValueObject.Name} was not present in the resulting fields");
                 }
                 var fieldNames = fieldNamesDict[myPrefix];
                 for (int i = 0; i < fieldNames.Item1.Length; i++) {

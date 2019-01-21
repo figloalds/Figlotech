@@ -134,15 +134,23 @@ namespace Figlotech.BDados.Helpers {
 
 
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
-            return ParseExpression(c.expression, typeof(T));
+            try {
+                return ParseExpression(c.expression, typeof(T));
+            } catch(Exception x) {
+                throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}", x);
+            }
         }
 
         public QueryBuilder ParseExpression<T>(Expression<Func<T, bool>> foofun, bool fullConditions = true, QueryBuilder strBuilder = null) {
-            if (foofun == null) {
-                return new QbFmt("TRUE");
+            try {
+                if (foofun == null) {
+                    return new QbFmt("TRUE");
+                }
+                rootType = typeof(T);
+                return ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
+            } catch(Exception x) {
+                throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
             }
-            rootType = typeof(T);
-            return ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
         }
 
         private bool CanGetValue(Expression member) {
@@ -158,13 +166,18 @@ namespace Figlotech.BDados.Helpers {
             //if(member is MemberExpression memex) {
             //    return GetValue(memex.Expression);
             //}
-            var objectMember = Expression.Convert(member, typeof(object));
-            
-            var getterLambda = Expression.Lambda<Func<object>>(objectMember);
+            try {
+                var objectMember = Expression.Convert(member, typeof(object));
 
-            var getter = getterLambda.Compile();
+                var getterLambda = Expression.Lambda<Func<object>>(objectMember);
 
-            return getter();
+                var getter = getterLambda.Compile();
+
+                return getter();
+            } catch(NullReferenceException nref) {
+                Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for member {member?.ToString()}");
+                return null;
+            }
         }
 
         private QueryBuilder ParseExpression(Expression foofun, Type typeOfT, String ForceAlias = null, QueryBuilder strBuilder = null, bool fullConditions = true) {

@@ -12,7 +12,6 @@ namespace Figlotech.Core.Interfaces {
         Desc
     }
 
-
     public class LoadAllArgs<T> where T : IDataObject, new() {
         public Expression<Func<T, bool>> Conditions { get; private set; } = null;
         public int? RowSkip { get; private set; } = null;
@@ -91,7 +90,7 @@ namespace Figlotech.Core.Interfaces {
         public IEnumerable<T> Fetch() {
             return DataAccessor.Fetch(LoadAllArgs);
         }
-        public IEnumerable<T> Load() {
+        public List<T> Load() {
             return DataAccessor.LoadAll(LoadAllArgs);
         }
     }
