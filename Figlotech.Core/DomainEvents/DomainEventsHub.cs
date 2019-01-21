@@ -52,7 +52,7 @@ namespace Figlotech.Core.DomainEvents {
             }
         }
 
-        public List<IDomainEvent> EventCache { get; private set; } = new List<IDomainEvent>();
+        private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
         //public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
