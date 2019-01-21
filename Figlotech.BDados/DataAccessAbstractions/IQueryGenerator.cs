@@ -32,6 +32,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder RenameTable(string tabName, string v);
         IQueryBuilder DropForeignKey(string target, string constraint);
         IQueryBuilder DropUnique(string target, string constraint);
+        IQueryBuilder DropColumn(string table, string column);
         IQueryBuilder DropIndex(string target, string constraint);
         IQueryBuilder DropPrimary(string target, string constraint);
         IQueryBuilder AddColumn(string tableName, string columnDefinition);
@@ -40,6 +41,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName);
         IQueryBuilder AddUniqueKey(string table, string column, string constraintName);
         IQueryBuilder AddPrimaryKey(string table, string column, string constraintName);
+        IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions);
         IQueryBuilder RenameColumn(string table, string column, string newName);
         IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable);
         IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new();

@@ -1,4 +1,5 @@
 ﻿
+using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
@@ -310,6 +311,64 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
+    public class UpdateExNullableColumnScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        String _column;
+        object _defaultValue;
+
+        public UpdateExNullableColumnScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, string column, object defaultValue, string reason) : base(dataAccessor, reason) {
+            _table = table;
+            _column = column;
+            _defaultValue = defaultValue;
+        }
+
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.UpdateColumn(_table, _column, _defaultValue, Qb.Fmt($"{_column} IS NULL")));
+        }
+
+        public override string ToString() {
+            return $"Fill default value onto newly non-nullable column {_table}.{_column}";
+        }
+    }
+
+    public class DropColumnScAction : AbstractIStructureCheckNecessaryAction {
+        String _table;
+        FieldAttribute _column;
+        Type _type;
+
+        public DropColumnScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, FieldAttribute column, Type type, string reason) : base(dataAccessor, reason) {
+            _table = table;
+            _column = column;
+            _type = type;
+        }
+
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            _column.AllowNull = true;
+            return Exec(DataAccessor,
+                Qb.Fmt($@"
+                    ALTER TABLE {_table} CHANGE COLUMN {_column.Name} {_column.Name} {_column.Type} DEFAULT NULL
+                ")
+            );
+            //Exec(DataAccessor, Qb.Fmt(
+            //    $@"
+            //        SET @a=1;
+            //        INSERT INTO _ResidualScData (RID, Type, Field, Value, ReferenceRID, CreatedBy, AlteredBy)
+            //        SELECT CONCAT({FiTechBDadosExtensions.RidColumnOf[_type]}, '-', @a:=@a+1), '{_table}', '{_column}', CAST({_column} as BINARY), {FiTechBDadosExtensions.RidColumnOf[_type]}, '{RID.MachineRID.AsULong}','{RID.MachineRID.AsULong}' FROM {_table} WHERE {_column} IS NOT NULL;
+            //    "
+            //));
+            //return Exec(DataAccessor, DataAccessor.QueryGenerator.DropColumn(
+            //    _table, _column.Name));
+        }
+
+        public override string ToString() {
+            return $"Drop column {_table}.{_column.Name}";
+        }
+    }
+
     public class AlterColumnDefinitionScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
@@ -389,12 +448,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private void Init(IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
             DataAccessor = dataAccessor;
-            workingTypes = workingTypes = types
+            workingTypes = new List<Type>();
+            workingTypes.Add(typeof(_ResidualScData));
+            workingTypes.AddRange(
+                types
                     .Where((t) =>
                         IsDataObject(t) &&
                         t.GetCustomAttribute<ViewOnlyAttribute>() == null &&
                         !t.IsAbstract
-                    ).ToList();
+                    )
+            );
         }
 
 
@@ -604,6 +667,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 foreach(var a in EvaluateForColumnDekeyal(type.Name, field.Name, keys)) {
                                     yield return a;
                                 }
+                                if(columnIsNullable && !fieldAtt.AllowNull && fieldAtt.DefaultValue != null) {
+                                    yield return new UpdateExNullableColumnScAction(DataAccessor, type.Name, field.Name, fieldAtt.DefaultValue, $"Need to update formerly nullable column {type.Name}.{field.Name} with the new default value");
+                                }
                                 yield return new AlterColumnDefinitionScAction(DataAccessor, type.Name, field.Name, field, $"Definition mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
                             } else {
 
@@ -619,6 +685,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
+        private IEnumerable<IStructureCheckNecessaryAction> EvaluateRemovedColumns(List<FieldAttribute> columns, List<ScStructuralLink> keys) {
+
+            foreach(var c in columns) {
+                var type = workingTypes.FirstOrDefault(t => t.Name.ToLower() == c.Table.ToLower());
+                if(type == null) {
+                    continue;
+                }
+                var fields = ReflectionTool.FieldsAndPropertiesOf(type)
+                    .Where(f => f.GetCustomAttribute<FieldAttribute>() != null);
+                if(!
+                    fields.Any(f=> 
+                        f.Name.ToLower() == c.Name.ToLower() ||
+                        f.GetCustomAttribute<OldNameAttribute>()?.Name == c.Name
+                    )
+                ) {
+                    foreach(var action in EvaluateForColumnDekeyal(c.Table, c.Name, keys)) {
+                        yield return action;
+                    }
+                    yield return new DropColumnScAction(DataAccessor, c.Table, c, type, "Column does not exist in structure");
+                }
+            }
+
+            yield break;
+        }
 
         public async Task<int> ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
 
@@ -666,6 +756,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var a in EvaluateColumnChanges(columns, keys))
                 yield return a;
             foreach (var a in EvaluateMissingKeysCreation(columns, keys))
+                yield return a;
+            foreach (var a in EvaluateRemovedColumns(columns, keys))
                 yield return a;
         }
 
@@ -873,6 +965,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         case ScStructuralKeyType.ForeignKey:
                             foreach (var x in EnumeratePurgesFor(fk, needFK)) {
                                 yield return x;
+                            }
+                            var foreignIndex = new ScStructuralLink {
+                                Type = ScStructuralKeyType.Index,
+                                Table = fk.RefTable,
+                                Column = fk.RefColumn,
+                            };
+                            if(!keys.Any(n=> CheckMatch(foreignIndex, n))) {
+                                yield return new CreateIndexScAction(DataAccessor, foreignIndex, $"Need to create an index for {fk.RefTable}.{fk.RefColumn} for {fk.KeyName}");
                             }
                             yield return new CreateForeignKeyScAction(DataAccessor, fk, $"Key absent in structure state {fk.KeyName}");
                             break;
