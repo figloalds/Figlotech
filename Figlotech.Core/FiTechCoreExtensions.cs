@@ -1103,12 +1103,12 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static Thread SafeCreateThread(this Fi __selfie, Action a) {
+        public static Thread SafeCreateThread(this Fi __selfie, Action a, Action<Exception> handler = null) {
             return new Thread(() => {
                 try {
                     a?.Invoke();
                 } catch (Exception x) {
-                    Fi.Tech.Throw(x);
+                    handler?.Invoke(x);
                 }
             });
         }
