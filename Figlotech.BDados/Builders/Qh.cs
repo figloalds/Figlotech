@@ -14,7 +14,11 @@ namespace Figlotech.BDados.Builders
 
         public static bool In<T>(object input, string column, List<T> o, Func<T, object> fn) {
             var refl = new ObjectReflector(input);
-            return o.Any(item=> fn(item) == refl[column]);
+            return o.Any(item => fn(item) == refl[column]);
+        }
+        public static bool NotIn<T>(object input, string column, List<T> o, Func<T, object> fn) {
+            var refl = new ObjectReflector(input);
+            return o.Any(item => fn(item) == refl[column]);
         }
     }
 }
