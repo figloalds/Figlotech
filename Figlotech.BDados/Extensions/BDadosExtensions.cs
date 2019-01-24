@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.DataAccessAbstractions {
     
 
+
     public static class ListBDadosExtensions {
 
         public static int DefaultPageSize = 200;

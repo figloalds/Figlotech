@@ -25,7 +25,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public IDbConnection Connection { get; private set; }
         private IDbTransaction Transaction { get; set; }
         public Benchmarker Benchmarker { get; set; }
-        private RdbmsDataAccessor DataAccessor { get; set; }
+        internal RdbmsDataAccessor DataAccessor { get; set; }
         public ConnectionState ConnectionState => Connection.State;
         public Object ContextTransferObject { get; set; }
 
@@ -43,14 +43,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<IDataObject> ObjectsToNotify { get; set; } = new List<IDataObject>();
 
         public void NotifyChange(IDataObject[] ido) {
-
             if (Transaction == null) {
                 DataAccessor.RaiseForChangeIn(ido);
             } else {
                 lock (ObjectsToNotify)
                     ObjectsToNotify.AddRange(ido);
             }
-
         }
 
         public void Step() {
@@ -131,7 +129,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
         public ILogger Logger { get; set; }
 
-        public static int DefaultMaxOpenAttempts { get; set; } = 30;
+        public static int DefaultMaxOpenAttempts { get; set; } = 5;
         public static int DefaultOpenAttemptInterval { get; set; } = 100;
 
         public Benchmarker Benchmarker { get; set; }
@@ -180,9 +178,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void EnsureDatabaseExists() {
-            using (var conn = Plugin.GetNewSchemalessConnection()) {
-                OpenConnection(conn);
-                Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName).ExecuteUsing(conn);
+            lock (Plugin) {
+                using (var conn = Plugin.GetNewSchemalessConnection()) {
+                    OpenConnection(conn);
+                    Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName).ExecuteUsing(conn);
+                }
             }
         }
 
@@ -266,17 +266,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public IDbConnection BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
             lock (this) {
                 if (CurrentTransaction == null) {
-                    WriteLog("Opening Transaction");
                     //if (FiTechCoreExtensions.EnableDebug) {
                     //    WriteLog(Environment.StackTrace);
                     //}
-                    var connection = Plugin.GetNewConnection();
-                    OpenConnection(connection);
-                    CurrentTransaction = new ConnectionInfo(this, connection);
-                    CurrentTransaction?.BeginTransaction(useTransaction, ilev);
-                    CurrentTransaction.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
-                    CurrentTransaction.usingExternalBenchmarker = bmark != null;
-                    WriteLog("Transaction Open");
+                    lock (Plugin) {
+                        WriteLog("Opening Transaction");
+                        var connection = Plugin.GetNewConnection();
+                        OpenConnection(connection);
+                        CurrentTransaction = new ConnectionInfo(this, connection);
+                        CurrentTransaction?.BeginTransaction(useTransaction, ilev);
+                        CurrentTransaction.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
+                        CurrentTransaction.usingExternalBenchmarker = bmark != null;
+                        WriteLog("Transaction Open");
+                    }
                 }
                 return CurrentTransaction?.Connection;
             }
@@ -2036,7 +2038,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Benchmarker?.Mark("Execute SELECT");
             transaction.Step();
             if (query == null || query.GetCommandText() == null) {
-                yield break;
+                return new List<T>();
             }
             DateTime start = DateTime.Now;
             using (var command = transaction.CreateCommand()) {
@@ -2065,22 +2067,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK");
 
-                var results = 0;
                 using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
                     transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List");
-                    foreach (var item in Fi.Tech.MapFromReader<T>(reader)) {
-                        results++;
-                        yield return RunAfterLoad(item, false, transferObject ?? transaction?.ContextTransferObject);
-                    }
+
+                    var retv = Fi.Tech.MapFromReader<T>(reader).Select(i => RunAfterLoad(i, false, transferObject ?? transaction?.ContextTransferObject)).ToList();
+
+                    double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
+                    WriteLog($"[{accessId}] -------- Fetch [OK] ({retv.Count} results) [{elaps} ms]");
+
+                    return retv;
                 }
-                double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                WriteLog($"[{accessId}] -------- Fetch [OK] ({results} results) [{elaps} ms]");
             }
-            transaction.Benchmarker?.Mark("Run AfterLoads");
-            yield break;
         }
 
         public void QueryReader(ConnectionInfo transaction, IQueryBuilder query, Action<IDataReader> actionRead) {
