@@ -9,6 +9,11 @@ using System.Net.NetworkInformation;
 using System.Text;
 
 namespace Figlotech.Core {
+    class PhysicalMediaInfo {
+        public string SerialNumber { get; set; }
+        public string UUID { get; set; }
+    }
+
     public class RID {
         static Random rng = new Random();
         static CrossRandom mRng = new CrossRandom(777);
@@ -36,7 +41,17 @@ namespace Figlotech.Core {
                             if(Environment.OSVersion.Platform == PlatformID.Win32NT) {
                                 var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMedia");
                                 foreach (ManagementObject wmi_HD in searcher.Get()) {
-                                    writer.WriteLine(JsonConvert.SerializeObject(wmi_HD));
+                                    if(wmi_HD.Path.Path.Contains("CDROM")) {
+                                        continue;
+                                    }
+                                    var json = JsonConvert.SerializeObject(
+                                        new PhysicalMediaInfo {
+                                            SerialNumber = wmi_HD["SerialNumber"] as String,
+                                            UUID = wmi_HD.Qualifiers["UUID"].Value as String
+                                        }                                        
+                                    , Formatting.Indented);
+                                    writer.WriteLine(json);
+                                    break;
                                 }
                             } else {
                                 writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
@@ -44,9 +59,9 @@ namespace Figlotech.Core {
                         }
 
                     }), 32);
-                    var id = lbif.Id.Replace("{", "").Replace("}", "").Replace("-", "");
+                    var id = lbif.Id.RegExReplace("[^0-9A-F]", "");
                     var segmentA = BitConverter.GetBytes(di.RootDirectory.CreationTimeUtc.Ticks);
-                    var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(lbif.Id), 8);
+                    var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(id), 8);
                     var segmentC = new byte[32 - (segmentA.Length + segmentB.Length)];
                     segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng.Next(256))));
                     var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);

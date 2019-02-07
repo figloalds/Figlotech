@@ -18,6 +18,7 @@ using Figlotech.Core.FileAcessAbstractions;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks.Dataflow;
 
 namespace Figlotech.Core {
     public delegate dynamic ComputeField(dynamic o);
@@ -385,14 +386,8 @@ namespace Figlotech.Core {
             return Version;
         }
 
-        public static void As<T>(this Fi _selfie, object input, Action<T> act) {
-            if (
-                (typeof(T).IsInterface && input.GetType().GetInterfaces().Contains(typeof(T))) ||
-                input.GetType().IsAssignableFrom(typeof(T))
-            ) {
-                act((T)input);
-            }
-
+        public static T As<T>(this Fi _selfie, object input) {
+            return (T) ReflectionTool.TryCast(input, typeof(T));
         }
 
         public static IBDadosStringsProvider GetStrings(this Fi _selfie) {
@@ -1194,10 +1189,10 @@ namespace Figlotech.Core {
         public static bool InlineRunAndForget { get; set; }
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 45000, ExtraWorkers = Environment.ProcessorCount * 4 };
         public static WorkJob RunAndForget(this Fi _selfie, string name, Action job, Action<Exception> handler = null, Action then = null) {
-            if(InlineRunAndForget) {
+            if (InlineRunAndForget) {
                 try {
                     job?.Invoke();
-                } catch(Exception x) {
+                } catch (Exception x) {
                     try {
                         handler?.Invoke(x);
                     } catch (Exception y) {
@@ -1206,7 +1201,7 @@ namespace Figlotech.Core {
                 } finally {
                     try {
                         then?.Invoke();
-                    } catch(Exception y) {
+                    } catch (Exception y) {
                         Throw(_selfie, y);
                     }
                 }

@@ -39,8 +39,8 @@ namespace Figlotech.Core.Helpers {
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
             if (!MembersCache.ContainsKey(type)) {
                 var members = new List<MemberInfo>();
-                members.AddRange(type.GetFields());
-                members.AddRange(type.GetProperties());
+                members.AddRange(type.GetFields().Where(m=> !m.IsStatic));
+                members.AddRange(type.GetProperties().Where(m => !m.GetGetMethod()?.IsStatic??true));
                 MembersCache[type] = members.ToArray();
             }
             // It is not clear rather the .Net Runtime caches or not 

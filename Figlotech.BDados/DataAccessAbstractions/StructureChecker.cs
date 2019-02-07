@@ -21,6 +21,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public class ScStructuralLink {
         private String _linkName;
 
+        public string TABLE_NAME { get => Table; set => Table = value; }
+        public string COLUMN_NAME { get => Column; set => Column = value; } 
+        public string NON_UNIQUE { get => IsUnique ? "NO": "YES"; set => IsUnique = value?.ToLower() == "no"; }
+        public string INDEX_NAME { get => KeyName; set => KeyName = value; }
+
+        public string REFERENCED_COLUMN_NAME { get => RefColumn; set => RefColumn = value; }
+        public string REFERENCED_TABLE_NAME { get => RefTable; set => RefTable = value; }
+        public string CONSTRAINT_NAME { get => KeyName; set => KeyName = value; }
+
         public String Table { get; set; }
         public String Column { get; set; }
         public String RefTable { get; set; }
@@ -990,32 +999,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<ScStructuralLink> GetInfoSchemaKeys() {
             var dbName = DataAccessor.SchemaName;
             var retv = new List<ScStructuralLink>();
-            var fk = DataAccessor.Query(
+            var fk = DataAccessor.Query<ScStructuralLink>(
                 DataAccessor
                     .QueryGenerator
                     .InformationSchemaQueryKeys(dbName)
-            )
-            .Map<ScStructuralLink>(new Dictionary<string, string> {
-                { "TABLE_NAME", nameof(ScStructuralLink.Table) },
-                { "COLUMN_NAME", nameof(ScStructuralLink.Column) },
-                { "REFERENCED_COLUMN_NAME", nameof(ScStructuralLink.RefColumn) },
-                { "REFERENCED_TABLE_NAME", nameof(ScStructuralLink.RefTable) },
-                { "CONSTRAINT_NAME", nameof(ScStructuralLink.KeyName) },
-            }).ToList();
+            );
             fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
             fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
             retv.AddRange(fk);
-            var idx = DataAccessor.Query(
+            var idx = DataAccessor.Query<ScStructuralLink>(
                  DataAccessor
                      .QueryGenerator
                      .InformationSchemaIndexes(dbName)
-             )
-             .Map<ScStructuralLink>(new Dictionary<string, string> {
-                { "TABLE_NAME", nameof(ScStructuralLink.Table) },
-                { "COLUMN_NAME", nameof(ScStructuralLink.Column) },
-                { "NON_UNIQUE", nameof(ScStructuralLink.IsUnique) },
-                { "INDEX_NAME", nameof(ScStructuralLink.KeyName) },
-             }).ToList();
+             );
             idx.ForEach(a => {
                 a.Type = ScStructuralKeyType.Index;
                 a.IsUnique = !a.IsUnique;
@@ -1040,22 +1036,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         private List<FieldAttribute> GetInfoSchemaColumns() {
             var dbName = DataAccessor.SchemaName;
-            return DataAccessor.Query(
+            return DataAccessor.Query<FieldAttribute>(
                     DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName)
-            )
-            .Map<FieldAttribute>(new Dictionary<string, string> {
-                { "TABLE_NAME", nameof(FieldAttribute.Table) },
-                { "COLUMN_NAME", nameof(FieldAttribute.Name) },
-                { "COLUMN_DEFAULT", nameof(FieldAttribute.DefaultValue) },
-                { "IS_NULLABLE", nameof(FieldAttribute.AllowNull) },
-                { "COLUMN_TYPE", nameof(FieldAttribute.Type) },
-                { "CHARACTER_MAXIMUM_LENGTH", nameof(FieldAttribute.Size) },
-                { "NUMERIC_PRECISION", nameof(FieldAttribute.Precision) },
-                { "CHARACTER_SET_NAME", nameof(FieldAttribute.Charset) },
-                { "COLLATION_NAME", nameof(FieldAttribute.Collation) },
-                { "COLUMN_COMMENT", nameof(FieldAttribute.Comment) },
-                { "GENERATION_EXPRESSION", nameof(FieldAttribute.GenerationExpression) },
-            }).ToList();
+            );
         }
 
         public async Task CheckStructureAsync(
