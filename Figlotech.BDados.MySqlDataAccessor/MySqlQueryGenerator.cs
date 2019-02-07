@@ -458,10 +458,10 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
         }
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE TABLE_SCHEMA=@1;", schema);
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE INDEX_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE TABLE_SCHEMA=@1;", schema);
         }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
