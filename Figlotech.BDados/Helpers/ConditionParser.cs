@@ -163,7 +163,7 @@ namespace Figlotech.BDados.Helpers {
         }
 
         private object GetValue(Expression member) {
-            //if(member is MemberExpression memex) {
+            //if (member is MemberExpression memex) {
             //    return GetValue(memex.Expression);
             //}
             try {

@@ -1131,14 +1131,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<T> conflicts = new List<T>();
             QueryReader(transaction, Plugin.QueryGenerator.QueryIds(rs), reader => {
                 while (reader.Read()) {
-                    var rowEquivalentObject = rs.FirstOrDefault(item => item.RID == reader[1] as String);
+                    var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == reader[0] as long? || item.RID == reader[1] as string);
                     if (rowEquivalentObject != null) {
+                        rowEquivalentObject.Id = (reader[0] as long?) ?? rowEquivalentObject.Id;
+                        rowEquivalentObject.RID = (reader[0] as string) ?? rowEquivalentObject.RID;
                         rowEquivalentObject.IsPersisted = true;
-                    }
+                    } 
                 }
             });
             var elaps = DateTime.UtcNow - d1;
-            Console.WriteLine($"Check conflicts in {elaps.TotalMilliseconds}ms");
+            Console.WriteLine($"Pre-multipersist probing in {elaps.TotalMilliseconds}ms");
 
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
@@ -1171,7 +1173,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (inserts.Count > 0) {
                         try {
                             transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} items");
-                            var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, true);
+                            var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
                             transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count}");
                             lock (transaction)
                                 rst += Execute(transaction, query);
