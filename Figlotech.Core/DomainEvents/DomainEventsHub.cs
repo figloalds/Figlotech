@@ -210,7 +210,9 @@ namespace Figlotech.Core.DomainEvents {
             return await Task.Run<IDomainEvent[]>(async () => {
                 IDomainEvent[] events;
                 var flushOrder = new CustomFlushOrderToken();
-                FlushOrderTokens.Add(flushOrder);
+                lock ("FLUSH_SWITCH") {
+                    FlushOrderTokens.Add(flushOrder);
+                }
                 do {
                     lock (EventCache) {
                         events = getEvents().ToArray();
@@ -226,7 +228,9 @@ namespace Figlotech.Core.DomainEvents {
                     await Task.Delay(500);
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
                 flushOrder.IsReleased = true;
-                FlushOrderTokens.Remove(flushOrder);
+                lock ("FLUSH_SWITCH") {
+                    FlushOrderTokens.Remove(flushOrder);
+                }
                 WriteLog($"Event pooling returned no events");
                 return new IDomainEvent[0];
             });
@@ -235,7 +239,6 @@ namespace Figlotech.Core.DomainEvents {
         public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
             return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(dt), e => filter(e));
         }
-
 
         public void SubscribeListener(IDomainEventListener listener) {
             Listeners.Add(listener);

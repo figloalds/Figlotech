@@ -1140,8 +1140,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             });
             var elaps = DateTime.UtcNow - d1;
-            Console.WriteLine($"Pre-multipersist probing in {elaps.TotalMilliseconds}ms");
-
+            
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i2 = 0;

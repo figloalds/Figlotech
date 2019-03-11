@@ -190,6 +190,14 @@ namespace Figlotech.ExcelUtil {
             return Range(startingColumn, c);
         }
 
+        public ExcelatorRowRangeWriter PutValues(int startingColumn, params object[] values) {
+            int c = startingColumn;
+            foreach (var value in values) {
+                Set(c++, value);
+            }
+            return Range(startingColumn, c);
+        }
+
         public ExcelatorRowRangeWriter Cell(int column) {
             return new ExcelatorRowRangeWriter(this, column + offsetCols, column + offsetCols);
         }

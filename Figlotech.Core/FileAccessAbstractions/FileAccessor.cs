@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -61,12 +62,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void MkDirs(string dir) {
             FixRel(ref dir);
-            absMkDirs(Path.Combine(RootDirectory, dir));
+            absMkDirs(AssemblePath(RootDirectory, dir));
         }
 
         public void Write(String relative, Action<Stream> func) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
@@ -103,33 +104,33 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public string MapPathTo(string relative) {
             FixRel(ref relative);
-            return Path.Combine(RootDirectory, relative);
+            return AssemblePath(RootDirectory, relative);
         }
 
         public void Rename(string relative, string newName) {
             FixRel(ref relative);
-            FileAttributes attr = File.GetAttributes(Path.Combine(RootDirectory, relative));
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            FileAttributes attr = File.GetAttributes(AssemblePath(RootDirectory, relative));
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             LockRegion(WorkingDirectory, () => {
                 //detect whether its a directory or file
                 if ((attr & FileAttributes.Directory) == FileAttributes.Directory) {
-                    if (Directory.Exists(Path.Combine(RootDirectory, relative))) {
-                        if (!Directory.Exists(Path.GetDirectoryName(Path.Combine(RootDirectory, newName))))
-                            absMkDirs(Path.GetDirectoryName(Path.Combine(RootDirectory, newName)));
-                        if (Directory.Exists(Path.Combine(RootDirectory, newName))) {
-                            RenDir(Path.Combine(RootDirectory, relative), Path.Combine(RootDirectory, newName));
+                    if (Directory.Exists(AssemblePath(RootDirectory, relative))) {
+                        if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
+                            absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
+                        if (Directory.Exists(AssemblePath(RootDirectory, newName))) {
+                            RenDir(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
                         } else {
-                            Directory.Move(Path.Combine(RootDirectory, relative), Path.Combine(RootDirectory, newName));
+                            Directory.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
                         }
                     }
                 } else {
-                    if (File.Exists(Path.Combine(RootDirectory, relative))) {
-                        if (!Directory.Exists(Path.GetDirectoryName(Path.Combine(RootDirectory, newName))))
-                            absMkDirs(Path.GetDirectoryName(Path.Combine(RootDirectory, newName)));
-                        if (File.Exists(Path.Combine(RootDirectory, newName))) {
-                            File.Delete(Path.Combine(RootDirectory, newName));
+                    if (File.Exists(AssemblePath(RootDirectory, relative))) {
+                        if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
+                            absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
+                        if (File.Exists(AssemblePath(RootDirectory, newName))) {
+                            File.Delete(AssemblePath(RootDirectory, newName));
                         }
-                        File.Move(Path.Combine(RootDirectory, relative), Path.Combine(RootDirectory, newName));
+                        File.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
                     }
                 }
             });
@@ -138,21 +139,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public DateTime? GetLastModified(string relative) {
             FixRel(ref relative);
             if (Exists(relative)) {
-                return new FileInfo(Path.Combine(RootDirectory, relative)).LastWriteTimeUtc;
+                return new FileInfo(AssemblePath(RootDirectory, relative)).LastWriteTimeUtc;
             }
             return DateTime.MinValue;
         }
         public DateTime? GetLastAccess(string relative) {
             FixRel(ref relative);
             if (Exists(relative)) {
-                return new FileInfo(Path.Combine(RootDirectory, relative)).LastAccessTimeUtc;
+                return new FileInfo(AssemblePath(RootDirectory, relative)).LastAccessTimeUtc;
             }
             return DateTime.MinValue;
         }
 
         public long GetSize(string relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (File.Exists(WorkingDirectory)) {
                 return new FileInfo(WorkingDirectory).Length;
             }
@@ -161,7 +162,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void ParallelForFilesIn(String relative, Action<String> execFunc) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return;
             }
@@ -177,7 +178,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void ForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return;
             }
@@ -195,7 +196,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     if (handler != null) {
                         handler?.Invoke(s, x);
                     } else {
-                        ex.Add(new Exception("Error manipulating {s}", x));
+                        ex.Add(new Exception($"Error manipulating file {s}", x));
                     }
                 }
                 if (handler == null && ex.Any()) {
@@ -205,7 +206,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         public IEnumerable<string> GetFilesIn(String relative) {
             relative = relative.Replace('/', '\\');
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
@@ -221,7 +222,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void ParallelForDirectoriesIn(String relative, Action<String> execFunc) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return;
             }
@@ -236,7 +237,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         public void ForDirectoriesIn(String relative, Action<String> execFunc) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return;
             }
@@ -251,7 +252,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         public IEnumerable<string> GetDirectoriesIn(String relative) {
             relative = relative.Replace('/', '\\');
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
@@ -267,7 +268,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Exists(relative)) {
                 return false;
             }
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!File.Exists(WorkingDirectory)) {
                 return false;
             }
@@ -281,18 +282,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void SetLastModified(String relative, DateTime dt) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             File.SetLastWriteTimeUtc(WorkingDirectory, dt);
         }
         public void SetLastAccess(String relative, DateTime dt) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             File.SetLastAccessTimeUtc(WorkingDirectory, dt);
         }
 
         public String ReadAllText(String relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             return LockRegion(WorkingDirectory, () => {
                 // Metodo 1: Convencional File System:
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
@@ -308,7 +309,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public byte[] ReadAllBytes(String relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             return LockRegion<byte[]>(WorkingDirectory, () => {
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
@@ -334,7 +335,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void WriteAllText(String relative, String content) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
 
             LockRegion(WorkingDirectory, () => {
@@ -347,7 +348,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void WriteAllBytes(String relative, byte[] content) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             LockRegion(WorkingDirectory, () => {
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
@@ -359,7 +360,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public bool Delete(String relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
@@ -375,11 +376,20 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public bool IsDirectory(string relative) {
             FixRel(ref relative);
-            return Directory.Exists(Path.Combine(RootDirectory, relative));
+            return Directory.Exists(AssemblePath(RootDirectory, relative));
         }
         public bool IsFile(string relative) {
             FixRel(ref relative);
-            return File.Exists(Path.Combine(RootDirectory, relative));
+            return File.Exists(AssemblePath(RootDirectory, relative));
+        }
+
+        private string AssemblePath(params string[] segments) {
+            var seg = segments.Select(s => s.Split(S))
+                .Flatten()
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToArray();
+            var retv = string.Join(S.ToString(), seg);
+            return retv;
         }
 
         public bool Exists(String relative) {
@@ -389,7 +399,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void AppendAllLines(String relative, IEnumerable<string> content) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
@@ -402,7 +412,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             FixRel(ref relative);
             Fi.Tech.RunAndForget(() => {
-                var WorkingDirectory = Path.Combine(RootDirectory, relative);
+                var WorkingDirectory = AssemblePath(RootDirectory, relative);
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                     absMkDirs(Path.GetDirectoryName(WorkingDirectory));
                 }
@@ -417,7 +427,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public Stream Open(string relative, FileMode fileMode, FileAccess fileAccess) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
@@ -430,7 +440,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void Hide(string relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (File.Exists(WorkingDirectory)) {
                 File.SetAttributes(WorkingDirectory, File.GetAttributes(WorkingDirectory) | FileAttributes.Hidden);
             }
@@ -438,7 +448,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void Show(string relative) {
             FixRel(ref relative);
-            var WorkingDirectory = Path.Combine(RootDirectory, relative);
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (File.Exists(WorkingDirectory)) {
                 File.SetAttributes(WorkingDirectory, File.GetAttributes(WorkingDirectory) & ~FileAttributes.Hidden);
             }
