@@ -4,8 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Timers;
 
 namespace Figlotech.Core.DomainEvents {
+
+
     public class DomainEvent : IDomainEvent {
         static short antiCollider = 0;
         static long _idGen = 0;
@@ -16,7 +19,6 @@ namespace Figlotech.Core.DomainEvents {
         public long Time => (created ?? (created = generateTimeStamp())).Value;
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
-
 
         [JsonIgnore]
         public string d_RaiseOrigin { get; set; }

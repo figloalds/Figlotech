@@ -3,6 +3,31 @@ using System.Collections.Generic;
 using System.IO;
 
 namespace Figlotech.Core.FileAcessAbstractions {
+
+    public static class IFileSystemExtensions {
+        private static IEnumerable<string> __findfile(IFileSystem fs, string relative, string regex) {
+            foreach (var file in fs.GetFilesIn(relative)) {
+                var f = file;
+                if (f.Contains("/")) {
+                    f = file.Substring(file.LastIndexOf('/') + 1);
+                }
+                if(f.RegExp(regex)) {
+                    yield return file;
+                }
+            }
+            foreach(var directory in fs.GetDirectoriesIn(relative)) {
+                foreach(var f in __findfile(fs, directory, regex)) {
+                    yield return f;
+                }
+            }
+        }
+
+        public static IEnumerable<string> Find(this IFileSystem fs, string relative, string regex) {
+            return __findfile(fs, relative, regex);
+        }
+
+    }
+
     public interface IFileSystem {
 
         bool IsCaseSensitive { get; }

@@ -399,23 +399,27 @@ namespace Figlotech.Core {
         public int TotalWork = 0;
         public int WorkDone = 0;
 
-        public WorkJob Enqueue(Action a, Action<Exception> exceptionHandler = null, Action finished = null) {
-            var retv = new WorkJob(a, exceptionHandler, finished);
-            if(Active) {
+        public WorkJob Enqueue(WorkJob job) {
+            if (Active) {
                 lock (ActivatedWorkQueue) {
-                    ActivatedWorkQueue.Enqueue(retv);
+                    ActivatedWorkQueue.Enqueue(job);
                 }
             } else {
-                HeldJobs.Add(retv);
+                HeldJobs.Add(job);
             }
-            if(!inited || this.workers.Count == 0) {
+            if (!inited || this.workers.Count == 0) {
                 SpawnWorker();
             }
             InitSupervisor();
             QueueResetEvent.Set();
             TotalWork++;
 
-            return retv;
+            return job;
+        }
+
+        public WorkJob Enqueue(Action a, Action<Exception> exceptionHandler = null, Action finished = null) {
+            var retv = new WorkJob(a, exceptionHandler, finished);
+            return Enqueue(retv);
         }
 
         public void Dispose() {

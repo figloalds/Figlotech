@@ -9,6 +9,19 @@ namespace Figlotech.Core.BusinessModel {
         public string Message;
     }
 
+    public static class Validation {
+        public static ValidationError Error(string msg) {
+            return  Error("Error", msg);
+        }
+
+        public static ValidationError Error(string key, string msg) {
+            return new ValidationError {
+                Key = key,
+                Message = msg
+            };
+        }
+    }
+
     public class ValidationErrors : List<ValidationError> {
         public void Add(string key, string value) {
             Add(new ValidationError { Key = key, Message = value });

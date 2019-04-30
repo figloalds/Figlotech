@@ -117,6 +117,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 refl[fieldAlias] = newLi;
                             }
                             var li = refl[fieldAlias];
+                            if(li == null) {
+                                continue;
+                            }
                             var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
                             var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;

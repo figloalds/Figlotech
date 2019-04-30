@@ -1252,7 +1252,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
-                throw new BDadosException("Not everything could be saved", transaction.FrameHistory, failedObjects, new AggregateException(failedSaves));
+                throw new BDadosException($"Not everything could be saved list of type {typeof(T).Name}", transaction.FrameHistory, failedObjects, new AggregateException(failedSaves));
             }
             if (failedObjects.Any()) {
                 var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);

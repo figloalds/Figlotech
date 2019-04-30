@@ -39,20 +39,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public List<String> Excludes = new List<String>();
-
-        private string WildcardToRegex(String input) {
-            input = input.Replace("*", "____WCASTER____");
-            input = input.Replace("%", "____WCPCT____");
-            input = input.Replace("?", "____WCQUEST____");
-            var escaped = Regex.Escape(input);
-            escaped = escaped.Replace("____WCASTER____", "[.]{0,}");
-            escaped = escaped.Replace("____WCPCT____", "[.]{0,1}");
-            escaped = escaped.Replace("____WCPCT____", "[.]{1}");
-            return escaped;
-        }
-
+        
         private bool CheckMatch(string file, string criteria) {
-            var regex = WildcardToRegex(criteria);
+            var regex = Fi.Tech.WildcardToRegex(criteria);
             return Regex.Match(file, regex, RegexOptions.IgnoreCase).Success;
         }
 

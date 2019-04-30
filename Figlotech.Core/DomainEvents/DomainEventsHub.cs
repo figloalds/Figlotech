@@ -9,6 +9,12 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
 
+    public class ScheduledDomainEvent {
+        public IDomainEvent Event;
+        public DateTime ScheduledTime;
+        public string Identifier;
+        internal Timer timer;
+    }
 
     public class CustomDomainValidation  {
         public CustomDomainValidation(IValidationRule validator, int? phase) {
@@ -36,20 +42,19 @@ namespace Figlotech.Core.DomainEvents {
 
         private bool IsTerminationIssued = false;
 
-        List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
-
-        public DomainEventsHub(DomainEventsHub parentHub = null) {
-            this.parentHub = parentHub;
-        }
-
         public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(30);
-
         public DateTime LastEventDateTime {
             get {
                 lock(EventCache) {
                     return EventCache.Count == 0 ? DateTime.MinValue : EventCache[EventCache.Count - 1]?.TimeStamp ?? DateTime.MinValue;
                 }
             }
+        }
+        List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
+        private List<ScheduledDomainEvent> ScheduledEvents { get; set; } = new List<ScheduledDomainEvent>();
+
+        public DomainEventsHub(DomainEventsHub parentHub = null) {
+            this.parentHub = parentHub;
         }
 
         private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
@@ -59,6 +64,40 @@ namespace Figlotech.Core.DomainEvents {
 
         // Wanna grab hold of tasks so that GC won't kill them.
         List<Task> EventTasks = new List<Task>();
+        
+        public void Schedule(IDomainEvent evt, DateTime when, string identifier) {
+            var due = when.ToUniversalTime() - DateTime.UtcNow;
+            var sched = ScheduledEvents.FirstOrDefault(s=> s.Identifier == identifier) ??
+                new ScheduledDomainEvent() {
+                    Identifier = identifier ?? new RID().AsBase36,
+                };
+            sched.Event = evt;
+            sched.ScheduledTime = when;
+            if(sched.timer != null) {
+                sched.timer.Dispose();
+                sched.timer = null;
+            }
+            
+            sched.timer = new Timer((s) => {
+                this.Raise((s as ScheduledDomainEvent).Event);
+                this.Unschedule(sched);
+            }, sched, (long)due.TotalMilliseconds, Timeout.Infinite);
+
+            ScheduledEvents.Add(sched);
+        }
+
+        public void Unschedule(ScheduledDomainEvent sched) {
+            sched.timer.Dispose();
+            ScheduledEvents.Remove(sched);
+        }
+
+        public void Unschedule(string identifier) {
+            ScheduledEvents.ForEachReverse(i => {
+                if (i.Identifier == identifier) {
+                    this.Unschedule(i);
+                }
+            });
+        }
 
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
             var tempLi = domainEvents.ToList();

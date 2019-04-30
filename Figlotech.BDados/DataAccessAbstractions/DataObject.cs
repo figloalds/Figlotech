@@ -55,7 +55,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             T obj = obj = (T)(IBusinessObject)this;
 
             foreach (var a in ValidationRules()) {
-                foreach (var err in a.Validate(obj, new ValidationErrors())) {
+                foreach (var err in a.Validate(obj)) {
                     ve.Add(err);
                 }
             }

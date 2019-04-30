@@ -16,7 +16,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods {
         public AesEncryptor(String password, int pin = 179425879) {
             instancePin = pin;
             instanceSecret = password;
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin, instanceSecret);
+            //cr = new CrossRandom(Int32.MaxValue ^ instancePin, instanceSecret);
             GenerateKey();
         }
         byte[] _Key;
@@ -48,9 +48,8 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods {
                 aes.Key = Key;
                 aes.IV = IV;
                 using (var enc = aes.CreateDecryptor()) {
-                    en = enc.TransformFinalBlock(en, 0, en.Length);
+                    return enc.TransformFinalBlock(en, 0, en.Length);
                 }
-                return en;
             }
         }
 
@@ -60,9 +59,8 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods {
                 aes.Key = Key;
                 aes.IV = IV;
                 using (var enc = aes.CreateEncryptor()) {
-                    en = enc.TransformFinalBlock(en, 0, en.Length);
+                    return enc.TransformFinalBlock(en, 0, en.Length);
                 }
-                return en;
             }
         }
 

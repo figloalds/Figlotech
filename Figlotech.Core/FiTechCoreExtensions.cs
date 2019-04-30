@@ -20,6 +20,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks.Dataflow;
 using System.Drawing;
+using System.Text.RegularExpressions;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -83,7 +84,13 @@ namespace Figlotech.Core {
             return (this.H == hsl.H) && (this.S == hsl.S) && (this.L == hsl.L);
         }
     }
-    
+
+    public class ScheduledWorkJob {
+        public WorkJob WorkJob;
+        public DateTime ScheduledTime;
+        public string Identifier;
+    }
+
     public delegate dynamic ComputeField(dynamic o);
     public static class BDadosActivator<T> {
         public static readonly Func<T> Activate =
@@ -131,6 +138,17 @@ namespace Figlotech.Core {
                 .FirstOrDefault(m => CheckParams(m.GetParameters().Select(p => p.GetType()), args))
                 .MakeGenericMethod(genericType)
                 .Invoke(null, args);
+        }
+
+        public static string WildcardToRegex(this Fi selfie, String input) {
+            input = input.Replace("*", "____WCASTER____");
+            input = input.Replace("%", "____WCPCT____");
+            input = input.Replace("?", "____WCQUEST____");
+            var escaped = Regex.Escape(input);
+            escaped = escaped.Replace("____WCASTER____", "[.]{0,}");
+            escaped = escaped.Replace("____WCPCT____", "[.]{0,1}");
+            escaped = escaped.Replace("____WCPCT____", "[.]{1}");
+            return escaped;
         }
 
         public static bool EnableStdoutLogs { get; set; } = false;
@@ -324,8 +342,8 @@ namespace Figlotech.Core {
 
         public static string BytesToString(this Fi __selfie, Fi.DataUnitGeneralFormat format, long value) {
             int mult = 0;
-            var unitNames = Fi.DataUnitNames[format.ToString()];
-            var duf = Fi.DataUnitFactors[format.ToString()];
+            var unitNames = Fi.DataUnitNames[format];
+            var duf = Fi.DataUnitFactors[format];
             while (value > duf && mult < unitNames.Length - 1) {
                 value /= duf;
                 mult++;
@@ -351,6 +369,34 @@ namespace Figlotech.Core {
         //    object o = dr.ItemArray[properColIndex];
         //    return (T)o;
         //}
+
+        static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
+        private static Timer _globalTimer { get; set; } = new Timer(_timerFn, null, TimeSpan.FromSeconds(0), TimeSpan.FromSeconds(5));
+        private static void _timerFn(object a) {
+            lock (GlobalScheduledJobs) {
+                var schedules = GlobalScheduledJobs.Splice(j=> DateTime.UtcNow >= j.ScheduledTime);
+                foreach(var schedule in schedules) {
+                    FiTechRAF.Enqueue(schedule.WorkJob);
+                }
+            }
+        }
+
+        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job) {
+            
+            lock (GlobalScheduledJobs) {
+                GlobalScheduledJobs.Add(new ScheduledWorkJob {
+                    Identifier = identifier,
+                    WorkJob = job,
+                    ScheduledTime = when,
+                });
+            }
+        }
+
+        public static void Unschedule(this Fi _selfie, string identifier) {
+            lock (GlobalScheduledJobs) {
+                GlobalScheduledJobs.RemoveAll(s => s.Identifier == identifier);
+            }
+        }
 
         public static byte[] ComputeHash(this Fi _selfie, string str) {
             using(MemoryStream ms = new MemoryStream(new UTF8Encoding(false).GetBytes(str))) {

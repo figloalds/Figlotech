@@ -135,7 +135,11 @@ namespace Figlotech.BDados.Helpers {
 
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
             try {
-                return ParseExpression(c.expression, typeof(T));
+                var retv = ParseExpression(c.expression, typeof(T));
+                if(Debugger.IsAttached) {
+                    Console.WriteLine(retv.GetCommandText());
+                }
+                return retv;
             } catch(Exception x) {
                 throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}", x);
             }
@@ -147,7 +151,11 @@ namespace Figlotech.BDados.Helpers {
                     return new QbFmt("TRUE");
                 }
                 rootType = typeof(T);
-                return ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
+                var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
+                if (Debugger.IsAttached) {
+                    Console.WriteLine(retv.GetCommandText());
+                }
+                return retv;
             } catch(Exception x) {
                 throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
             }
@@ -216,7 +224,7 @@ namespace Figlotech.BDados.Helpers {
                 } else
                 if (expr.NodeType == ExpressionType.Equal &&
                     CanGetValue(expr.Right) &&
-                    GetValue(expr.Right).GetType() == typeof(string) &&
+                    GetValue(expr.Right)?.GetType() == typeof(string) &&
                     (expr.Left is MemberExpression)
                 ) {
                     var member = (expr.Left as MemberExpression).Member;
@@ -224,7 +232,7 @@ namespace Figlotech.BDados.Helpers {
                     //if (Debugger.IsAttached) {
                     //    Debugger.Break();
                     //}
-                    if (GetValue(expr.Right).GetType() == typeof(string)) {
+                    if (GetValue(expr.Right)?.GetType() == typeof(string)) {
                         strBuilder.Append("(");
                         strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
                         strBuilder.Append("LIKE");
@@ -400,8 +408,10 @@ namespace Figlotech.BDados.Helpers {
                         strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
                     }
                 }
-            } else {
-
+            }
+            if(foofun is NewExpression newex) {
+                var marshalledValue = newex.Constructor.Invoke(newex.Arguments.Select(arg => GetValue(arg)).ToArray());
+                return Qb.Fmt($"@{IntEx.GenerateShortRid()}", marshalledValue);
             }
             if (fullConditions) {
                 return strBuilder;

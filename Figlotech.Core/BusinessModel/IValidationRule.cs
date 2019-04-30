@@ -1,10 +1,12 @@
-﻿namespace Figlotech.Core.BusinessModel {
+﻿using System.Collections.Generic;
+
+namespace Figlotech.Core.BusinessModel {
 
     public interface IValidationRule  {
-        ValidationErrors Validate(IBusinessObject ObjectToValidate, ValidationErrors errors);
+        IEnumerable<ValidationError> Validate(IBusinessObject ObjectToValidate);
     }
 
     public interface IValidationRule<T> : IValidationRule where T : IBusinessObject, new() {
-        ValidationErrors Validate(T ObjectToValidate, ValidationErrors errors);
+        IEnumerable<ValidationError> Validate(T ObjectToValidate);
     }
 }
