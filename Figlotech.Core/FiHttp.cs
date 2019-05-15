@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
+using Figlotech.Core.Helpers;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
@@ -59,6 +60,36 @@ namespace Figlotech.Core {
             }
             return retv;
         }
+        public static async Task<FiHttpResult> Init(string verb, HttpWebRequest req, Func<Stream, Task> UploadRequestStream) {
+            var retv = new FiHttpResult();
+            try {
+                if(verb != "GET" && verb != "OPTIONS") {
+                    if(UploadRequestStream != null) {
+                        using (var ms = new MemoryStream()) {
+                            var t = UploadRequestStream(ms);
+                            ms.Seek(0, SeekOrigin.Begin);
+                            req.ContentLength = ms.Length;
+                            using (var reqStream = req.GetRequestStream()) {
+                                ms.CopyTo(reqStream);
+                                await reqStream.FlushAsync();
+                            }
+                        }
+                    }
+                }
+                using (var resp = await req.GetResponseAsync()) {
+                    retv.Init(resp);
+                }
+            } catch (WebException wex) {
+                using (var resp = wex.Response) {
+                    retv.Init(resp);
+                }
+            } catch (Exception x) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+            }
+            return retv;
+        }
 
         void Init(WebResponse resp) {
             if (resp == null) {
@@ -109,6 +140,20 @@ namespace Figlotech.Core {
         public Stream AsStream() {
             ResultStream.Seek(0, SeekOrigin.Begin);
             return ResultStream;
+        }
+
+        public Stream AsRawStream() {
+            var rawStream = new MemoryStream();
+            using (var writer = new StreamWriter(rawStream, new UTF8Encoding(), 8192, true)) {
+                writer.WriteLine($"HTTP/1.1 {StatusCode} {StatusDescription}");
+                this.Headers.ForEach(header => {
+                    writer.WriteLine();
+                });
+                writer.WriteLine();
+            }
+            ResultStream.CopyTo(rawStream);
+            rawStream.Seek(0, SeekOrigin.Begin);
+            return rawStream;
         }
 
         public byte[] AsBuffer() {
@@ -171,6 +216,17 @@ namespace Figlotech.Core {
             }
         }
 
+        string[] reservedHeaders = new string[] {
+            "Host",
+            "Origin",
+            "Connection",
+            "User-Agent",
+            "Accept",
+            "Referer",
+            "Content-Length",
+            "Content-Type",
+        };
+
         private string UrlPrefix { get; set; }
 
         private string MapUrl(string Url) {
@@ -221,18 +277,21 @@ namespace Figlotech.Core {
             req.Method = "GET";
             req.UserAgent = UserAgent;
             UpdateSyncCode();
+            AddHeaders(req);
+            return await FiHttpResult.InitFromGet(req);
+        }
+
+        private void AddHeaders(HttpWebRequest req) {
             headers.ForEach((h) => {
-                switch (h.Key) {
-                    case "Content-Type":
-                        break;
-                    case "Content-Length":
-                        break;
-                    default:
-                        req.Headers.Add(h.Key, h.Value);
-                        break;
+                if(h.Key == "Content-Length") {
+                    return;
+                }
+                if (reservedHeaders.Contains(h.Key)) {
+                    ReflectionTool.SetValue(req, h.Key.Replace("-", ""), h.Value);
+                } else {
+                    req.Headers.Add(h.Key, h.Value);
                 }
             });
-            return await FiHttpResult.InitFromGet(req);
         }
 
         public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
@@ -240,17 +299,7 @@ namespace Figlotech.Core {
             req.Method = "GET";
             req.UserAgent = UserAgent;
             UpdateSyncCode();
-            headers.ForEach((h) => {
-                switch (h.Key) {
-                    case "Content-Type":
-                        break;
-                    case "Content-Length":
-                        break;
-                    default:
-                        req.Headers.Add(h.Key, h.Value);
-                        break;
-                }
-            });
+            AddHeaders(req);
 
             try {
                 using (var resp = req.GetResponse() as HttpWebResponse) {
@@ -273,28 +322,18 @@ namespace Figlotech.Core {
             }
         }
 
-        public async Task<FiHttpResult> Post(String Url, Func<Stream, Task> UploadRequestStream = null) {
+        public async Task<FiHttpResult> Custom(String verb, String Url, Func<Stream, Task> UploadRequestStream = null) {
             var req = (HttpWebRequest)WebRequest.Create(MapUrl(Url));
-            req.Method = "POST";
+            req.Method = verb;
             req.UserAgent = UserAgent;
             UpdateSyncCode();
-            headers.ForEach((h) => {
-                switch (h.Key) {
-                    case "Content-Type":
-                        req.ContentType = h.Value;
-                        break;
-                    case "Content-Length":
-                        if (Int64.TryParse(h.Value, out long len)) {
-                            req.ContentLength = len;
-                        }
-                        break;
-                    default:
-                        req.Headers.Add(h.Key, h.Value);
-                        break;
-                }
-            });
+            AddHeaders(req);
 
-            return await FiHttpResult.InitFromPost(req, UploadRequestStream);
+            return await FiHttpResult.Init(verb, req, UploadRequestStream);
+        }
+
+        public async Task<FiHttpResult> Post(String Url, Func<Stream, Task> UploadRequestStream = null) {
+            return await Custom("POST", Url, UploadRequestStream);
         }
 
         public async Task<FiHttpResult> Post<T>(String Url, T postData) {
@@ -317,13 +356,23 @@ namespace Figlotech.Core {
         }
         public string this[string k] {
             get {
+                
                 if (headers.ContainsKey(k)) {
                     return headers[k];
                 }
                 return null;
             }
             set {
-                headers[k] = value;
+                var rectifiedHeaderArray = new char[k.Length];
+                for (int i = 0; i < rectifiedHeaderArray.Length; i++) {
+                    if (i == 0 || k[i - 1] == '-') {
+                        rectifiedHeaderArray[i] = Char.ToUpper(k[i]);
+                    } else {
+                        rectifiedHeaderArray[i] = k[i];
+                    }
+                }
+                var rectifiedHeader = new String(rectifiedHeaderArray);
+                headers[rectifiedHeader] = value;
             }
         }
     }

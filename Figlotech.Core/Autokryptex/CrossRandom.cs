@@ -136,7 +136,7 @@ namespace Figlotech.Core {
             int r = 0;
             for (int i = 0; i < 1 + (opc % 2); i++) {
                 ++opc;
-                var val = opc * CallCount * i;
+                var val = Math.Abs(opc * CallCount * i);
                 retv += val;
                 var a = AppSecret[val % asl];
                 var b = Primes[val % Primes.Length];

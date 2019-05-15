@@ -407,6 +407,12 @@ namespace Figlotech.Core {
             }
         }
 
+        public static byte[] ComputeHash(this Fi _selfie, byte[] data) {
+            using (var sha = SHA256.Create()) {
+                return sha.ComputeHash(data);
+            }
+        }
+
         public static byte[] ComputeHash(this Fi _selfie, Stream stream) {
             using (var sha = SHA256.Create()) {
                 return sha.ComputeHash(stream);
