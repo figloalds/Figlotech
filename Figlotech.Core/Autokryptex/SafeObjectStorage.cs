@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -20,19 +21,33 @@ namespace Figlotech.Core.Autokryptex {
     }
     public class SafeObjectStorage {
         IFileSystem fileSystem { get; set; }
-        AutokryptexEncryptor dataEncryptor { get; set; }
-        AesEncryptor fileEncryptor { get; set; }
+        IEncryptionMethod dataEncryptor { get; set; }
+        IEncryptionMethod fileEncryptor { get; set; }
 
         List<SafeDataPayload> Cache { get; set; } = new List<SafeDataPayload>();
         Queue<string> DeletionQueue { get; set; } = new Queue<string>();
+
+        public int CacheLength {
+            get {
+                lock (Cache)
+                    return Cache.Count;
+            }
+        }
+
 
         List<Type> KnownTypes { get; set; } = new List<Type>();
         int _fetchLock = 0;
 
         public SafeObjectStorage(IFileSystem fs, string password) {
             fileSystem = fs;
-            dataEncryptor = new AutokryptexEncryptor(password);
+            dataEncryptor = new AutokryptexEncryptor(password, 2);
             fileEncryptor = new AesEncryptor(RID.MachineRID);
+        }
+
+        public SafeObjectStorage(IFileSystem fs, IEncryptionMethod fileEncryptionMethod, IEncryptionMethod dataEncryptionMethod) {
+            fileSystem = fs;
+            dataEncryptor = dataEncryptionMethod;
+            fileEncryptor = fileEncryptionMethod;
         }
 
         public void AddWorkingTypes(params Type[] types) {
@@ -41,16 +56,82 @@ namespace Figlotech.Core.Autokryptex {
             );
         }
 
+        public void PreloadAll() {
+            var cachedRids = Cache.Select(c => c.RID);
+            var newList = new List<SafeDataPayload>();
+            fileSystem.ForFilesIn("", rid => {
+                if (cachedRids.Contains(rid)) {
+                    return;
+                }
+                _cachePayload(_getPayloadFromFile(rid));
+            });
+            lock(Cache) {
+                Cache.Sort((a, b) =>
+                    a.CreatedTime > b.CreatedTime ? 1 :
+                    a.CreatedTime < b.CreatedTime ? -1 :
+                    0
+                );
+            }
+        }
+
+        public IEnumerable<(string RID, Type Type, object Value)> CacheFetch() {
+            lock(Cache)
+                foreach(var payload in Cache) {
+                    var type = KnownTypes.FirstOrDefault(t => t.Name == payload.Type);
+                    if(type == null) {
+                        continue;
+                    }
+                    var value = _decryptObject(type, payload.Data);
+                    yield return (payload.RID, type, value);
+                }
+        }
+
+        private byte[] _gzip(byte[] data) {
+            using (MemoryStream ms = new MemoryStream(data)) {
+                using (var retv = new MemoryStream()) {
+                    using (var zs = new GZipStream(retv, CompressionLevel.Optimal, true)) {
+                        ms.CopyTo(zs);
+                    }
+                    return retv.ToArray();
+                }
+            }
+        }
+
+        private byte[] _gunzip(byte[] data) {
+            using (MemoryStream ms = new MemoryStream(data)) {
+                using (var zs = new GZipStream(ms, CompressionMode.Decompress)) {
+                    using (var retv = new MemoryStream()) {
+                        zs.CopyTo(retv);
+                        return retv.ToArray();
+                    }
+                }
+            }
+        }
+
         private byte[] _encryptObject(object o) {
-            return dataEncryptor.Encrypt(Fi.StandardEncoding.GetBytes(
-                JsonConvert.SerializeObject(o)
-            ));
+            return dataEncryptor.Encrypt(
+                _gzip(
+                    Fi.StandardEncoding.GetBytes(
+                    JsonConvert.SerializeObject(o)
+                    )
+                )
+            );
         }
 
         private T _decryptObject<T>(byte[] data) {
-            return JsonConvert.DeserializeObject<T>(Fi.StandardEncoding.GetString(
+            return JsonConvert.DeserializeObject<T>(
+                Fi.StandardEncoding.GetString(
+                    _gunzip(
+                        dataEncryptor.Decrypt(data)
+                    )
+                )
+            );
+        }
+
+        private object _decryptObject(Type type, byte[] data) {
+            return JsonConvert.DeserializeObject(Fi.StandardEncoding.GetString(
                 dataEncryptor.Decrypt(data)
-            ));
+            ), type);
         }
 
         public IEnumerable<(string RID, T Data)> Fetch<T>() {
@@ -108,19 +189,22 @@ namespace Figlotech.Core.Autokryptex {
             }
             var data = _encryptObject(item);
             var hash = Fi.Tech.ComputeHash(data);
+            var objectRID = new RID().AsBase36;
             var payload = new SafeDataPayload {
                 Type = item.GetType().Name,
                 Hash = hash,
                 Data = data,
-                CreatedTime = DateTime.UtcNow.Ticks
+                CreatedTime = DateTime.UtcNow.Ticks,
+                RID = objectRID
             };
-            var objectRID = new RID().AsBase36;
-
-            var bytes = Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(payload));
+            _cachePayload(payload);
+            var bytes = _gzip(
+                Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(payload))
+            );
             var encBytes = fileEncryptor.Encrypt(bytes);
 
             fileSystem.WriteAllBytes(objectRID, encBytes);
-
+            
             return objectRID;
         }
 
@@ -146,17 +230,16 @@ namespace Figlotech.Core.Autokryptex {
         }
 
         public SafeDataPayload _getPayloadFromFile(string rid) {
-            var buffer = fileEncryptor.Decrypt(
-                fileSystem.ReadAllBytes(rid)
+            var buffer = _gunzip(
+                fileEncryptor.Decrypt(
+                    fileSystem.ReadAllBytes(rid)
+                )
             );
-            var bufferString = Fi.StandardEncoding.GetString(buffer);
-            Console.WriteLine(bufferString);
-            if (Debugger.IsAttached) {
-                Debugger.Break();
-            }
-            return JsonConvert.DeserializeObject<SafeDataPayload>(
-                bufferString
+            var retv = JsonConvert.DeserializeObject<SafeDataPayload>(
+                Fi.StandardEncoding.GetString(buffer)
             );
+            retv.RID = rid;
+            return retv;
         }
 
         public T _getObjectFromFile<T>(string rid) {

@@ -24,12 +24,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public int MaxStreamBufferLength { get; set; } = 64 * 1024 * 1024;
 
         public String FixRel(ref string relative) {
-            return relative = relative.Replace('\\', '/')
+            return relative = relative?.Replace('\\', '/')
                 .Replace("//", "/")
                 .Replace('/', S);
         }
         public String UnFixRel(ref string relative) {
-            return relative = relative.Replace(S, '/')
+            return relative = relative?.Replace(S, '/')
                 .Replace($"{S}", "/");
         }
 

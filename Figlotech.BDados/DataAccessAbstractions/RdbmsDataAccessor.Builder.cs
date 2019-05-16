@@ -124,6 +124,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
+                            string childRidCacheId = cacheId(reader, childRidCol, ulType);
                             object newObj;
                             if (parentRid == null || childRid == null) {
                                 continue;
@@ -131,12 +132,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             bool isUlNew = false;
                             //if (!constructionCache.ContainsKey(childRidCol))
                             //    constructionCache.Add(childRidCol, new Dictionary<string, object>());
-                            if (constructionCache.ContainsKey(childRid)) {
-                                newObj = constructionCache[childRid];
+                            if (constructionCache.ContainsKey(childRidCacheId)) {
+                                newObj = constructionCache[childRidCacheId];
                             } else {
                                 newObj = Activator.CreateInstance(ulType, new object[] { });
                                 addMethod.Invoke(li, new object[] { newObj });
-                                constructionCache[childRid] = newObj;
+                                constructionCache[childRidCacheId] = newObj;
                                 isUlNew = true;
                             }
 
@@ -158,6 +159,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
                             string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
                             string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
+                            string childRidCacheId = cacheId(reader, childRidCol, ulType);
                             object newObj = null;
                             if (parentRid == null || childRid == null) {
                                 continue;
@@ -166,11 +168,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             if (!constructionCache.ContainsKey(childRidCol))
                                 constructionCache.Add(childRidCol, new Dictionary<string, object>());
 
-                            if (constructionCache.ContainsKey(childRid)) {
-                                newObj = constructionCache[childRid];
+                            if (constructionCache.ContainsKey(childRidCacheId)) {
+                                newObj = constructionCache[childRidCacheId];
                             } else {
                                 newObj = Activator.CreateInstance(ulType, new object[] { });
-                                constructionCache[childRid] = newObj;
+                                constructionCache[childRidCacheId] = newObj;
                                 isUlNew = true;
                             }
                             refl[fieldAlias] = newObj;
@@ -204,6 +206,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         );
 
         static Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
+
+        public string cacheId(IDataReader reader, string myRidCol, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
+            return $"{t.Name}_{rid}";
+        }
 
         public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
             List<T> retv = new List<T>();
@@ -252,12 +259,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         //transaction.Benchmarker.Mark($"Enter result row {row}");
                         isNew = true;
                         T newObj;
-                        if (!constructionCache.ContainsKey(reader[myRidCol] as string)) {
+                        if (!constructionCache.ContainsKey(cacheId(reader, myRidCol, typeof(T)))) {
                             newObj = new T();
-                            constructionCache[reader[myRidCol] as string] = newObj;
+                            constructionCache[cacheId(reader, myRidCol, typeof(T))] = newObj;
                             retv.Add(newObj);
                         } else {
-                            newObj = (T)constructionCache[reader[myRidCol] as string];
+                            newObj = (T)constructionCache[cacheId(reader, myRidCol, typeof(T))];
                             isNew = false;
                         }
 

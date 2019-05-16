@@ -33,7 +33,7 @@ namespace Figlotech.Core {
             Retv.Reverse();
             return new string(Retv.ToArray());
         }
-        
+
         public static byte[] CramString(String input, int digitCount) {
             // if I use CrossRandom here it might bug
             // when setting the app secret or instance secret mutiple times.

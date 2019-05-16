@@ -13,7 +13,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
 
         String instancePassword;
 
-        public AutokryptexEncryptor(String password) {
+        public AutokryptexEncryptor(String password, int MaxEncryptors = 6) {
             instancePassword = password;
             CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
             var passwordBytes = MathUtils.CramString(password, 16);
@@ -21,7 +21,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             for(int i = 0; i < args.Length; i++) {
                 args[i] = password[i] ^ cr.Next(77777);
             }
-            Init(args);
+            Init(args, MaxEncryptors);
         }
         
         public byte[] Decrypt(byte[] en) {
@@ -32,7 +32,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             return encryptor.Encrypt(en);
         }
 
-        private void Init(int[] args) {
+        private void Init(int[] args, int maxEncryptors) {
             if (args.Length < 2) {
                 throw new Exception("Crazy Locking Engine requires 2 or more integers as 'Key', preferably big primes");
             }
@@ -55,7 +55,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                     encryptor.Add(
                         (IEncryptionMethod)
                         Activator.CreateInstance(em,
-                            new Object[] { a }
+                            new Object[] { a ^ cr.Next(Int32.MaxValue) }
                         )
                     );
                 } else 
@@ -68,6 +68,11 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                     );
                 }
             }
+
+            while(encryptor.Count > maxEncryptors) {
+                encryptor.RemoveAt(cr.Next(encryptor.Count));
+            }
+
             encryptor.Add(new AesEncryptor(instancePassword));
         }
 
