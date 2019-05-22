@@ -12,6 +12,31 @@ namespace System
 {
     public static class IEnumerableExtensions
     {
+        public static void SetAllTo<T>(this T[] me, T val) {
+            for(int i = 0; i < me.Length; i++) {
+                me[i] = val;
+            }
+        }
+
+        public static IEnumerable<T> PickRandom<T>(this IEnumerable<T> me, int count) {
+            var arr = me.ToArray();
+            var r = new Random();
+            var pickedNumbers = new int[Math.Min(arr.Length, count)];
+            pickedNumbers.SetAllTo(-1);
+            int cursor = 0;
+            for(int i = 0; i < count; i++) {
+                if (cursor >= pickedNumbers.Length) {
+                    pickedNumbers.SetAllTo(-1);
+                }
+                int pick = 0;
+                do {
+                    pick = r.Next(0, arr.Length);
+                } while (pickedNumbers.Contains(pick));
+                pickedNumbers[i % pickedNumbers.Length] = pick;
+                cursor++;
+                yield return arr[pickedNumbers[i]];
+            }
+        }
 
         public static DataTable ToDataTable<T>(this IEnumerable<T> me) {
             var dt = new DataTable();
