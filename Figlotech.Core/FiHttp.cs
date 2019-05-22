@@ -60,19 +60,22 @@ namespace Figlotech.Core {
             }
             return retv;
         }
+
         public static async Task<FiHttpResult> Init(string verb, HttpWebRequest req, Func<Stream, Task> UploadRequestStream) {
             var retv = new FiHttpResult();
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
                     if(UploadRequestStream != null) {
-                        using (var ms = new MemoryStream()) {
-                            var t = UploadRequestStream(ms);
-                            ms.Seek(0, SeekOrigin.Begin);
-                            req.ContentLength = ms.Length;
+                        try {
                             using (var reqStream = req.GetRequestStream()) {
-                                ms.CopyTo(reqStream);
+                                var t = UploadRequestStream(reqStream);
+                                if (t != null) {
+                                    await t;
+                                }
                                 await reqStream.FlushAsync();
                             }
+                        } catch(Exception x) {
+                            throw x;
                         }
                     }
                 }
