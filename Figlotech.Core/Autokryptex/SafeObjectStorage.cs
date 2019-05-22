@@ -74,6 +74,11 @@ namespace Figlotech.Core.Autokryptex {
             }
         }
 
+        public int CacheCount<T>() {
+            lock (Cache)
+                return Cache.Count(payload=> payload.Type == typeof(T).Name);
+        }
+
         public IEnumerable<(string RID, Type Type, object Value)> CacheFetch() {
             lock(Cache)
                 foreach(var payload in Cache) {
