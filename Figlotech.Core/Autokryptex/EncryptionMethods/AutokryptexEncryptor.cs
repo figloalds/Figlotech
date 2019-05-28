@@ -1,4 +1,4 @@
-using Figlotech.Core;
+﻿using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,14 +12,17 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
         AggregateEncryptor encryptor = new AggregateEncryptor();
 
         String instancePassword;
+        String encodedPassword;
+
+        public bool MultiPassRandomEncoder { get; set; } = false;
 
         public AutokryptexEncryptor(String password, int MaxEncryptors = 6) {
             instancePassword = password;
             CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
             var passwordBytes = MathUtils.CramString(password, 16);
-            int[] args = new int[password.Length];
+            int[] args = new int[16];
             for(int i = 0; i < args.Length; i++) {
-                args[i] = password[i] ^ cr.Next(77777);
+                args[i] = passwordBytes[i] ^ cr.Next(77777);
             }
             Init(args, MaxEncryptors);
         }
@@ -42,7 +45,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                 typeof(BinaryBlur),
                 typeof(BinaryNegativation),
                 typeof(BinaryScramble),
-                typeof(EnigmaEncryptor),
+                //typeof(EnigmaEncryptor),
             };
 
             foreach(var a in args) {
@@ -62,10 +65,17 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                 if(ctors.Any(
                     c => c.GetParameters().Length == 0 
                 )) {
-                    encryptor.Add(
+                    var inst =
                         (IEncryptionMethod)
-                        Activator.CreateInstance(em)
-                    );
+                        Activator.CreateInstance(em);
+
+                    passBytes = inst.Encrypt(passBytes);
+
+                    if(MultiPassRandomEncoder) {
+                        encryptor.Add(
+                            inst
+                        );
+                    }
                 }
             }
 
@@ -73,6 +83,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                 encryptor.RemoveAt(cr.Next(encryptor.Count));
             }
 
+            encodedPassword = Convert.ToBase64String(passBytes);
             encryptor.Add(new AesEncryptor(instancePassword));
         }
 
