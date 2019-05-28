@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Figlotech.Core;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -85,7 +86,7 @@ namespace Figlotech.Extensions
 
         public static void Write<T>(this Stream me, T val) {
             if(val is String || val is string) {
-                Write(me, val as String, Encoding.UTF8);
+                Write(me, val as String, Fi.StandardEncoding);
                 return;
             }
             Action err = () => {
@@ -111,7 +112,7 @@ namespace Figlotech.Extensions
 
         public static void Write(this Stream me, String text, Encoding encoding = null) {
             if (encoding == null)
-                encoding = Encoding.UTF8;
+                encoding = Fi.StandardEncoding;
             var buff = encoding.GetBytes(text);
             me.Write(buff, 0, buff.Length);
         }

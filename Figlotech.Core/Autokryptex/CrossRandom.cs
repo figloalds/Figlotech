@@ -72,7 +72,7 @@ namespace Figlotech.Core {
 
         private static byte[] CramStringPlus(String input, int digitCount) {
             CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
-            byte[] workset = Encoding.UTF8.GetBytes(input);
+            byte[] workset = Fi.StandardEncoding.GetBytes(input);
             while (workset.Count() > digitCount) {
                 byte ch = workset[0];
                 workset = workset.Skip(1).ToArray();

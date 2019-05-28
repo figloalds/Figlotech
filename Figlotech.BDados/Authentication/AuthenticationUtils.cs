@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using Figlotech.Core;
 using Figlotech.Core.Autokryptex.EncryptMethods;
 
 namespace Figlotech.BDados.Authentication {
@@ -9,7 +10,7 @@ namespace Figlotech.BDados.Authentication {
         public static String HashPass(String pass, String encryptionKey) {
             return Convert.ToBase64String(
                 new AutokryptexEncryptor(encryptionKey).Encrypt(
-                    Encoding.UTF8.GetBytes(pass)
+                    Fi.StandardEncoding.GetBytes(pass)
                 ));
         }
 

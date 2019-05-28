@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.FileAcessAbstractions;
+﻿using Figlotech.Core;
+using Figlotech.Core.FileAcessAbstractions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -18,7 +19,7 @@ namespace Figlotech.BDados.CustomForms {
             if (fa == null)
                 return null;
             try {
-                String RawJson = Encoding.UTF8.GetString(fa.ReadAllBytes(Relative));
+                String RawJson = Fi.StandardEncoding.GetString(fa.ReadAllBytes(Relative));
                 if (RawJson == null || RawJson.Length == 0) {
                     throw new CustomFormsException("Custom Form not found.");
                 }

@@ -46,7 +46,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static Encoding StandardEncoding => new UTF8Encoding(true);
+        public static Encoding StandardEncoding => new UTF8Encoding(false);
         
         /// <summary>
         /// This is here because ain't nobody got time to write

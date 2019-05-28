@@ -10,7 +10,7 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods {
             if(inputString.IsBase64()) {
                 bytes = Convert.FromBase64String(inputString);
             } else {
-                bytes = Encoding.UTF8.GetBytes(inputString);
+                bytes = Fi.StandardEncoding.GetBytes(inputString);
             }
             return self.Encrypt(bytes);
         }

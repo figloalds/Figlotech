@@ -1977,7 +1977,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             cmdParam.Value = str;
                             cmdParam.DbType = DbType.String;
                             var paramRefl = new ObjectReflector(cmdParam);
-                            paramRefl["Encoding"] = Encoding.UTF8;
+                            paramRefl["Encoding"] = Fi.StandardEncoding;
                         } else {
                             cmdParam.Value = param.Value;
                         }

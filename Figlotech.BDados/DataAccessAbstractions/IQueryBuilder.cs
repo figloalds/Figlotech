@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Helpers;
+﻿using Figlotech.Core;
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -28,7 +29,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
                     paramRefl.Slot(cmdParam);
-                    paramRefl["Encoding"] = Encoding.UTF8;
+                    paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else {
                     cmdParam.Value = param.Value;
                 }

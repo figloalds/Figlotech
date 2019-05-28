@@ -51,7 +51,7 @@ namespace Figlotech.Core.Extensions {
 
             StreamOptions
                 .Process(rawStream, (usableStream) => {
-                    using (var reader = new StreamReader(usableStream, Encoding.UTF8)) {
+                    using (var reader = new StreamReader(usableStream, Fi.StandardEncoding)) {
                         var json = reader.ReadToEnd();
                         try {
                             var parse = JsonConvert.DeserializeObject(json, obj.GetType());
@@ -113,7 +113,7 @@ namespace Figlotech.Core.Extensions {
                         }
                         xsSubmit.Serialize(writer, obj);
                         xml = sww.ToString();
-                        using (var sw = new StreamWriter(ms, Encoding.UTF8)) {
+                        using (var sw = new StreamWriter(ms, Fi.StandardEncoding)) {
                             sw.Write(xml);
                             ms.Seek(0, SeekOrigin.Begin);
                             StreamOptions
@@ -144,7 +144,7 @@ namespace Figlotech.Core.Extensions {
                     var serializer = new XmlSerializer(obj.GetType());
                     // this is necessary because XML Deserializer is a bitch
 
-                    using (StreamReader reader = new StreamReader(usableStream, Encoding.UTF8)) {
+                    using (StreamReader reader = new StreamReader(usableStream, Fi.StandardEncoding)) {
                         var retv = serializer.Deserialize(reader);
                         Fi.Tech.MemberwiseCopy(retv, obj);
                     }

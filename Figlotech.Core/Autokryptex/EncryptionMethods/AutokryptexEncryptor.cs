@@ -1,4 +1,4 @@
-﻿using Figlotech.Core;
+using Figlotech.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,7 +36,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             if (args.Length < 2) {
                 throw new Exception("Crazy Locking Engine requires 2 or more integers as 'Key', preferably big primes");
             }
-
+            var passBytes = Fi.StandardEncoding.GetBytes(instancePassword);
             CrossRandom cr = new CrossRandom(Int32.MaxValue ^ args[0]);
             Type[] availableMethods = new Type[] {
                 typeof(BinaryBlur),

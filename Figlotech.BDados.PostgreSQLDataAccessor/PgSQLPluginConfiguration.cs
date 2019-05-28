@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using System.Text;
 using System.IO;
 using Figlotech.Core.Autokryptex.EncryptMethods;
+using Figlotech.Core;
 
 namespace Figlotech.BDados.PgSQLDataAccessor
 {
@@ -27,7 +28,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor
         public void SaveToFile(String path, String password) {
 
             var json = JsonConvert.SerializeObject(this);
-            var bytes = Encoding.UTF8.GetBytes(json);
+            var bytes = Fi.StandardEncoding.GetBytes(json);
             var autokryptex = new AutokryptexEncryptor(password);
             var encryptedBytes = autokryptex.Encrypt(bytes);
 
@@ -41,7 +42,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor
             var bytes = File.ReadAllBytes(path);
             var autokryptex = new AutokryptexEncryptor(password);
             var decryptedBytes = autokryptex.Decrypt(bytes);
-            var json = Encoding.UTF8.GetString(decryptedBytes);
+            var json = Fi.StandardEncoding.GetString(decryptedBytes);
             var obj = JsonConvert.DeserializeObject<PgSQLPluginConfiguration>(json);
 
             return obj;
