@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,17 +9,28 @@ namespace Figlotech.Core {
     public class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
         Dictionary<TKey, TValue> _dmmy = new Dictionary<TKey, TValue>();
         Func<TKey, TValue> SelfInitFn { get; set; }
+        public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {
-                lock (_dmmy) {
+                lock (key) {
+                    TValue retv;
                     if (!_dmmy.ContainsKey(key)) {
-                        _dmmy.Add(key, SelfInitFn(key));
+                        var init = SelfInitFn(key);
+                        if(AllowNullValueCaching || init != null) {
+                            _dmmy.Add(key, init);
+                        }
+                        retv = init;
+                    } else {
+                        retv = _dmmy[key];
                     }
-                    return _dmmy[key];
+                    return retv;
                 }
             }
             set {
-                lock (_dmmy) {
+                lock (key) {
+                    if(!AllowNullValueCaching && value ==  null) {
+                        return;
+                    }
                     _dmmy[key] = value;
                 }
             }
