@@ -255,6 +255,10 @@ namespace Figlotech.Core {
             return GlobalTimeStampSource.GetUtc();
         }
 
+        public static Func<Task> ActionToTask(this Fi _selfie, Action fn) {
+            return async () => FireTask(_selfie, fn);
+        }
+
         // stackoverflow.com/questions/1193955
         public static DateTime GetUtcNetworkTime(this Fi _selfie, string ntpServer) {
 
@@ -1187,6 +1191,7 @@ namespace Figlotech.Core {
         public static async Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             await FireTask<int>(_selfie, () => { task?.Invoke(); return 0; }, handling, executeAnywaysWhenFinished);
         }
+        
         public static async Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             // Could just call the other function here
             // Decided to CTRL+C in favor of runtime performance.
