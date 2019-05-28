@@ -1,4 +1,4 @@
-﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Autokryptex;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
@@ -129,14 +129,14 @@ namespace Figlotech.Core {
         public string AsString() {
             ResultStream.Seek(0, SeekOrigin.Begin);
             var bytes = ResultStream.ToArray();
-            var retv = Encoding.UTF8.GetString(bytes);
+            var retv = Fi.StandardEncoding.GetString(bytes);
             return retv;
         }
 
         public string AsDecodedString(IEncryptionMethod method) {
             ResultStream.Seek(0, SeekOrigin.Begin);
             var bytes = ResultStream.ToArray();
-            var retv = Encoding.UTF8.GetString(method.Decrypt(bytes));
+            var retv = Fi.StandardEncoding.GetString(method.Decrypt(bytes));
             return retv;
         }
 

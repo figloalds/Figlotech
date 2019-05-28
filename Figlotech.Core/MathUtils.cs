@@ -47,7 +47,7 @@ namespace Figlotech.Core {
             // to inside CrossRandom and I'll use that to "set instanceKey"
             // this will be neat 
             Random cr = new Random(Int32.MaxValue ^ 123456789);
-            byte[] workset = Encoding.UTF8.GetBytes(input);
+            byte[] workset = Fi.StandardEncoding.GetBytes(input);
             while (workset.Count() > digitCount) {
                 byte ch = workset[0];
                 workset = workset.Skip(1).ToArray();

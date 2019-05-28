@@ -39,12 +39,12 @@ namespace Figlotech.Core.InAppServiceHosting
                         var msg = new byte[len];
                         server.Read(msg, 0, msg.Length);
                         var end = server.ReadByte();
-                        var msgText = Encoding.UTF8.GetString(msg);
+                        var msgText = Fi.StandardEncoding.GetString(msg);
 
                         var respText = Process(msgText);
 
                         server.WriteByte(0x02);
-                        var respBytes = Encoding.UTF8.GetBytes(respText);
+                        var respBytes = Fi.StandardEncoding.GetBytes(respText);
                         server.Write<int>(respBytes.Length);
                         server.Write(respBytes, 0, respBytes.Length);
                         server.WriteByte(0x03);

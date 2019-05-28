@@ -28,7 +28,7 @@ namespace Figlotech.Core.InAppServiceHosting {
 
                 client.WriteByte(0x02);
                 var reqText = commands;
-                var reqBytes = Encoding.UTF8.GetBytes(reqText);
+                var reqBytes = Fi.StandardEncoding.GetBytes(reqText);
                 client.Write<int>(reqBytes.Length);
                 client.Write(reqBytes, 0, reqBytes.Length);
                 client.WriteByte(0x03);
@@ -39,7 +39,7 @@ namespace Figlotech.Core.InAppServiceHosting {
                 var len = client.Read<int>();
                 var msg = new byte[len];
                 client.Read(msg, 0, msg.Length);
-                var msgText = Encoding.UTF8.GetString(msg);
+                var msgText = Fi.StandardEncoding.GetString(msg);
                 var end = client.ReadByte();
                 return msgText;
             }

@@ -506,14 +506,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         destination.Delete(HASHLIST_FILENAME);
                         destination.Write(HASHLIST_FILENAME, (stream) => {
                             string text = JsonConvert.SerializeObject(HashList);
-                            byte[] writev = Encoding.UTF8.GetBytes(text);
+                            byte[] writev = Fi.StandardEncoding.GetBytes(text);
                             stream.Write(writev, 0, writev.Length);
                         });
 
                         origin.Delete(HASHLIST_FILENAME);
                         origin.Write(HASHLIST_FILENAME, (stream) => {
                             string text = JsonConvert.SerializeObject(HashList);
-                            byte[] writev = Encoding.UTF8.GetBytes(text);
+                            byte[] writev = Fi.StandardEncoding.GetBytes(text);
                             stream.Write(writev, 0, writev.Length);
                         });
                     }
