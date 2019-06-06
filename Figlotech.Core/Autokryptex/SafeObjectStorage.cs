@@ -29,11 +29,9 @@ namespace Figlotech.Core.Autokryptex {
 
         public int CacheLength {
             get {
-                lock (Cache)
-                    return Cache.Count;
+                return Cache.Count;
             }
         }
-
 
         List<Type> KnownTypes { get; set; } = new List<Type>();
         int _fetchLock = 0;

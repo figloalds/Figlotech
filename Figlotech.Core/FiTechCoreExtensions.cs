@@ -1191,7 +1191,26 @@ namespace Figlotech.Core {
         public static async Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             await FireTask<int>(_selfie, () => { task?.Invoke(); return 0; }, handling, executeAnywaysWhenFinished);
         }
-        
+
+        public static IEnumerable<Exception> ToExceptionArray(this Exception ex) {
+            return Fi.Tech.ExceptionTreeToArray(ex);
+        }
+
+        public static IEnumerable<Exception> ExceptionTreeToArray(this Fi _selfie, Exception x) {
+            var ex = x;
+            while (ex != null) {
+                yield return ex;
+                if (ex is AggregateException agex) {
+                    foreach (var inex in agex.InnerExceptions) {
+                        foreach(var inex2 in ExceptionTreeToArray(_selfie, inex)) {
+                            yield return inex2;
+                        }
+                    }
+                }
+                ex = ex.InnerException;
+            }
+        }
+
         public static async Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             // Could just call the other function here
             // Decided to CTRL+C in favor of runtime performance.

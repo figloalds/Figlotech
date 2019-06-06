@@ -1,21 +1,97 @@
 ﻿using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace System
 {
+    public interface IAccumulator<T> {
+        void Apply(T element, IEnumerable<T> elements);
+    }
+    public class Accumulators {
+        public static SumAccumulator<T> Sum<T>(MemberInfo field) {
+            return new SumAccumulator<T>(field);
+        }
+        public static MinAccumulator<T, TResult> Min<T, TResult>(MemberInfo field) {
+            return new MinAccumulator<T, TResult>(field);
+        }
+        public static MaxAccumulator<T, TResult> Max<T, TResult>(MemberInfo field) {
+            return new MaxAccumulator<T, TResult>(field);
+        }
+
+        public class SumAccumulator<T> : IAccumulator<T> {
+            MemberInfo member { get; set; }
+            public SumAccumulator(MemberInfo field) {
+                member = field;
+            }
+
+            public void Apply(T element, IEnumerable<T> elements) {
+                var value = Enumerable.Sum<T>(elements, (e) => (decimal)ReflectionTool.GetMemberValue(member, e));
+                ReflectionTool.SetMemberValue(member, element, Convert.ChangeType(value, ReflectionTool.GetTypeOf(member)));
+            }
+        }
+        public class MinAccumulator<T, TResult> : IAccumulator<T> {
+            MemberInfo member { get; set; }
+            public MinAccumulator(MemberInfo field) {
+                member = field;
+            }
+
+            public void Apply(T element, IEnumerable<T> elements) {
+                var value = Enumerable.Min<T, TResult>(elements, (e) => (TResult)ReflectionTool.GetMemberValue(member, e));
+                ReflectionTool.SetMemberValue(member, element, Convert.ChangeType(value, typeof(TResult)));
+            }
+        }
+        public class MaxAccumulator<T, TResult> : IAccumulator<T> {
+            MemberInfo member { get; set; }
+            public MaxAccumulator(MemberInfo field) {
+                member = field;
+            }
+
+            public void Apply(T element, IEnumerable<T> elements) {
+                var value = Enumerable.Max<T, TResult>(elements, (e) => (TResult)ReflectionTool.GetMemberValue(member, e));
+                ReflectionTool.SetMemberValue(member, element, Convert.ChangeType(value, typeof(TResult)));
+            }
+        }
+    }
     public static class IEnumerableExtensions
     {
         public static void SetAllTo<T>(this T[] me, T val) {
             for(int i = 0; i < me.Length; i++) {
                 me[i] = val;
             }
+        }
+
+        static SelfInitializerDictionary<string, MethodInfo> AccumulatorInitializerMethodsCache = new SelfInitializerDictionary<string, MethodInfo>(type=> typeof(Accumulators).GetMethods().FirstOrDefault(m => m.IsStatic && m.Name == type));
+
+        public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params (string type, Expression<Func<T, object>> exp)[] accumulators) where T : new() {
+            var accts = new IAccumulator<T>[accumulators.Length];
+            for(int i = 0; i < accts.Length; i++) {
+                var acctInitMethod = AccumulatorInitializerMethodsCache[accumulators[i].type];
+                var member = (accumulators[i].exp as MemberExpression).Member;
+                if(acctInitMethod.GetGenericArguments().Length == 1) {
+                    accts[i] = (IAccumulator<T>) acctInitMethod.MakeGenericMethod(typeof(T)).Invoke(null, new object[] { member });
+                } else {
+                    accts[i] = (IAccumulator<T>)acctInitMethod.MakeGenericMethod(typeof(T), ReflectionTool.GetTypeOf(member)).Invoke(null, new object[] { member });
+                }
+            }
+
+            return Accumulate(self, grouping, accts);
+        }
+
+        public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params IAccumulator<T>[] accumulators) where T : new() {
+            var grp = self.GroupBy(grouping);
+            return grp.Select(gp => {
+                var cp = Fi.Tech.CopyOf(gp.First());
+                accumulators.ForEach(acc => acc.Apply(cp, gp));
+                return cp;
+            });
         }
 
         public static IEnumerable<T> PickRandom<T>(this IEnumerable<T> me, int count) {

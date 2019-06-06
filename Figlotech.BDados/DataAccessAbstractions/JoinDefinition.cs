@@ -153,7 +153,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int c = Joins.Count;
             return c>0;
         }
-        
+
+        public override string ToString() {
+            return $"{string.Join("|", this.Joins.Select(j=> $"{j.TableName}({j.Args})"))}";
+        }
+
         private String GetAPrefix(String Alias)
         {
             List<String> prefixes = (from a in Joins select a.Prefix).ToList();

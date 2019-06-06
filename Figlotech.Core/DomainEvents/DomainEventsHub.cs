@@ -39,6 +39,7 @@ namespace Figlotech.Core.DomainEvents {
     public class DomainEventsHub {
         public static DomainEventsHub Global = new DomainEventsHub();
         private readonly DomainEventsHub parentHub;
+        private ManualResetEvent WaitHandle { get; set; } = new ManualResetEvent(true);
 
         private bool IsTerminationIssued = false;
 
@@ -187,6 +188,9 @@ namespace Figlotech.Core.DomainEvents {
             lock(EventTasks) {
                 EventTasks.RemoveAll(t => t.IsCompleted || t.IsFaulted || t.IsCanceled);
             }
+
+            WaitHandle.Set();
+            WaitHandle.Reset();
         }
 
         ///// <summary>
@@ -244,6 +248,10 @@ namespace Figlotech.Core.DomainEvents {
             return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(Id), e => filter(e));
         }
 
+        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
+            return await PollForEventsSince(maximumPollTime, () => GetEventsSince(dt), e => filter(e));
+        }
+
         private async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
             return await Task.Run<IDomainEvent[]>(async () => {
@@ -264,7 +272,7 @@ namespace Figlotech.Core.DomainEvents {
                         WriteLog($"Event flushing issued {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
                         return events;
                     }
-                    await Task.Delay(500);
+                    WaitHandle.WaitOne(maximumPollTime);
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
                 flushOrder.IsReleased = true;
                 lock ("FLUSH_SWITCH") {
@@ -273,10 +281,6 @@ namespace Figlotech.Core.DomainEvents {
                 WriteLog($"Event pooling returned no events");
                 return new IDomainEvent[0];
             });
-        }
-
-        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
-            return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(dt), e => filter(e));
         }
 
         public void SubscribeListener(IDomainEventListener listener) {
