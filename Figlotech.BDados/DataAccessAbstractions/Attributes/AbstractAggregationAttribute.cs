@@ -5,12 +5,11 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// This is used by AggregateFieldAttribute
     /// </summary>
     public abstract class AbstractAggregationAttribute : Attribute {
-        public string ObjectKey;
-        public Type RemoteObjectType; 
+        public string Flags { get; set; } = "full";
+        string[] _explodedFlags = null;
+        public string[] ExplodedFlags => _explodedFlags ?? (_explodedFlags = Flags.Split(','));
 
-        public AbstractAggregationAttribute(Type remoteObjectType, string keyField) {
-            ObjectKey = keyField;
-            RemoteObjectType = remoteObjectType;
+        public AbstractAggregationAttribute() {
         }
     }
 }

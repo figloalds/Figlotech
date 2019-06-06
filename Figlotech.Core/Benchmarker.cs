@@ -81,7 +81,7 @@ namespace System {
         }
 
         public static void Assert(this Benchmarker self, Expression<Func<bool>> expr) {
-            if (!FiTechCoreExtensions.EnableBenchMarkers ||  expr == null)
+            if (!FiTechCoreExtensions.EnableBenchMarkers || expr == null)
                 return;
             try {
                 bool result = expr.Compile().Invoke();

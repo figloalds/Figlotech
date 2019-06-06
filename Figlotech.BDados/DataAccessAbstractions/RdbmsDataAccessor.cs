@@ -228,7 +228,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Execute("SELECT 1");
                 return isOnline = true;
             } catch (Exception x) {
-                throw new BDadosException ("Error testing connection to the database", x);
+                throw new BDadosException("Error testing connection to the database", x);
             }
         }
 
@@ -569,7 +569,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (CurrentTransaction != null) {
                 return Fetch(CurrentTransaction, args);
             }
-            return Access((transaction) => Fetch(transaction, args).ToList() );
+            return Access((transaction) => Fetch(transaction, args).ToList());
         }
 
         public IEnumerable<T> Fetch<T>(IQueryBuilder conditions, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new() {
@@ -849,9 +849,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in membersOfT.Where(
                     (f) =>
                         f.GetCustomAttribute<AggregateFieldAttribute>() != null)) {
-                var infoField = field.GetCustomAttribute<AggregateFieldAttribute>();
-                var type = infoField?.RemoteObjectType;
-                var key = infoField?.ObjectKey;
+                var info = field.GetCustomAttribute<AggregateFieldAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
+                var type = info?.RemoteObjectType;
+                var key = info?.ObjectKey;
                 String childAlias;
                 var tname = type.Name;
                 var pkey = key;
@@ -870,8 +876,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 joh.As(childAlias);
 
                 var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
-                if (qjoins.Any() && !qjoins.First().Columns.Contains(infoField?.RemoteField)) {
-                    qjoins.First().Columns.Add(infoField?.RemoteField);
+                if (qjoins.Any() && !qjoins.First().Columns.Contains(info?.RemoteField)) {
+                    qjoins.First().Columns.Add(info?.RemoteField);
                     //continue;
                 }
 
@@ -886,6 +892,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateFarFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFarFieldAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
                 String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
 
@@ -943,7 +955,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var type = ReflectionTool.GetTypeOf(field);
                 var key = field.GetCustomAttribute<AggregateObjectAttribute>()?.ObjectKey;
-                var infoObj = field.GetCustomAttribute<AggregateObjectAttribute>();
+                var info = field.GetCustomAttribute<AggregateObjectAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias;
                 var tname = type.Name;
                 var pkey = key;
@@ -983,6 +1001,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
+                if (
+                     (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                     (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
 
                 String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.RID";
@@ -1020,6 +1044,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFieldAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.ObjectKey);
                 build.AggregateField(thisAlias, childAlias, info.RemoteField, field.Name);
             }
@@ -1029,6 +1059,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         f.GetCustomAttribute<AggregateFarFieldAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateFarFieldAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
                 String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
                 build.AggregateField(thisAlias, farAlias, info.FarField, field.Name);
@@ -1053,6 +1089,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateObjectAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateObjectAttribute>();
+                if (
+                     (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                     (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, memberType.Name, info.ObjectKey);
                 build.AggregateObject(thisAlias, childAlias, field.Name);
                 if (!Linear) {
@@ -1063,6 +1105,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateListAttribute>() != null)) {
                 var memberType = ReflectionTool.GetTypeOf(field);
                 var info = field.GetCustomAttribute<AggregateListAttribute>();
+                if (
+                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
+                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
+                ) {
+                    continue;
+                }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
                 build.AggregateList(thisAlias, childAlias, field.Name);
                 if (!Linear) {
@@ -1136,11 +1184,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         rowEquivalentObject.Id = (reader[0] as long?) ?? rowEquivalentObject.Id;
                         rowEquivalentObject.RID = (reader[0] as string) ?? rowEquivalentObject.RID;
                         rowEquivalentObject.IsPersisted = true;
-                    } 
+                    }
                 }
             });
             var elaps = DateTime.UtcNow - d1;
-            
+
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i2 = 0;

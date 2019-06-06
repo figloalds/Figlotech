@@ -205,7 +205,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
-        static Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
+        static Dictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<string, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
@@ -223,8 +223,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 using (var reader = command.ExecuteReader()) {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
-                    lock(join) {
-                        if (!_autoAggregateCache.ContainsKey(join)) {
+                    Benchmarker.Assert(()=> join != null);
+                    var jstr = join.ToString();
+                    lock (jstr) {
+                        if (!_autoAggregateCache.ContainsKey(jstr)) {
                             // This is only ever used in the auto aggregations
                             // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
                             var fieldNames = new string[reader.FieldCount];
@@ -233,17 +235,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             int idx = 0;
                             // With this I make a reusable cache and reduce the "per-object" field 
                             // probing when copying values from the reader
-                            var newEntry = fieldNames.Select<string, (string, int, string)>(name => {
+                            var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
                                 var prefix = name.Split('_')[0].ToLower();
                                 return (prefix, idx++, name.Replace($"{prefix}_", ""));
                             })
-                            .GroupBy(i => i.Item1)
-                            .ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-                            _autoAggregateCache.Add(join, newEntry);
-                        }
+                            .Where(i => i.Item1 != null)
+                            .GroupBy(i => i.Item1);
+                            var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                            _autoAggregateCache.Add(jstr, newEntry);
+                        } 
                     }
-                    Benchmarker.Assert(()=> _autoAggregateCache.ContainsKey(join));
-                    fieldNamesDict = _autoAggregateCache[join];
+                    Benchmarker.Assert(()=> _autoAggregateCache.ContainsKey(jstr));
+                    fieldNamesDict = _autoAggregateCache[jstr];
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();

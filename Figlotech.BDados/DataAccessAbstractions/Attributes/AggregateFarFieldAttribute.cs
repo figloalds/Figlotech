@@ -10,7 +10,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// FarKey = The key that relates your immediate type with the far one
     /// FarField = The far field from which to load information.
     /// </summary>
-    public class AggregateFarFieldAttribute : Attribute {
+    public class AggregateFarFieldAttribute : AbstractAggregationAttribute {
         public Type ImediateType;
         public string ImediateKey;
         public Type FarType;
