@@ -254,10 +254,15 @@ namespace Figlotech.Core {
                     //}
                     WorkJob job;
 
+                    int foulEntryCount = 2;
                     bool isFoulEntry = false;
                     while (true) {
                         job = null;
-                        int foulEntryCount = 10;
+                        lock(workers) {
+                            if(workers.Count > ParallelSize) {
+                                break;
+                            }
+                        }
                         lock (ActivatedWorkQueue) {
                             if (ActivatedWorkQueue.Count > workers.Count && workers.Count < ParallelSize) {
                                 SpawnWorker(true);
@@ -273,8 +278,8 @@ namespace Figlotech.Core {
                             if (isFoulEntry && --foulEntryCount < 0) {
                                 break;
                             }
-                            Thread.Sleep(200);
                             Thread.CurrentThread.IsBackground = true;
+                            Thread.Sleep(200);
                             var cnt = 0;
                             lock (ActivatedWorkQueue) {
                                 cnt = ActivatedWorkQueue.Count;
