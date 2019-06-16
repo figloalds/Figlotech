@@ -76,12 +76,13 @@ namespace Figlotech.Core.InAppServiceHosting
 
                             cServ.BreakMainLoop = false;
                             cServ.InterruptIssued = false;
-                            Task[] lt = new Task[512];
+                            Task[] lt = new Task[2];
                             int l = 0;
                             while (!cServ.BreakMainLoop && !cServ.InterruptIssued) {
                                 lt[l] = cServ.MainLoopIteration();
-                                if (lt[l] != null) {
-                                    lt[l].Wait();
+                                var prev = (l - 1) >= 0 ? l - 1 : lt.Length - 1;
+                                if (lt[prev] != null && !lt[prev].IsCompleted) {
+                                    lt[prev].Wait();
                                 }
                                 l = (l + 1) % lt.Length;
                                 Task.Delay(cServ.IterationDelay).Wait();
