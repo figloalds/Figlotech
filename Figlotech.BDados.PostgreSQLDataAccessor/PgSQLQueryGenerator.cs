@@ -1,4 +1,11 @@
 ﻿
+using Figlotech.BDados.Builders;
+using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Helpers;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 /**
  * Figlotech.BDados.Builders.PgSQLQueryGenerator
  * This is a blatant copy from MySQL Query Generator
@@ -12,19 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core.Interfaces;
 using System.Reflection;
-using System.Linq.Expressions;
-using Figlotech.BDados.Helpers;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.Core;
-using System.Text.RegularExpressions;
-using Figlotech.BDados.Builders;
-using Figlotech.Core.Helpers;
-using System.Diagnostics;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
     public class PgSQLQueryGenerator : IQueryGenerator {
@@ -70,7 +65,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
             for (int i = 0; i < members.Length; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
-                CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
+                CreateTable.Append(GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options ?? "");
                 if (i != members.Length - 1) {
@@ -79,6 +74,127 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             }
             CreateTable.Append(" );");
             return CreateTable;
+        }
+        /// <summary>
+        /// deprecated
+        /// this is responsibility of the rdbms query generator
+        /// </summary>
+        /// <param name="field"></param>
+        /// <param name="info"></param>
+        /// <returns></returns>
+        public String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
+            if (info == null)
+                info = field.GetCustomAttribute<FieldAttribute>();
+            if (info == null)
+                return "VARCHAR(128)";
+            var typeOfField = ReflectionTool.GetTypeOf(field);
+            var nome = field.Name;
+            String tipo = GetDatabaseType(field, info);
+            if (info.Type != null && info.Type.Length > 0)
+                tipo = info.Type;
+            var options = "";
+            if (info.Options != null && info.Options.Length > 0) {
+                options = info.Options;
+            } else {
+                if (!info.AllowNull) {
+                    options += " NOT NULL";
+                } else if (Nullable.GetUnderlyingType(typeOfField) == null && typeOfField.IsValueType && !info.AllowNull) {
+                    options += " NOT NULL";
+                }
+                if (info.Unique)
+                    options += " UNIQUE";
+                if ((info.AllowNull && info.DefaultValue == null))
+                    options += "DEFAULT NULL";
+                else if (info.DefaultValue != null)
+                    options += $" DEFAULT {ConvertDefaultOption(info.DefaultValue, typeOfField)}";
+                foreach (var att in field.GetCustomAttributes())
+                    if (att is PrimaryKeyAttribute)
+                        options += " PRIMARY KEY";
+            }
+
+            return $"{nome} {tipo} {options}";
+        }
+
+        public string ConvertDefaultOption(object input, Type type) {
+            if (input == null) {
+                return "NULL";
+            }
+            if (type == typeof(string)) {
+                return Fi.Tech.CheapSanitize(input);
+            }
+            if (type == typeof(Boolean) &&
+                (input.GetType() == typeof(Int16) ||
+                input.GetType() == typeof(Int32) ||
+                input.GetType() == typeof(Int64) ||
+                input.GetType() == typeof(Single) ||
+                input.GetType() == typeof(Double) ||
+                input.GetType() == typeof(Decimal))
+            ) {
+                return ((int)input != 0).ToString().ToUpper();
+            }
+            return Fi.Tech.CheapSanitize(input);
+        }
+
+        /// <summary>
+        /// deprecated
+        /// Must implement this on each rdbms query generator
+        /// </summary>
+        /// <param name="field"></param>
+        /// <param name="info"></param>
+        /// <returns></returns>
+        public String GetDatabaseType(MemberInfo field, FieldAttribute info = null) {
+            if (info == null)
+                foreach (var att in field.GetCustomAttributes())
+                    if (att is FieldAttribute) {
+                        info = (FieldAttribute)att; break;
+                    }
+            if (info == null)
+                return "VARCHAR(100)";
+            var typeOfField = ReflectionTool.GetTypeOf(field);
+            string tipoDados;
+            if (Nullable.GetUnderlyingType(typeOfField) != null)
+                tipoDados = Nullable.GetUnderlyingType(typeOfField).Name;
+            else
+                tipoDados = typeOfField.Name;
+            if (typeOfField.IsEnum) {
+                return "INT";
+            }
+            String type = "VARCHAR(20)";
+            if (info.Type != null && info.Type.Length > 0) {
+                type = info.Type;
+            } else {
+                switch (tipoDados.ToLower()) {
+                    case "string":
+                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
+                        break;
+                    case "int":
+                    case "int32":
+                        type = $"INT";
+                        break;
+                    case "short":
+                    case "int16":
+                        type = $"SMALLINT";
+                        break;
+                    case "long":
+                    case "int64":
+                        type = $"BIGINT";
+                        break;
+                    case "bool":
+                    case "boolean":
+                        type = $"BOOLEAN";
+                        break;
+                    case "float":
+                    case "double":
+                    case "single":
+                    case "decimal":
+                        type = $"DECIMAL(16,3)";
+                        break;
+                    case "datetime":
+                        type = $"TIMEsTAMP";
+                        break;
+                }
+            }
+            return type;
         }
 
         public IQueryBuilder GenerateCallProcedure(string name, object[] args) {
@@ -204,8 +320,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
-            if(limit != null || skip != null) {
-                Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");
+            if (limit != null || skip != null) {
+                Query.Append($"LIMIT {(skip != null ? $"{skip}," : "")} {limit ?? Int32.MaxValue}");
             }
             Query.Append(";");
             return Query;
@@ -353,6 +469,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE INDEX_SCHEMA=@1;", schema);
         }
 
+
+
         public IQueryBuilder RenameTable(string tabName, string newName) {
             return new QueryBuilder().Append($"RENAME TABLE {tabName} TO {newName};");
         }
@@ -408,7 +526,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
-            if(!isNullable) {
+            if (!isNullable) {
                 return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
                 return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
@@ -455,6 +573,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {
             throw new NotImplementedException();
+        }
+
+        public IQueryBuilder DisableForeignKeys() {
+            return Qb.Fmt("SET session_replication_role = 'replica';");
+        }
+        public IQueryBuilder EnableForeignKeys() {
+            return Qb.Fmt("SET session_replication_role = 'origin';");
         }
     }
 }

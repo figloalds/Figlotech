@@ -13,7 +13,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public abstract class DataObject<T> : BaseDataObject, IDataObject, IBusinessObject where T: IDataObject, IBusinessObject, new() {
 
         [PrimaryKey]
-        [Field(Options = "NOT NULL AUTO_INCREMENT PRIMARY KEY")]
+        [Field()]
         public override long Id { get; set; } = 0;
 
         [Field(AllowNull = true, DefaultValue = null)]

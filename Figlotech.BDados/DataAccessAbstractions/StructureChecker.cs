@@ -268,11 +268,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.AddColumn(
-                _table, StructureChecker.GetColumnDefinition(_columnMember)));
+                _table, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
         }
 
         public override string ToString() {
-            return $"Create column {_columnMember.Name} {StructureChecker.GetColumnDefinition(_columnMember)}";
+            return $"Create column {_columnMember.Name}";
         }
     }
 
@@ -312,7 +312,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
+                _table, _column, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
         }
 
         public override string ToString() {
@@ -393,7 +393,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, StructureChecker.GetColumnDefinition(_columnMember)));
+                _table, _column, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
         }
 
         public override string ToString() {
@@ -666,7 +666,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 "VARCHAR", "VARBINARY"
                             };
                             var sizesMatch = !typesToCheckSize.Contains(datatype) || length == fieldAtt.Size;
-                            var dbDefinition = GetDatabaseType(field, fieldAtt);
+                            var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
                             //var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                             if (
                                 columnIsNullable != fieldAtt.AllowNull ||
@@ -1007,19 +1007,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
             fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
             retv.AddRange(fk);
-            var idx = DataAccessor.Query<ScStructuralLink>(
-                 DataAccessor
-                     .QueryGenerator
-                     .InformationSchemaIndexes(dbName)
-             );
-            idx.ForEach(a => {
-                a.Type = ScStructuralKeyType.Index;
-                a.IsUnique = !a.IsUnique;
-                if(a.KeyName == "PRIMARY") {
-                    a.Type = ScStructuralKeyType.PrimaryKey;
-                }
-            });
-            retv.AddRange(idx);
+            //var idx = DataAccessor.Query<ScStructuralLink>(
+            //     DataAccessor
+            //         .QueryGenerator
+            //         .InformationSchemaIndexes(dbName)
+            // );
+            //idx.ForEach(a => {
+            //    a.Type = ScStructuralKeyType.Index;
+            //    a.IsUnique = !a.IsUnique;
+            //    if(a.KeyName == "PRIMARY") {
+            //        a.Type = ScStructuralKeyType.PrimaryKey;
+            //    }
+            //});
+            //retv.AddRange(idx);
             var wtNames = workingTypes.Select(wt => wt.Name.ToLower());
             retv.RemoveAll(r => !wtNames.Contains(r.Table.ToLower()));
             return retv;
@@ -1054,7 +1054,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 // DRAGONS
 
             }
-            DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=0;");
+            DataAccessor.Execute(DataAccessor.QueryGenerator.DisableForeignKeys());
             //DataAccessor.BeginTransaction();
             try {
 
@@ -1080,138 +1080,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } catch (Exception) {
 
             } finally {
-                DataAccessor.Execute("SET FOREIGN_KEY_CHECKS=1;");
+                DataAccessor.Execute(DataAccessor.QueryGenerator.EnableForeignKeys());
                 //DataAccessor.EndTransaction();
             }
         }
         
-        // |...................|
-        // |..... WARNING......|
-        // |...................|
-        // |......DRAGONS......|
-        // |...................|
-        //         |...|
-        //         |...|
-        //         |...|
-        // Actually, these dragons should be refactored into IRdbmsAccessorPlugin
-        // Soon
-        // Use safety gear when going down there.
-        private static String GetDatabaseType(MemberInfo field, FieldAttribute info = null, bool size = true) {
-            if (info == null)
-                foreach (var att in field.GetCustomAttributes())
-                    if (att is FieldAttribute) {
-                        info = (FieldAttribute)att; break;
-                    }
-            if (info == null)
-                return "VARCHAR(100)";
-
-            string dataType;
-            var fieldType = ReflectionTool.GetTypeOf(field);
-            if (Nullable.GetUnderlyingType(fieldType) != null)
-                dataType = Nullable.GetUnderlyingType(fieldType).Name;
-            else
-                dataType = fieldType.Name;
-            if (fieldType.IsEnum) {
-                return "INT(11)";
-            }
-            String type = "VARCHAR(20)";
-            if (info.Type != null && info.Type.Length > 0) {
-                type = info.Type;
-            } else {
-                switch (dataType.ToLower()) {
-                    case "rid":
-                        type = $"VARCHAR(64)";
-                        break;
-                    case "byte[]":
-                        if (info.Size != 0 && info.Size <= 255)
-                            type = $"BINARY({info.Size})";
-                        else
-                            type = "BLOB";
-                        break;
-                    case "string":
-                        type = $"VARCHAR({info.Size})";
-                        break;
-                    case "int":
-                    case "int32":
-                        type = $"INT(11)";
-                        break;
-                    case "uint":
-                    case "uint32":
-                        type = $"INT(11) UNSIGNED";
-                        break;
-                    case "short":
-                    case "int16":
-                        type = $"SMALLINT(3)";
-                        break;
-                    case "ushort":
-                    case "uint16":
-                        type = $"SMALLINT(3) UNSIGNED";
-                        break;
-                    case "long":
-                    case "int64":
-                        type = $"BIGINT(20)";
-                        break;
-                    case "ulong":
-                    case "uint64":
-                        type = $"BIGINT(20) UNSIGNED";
-                        break;
-                    case "bool":
-                    case "boolean":
-                        type = $"TINYINT(1)";
-                        break;
-                    case "float":
-                    case "single":
-                        type = $"FLOAT(16,3)";
-                        break;
-                    case "decimal":
-                        type = $"DECIMAL(20,3)";
-                        break;
-                    case "double":
-                        type = $"DOUBLE(20,3)";
-                        break;
-                    case "datetime":
-                        type = $"DATETIME";
-                        break;
-                    case "FnVal`1":
-                        var underlying = field.GetType().GetProperty("Value");
-                        type = GetDatabaseType(underlying, info, size);
-                        break;
-                }
-            }
-            return type;
-        }
-
-        internal static String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
-            if (info == null)
-                info = field.GetCustomAttribute<FieldAttribute>();
-            if (info == null)
-                return "VARCHAR(128)";
-            var nome = field.Name;
-            var fieldType = ReflectionTool.GetTypeOf(field);
-            String tipo = GetDatabaseType(field, info);
-            if (info.Type != null && info.Type.Length > 0)
-                tipo = info.Type;
-            var options = "";
-            if (info.Options != null && info.Options.Length > 0) {
-                options = info.Options;
-            } else {
-                if (!info.AllowNull) {
-                    options += " NOT NULL";
-                } else if (Nullable.GetUnderlyingType(field.GetType()) == null && fieldType.IsValueType && !info.AllowNull) {
-                    options += " NOT NULL";
-                }
-                //if (info.Unique)
-                //    options += " UNIQUE";
-                if ((info.AllowNull && info.DefaultValue == null) || info.DefaultValue != null)
-                    options += $" DEFAULT {CheapSanitize(info.DefaultValue)}";
-                foreach (var att in field.GetCustomAttributes())
-                    if (att is PrimaryKeyAttribute)
-                        options += " AUTO_INCREMENT PRIMARY KEY";
-            }
-
-            return $"{nome} {tipo} {options}";
-        }
-
         private static String CheapSanitize(Object value) {
             String valOutput;
             if (value == null)

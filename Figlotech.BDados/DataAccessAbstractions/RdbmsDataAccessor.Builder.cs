@@ -209,7 +209,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
-            return $"{t.Name}_{rid}";
+            var retv = $"{t.Name}_{rid}";
+            if (retv == null && Debugger.IsAttached) {
+                Debugger.Break();
+            }
+            return retv;
         }
 
         public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
@@ -242,6 +246,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .Where(i => i.Item1 != null)
                             .GroupBy(i => i.Item1);
                             var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                            if(jstr == null && Debugger.IsAttached) {
+                                Debugger.Break();
+                            }
                             _autoAggregateCache.Add(jstr, newEntry);
                         } 
                     }
@@ -255,6 +262,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var myRidCol = $"{myPrefix}_{ridcol}";
                     bool isNew;
                     var constructionCache = new Dictionary<string, object>();
+                    if (myRidCol == null && Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
                     constructionCache.Add(myRidCol, new Dictionary<string, object>());
                     transaction?.Benchmarker?.Mark("Enter Build Result");
                     int row = 0;

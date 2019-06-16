@@ -69,7 +69,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             QueryBuilder CreateTable = new QbFmt($"CREATE TABLE IF NOT EXISTS {objectName} (\n");
             for (int i = 0; i < members.Length; i++) {
                 var info = members[i].GetCustomAttribute<FieldAttribute>();
-                CreateTable.Append(Fi.Tech.GetColumnDefinition(members[i], info));
+                CreateTable.Append(GetColumnDefinition(members[i], info));
                 CreateTable.Append(" ");
                 CreateTable.Append(info.Options ?? "");
                 if (i != members.Length - 1) {
@@ -78,6 +78,99 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             }
             CreateTable.Append(" );");
             return CreateTable;
+        }
+
+        /// <summary>
+        /// deprecated
+        /// this is responsibility of the rdbms query generator
+        /// </summary>
+        /// <param name="field"></param>
+        /// <param name="info"></param>
+        /// <returns></returns>
+        public String GetColumnDefinition(MemberInfo field, FieldAttribute info = null) {
+            if (info == null)
+                info = field.GetCustomAttribute<FieldAttribute>();
+            if (info == null)
+                return "VARCHAR(128)";
+            var typeOfField = ReflectionTool.GetTypeOf(field);
+            var nome = field.Name;
+            String tipo = GetDatabaseType(field, info);
+            if (info.Type != null && info.Type.Length > 0)
+                tipo = info.Type;
+            var options = "";
+            if (info.Options != null && info.Options.Length > 0) {
+                options = info.Options;
+            } else {
+                if (!info.AllowNull) {
+                    options += " NOT NULL";
+                } else if (Nullable.GetUnderlyingType(typeOfField) == null && typeOfField.IsValueType && !info.AllowNull) {
+                    options += " NOT NULL";
+                }
+                if (info.Unique)
+                    options += " UNIQUE";
+                if ((info.AllowNull && info.DefaultValue == null) || info.DefaultValue != null)
+                    options += $" DEFAULT {Fi.Tech.CheapSanitize(info.DefaultValue)}";
+                foreach (var att in field.GetCustomAttributes())
+                    if (att is PrimaryKeyAttribute)
+                        options += " AUTO_INCREMENT PRIMARY KEY";
+            }
+
+            return $"{nome} {tipo} {options}";
+        }
+
+        public String GetDatabaseType(MemberInfo field, FieldAttribute info = null) {
+            if (info == null)
+                foreach (var att in field.GetCustomAttributes())
+                    if (att is FieldAttribute) {
+                        info = (FieldAttribute)att; break;
+                    }
+            if (info == null)
+                return "VARCHAR(100)";
+            var typeOfField = ReflectionTool.GetTypeOf(field);
+            string tipoDados;
+            if (Nullable.GetUnderlyingType(typeOfField) != null)
+                tipoDados = Nullable.GetUnderlyingType(typeOfField).Name;
+            else
+                tipoDados = typeOfField.Name;
+            if (typeOfField.IsEnum) {
+                return "INT";
+            }
+            String type = "VARCHAR(20)";
+            if (info.Type != null && info.Type.Length > 0) {
+                type = info.Type;
+            } else {
+                switch (tipoDados.ToLower()) {
+                    case "string":
+                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
+                        break;
+                    case "int":
+                    case "int32":
+                        type = $"INT";
+                        break;
+                    case "short":
+                    case "int16":
+                        type = $"SMALLINT";
+                        break;
+                    case "long":
+                    case "int64":
+                        type = $"BIGINT";
+                        break;
+                    case "bool":
+                    case "boolean":
+                        type = $"TINYINT(1)";
+                        break;
+                    case "float":
+                    case "double":
+                    case "single":
+                    case "decimal":
+                        type = $"FLOAT(16,3)";
+                        break;
+                    case "datetime":
+                        type = $"DATETIME";
+                        break;
+                }
+            }
+            return type;
         }
 
         public IQueryBuilder GenerateCallProcedure(string name, object[] args) {
@@ -452,6 +545,13 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {
             throw new NotImplementedException();
+        }
+
+        public IQueryBuilder DisableForeignKeys() {
+            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
+        }
+        public IQueryBuilder EnableForeignKeys() {
+            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
         }
     }
 }

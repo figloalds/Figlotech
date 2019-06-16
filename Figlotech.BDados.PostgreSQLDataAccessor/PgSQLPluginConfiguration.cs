@@ -17,11 +17,12 @@ namespace Figlotech.BDados.PgSQLDataAccessor
         public String Database { get; set; }
         public String User { get; set; }
         public String Password { get; set; }
-        public int Port { get; set; } = 3306;
+        public String Schema { get; set; }
+        public int Port { get; set; } = 5432;
         public int PoolSize { get; set; } = 10;
         public bool UsePooling { get; set; } = true;
-        public int Timeout { get; set; } = 60000;
-        public int Lifetime { get; set; } = 60000;
+        public int Timeout { get; set; } = 1024;
+        public int Lifetime { get; set; } = 1024;
         public bool ResetConnection { get; set; } = true;
         public bool ContinuousConnection { get; set; } = false;
 
@@ -48,8 +49,22 @@ namespace Figlotech.BDados.PgSQLDataAccessor
             return obj;
         }
 
-        public String GetConnectionString() { 
-            return $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database}" : "")};Min Pool Size=1;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Timeout};DefaultCommandTimeout={Timeout};ConnectionLifetime={Lifetime};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;";
+        public String GetConnectionString() {
+            var config = new Npgsql.NpgsqlConnectionStringBuilder() {
+                Host = Host,
+                Port = Port,
+                Username = User,
+                Password = Password,
+                PersistSecurityInfo = true,
+                Database = Database??"",
+                MinPoolSize = 1,
+                MaxPoolSize = PoolSize,
+                Pooling = UsePooling,
+                Timeout = Timeout,
+                ConnectionIdleLifetime = Lifetime,
+                CommandTimeout = Timeout,
+            };
+            return config.ToString();
         }
 
     }
