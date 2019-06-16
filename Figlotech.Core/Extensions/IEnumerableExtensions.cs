@@ -68,6 +68,18 @@ namespace System
             }
         }
 
+        public static void Shuffle<T>(this IList<T> list) {
+            int n = list.Count;
+            var rng = new Random();
+            while (n > 1) {
+                n--;
+                int k = rng.Next(n + 1);
+                T value = list[k];
+                list[k] = list[n];
+                list[n] = value;
+            }
+        }
+
         static SelfInitializerDictionary<string, MethodInfo> AccumulatorInitializerMethodsCache = new SelfInitializerDictionary<string, MethodInfo>(type=> typeof(Accumulators).GetMethods().FirstOrDefault(m => m.IsStatic && m.Name == type));
 
         public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params (string type, Expression<Func<T, object>> exp)[] accumulators) where T : new() {
