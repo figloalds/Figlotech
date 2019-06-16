@@ -43,7 +43,7 @@ namespace Figlotech.Core.DomainEvents {
 
         private bool IsTerminationIssued = false;
 
-        public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(30);
+        public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(2);
         public DateTime LastEventDateTime {
             get {
                 lock(EventCache) {
