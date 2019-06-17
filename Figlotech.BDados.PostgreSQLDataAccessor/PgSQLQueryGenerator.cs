@@ -29,12 +29,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
+            var type = inputObject.GetType();
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
-            query.Append(GenerateFieldsString(inputObject.GetType(), true));
+            query.Append(GenerateFieldsString(type, true));
             query.Append(")");
             query.Append("VALUES (");
-            var members = GetMembers(inputObject.GetType());
+            var members = GetMembers(type);
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             for (int i = 0; i < members.Count; i++) {
                 query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
@@ -42,16 +43,17 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     query.Append(",");
                 }
             }
-            query.Append(") ON DUPLICATE KEY UPDATE ");
-            var Fields = GetMembers(inputObject.GetType());
-            for (int i = 0; i < Fields.Count; ++i) {
-                if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
-                    continue;
-                query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
-                if (i < Fields.Count - 1) {
-                    query.Append(",");
-                }
-            }
+            query.Append(")");
+            //query.Append("ON CONFLICT (" + GenerateKeysString(type) + ") DO UPDATE SET ");
+            //var Fields = GetMembers(inputObject.GetType());
+            //for (int i = 0; i < Fields.Count; ++i) {
+            //    if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+            //        continue;
+            //    query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
+            //    if (i < Fields.Count - 1) {
+            //        query.Append(",");
+            //    }
+            //}
             return query;
         }
 
@@ -104,12 +106,14 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 if (info.Unique)
                     options += " UNIQUE";
                 if ((info.AllowNull && info.DefaultValue == null))
-                    options += "DEFAULT NULL";
+                    options += " DEFAULT NULL";
                 else if (info.DefaultValue != null)
                     options += $" DEFAULT {ConvertDefaultOption(info.DefaultValue, typeOfField)}";
                 foreach (var att in field.GetCustomAttributes())
-                    if (att is PrimaryKeyAttribute)
-                        options += " PRIMARY KEY";
+                    if (att is PrimaryKeyAttribute) {
+                        options = " PRIMARY KEY";
+                        tipo = "SERIAL";
+                    }
             }
 
             return $"{nome} {tipo} {options}";
@@ -429,18 +433,31 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     Query.Append(",");
             }
             // -- 
-            Query.Append("ON DUPLICATE KEY UPDATE ");
-            var Fields = GetMembers(typeof(T));
-            for (int i = 0; i < Fields.Count; ++i) {
-                if (OmmitPk && Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
-                    continue;
-                Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
-                if (i < Fields.Count - 1) {
-                    Query.Append(",");
-                }
-            }
+            //Query.Append("ON CONFLICT ("+ GenerateKeysString(typeof(T)) + ") DO UPDATE SET ");
+            //var Fields = GetMembers(typeof(T));
+            //for (int i = 0; i < Fields.Count; ++i) {
+            //    if (OmmitPk && Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+            //        continue;
+            //    Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
+            //    if (i < Fields.Count - 1) {
+            //        Query.Append(",");
+            //    }
+            //}
             // -- 
             return Query;
+        }
+
+        public IQueryBuilder GenerateKeysString(Type type) {
+            QueryBuilder sb = new QueryBuilder();
+            var fields = GetMembers(type);
+            for (int i = 0; i < fields.Count; i++) {
+                if (
+                    fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null ||
+                    fields[i].GetCustomAttribute<FieldAttribute>()?.Unique == true
+                )
+                    sb.Append(", ");
+            }
+            return sb;
         }
 
         public IQueryBuilder GenerateFieldsString(Type type, bool ommitPk = false) {
@@ -517,7 +534,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder AddUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"alter table {table} ADD UNIQUE KEY {constraintName}({column});");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} UNIQUE ({column});");
         }
         public IQueryBuilder AddPrimaryKey(string table, string column, string constraintName) {
             table = table.ToLower();
@@ -565,10 +582,11 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
-            var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
-            var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+            var type = rs.FirstOrDefault()?.GetType()??typeof(T);
+            var id = FiTechBDadosExtensions.IdColumnOf[type];
+            var rid = FiTechBDadosExtensions.RidColumnOf[type];
 
-            return Qb.Fmt($"SELECT {id.Name}, {rid.Name} FROM {typeof(T).Name} WHERE") + Qb.In(rid.Name, rs, i => i.RID);
+            return Qb.Fmt($"SELECT {id}, {rid} FROM {type.Name} WHERE") + Qb.In(rid, rs, i => i.RID);
         }
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {

@@ -51,5 +51,18 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 o[a.Key] = a.Value;
             }
         }
+
+        public object ProcessParameterValue(object value) {
+            if(value == null) {
+                return DBNull.Value;
+            } else
+            if (value is UInt64) {
+                return value.ToString();
+            } else
+            if (value.GetType().IsEnum) {
+                return (int) value;
+            } else
+                return value;
+        }
     }
 }

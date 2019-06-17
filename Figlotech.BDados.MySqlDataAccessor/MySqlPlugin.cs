@@ -52,5 +52,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 o[a.Key] = a.Value;
             }
         }
+
+        public object ProcessParameterValue(object value) {
+            return value;
+        }
     }
 }

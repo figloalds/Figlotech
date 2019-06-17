@@ -47,5 +47,9 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 o[a.Key] = a.Value;
             }
         }
+
+        public object ProcessParameterValue(object value) {
+            return value;
+        }
     }
 }

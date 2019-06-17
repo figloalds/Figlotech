@@ -1045,7 +1045,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Func<IStructureCheckNecessaryAction, Task> onActionProcessed = null,
             Func<IStructureCheckNecessaryAction, Exception, Task> onError = null,
             Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null,
-            Func<int, Task> onReportTotalTasks = null) {
+            Func<int, Task> onReportTotalTasks = null
+        ) {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
             try {

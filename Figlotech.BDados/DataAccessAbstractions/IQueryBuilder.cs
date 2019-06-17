@@ -10,14 +10,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public static class IQueryBuilderExtensions {
 
-        public static void ExecuteUsing(this IQueryBuilder query, IDbConnection conn) {
+        public static void ExecuteUsing(this IQueryBuilder query, IDbConnection conn, IRdbmsPluginAdapter Plugin) {
             using (var command = conn.CreateCommand()) {
-                query.ApplyToComand(command);
+                query.ApplyToComand(command, Plugin);
                 command.ExecuteNonQuery();
             }
         }
 
-        public static void ApplyToComand(this IQueryBuilder query, IDbCommand command) {
+        public static void ApplyToComand(this IQueryBuilder query, IDbCommand command, IRdbmsPluginAdapter Plugin) {
             String QueryText = query.GetCommandText();
             command.CommandText = QueryText;
             // Adiciona os parametros
@@ -25,13 +25,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                 var cmdParam = command.CreateParameter();
                 cmdParam.ParameterName = param.Key;
-                if (param.Value is String str) {
+                var usableValue = Plugin.ProcessParameterValue(param.Value);
+                if(usableValue == null) {
+                    cmdParam.Value = DBNull.Value;
+                } else
+                if (usableValue is String str) {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
                     paramRefl.Slot(cmdParam);
                     paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else {
-                    cmdParam.Value = param.Value;
+                    cmdParam.Value = usableValue;
                 }
                 cmdParam.Direction = ParameterDirection.Input;
 

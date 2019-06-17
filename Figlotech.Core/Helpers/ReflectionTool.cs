@@ -114,7 +114,22 @@ namespace Figlotech.Core.Helpers {
                     .GetProperties()
                     .Where((field) => field.Name == fieldName)
                     .FirstOrDefault());
-            return member ?? GetMember(t.BaseType, fieldName);
+            var retv = member ?? GetMember(t.BaseType, fieldName);
+
+            if(retv == null) {
+                member = ((MemberInfo)
+                t
+                    .GetFields()
+                    .Where((field) => field.Name?.ToLower() == fieldName?.ToLower())
+                    .FirstOrDefault()) ?? ((MemberInfo)
+                t
+                    .GetProperties()
+                    .Where((field) => field.Name?.ToLower() == fieldName?.ToLower())
+                    .FirstOrDefault());
+                retv = member;
+            }
+
+            return retv;
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {

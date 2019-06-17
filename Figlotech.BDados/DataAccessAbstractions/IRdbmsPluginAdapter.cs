@@ -14,5 +14,6 @@ namespace Figlotech.BDados.DataAccessAbstractions
         int CommandTimeout { get; }
         string SchemaName { get; }
 
+        object ProcessParameterValue(object value);
     }
 }
