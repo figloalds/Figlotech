@@ -194,7 +194,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             else
                 tipoDados = typeOfField.Name;
             if (typeOfField.IsEnum) {
-                return "INT";
+                return "INT(11)";
             }
             String type = "VARCHAR(20)";
             if (info.Type != null && info.Type.Length > 0) {
@@ -204,17 +204,29 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     case "string":
                         type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
                         break;
-                    case "int":
-                    case "int32":
-                        type = $"INT";
-                        break;
                     case "short":
                     case "int16":
-                        type = $"SMALLINT";
+                        type = $"SMALLINT(3)";
+                        break;
+                    case "ushort":
+                    case "uint16":
+                        type = $"SMALLINT(3) UNSIGNED";
+                        break;
+                    case "int":
+                    case "int32":
+                        type = $"INT(11)";
+                        break;
+                    case "uint":
+                    case "uint32":
+                        type = $"INT(11) UNSIGNED";
                         break;
                     case "long":
                     case "int64":
-                        type = $"BIGINT";
+                        type = $"BIGINT(20)";
+                        break;
+                    case "ulong":
+                    case "uint64":
+                        type = $"BIGINT(20) UNSIGNED";
                         break;
                     case "bool":
                     case "boolean":
@@ -224,7 +236,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     case "double":
                     case "single":
                     case "decimal":
-                        type = $"FLOAT(16,3)";
+                        type = $"DECIMAL(20,3)";
                         break;
                     case "datetime":
                         type = $"DATETIME";

@@ -484,7 +484,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private bool CheckMatch(ScStructuralLink a, ScStructuralLink n) {
-            if (a.Type != n.Type) return false;
+            if(a.Table.ToLower() != n.Table.ToLower()) {
+                return false;
+            }
+            if (a.Type != n.Type)
+                return false;
             switch(a.Type) {
                 case ScStructuralKeyType.Index:
                     return
@@ -1007,19 +1011,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
             fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
             retv.AddRange(fk);
-            //var idx = DataAccessor.Query<ScStructuralLink>(
-            //     DataAccessor
-            //         .QueryGenerator
-            //         .InformationSchemaIndexes(dbName)
-            // );
-            //idx.ForEach(a => {
-            //    a.Type = ScStructuralKeyType.Index;
-            //    a.IsUnique = !a.IsUnique;
-            //    if(a.KeyName == "PRIMARY") {
-            //        a.Type = ScStructuralKeyType.PrimaryKey;
-            //    }
-            //});
-            //retv.AddRange(idx);
+            var idx = DataAccessor.Query<ScStructuralLink>(
+                 DataAccessor
+                     .QueryGenerator
+                     .InformationSchemaIndexes(dbName)
+             );
+            idx.ForEach(a => {
+                a.Type = ScStructuralKeyType.Index;
+                a.IsUnique = !a.IsUnique;
+                if (a.KeyName == "PRIMARY") {
+                    a.Type = ScStructuralKeyType.PrimaryKey;
+                }
+            });
+            retv.AddRange(idx);
             var wtNames = workingTypes.Select(wt => wt.Name.ToLower());
             retv.RemoveAll(r => !wtNames.Contains(r.Table.ToLower()));
             return retv;
