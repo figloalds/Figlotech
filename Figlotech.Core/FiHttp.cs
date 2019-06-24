@@ -62,15 +62,13 @@ namespace Figlotech.Core {
             var retv = new FiHttpResult();
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
-                    if(UploadRequestStream != null) {
-                        try {
-                            using (var reqStream = req.GetRequestStream()) {
-                                UploadRequestStream(reqStream);
-                                reqStream.Flush();
-                            }
-                        } catch(Exception x) {
-                            throw x;
+                    try {
+                        using (var reqStream = req.GetRequestStream()) {
+                            UploadRequestStream?.Invoke(reqStream);
+                            reqStream.Flush();
                         }
+                    } catch(Exception x) {
+                        throw x;
                     }
                 }
                 using (var resp = req.GetResponse()) {
@@ -143,9 +141,11 @@ namespace Figlotech.Core {
             var rawStream = new MemoryStream();
             using (var writer = new StreamWriter(rawStream, new UTF8Encoding(), 8192, true)) {
                 writer.WriteLine($"HTTP/1.1 {StatusCode} {StatusDescription}");
-                this.Headers.ForEach(header => {
-                    writer.WriteLine();
-                });
+                lock (this.Headers) {
+                    this.Headers.ForEach(header => {
+                        writer.WriteLine();
+                    });
+                }
                 writer.WriteLine();
             }
             ResultStream.CopyTo(rawStream);
@@ -286,16 +286,18 @@ namespace Figlotech.Core {
         }
 
         private void AddHeaders(HttpWebRequest req) {
-            headers.ForEach((h) => {
-                if(h.Key == "Content-Length") {
-                    return;
-                }
-                if (reservedHeaders.Contains(h.Key)) {
-                    ReflectionTool.SetValue(req, h.Key.Replace("-", ""), h.Value);
-                } else {
-                    req.Headers.Add(h.Key, h.Value);
-                }
-            });
+            lock (headers) {
+                headers.ForEach((h) => {
+                    if(h.Key == "Content-Length") {
+                        return;
+                    }
+                    if (reservedHeaders.Contains(h.Key)) {
+                        ReflectionTool.SetValue(req, h.Key.Replace("-", ""), h.Value);
+                    } else {
+                        req.Headers.Add(h.Key, h.Value);
+                    }
+                });
+            }
         }
 
         public HttpStatusCode Get(string Url, Action<HttpStatusCode, Stream> ActOnResponse = null) {
@@ -349,32 +351,35 @@ namespace Figlotech.Core {
 
         public string UserAgent { get; set; } = "Figlotech Http Abstraction on NetStandard2.0";
         public int ContentLength {
-            get => Int32.Parse(headers["Content-Length"]);
-            set => headers["Content-Length"] = value.ToString();
+            get => Int32.Parse(this["Content-Length"]);
+            set => this["Content-Length"] = value.ToString();
         }
         public String ContentType {
-            get => headers["Content-Type"];
-            set => headers["Content-Type"] = value;
+            get => this["Content-Type"];
+            set => this["Content-Type"] = value;
         }
         public string this[string k] {
             get {
-                
-                if (headers.ContainsKey(k)) {
-                    return headers[k];
+                lock(headers) {
+                    if (headers.ContainsKey(k)) {
+                        return headers[k];
+                    }
                 }
                 return null;
             }
             set {
-                var rectifiedHeaderArray = new char[k.Length];
-                for (int i = 0; i < rectifiedHeaderArray.Length; i++) {
-                    if (i == 0 || k[i - 1] == '-') {
-                        rectifiedHeaderArray[i] = Char.ToUpper(k[i]);
-                    } else {
-                        rectifiedHeaderArray[i] = k[i];
+                lock(headers) {
+                    var rectifiedHeaderArray = new char[k.Length];
+                    for (int i = 0; i < rectifiedHeaderArray.Length; i++) {
+                        if (i == 0 || k[i - 1] == '-') {
+                            rectifiedHeaderArray[i] = Char.ToUpper(k[i]);
+                        } else {
+                            rectifiedHeaderArray[i] = k[i];
+                        }
                     }
+                    var rectifiedHeader = new String(rectifiedHeaderArray);
+                    headers[rectifiedHeader] = value;
                 }
-                var rectifiedHeader = new String(rectifiedHeaderArray);
-                headers[rectifiedHeader] = value;
             }
         }
     }

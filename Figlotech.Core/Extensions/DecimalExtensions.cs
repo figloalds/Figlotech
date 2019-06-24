@@ -11,8 +11,12 @@ namespace System {
             return $"{me:C}";
         }
         public static string ToMoney(this decimal me) {
-            
+
             return $"{me:C}";
+        }
+        public static decimal RoundTo(this decimal me, int decimalPlaces) {
+            decimal mul = (decimal) Math.Pow( 10, decimalPlaces);
+            return Math.Round(me * mul) / mul;
         }
 
     }

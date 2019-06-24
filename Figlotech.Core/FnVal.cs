@@ -18,6 +18,7 @@ namespace Figlotech.Core {
         public T Value { get; set; } = default(T);
         public FnVal(Func<T> accessor) {
             this.Accessor = accessor;
+            this.Refresh();
         }
 
         public void Refresh() {
@@ -27,10 +28,12 @@ namespace Figlotech.Core {
         }
 
         public static implicit operator T(FnVal<T> self) {
+            self.Refresh();
             return self.Value;
         }
 
         public static implicit operator List<T>(FnVal<T> self) {
+            self.Refresh();
             return new List<T> { self.Value };
         }
 
@@ -53,6 +56,7 @@ namespace Figlotech.Core {
         }
 
         public override string ToString() {
+            Refresh();
             return Value?.ToString();
         }
 

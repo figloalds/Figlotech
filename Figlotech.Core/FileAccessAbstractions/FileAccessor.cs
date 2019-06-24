@@ -138,15 +138,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public DateTime? GetLastModified(string relative) {
             FixRel(ref relative);
-            if (Exists(relative)) {
+            if (IsFile(relative)) {
                 return new FileInfo(AssemblePath(RootDirectory, relative)).LastWriteTimeUtc;
+            }
+            if (IsDirectory(relative)) {
+                return new DirectoryInfo(AssemblePath(RootDirectory, relative)).LastWriteTimeUtc;
             }
             return DateTime.MinValue;
         }
         public DateTime? GetLastAccess(string relative) {
             FixRel(ref relative);
-            if (Exists(relative)) {
+            if (IsFile(relative)) {
                 return new FileInfo(AssemblePath(RootDirectory, relative)).LastAccessTimeUtc;
+            }
+            if (IsDirectory(relative)) {
+                return new DirectoryInfo(AssemblePath(RootDirectory, relative)).LastAccessTimeUtc;
             }
             return DateTime.MinValue;
         }

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.Core {
@@ -47,28 +48,22 @@ namespace Figlotech.Core {
         public void WriteLog(String log) {
             if (!Enabled)
                 return;
-            try {
-                //Debug.WriteLine(log);
-                Fi.Tech.RunAndForget(() => {
-                    if (EnableConsoleLogging)
-                        Console.Error.WriteLine(log);
-                    log = Regex.Replace(log, @"\s+", " ");
-                    lock ("BDADOS_LOG_LOCK") {
-                        String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
-                        try {
-
-                            List<String> Lines = new List<String>();
-                            Lines.AddRange(BDadosLogCache);
-                            Lines.Add(line);
-                            FileAccessor.AppendAllLines(
-                                Filename, Lines);
-                            BDadosLogCache.Clear();
-                        } catch (Exception) {
-                        }
-                    }
-                });
-            } catch (Exception) {
-            }
+            //Debug.WriteLine(log);
+            Fi.Tech.RunAndForget(() => {
+                if (EnableConsoleLogging)
+                    Console.Error.WriteLine(log);
+                log = Regex.Replace(log, @"\s+", " ");
+                lock ("BDADOS_LOG_LOCK") {
+                    String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
+                    List<String> Lines = new List<String>();
+                    Lines.AddRange(BDadosLogCache);
+                    Lines.Add(line);
+                    FileAccessor.AppendAllLines(
+                        Filename.Value, Lines);
+                    BDadosLogCache.Clear();
+                }
+            }, x=> {
+            });
         }
 
         public void BDadosLogDropLines() {
@@ -82,20 +77,35 @@ namespace Figlotech.Core {
                     });
             } catch (Exception) { }
         }
-        
-        public void WriteEx(Exception x, StreamWriter sw) {
-            sw.WriteLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
-            sw.WriteLine(x.StackTrace);
-            sw.WriteLine(new String('-', 20));
+
+        private void writeExInternal(string message, Exception x, StringBuilder sw = null) {
+            bool isRoot = sw == null;
+            sw = sw ?? new StringBuilder();
+            if(isRoot) {
+                sw.AppendLine($"-> {{");
+                sw.AppendLine($" -- [{message}] -- {{");
+            }
+            sw.AppendLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
+            sw.AppendLine(x.StackTrace);
+            sw.AppendLine(new String('-', 20));
             if(x.InnerException != null) {
-                WriteEx(x, sw);
+                writeExInternal(message, x.InnerException, sw);
             }
             if(x is AggregateException ag) {
                 foreach(var agex in ag.InnerExceptions) {
-                    WriteEx(agex, sw);
+                    writeExInternal(message, agex, sw);
                 }
             }
+            if(isRoot) {
+                sw.AppendLine("}} // {message} ");
+                WriteLog(sw.ToString());
+            }
         }
+
+        public void WriteEx(String message, Exception x) {
+            writeExInternal(message, x);
+        }
+
 
         public void WriteLog(Exception x) {
             if (!Enabled)

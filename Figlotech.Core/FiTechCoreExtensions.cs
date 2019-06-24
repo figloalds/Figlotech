@@ -385,6 +385,18 @@ namespace Figlotech.Core {
             }
         }
 
+        public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
+            if(value == null) {
+                var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}";
+                lock (lockStr) {
+                    if (value == null) {
+                        value = init.Invoke();
+                    }
+                }
+            }
+            return value;
+        }
+
         public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job) {
             
             lock (GlobalScheduledJobs) {
