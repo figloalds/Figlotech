@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.Autokryptex.EncryptionMethods;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,18 +12,19 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
     {
         AggregateEncryptor encryptor = new AggregateEncryptor();
 
-        String instancePassword;
+        byte[] instancePassword;
         String encodedPassword;
+        TwoWayRsaEncryptor TwoWayEncryptor;
+        CrossRandom cr;
 
         public bool MultiPassRandomEncoder { get; set; } = false;
 
-        public AutokryptexEncryptor(String password, int MaxEncryptors = 6) {
-            instancePassword = password;
-            CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
-            var passwordBytes = MathUtils.CramString(password, 16);
-            int[] args = new int[16];
+        public AutokryptexEncryptor(String password,int MaxEncryptors = 6, int seed = 179426447) {
+            cr = new CrossRandom(Int32.MaxValue ^ seed);
+            instancePassword = cr.CramString(password, 256);
+            int[] args = new int[256];
             for(int i = 0; i < args.Length; i++) {
-                args[i] = passwordBytes[i] ^ cr.Next(77777);
+                args[i] = instancePassword[i] ^ cr.Next(Int32.MaxValue);
             }
             Init(args, MaxEncryptors);
         }
@@ -39,21 +41,24 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             if (args.Length < 2) {
                 throw new Exception("Crazy Locking Engine requires 2 or more integers as 'Key', preferably big primes");
             }
-            var passBytes = Fi.StandardEncoding.GetBytes(instancePassword);
-            CrossRandom cr = new CrossRandom(Int32.MaxValue ^ args[0]);
+            var passBytes = instancePassword;
             Type[] availableMethods = new Type[] {
                 typeof(BinaryBlur),
                 typeof(BinaryNegativation),
                 typeof(BinaryScramble),
-                //typeof(EnigmaEncryptor),
+                typeof(EnigmaEncryptor),
             };
+            var pickedKeys = new Queue<int>();
+            for(int i = 0; i < maxEncryptors; i++) {
+                pickedKeys.Enqueue(args[cr.Next(args.Length - 1)]);
+            }
 
-            foreach(var a in args) {
+            foreach(var a in pickedKeys) {
                 var em = availableMethods[cr.Next(availableMethods.Length)];
                 var ctors = em.GetConstructors();
                 if(ctors.Any(
                     c=> c.GetParameters().Length == 1 && 
-                    c.GetParameters()[0].ParameterType== typeof(int)
+                    c.GetParameters()[0].ParameterType == typeof(int)
                 )) {
                     encryptor.Add(
                         (IEncryptionMethod)
@@ -71,7 +76,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
 
                     passBytes = inst.Encrypt(passBytes);
 
-                    if(MultiPassRandomEncoder) {
+                    if(MultiPassRandomEncoder && inst.GetType() != typeof(EnigmaEncryptor)) {
                         encryptor.Add(
                             inst
                         );
@@ -82,9 +87,8 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             while(encryptor.Count > maxEncryptors) {
                 encryptor.RemoveAt(cr.Next(encryptor.Count));
             }
-
             encodedPassword = Convert.ToBase64String(passBytes);
-            encryptor.Add(new AesEncryptor(instancePassword));
+            encryptor.Add(new AesEncryptor(Fi.StandardEncoding.GetString(instancePassword)));
         }
 
     }

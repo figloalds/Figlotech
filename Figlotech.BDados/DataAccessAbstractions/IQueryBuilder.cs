@@ -54,6 +54,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         string GetCommandText();
 
         bool IsEmpty { get; }
+        int Id { get; }
 
         IQueryBuilder If(bool condition);
         IQueryBuilder Then();

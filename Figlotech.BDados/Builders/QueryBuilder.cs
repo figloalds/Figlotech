@@ -173,6 +173,11 @@ namespace Figlotech.BDados.Builders {
         }
     }
     public class QueryBuilder : IQueryBuilder {
+
+        private static int _qid = 0;
+        private int _myId = ++_qid;
+        public int Id => _myId;
+
         private bool _conditionalEngaged = false;
 
         private bool _elseEngaged = false;

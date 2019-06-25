@@ -717,9 +717,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return this.Query(Qb.Fmt(Query, args));
         }
 
+        private const string RDB_SYSTEM_LOGID = "FTH:RDB";
         public void WriteLog(String s) {
             Logger?.WriteLog(s);
-            Fi.Tech.WriteLine("FTH:RDB", s);
+            Fi.Tech.WriteLine(RDB_SYSTEM_LOGID, s);
         }
 
         public int Execute(String str, params object[] args) {
@@ -1410,7 +1411,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToComand(command, Plugin);
-                transaction?.Benchmarker?.Mark("Execute Query");
+                transaction?.Benchmarker?.Mark($"Execute Query <{query.Id}>");
                 using (var reader = command.ExecuteReader()) {
                     return BuildStateUpdateQueryResult(transaction, reader, workingTypes, fields);
                 }
@@ -1493,7 +1494,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 command.CommandTimeout = 999999;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToComand(command, Plugin);
-                transaction?.Benchmarker?.Mark("Execute Query");
+                transaction?.Benchmarker?.Mark($"@SendLocalUpdates Execute Query <{query.Id}>");
                 using (var reader = command.ExecuteReader()) {
                     using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024 * 64, true)) {
                         object[] values = new object[reader.FieldCount];
@@ -1675,9 +1676,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private void VerboseLogQueryParameterization(ConnectionInfo transaction, IQueryBuilder query) {
+            if(!FiTechCoreExtensions.EnabledSystemLogs[RDB_SYSTEM_LOGID]) {
+                return;
+            }
             String QueryText = query.GetCommandText();
-            WriteLog($"[{accessId}] -- Query: {QueryText}");
-            transaction?.Benchmarker?.Mark($"[{accessId}] Prepare Statement");
+            WriteLog($"[{accessId}] -- Query <{query.Id}>:\n {QueryText}");
+            transaction?.Benchmarker?.Mark($"[{accessId}] Prepare Statement <{query.Id}>");
             // Adiciona os parametros
             foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
 
@@ -1697,29 +1701,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (query == null || query.GetCommandText() == null) {
                 return new List<T>();
             }
+            var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
             using (var command = transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
-                VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToComand(command, Plugin);
+                VerboseLogQueryParameterization(transaction, query);
                 // --
                 List<T> retv;
+                transaction?.Benchmarker?.Mark($"[{accessId}] Enter lock region");
                 lock (transaction) {
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query<{tName}> <{query.Id}>");
                     retv = GetObjectList<T>(transaction, command);
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
                 }
                 if (retv == null) {
                     throw new Exception("Null list generated");
                 }
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count}");
+                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List <{query.Id}> Size: {retv.Count}");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
 
                 try {
-                    int resultados = 0;
-                    resultados = retv.Count;
-                    WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
+                    int nResults = 0;
+                    nResults = retv.Count;
+                    WriteLog($"[{accessId}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
                     return retv;
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     throw x;
@@ -2012,36 +2020,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 using (var command = transaction?.CreateCommand()) {
                     var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
-                    transaction?.Benchmarker?.Mark("Generate Join Query");
+                    transaction?.Benchmarker?.Mark($"Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
-                    command.CommandText = query.GetCommandText();
-                    WriteLog($"[{accessId}] {command.CommandText}");
-                    transaction?.Benchmarker?.Mark("Fill query params");
-                    foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
-                        var cmdParam = command.CreateParameter();
-                        cmdParam.ParameterName = param.Key;
-                        if (param.Value is String str) {
-                            cmdParam.Value = str;
-                            cmdParam.DbType = DbType.String;
-                            var paramRefl = new ObjectReflector(cmdParam);
-                            paramRefl["Encoding"] = Fi.StandardEncoding;
-                        } else {
-                            cmdParam.Value = param.Value;
-                        }
-
-                        var pval = $"'{param.Value?.ToString() ?? "null"}'";
-                        if (param.Value is DateTime || param.Value is DateTime? && ((DateTime?)param.Value).HasValue) {
-                            pval = ((DateTime)param.Value).ToString("yyyy-MM-dd HH:mm:ss");
-                            pval = $"'{pval}'";
-                        }
-
-                        command.Parameters.Add(cmdParam);
-                        WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {cmdParam.DbType.ToString()}");
-                    }
-                    transaction?.Benchmarker?.Mark("Start build AggregateListDirect");
+                    query.ApplyToComand(command, Plugin);
+                    transaction?.Benchmarker?.Mark($"Start build AggregateListDirect <{query.Id}>");
                     var retv = BuildAggregateListDirect<T>(transaction, command, join, 0, args.ContextObject);
-                    transaction?.Benchmarker?.Mark("Finished building the result");
+                    transaction?.Benchmarker?.Mark($"Finished building the result <{query.Id}>");
                     return retv;
                 }
 
@@ -2097,14 +2082,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 IDataReader reader;
                 try {
 
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
                     lock (transaction) {
-                        var refl = new ObjectReflector();
                         lock (command) {
-                            transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query");
+                            transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query <{query.Id}>");
                             reader = command.ExecuteReader();
                         }
                     }
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Query executed OK");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
 
                 } catch (Exception x) {
                     WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(start).TotalMilliseconds} ms]");
@@ -2114,18 +2099,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } finally {
                     WriteLog("------------------------------------");
                 }
-                transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK");
+                transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
 
                 using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List <{query.Id}>");
 
                     var retv = Fi.Tech.MapFromReader<T>(reader).Select(i => RunAfterLoad(i, false, transferObject ?? transaction?.ContextTransferObject)).ToList();
 
                     double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                    WriteLog($"[{accessId}] -------- Fetch [OK] ({retv.Count} results) [{elaps} ms]");
+                    WriteLog($"[{accessId}] -------- <{query.Id}> Fetch [OK] ({retv.Count} results) [{elaps} ms]");
 
                     return retv;
                 }
@@ -2141,7 +2126,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return default(T);
             }
             DateTime Inicio = DateTime.Now;
-            String QueryText = query.GetCommandText();
             DataTable retv = new DataTable();
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
@@ -2160,7 +2144,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return new DataTable();
             }
             DateTime Inicio = DateTime.Now;
-            String QueryText = query.GetCommandText();
             DataTable retv = new DataTable();
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
@@ -2179,10 +2162,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         throw new BDadosException("Database did not return any table.");
                     }
                     resultados = ds.Tables[0].Rows.Count;
-                    WriteLog($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
                     return ds.Tables[0];
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    transaction?.Benchmarker?.Mark($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     var ex = new BDadosException("Error executing Query", x);
@@ -2201,10 +2184,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int result = -1;
             transaction.Benchmarker?.Mark($"[{accessId}] Prepare statement");
             transaction.Benchmarker?.Mark("--");
-            WriteLog($"[{accessId}] -- Execute: {query.GetCommandText()} [{Plugin.CommandTimeout}s timeout]");
-            foreach (var param in query.GetParameters()) {
-                WriteLog($"[{accessId}] @{param.Key} = {param.Value?.ToString() ?? "null"}");
-            }
+            WriteLog($"[{accessId}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout}s timeout]");
             using (var command = transaction.CreateCommand()) {
                 try {
                     VerboseLogQueryParameterization(transaction, query);

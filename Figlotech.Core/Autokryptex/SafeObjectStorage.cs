@@ -38,7 +38,7 @@ namespace Figlotech.Core.Autokryptex {
 
         public SafeObjectStorage(IFileSystem fs, string password) {
             fileSystem = fs;
-            dataEncryptor = new AutokryptexEncryptor(password, 2);
+            dataEncryptor = new AutokryptexEncryptor(password, 4);
             fileEncryptor = new AesEncryptor(RID.MachineRID);
         }
 

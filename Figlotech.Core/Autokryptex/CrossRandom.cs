@@ -88,6 +88,24 @@ namespace Figlotech.Core {
             return workset;
         }
 
+        public byte[] CramString(String input, int digitCount) {
+            CrossRandom cr = this;
+            byte[] workset = Fi.StandardEncoding.GetBytes(input);
+            while (workset.Count() > digitCount) {
+                byte ch = workset[0];
+                workset = workset.Skip(1).ToArray();
+                workset[cr.Next(workset.Length)] = (byte)(workset[cr.Next(workset.Length)] ^ ch);
+            }
+            while (workset.Count() < digitCount) {
+                var ws = new byte[workset.Count() + 1];
+                workset.CopyTo(ws, 0);
+                ws[ws.Count() - 1] = (byte)cr.Next(byte.MaxValue);
+                workset = ws;
+            }
+
+            return workset;
+        }
+
         private long Seed;
         private long Subcount;
         private long CallCount;

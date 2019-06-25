@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Extensions;
+﻿using Figlotech.Core.Autokryptex.EncryptMethods;
+using Figlotech.Core.Extensions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -75,6 +76,20 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
             var rsa = new RSACryptoServiceProvider();
             rsa.ImportCspBlob(KeyPair.EncryptionKey);
             return rsa.Encrypt(en, false);
+        }
+
+        private byte[] wrongEncrypt(byte[] en) {
+            var rsa = new RSACryptoServiceProvider();
+            rsa.ImportCspBlob(KeyPair.DecryptionKey);
+            return rsa.Encrypt(en, false);
+        }
+
+        public TwoWayAesEncryptor GenerateTwoWayAesEncryptor(string password) {
+            password = Fi.StandardEncoding.GetString(MathUtils.CramString(password, 64));
+            return new TwoWayAesEncryptor(
+                Fi.StandardEncoding.GetString(Encrypt(Fi.StandardEncoding.GetBytes(password))),
+                Fi.StandardEncoding.GetString(wrongEncrypt(Fi.StandardEncoding.GetBytes(password)))
+            );
         }
     }
 }

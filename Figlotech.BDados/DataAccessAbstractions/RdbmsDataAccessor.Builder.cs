@@ -14,13 +14,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public List<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
+            transaction?.Benchmarker.Mark("Enter lock command");
             lock (command) {
-                transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query");
+                transaction?.Benchmarker.Mark("- Starting Execute Query");
                 using (var reader = command.ExecuteReader()) {
-                    var cols = new string[reader.FieldCount];
-                    for (int i = 0; i < cols.Length; i++)
-                        cols[i] = reader.GetName(i);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List");
+                    transaction?.Benchmarker.Mark("- Starting build");
                     return Fi.Tech.MapFromReader<T>(reader).ToList();
                 }
             }
@@ -222,7 +220,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var joinTables = join.Joins.ToArray();
             var joinRelations = join.Relations.ToArray();
             var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
-            transaction?.Benchmarker?.Mark("Execute Query");
+            if(Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
+                Debugger.Break();
+            }
             lock (command) {
                 using (var reader = command.ExecuteReader()) {
                     transaction?.Benchmarker?.Mark("Prepare caches");
@@ -246,9 +246,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .Where(i => i.Item1 != null)
                             .GroupBy(i => i.Item1);
                             var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-                            if(jstr == null && Debugger.IsAttached) {
-                                Debugger.Break();
-                            }
+                            
                             _autoAggregateCache.Add(jstr, newEntry);
                         } 
                     }
