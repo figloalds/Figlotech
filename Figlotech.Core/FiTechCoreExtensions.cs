@@ -1306,6 +1306,21 @@ namespace Figlotech.Core {
             });
         }
 
+        public static void RunOnlyUntilSync(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
+            if (DateTime.UtcNow > max)
+                return;
+            try {
+                try {
+                    a?.Invoke();
+                } catch (Exception x) {
+                    h?.Invoke(x);
+                } finally {
+                    t?.Invoke();
+                }
+            } catch(Exception x) {
+                Fi.Tech.Error(x);
+            }
+        }
         public static void RunOnlyUntil(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
             if (DateTime.UtcNow > max)
                 return;
@@ -1313,6 +1328,15 @@ namespace Figlotech.Core {
         }
 
         public static event Action<Exception> OnUltimatelyUnhandledException;
+
+        public static int FreeTcpPort(this Fi __selfie) {
+            TcpListener l = new TcpListener(IPAddress.Loopback, 0);
+            l.Start();
+            int port = ((IPEndPoint)l.LocalEndpoint).Port;
+            l.Stop();
+            return port;
+        }
+
 
         public static void Try(this Fi __selfie, Action Try, Action<Exception> Catch, Action<bool> Finally) {
             bool success = false;

@@ -97,7 +97,7 @@ namespace Figlotech.Core {
                 }
             }
             if(isRoot) {
-                sw.AppendLine("}} // {message} ");
+                sw.AppendLine($"}} // {message} ");
                 WriteLog(sw.ToString());
             }
         }

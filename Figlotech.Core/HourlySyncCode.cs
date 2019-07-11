@@ -1,10 +1,12 @@
-﻿using System;
+﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Autokryptex.EncryptMethods;
+using System;
 using System.Linq;
 
 namespace Figlotech.Core {
     public class HourlySyncCode {
         public static HourlySyncCode Generate(String Password = null, DateTime? KeyMoment = null) {
-            return Generate(KeyMoment??DateTime.UtcNow, Password);
+            return Generate(KeyMoment??Fi.Tech.GetUtcTime(), Password);
         }
 
         private HourlySyncCode(byte[] code) {
@@ -32,11 +34,24 @@ namespace Figlotech.Core {
         }
 
         public static HourlySyncCode Generate(DateTime KeyMomment, String Password = null) {
-            CrossRandom cs = new CrossRandom((KeyMomment.Date.AddHours(KeyMomment.Hour)).Ticks);
+            Password = Password ?? "SuchDefaultVeryUnsafe";
+            var mins = (long)(TimeSpan.FromTicks(KeyMomment.Ticks)).TotalMinutes;
+            CrossRandom cs = new CrossRandom(mins);
             byte[] barr = new byte[64];
             for(int i = 0; i < barr.Length; i++) {
                 barr[i] = (byte)cs.Next(256);
             }
+
+            int passCount = 32;
+            while (passCount-- > 0) {
+                for (int i = 0; i < Password.Length; i++) {
+                    var place = cs.Next(0, barr.Length);
+                    barr[place] ^= (byte)Password[i];
+                }
+            }
+            var hs = (int)(TimeSpan.FromTicks(KeyMomment.Ticks).TotalHours);
+            barr = new BinaryScramble(Password.GetHashCode()).Encrypt(barr);
+            barr = new EnigmaEncryptor(hs).Encrypt(barr);
             return new HourlySyncCode(barr);
         }
 
@@ -44,25 +59,18 @@ namespace Figlotech.Core {
             return Validate(code, Password, keyMoment);
         }
         public static bool Validate(HourlySyncCode code, String Password, DateTime? keyMoment = null) {
-            keyMoment = keyMoment ?? DateTime.UtcNow;
-            if (Generate(Password).Code.SequenceEqual(code.Code)) {
+            keyMoment = keyMoment ?? Fi.Tech.GetUtcTime();
+            if (Generate(keyMoment.Value, Password).Code.SequenceEqual(code.Code)) {
                 return true;
             }
 
-            for (int i = 3; i >= 0; --i) {
-                var dt = DateTime.UtcNow.Subtract(TimeSpan.FromMinutes(i));
+            for (int i = -3; i <= 3; ++i) {
+                var dt = Fi.Tech.GetUtcTime().Add(TimeSpan.FromMinutes(i));
                 if (Generate(dt, Password).Code.SequenceEqual(code.Code)) {
                     return true;
                 }
             }
 
-            for (int i = 0; i >= 2; ++i) {
-                var v = i - 1;
-                var dt = DateTime.UtcNow.AddHours(i);
-                if (Generate(dt, Password).Code.SequenceEqual(code.Code)) {
-                    return true;
-                }
-            }
             return false;
         }
     }

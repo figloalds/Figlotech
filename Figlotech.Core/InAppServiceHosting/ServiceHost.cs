@@ -10,39 +10,11 @@ namespace Figlotech.Core.InAppServiceHosting
     public class ServiceHost
     {
         public static ServiceHost Default { get; set; } = new ServiceHost();
-        private List<Type> _declaredMicroServices = new List<Type>();
-
+        
         private List<IFthService> Services { get; set; } = new List<IFthService>();
         Dictionary<IFthService, Thread> ServiceThreads = new Dictionary<IFthService, Thread>();
         Dictionary<IFthService, FthServiceInfo> ServiceInfos = new Dictionary<IFthService, FthServiceInfo>();
 
-        public void AddDeclaredMicroService(Type serviceClass) {
-            if (serviceClass.GetInterfaces().FirstOrDefault(i => i == typeof(IFthService)) == null) {
-                throw new Exception($"{serviceClass.Name} was expected to implement IFthService interface.");
-            }
-            if(_declaredMicroServices.FirstOrDefault(t=> t==serviceClass) == null)
-                _declaredMicroServices.Add(serviceClass);
-        }
-
-        public void AddDeclaredMicroService<T>() where T: IFthService, new() {
-            AddDeclaredMicroService(typeof(T));
-        }
-
-        public void UseDeclaredMicroservicesFrom(ServiceHost other) {
-            _declaredMicroServices.Clear();
-            _declaredMicroServices.AddRange(other._declaredMicroServices);
-        }
-
-        /// <summary>
-        /// Instantiates a service that has been declared earlier and initializes it. This function does not start said service.
-        /// </summary>
-        /// <param name="serviceName"></param>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        public IFthService InitService(String serviceName, params object[] args) {
-            var svcType = _declaredMicroServices.FirstOrDefault(t => t.Name == serviceName);
-            return InitService(svcType, args);
-        }
         public IFthService InitService<T>(params object[] args) {
             return InitService(typeof(T), args);
         }
@@ -124,7 +96,6 @@ namespace Figlotech.Core.InAppServiceHosting
         }
 
         public void Run(Type t, params object[] args) {
-            AddDeclaredMicroService(t);
             var svc = InitService(t, args);
             Start(svc);
         }

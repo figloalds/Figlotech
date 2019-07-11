@@ -1,9 +1,5 @@
-﻿using Figlotech.Core;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     /// <summary>
@@ -47,12 +43,14 @@ namespace Figlotech.Core {
             179425019, 179425559, 179426029, 179426491,
             179425027, 179425579, 179426081, 179426549,
         };
+
         private long[] InstanceSecret = new long[16] {
             104971,  105323,  105557,  105907,
             104987,  105331,  105563,  105913,
             104999,  105337,  105601,  105929,
             105019,  105341,  105607,  105943,
         };
+
         public static void UseAppSecret(String secret) {
             var secretBytes = MathUtils.CramString(secret, 16);
             for (int i = 0; i < secretBytes.Length; i++) {

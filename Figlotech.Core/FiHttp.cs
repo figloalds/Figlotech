@@ -171,7 +171,7 @@ namespace Figlotech.Core {
                 T obj = JsonConvert.DeserializeObject<T>(json);
                 retv = obj;
             } catch (Exception x) {
-
+                return default(T);
             }
             return retv;
         }
