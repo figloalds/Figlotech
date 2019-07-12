@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Linq;
 
-namespace Figlotech.Core {
+namespace Figlotech.Core.Autokryptex.Legacy
+{
     /// <summary>
     /// This class provides stateful pseudo-random for 
     /// this lib's "lame" encryption methods.
     /// Calling this class with the same parameters will output
     /// the exact same numbers every time.
     /// </summary>
-    public sealed class CrossRandom {
+    public sealed class LegacyCrossRandom {
         private static long[] Primes = new long[] {
             32416187567, 32416188223, 32416188809, 32416189391,
             32416187627, 32416188227, 32416188839, 32416189459,
@@ -60,7 +61,7 @@ namespace Figlotech.Core {
         }
         public void UseInstanceSecret(String secret) {
             var secretBytes = CramStringPlus(secret, 16);
-            CrossRandom cr = new CrossRandom(Primes[77]);
+            LegacyCrossRandom cr = new LegacyCrossRandom();
             for (int i = 0; i < secretBytes.Length; i++) {
                 if (i <= InstanceSecret.Length) {
                     InstanceSecret[i] = Primes[secretBytes[i] % Primes.Length] + cr.Next(Primes.Length ^ secretBytes[i]);
@@ -69,7 +70,7 @@ namespace Figlotech.Core {
         }
 
         private static byte[] CramStringPlus(String input, int digitCount) {
-            CrossRandom cr = new CrossRandom(Int32.MaxValue ^ 123456789);
+            LegacyCrossRandom cr = new LegacyCrossRandom();
             byte[] workset = Fi.StandardEncoding.GetBytes(input);
             while (workset.Count() > digitCount) {
                 byte ch = workset[0];
@@ -87,7 +88,7 @@ namespace Figlotech.Core {
         }
 
         public byte[] CramString(String input, int digitCount) {
-            CrossRandom cr = this;
+            LegacyCrossRandom cr = this;
             byte[] workset = Fi.StandardEncoding.GetBytes(input);
             while (workset.Count() > digitCount) {
                 byte ch = workset[0];
@@ -104,7 +105,6 @@ namespace Figlotech.Core {
             return workset;
         }
 
-        private long Seed;
         private long Subcount;
         private long CallCount;
 
@@ -116,12 +116,10 @@ namespace Figlotech.Core {
         //        this.CallCount = 0L;
         //    }
 
-        public CrossRandom(long RandomSeed) {
-            this.Seed = (AppSecret[0] ^ RandomSeed) + RandomSeed;
+        public LegacyCrossRandom() {
         }
 
-        public CrossRandom(long RandomSeed, string password) {
-            this.Seed = (AppSecret[0] ^ RandomSeed) + RandomSeed;
+        public LegacyCrossRandom(long RandomSeed, string password) {
             this.UseInstanceSecret(password);
         }
 

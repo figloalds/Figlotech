@@ -21,6 +21,7 @@ using System.Text;
 using System.Threading.Tasks.Dataflow;
 using System.Drawing;
 using System.Text.RegularExpressions;
+using Figlotech.Core.Autokryptex;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -1448,6 +1449,10 @@ namespace Figlotech.Core {
             for (int index = 0; index < 16; ++index)
                 numArray[index] = (byte)random.Next(256);
             return numArray;
+        }
+        
+        public static byte[] CramString(this Fi _selfie, string password, int numDigits) {
+            return FiRandom.CramStringPlus(password, numDigits);
         }
 
         public static string GenerateIdString(this Fi _selfie, string uniqueId, int numDigits = 128) {

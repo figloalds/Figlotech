@@ -12,20 +12,20 @@ using System.Threading.Tasks;
  * 
 */
 
-namespace Figlotech.Core.Autokryptex {
-    public class EnigmaEncryptor : IEncryptionMethod {
+namespace Figlotech.Core.Autokryptex.Legacy {
+    public class LegacyEnigmaEncryptor : IEncryptionMethod {
         private int enigmaPin;
         private static byte[] originalByteMap = new byte[byte.MaxValue + 1];
         private byte[] enigmaStrip;
-        CrossRandom cr;
+        LegacyCrossRandom cr;
         int instancePin;
-        public EnigmaEncryptor(int pin) {
+        public LegacyEnigmaEncryptor(int pin) {
             enigmaPin = pin;
             for(int i = 0; i < originalByteMap.Length; i++) {
                 originalByteMap[i] = (byte) i;
             }
             instancePin = pin;
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
         }
 
         private byte[] GenerateEnigmaStrip(byte[] Map) {
@@ -56,7 +56,7 @@ namespace Figlotech.Core.Autokryptex {
                 en[a] = this.enigmaStrip[en[a]];
                 this.enigmaStrip = this.GenerateEnigmaStrip(this.enigmaStrip);
             }
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
             return en;
         }
 
@@ -77,7 +77,7 @@ namespace Figlotech.Core.Autokryptex {
                 en[a] = originalByteMap[index];
                 this.enigmaStrip = this.GenerateEnigmaStrip(this.enigmaStrip);
             }
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
             return en;
         }
 

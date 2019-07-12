@@ -83,13 +83,5 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
             rsa.ImportCspBlob(KeyPair.DecryptionKey);
             return rsa.Encrypt(en, false);
         }
-
-        public TwoWayAesEncryptor GenerateTwoWayAesEncryptor(string password) {
-            password = Fi.StandardEncoding.GetString(MathUtils.CramString(password, 64));
-            return new TwoWayAesEncryptor(
-                Fi.StandardEncoding.GetString(Encrypt(Fi.StandardEncoding.GetBytes(password))),
-                Fi.StandardEncoding.GetString(wrongEncrypt(Fi.StandardEncoding.GetBytes(password)))
-            );
-        }
     }
 }

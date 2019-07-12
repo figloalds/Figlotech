@@ -1,26 +1,28 @@
 ﻿using Figlotech.Core;
 using Figlotech.Core.Autokryptex.EncryptionMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods.Legacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex.EncryptMethods
+namespace Figlotech.Core.Autokryptex.Legacy
 {
-    public class AutokryptexEncryptor : IEncryptionMethod
+    public class LegacyAutokryptexEncryptor : IEncryptionMethod
     {
         AggregateEncryptor encryptor = new AggregateEncryptor();
 
         byte[] instancePassword;
         String encodedPassword;
         TwoWayRsaEncryptor TwoWayEncryptor;
-        CrossRandom cr;
+        LegacyCrossRandom cr;
 
         public bool MultiPassRandomEncoder { get; set; } = false;
 
-        public AutokryptexEncryptor(String password,int MaxEncryptors = 6, int seed = 179426447) {
-            cr = new CrossRandom(Int32.MaxValue ^ seed);
+        public LegacyAutokryptexEncryptor(String password,int MaxEncryptors = 6, int seed = 179426447) {
+            cr = new LegacyCrossRandom();
             instancePassword = cr.CramString(password, 256);
             int[] args = new int[256];
             for(int i = 0; i < args.Length; i++) {
@@ -43,10 +45,10 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
             }
             var passBytes = instancePassword;
             Type[] availableMethods = new Type[] {
-                typeof(BinaryBlur),
+                typeof(LegacyBinaryBlur),
                 typeof(BinaryNegativation),
-                typeof(BinaryScramble),
-                typeof(EnigmaEncryptor),
+                typeof(LegacyBinaryScramble),
+                typeof(LegacyEnigmaEncryptor),
             };
             var pickedKeys = new Queue<int>();
             for(int i = 0; i < maxEncryptors; i++) {
@@ -76,7 +78,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
 
                     passBytes = inst.Encrypt(passBytes);
 
-                    if(MultiPassRandomEncoder && inst.GetType() != typeof(EnigmaEncryptor)) {
+                    if(MultiPassRandomEncoder && inst.GetType() != typeof(LegacyEnigmaEncryptor)) {
                         encryptor.Add(
                             inst
                         );
@@ -88,7 +90,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
                 encryptor.RemoveAt(cr.Next(encryptor.Count));
             }
             encodedPassword = Convert.ToBase64String(passBytes);
-            encryptor.Add(new AesEncryptor(Fi.StandardEncoding.GetString(instancePassword)));
+            encryptor.Add(new LegacyAesEncryptor(Fi.StandardEncoding.GetString(instancePassword)));
         }
 
     }

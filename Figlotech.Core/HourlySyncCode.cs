@@ -1,5 +1,6 @@
 ﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core.Autokryptex.EncryptMethods;
+using Figlotech.Core.Autokryptex.Legacy;
 using System;
 using System.Linq;
 
@@ -36,7 +37,7 @@ namespace Figlotech.Core {
         public static HourlySyncCode Generate(DateTime KeyMomment, String Password = null) {
             Password = Password ?? "SuchDefaultVeryUnsafe";
             var mins = (long)(TimeSpan.FromTicks(KeyMomment.Ticks)).TotalMinutes;
-            CrossRandom cs = new CrossRandom(mins);
+            LegacyCrossRandom cs = new LegacyCrossRandom();
             byte[] barr = new byte[64];
             for(int i = 0; i < barr.Length; i++) {
                 barr[i] = (byte)cs.Next(256);
@@ -50,8 +51,8 @@ namespace Figlotech.Core {
                 }
             }
             var hs = (int)(TimeSpan.FromTicks(KeyMomment.Ticks).TotalHours);
-            barr = new BinaryScramble(Password.GetHashCode()).Encrypt(barr);
-            barr = new EnigmaEncryptor(hs).Encrypt(barr);
+            barr = new LegacyBinaryScramble(Password.GetHashCode()).Encrypt(barr);
+            barr = new LegacyEnigmaEncryptor(hs).Encrypt(barr);
             return new HourlySyncCode(barr);
         }
 

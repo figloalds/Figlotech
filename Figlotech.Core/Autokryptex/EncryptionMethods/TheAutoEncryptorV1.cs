@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.Autokryptex.Legacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,13 +15,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex {
     public class TheAutoEncryptorV1 : IEncryptionMethod {
-        CrossRandom[] rands = new CrossRandom[16];
+        FiRandom[] rands = new FiRandom[16];
         byte[,] map = new byte[16, 256];
 
         public TheAutoEncryptorV1(string password, int pin) {
-            CrossRandom cr0 = new CrossRandom(pin);
+            FiRandom cr0 = new FiRandom(pin);
             for(int i = 0; i < 16; i++) {
-                rands[i] = new CrossRandom(cr0.Next(Int32.MaxValue));
+                rands[i] = new FiRandom(cr0.Next(Int32.MaxValue));
             }
         }
 

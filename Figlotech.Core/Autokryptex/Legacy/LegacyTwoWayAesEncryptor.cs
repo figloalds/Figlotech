@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.Autokryptex.Legacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,13 +7,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex.EncryptMethods {
+namespace Figlotech.Core.Autokryptex.EncryptMethods.Legacy {
 
     public class TwoWayAesEncryptor : IEncryptionMethod {
         string instanceEncodeSecret;
         string instanceDecodeSecret;
         int instancePin;
-        CrossRandom cr;
+        LegacyCrossRandom cr;
 
         public TwoWayAesEncryptor(string encodePassword, string decodePassword, int pin = 179425879) {
             instancePin = pin;
@@ -27,7 +28,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods {
         byte[] _decodeIv;
 
         private void GenerateKeys() {
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin, instanceEncodeSecret);
+            cr = new LegacyCrossRandom(Int32.MaxValue ^ instancePin, instanceEncodeSecret);
             _encodeKey = new byte[16];
             _encodeIv = new byte[16];
             for (int i = 0; i < _encodeKey.Length; i++)

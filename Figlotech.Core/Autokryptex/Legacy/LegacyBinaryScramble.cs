@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.Autokryptex.Legacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,13 +13,13 @@ using System.Threading.Tasks;
  * 
 */
 
-namespace Figlotech.Core.Autokryptex {
-    public class BinaryScramble : IEncryptionMethod {
-        CrossRandom cr;
+namespace Figlotech.Core.Autokryptex.Legacy {
+    public class LegacyBinaryScramble : IEncryptionMethod {
+        LegacyCrossRandom cr;
         int instancePin;
-        public BinaryScramble(int pin) {
+        public LegacyBinaryScramble(int pin) {
             instancePin = pin;
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
         }
 
         public byte[] Encrypt(byte[] en) {
@@ -36,7 +37,7 @@ namespace Figlotech.Core.Autokryptex {
             for (int a = 0; a < en.Length; ++a) {
                 retv[a] = en[scr[a]];
             }
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
             return retv;
         }
 
@@ -55,7 +56,7 @@ namespace Figlotech.Core.Autokryptex {
             for (int a = 0; a < en.Length; ++a) {
                 retv[scr[a]] = en[a];
             }
-            cr = new CrossRandom(Int32.MaxValue ^ instancePin);
+            cr = new LegacyCrossRandom();
             return retv;
         }
 

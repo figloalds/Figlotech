@@ -8,6 +8,7 @@ using System.Text;
 using System.IO;
 using Figlotech.Core.Autokryptex.EncryptMethods;
 using Figlotech.Core;
+using Figlotech.Core.Autokryptex.Legacy;
 
 namespace Figlotech.BDados.MySqlDataAccessor
 {
@@ -30,7 +31,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
 
             var json = JsonConvert.SerializeObject(this);
             var bytes = Fi.StandardEncoding.GetBytes(json);
-            var autokryptex = new AutokryptexEncryptor(password);
+            var autokryptex = new TheAutoEncryptorV1(password, 429497291);
             var encryptedBytes = autokryptex.Encrypt(bytes);
 
             File.WriteAllBytes(path, encryptedBytes);
@@ -41,7 +42,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
             }
 
             var bytes = File.ReadAllBytes(path);
-            var autokryptex = new AutokryptexEncryptor(password);
+            var autokryptex = new TheAutoEncryptorV1(password, 429497291);
             var decryptedBytes = autokryptex.Decrypt(bytes);
             var json = Fi.StandardEncoding.GetString(decryptedBytes);
             var obj = JsonConvert.DeserializeObject<MySqlPluginConfiguration>(json);

@@ -1,4 +1,6 @@
 ﻿using Figlotech.Core.Autokryptex.EncryptMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods.Legacy;
+using Figlotech.Core.Autokryptex.Legacy;
 using Figlotech.Core.FileAcessAbstractions;
 using Newtonsoft.Json;
 using System;
@@ -38,8 +40,12 @@ namespace Figlotech.Core.Autokryptex {
 
         public SafeObjectStorage(IFileSystem fs, string password) {
             fileSystem = fs;
-            dataEncryptor = new AutokryptexEncryptor(password, 4);
-            fileEncryptor = new AesEncryptor(RID.MachineRID);
+            dataEncryptor = new FailOverEncryptor(
+                new LegacyAutokryptexEncryptor(password, 4)
+            );
+            fileEncryptor = new FailOverEncryptor(
+                new LegacyAesEncryptor(RID.MachineRID, 4)
+            );
         }
 
         public SafeObjectStorage(IFileSystem fs, IEncryptionMethod fileEncryptionMethod, IEncryptionMethod dataEncryptionMethod) {

@@ -20,7 +20,7 @@ namespace Figlotech.BDados.SqliteDataAccessor
         public void SaveToFile(String path, String password) {
             var json = JsonConvert.SerializeObject(this);
             var bytes = Fi.StandardEncoding.GetBytes(json);
-            var autokryptex = new AutokryptexEncryptor(password);
+            var autokryptex = new TheAutoEncryptorV1(password, 4);
             var encryptedBytes = autokryptex.Encrypt(bytes);
 
             File.WriteAllBytes(path, encryptedBytes);
@@ -31,7 +31,7 @@ namespace Figlotech.BDados.SqliteDataAccessor
             }
 
             var bytes = File.ReadAllBytes(path);
-            var autokryptex = new AutokryptexEncryptor(password);
+            var autokryptex = new TheAutoEncryptorV1(password, 4);
             var decryptedBytes = autokryptex.Decrypt(bytes);
             var json = Fi.StandardEncoding.GetString(decryptedBytes);
             var obj = JsonConvert.DeserializeObject<SqlitePluginConfiguration>(json);
