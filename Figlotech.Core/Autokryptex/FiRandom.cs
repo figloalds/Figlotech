@@ -108,7 +108,7 @@ namespace Figlotech.Core.Autokryptex
         }
 
         private void InitSeed(long seed) {
-            int idx = ((int)seed % AppSecret.Length);
+            int idx = (int) ((uint)seed % AppSecret.Length);
             this.Seed = (AppSecret[idx] ^ seed) + seed;
         }
 
