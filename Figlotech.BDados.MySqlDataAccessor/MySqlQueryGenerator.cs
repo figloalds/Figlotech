@@ -238,6 +238,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     case "decimal":
                         type = $"DECIMAL(20,3)";
                         break;
+                    case "byte[]":
+                        type = $"BLOB";
+                        break;
                     case "datetime":
                         type = $"DATETIME";
                         break;
