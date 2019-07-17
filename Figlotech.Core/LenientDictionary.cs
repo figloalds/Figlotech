@@ -11,6 +11,9 @@ namespace Figlotech.Core
         Dictionary<TKey, TValue> _dmmy = new Dictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
+                if(key == null) {
+                    return default(TValue);
+                }
                 if (_dmmy.ContainsKey(key)) {
                     return _dmmy[key];
                 }
