@@ -34,9 +34,9 @@ namespace Figlotech.Core {
             return Convert.ToBase64String(this.Code);
         }
 
-        public static HourlySyncCode Generate(DateTime KeyMomment, String Password = null) {
+        public static HourlySyncCode Generate(DateTime KeyMoment, String Password = null) {
             Password = Password ?? "SuchDefaultVeryUnsafe";
-            var mins = (long)(TimeSpan.FromTicks(KeyMomment.Ticks)).TotalMinutes;
+            var mins = (long)(TimeSpan.FromTicks(KeyMoment.Ticks)).TotalMinutes;
             FiRandom cs = new FiRandom(mins);
             byte[] barr = new byte[64];
             for(int i = 0; i < barr.Length; i++) {
@@ -50,15 +50,16 @@ namespace Figlotech.Core {
                     barr[place] ^= (byte)Password[i];
                 }
             }
-            var hs = (int)(TimeSpan.FromTicks(KeyMomment.Ticks).TotalHours);
-            barr = new LegacyBinaryScramble(BitConverter.ToInt32(Fi.Tech.ComputeHash(Password), 0)).Encrypt(barr);
+            var hs = (int)(TimeSpan.FromTicks(KeyMoment.Ticks).TotalHours);
+            var hash = Fi.Tech.ComputeHash(Password);
+            barr = new LegacyBinaryScramble(BitConverter.ToInt32(hash, 0)).Encrypt(barr);
             barr = new LegacyEnigmaEncryptor(hs).Encrypt(barr);
             return new HourlySyncCode(barr);
         }
 
         public static bool Validate(DateTime keyMoment, HourlySyncCode code, String Password) {
             return Validate(code, Password, keyMoment);
-        }
+        } 
         public static bool Validate(HourlySyncCode code, String Password, DateTime? keyMoment = null) {
             keyMoment = keyMoment ?? Fi.Tech.GetUtcTime();
             if (Generate(keyMoment.Value, Password).Code.SequenceEqual(code.Code)) {
