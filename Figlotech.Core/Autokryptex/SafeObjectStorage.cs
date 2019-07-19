@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Autokryptex.EncryptMethods;
+﻿using Figlotech.Core.Autokryptex.EncryptionMethods;
+using Figlotech.Core.Autokryptex.EncryptMethods;
 using Figlotech.Core.Autokryptex.EncryptMethods.Legacy;
 using Figlotech.Core.Autokryptex.Legacy;
 using Figlotech.Core.FileAcessAbstractions;
@@ -38,14 +39,10 @@ namespace Figlotech.Core.Autokryptex {
         List<Type> KnownTypes { get; set; } = new List<Type>();
         int _fetchLock = 0;
 
-        public SafeObjectStorage(IFileSystem fs, string password) {
+        public SafeObjectStorage(IFileSystem fs) {
             fileSystem = fs;
-            dataEncryptor = new FailOverEncryptor(
-                new LegacyAutokryptexEncryptor(password, 4)
-            );
-            fileEncryptor = new FailOverEncryptor(
-                new LegacyAesEncryptor(RID.MachineRID, 4)
-            );
+            dataEncryptor = new NoOpEncryptor();
+            fileEncryptor = new NoOpEncryptor();
         }
 
         public SafeObjectStorage(IFileSystem fs, IEncryptionMethod fileEncryptionMethod, IEncryptionMethod dataEncryptionMethod) {
