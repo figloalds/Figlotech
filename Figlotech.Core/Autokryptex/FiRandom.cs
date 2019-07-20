@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Figlotech.Core.Autokryptex
@@ -107,9 +108,37 @@ namespace Figlotech.Core.Autokryptex
             InitSeed(RandomSeed);
         }
 
+        const int chunkSize = 256;
+        List<byte[]> hashs = new List<byte[]>();
+        byte[] chunk = new byte[chunkSize];
+        int cursor = 0;
+
         private void InitSeed(long seed) {
-            int idx = (int) ((uint)seed % AppSecret.Length);
-            this.Seed = (AppSecret[idx] ^ seed) + seed;
+            Seed = seed;
+
+            byte[] hash;
+            var bytes = BitConverter.GetBytes(seed);
+            for (int x = 0; x < chunk.Length / sizeof(Int64); x++) {
+                bytes[2] ^= (byte)(bytes[3] * bytes[0]);
+                bytes[3] ^= (byte)(bytes[0] * bytes[1]);
+                bytes[0] ^= (byte)(bytes[bytes[1] % bytes.Length]);
+                bytes[1] ^= (byte)(bytes[bytes[2] % bytes.Length]);
+                bytes[0] ^= (byte)(bytes[1] * bytes[2]);
+                bytes[1] ^= (byte)(bytes[2] * bytes[3]);
+                bytes[2] ^= (byte)(bytes[bytes[3] % bytes.Length]);
+                bytes[3] ^= (byte)(bytes[bytes[0] % bytes.Length]);
+                Array.Copy(bytes, 0, chunk, x * sizeof(Int64), sizeof(Int64));
+            }
+            do {
+                for (int r = 0; r < 128 + (chunk[0]); r++) {
+                    for (int x = 0; x < chunk.Length; x++) {
+                        chunk[x] ^= (byte)((x + 1) * (r - 1) % 255);
+                        chunk[x] ^= (byte)(1 << ((x + 1) * (r - 1) % 8));
+                    }
+                }
+                hash = Fi.Tech.ComputeHash(chunk);
+            } while (hashs.Any(h => h.SequenceEqual(hash)));
+            cursor = 0;
         }
 
         public FiRandom(long RandomSeed, string password) {
@@ -117,57 +146,24 @@ namespace Figlotech.Core.Autokryptex
             this.UseInstanceSecret(password);
         }
 
-        public int Next() {
-            int num = (int)this.GenSalt();
-            if (num < 0)
-                num = -num;
-            return num;
+        public int Gen() {
+            while(cursor > chunk.Length -sizeof(int)) {
+                InitSeed(Seed);
+            }
+            var gen = BitConverter.ToInt32(chunk, cursor);
+            while(gen < 0) gen += Int32.MaxValue;
+            cursor += sizeof(int);
+            return gen;
         }
 
         public int Next(int Maximum) {
             if(Maximum == 0) return 0;
-            var retv = this.Next();
+            var retv = this.Gen();
             return retv % Maximum;
         }
 
         public int Next(int Minimum, int Maximum) {
-            return Minimum + this.Next() % Maximum;
-        }
-
-        long opc = 0;
-        long[] historianVals = new long[16];
-        private long Xor128() {
-            long retv = 0 ^ Seed;
-            int asl = AppSecret.Length;
-            int isl = InstanceSecret.Length;
-            opc += CallCount;
-            int r = 0;
-            for (int i = 0; i < 10; i++) {
-                ++opc;
-                var val = Math.Abs(opc * CallCount * i);
-                retv += val;
-                var a = AppSecret[val % asl];
-                var b = Primes[val % Primes.Length];
-                var c = InstanceSecret[val % isl];
-                var d = historianVals[val % historianVals.Length];
-                switch (opc % 6) {
-                    case 0: retv ^= a*b; break;
-                    case 1: retv ^= a*c; break;
-                    case 2: retv ^= a*d; break;
-                    case 3: retv ^= b*c; break;
-                    case 4: retv ^= b*d; break;
-                    case 5: retv ^= c*d; break;
-                }
-            }
-            historianVals[CallCount % historianVals.Length] ^= retv;
-            Seed ^= retv;
-            return (retv + (retv % 10))/2;
-        }
-
-        public long GenSalt() {
-            ++CallCount;
-            var xor = Xor128();
-            return xor;
+            return Minimum + this.Gen() % Maximum;
         }
     }
 }
