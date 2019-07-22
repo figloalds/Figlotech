@@ -1451,8 +1451,24 @@ namespace Figlotech.Core {
             return numArray;
         }
         
-        public static byte[] CramString(this Fi _selfie, string password, int numDigits) {
-            return FiRandom.CramStringPlus(password, numDigits);
+        public static byte[] CramString(this Fi _selfie, String input, int digitCount) {
+            byte[] workset = Fi.StandardEncoding.GetBytes(input);
+            FiRandom cr = new FiRandom(BitConverter.ToInt64(Fi.Tech.ComputeHash(workset), 0));
+            byte[] result = new byte[digitCount];
+
+            for (int i = 0; i < result.Length; i++) {
+                result[i] = (byte)cr.Next(255);
+            }
+
+            var loops = Math.Max(16, (digitCount / workset.Length) * 2);
+            for (int i = 0; i < loops; i++) {
+                var idx = cr.Next(Int32.MaxValue) % result.Length;
+                foreach (byte c in workset) {
+                    result[idx] ^= c;
+                }
+            }
+
+            return result;
         }
 
         public static string GenerateIdString(this Fi _selfie, string uniqueId, int numDigits = 128) {

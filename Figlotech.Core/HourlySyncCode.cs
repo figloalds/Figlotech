@@ -35,11 +35,11 @@ namespace Figlotech.Core {
         }
 
         public static HourlySyncCode Generate(DateTime KeyMoment, String Password = null) {
-            Password = Password ?? "SuchDefaultVeryUnsafe";
+            Password = Password ?? "";
             var mins = (long)(TimeSpan.FromTicks(KeyMoment.Ticks)).TotalMinutes;
             FiRandom cs = new FiRandom(mins);
             byte[] barr = new byte[64];
-            for(int i = 0; i < barr.Length; i++) {
+            for (int i = 0; i < barr.Length; i++) {
                 barr[i] = (byte)cs.Next(256);
             }
 
@@ -50,10 +50,7 @@ namespace Figlotech.Core {
                     barr[place] ^= (byte)Password[i];
                 }
             }
-            var hs = (int)(TimeSpan.FromTicks(KeyMoment.Ticks).TotalHours);
-            var hash = Fi.Tech.ComputeHash(Password);
-            barr = new LegacyBinaryScramble(BitConverter.ToInt32(hash, 0)).Encrypt(barr);
-            barr = new LegacyEnigmaEncryptor(hs).Encrypt(barr);
+
             return new HourlySyncCode(barr);
         }
 
