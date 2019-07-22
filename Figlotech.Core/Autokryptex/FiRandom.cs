@@ -64,7 +64,7 @@ namespace Figlotech.Core.Autokryptex
             cursor = 0;
         }
         
-        public int Gen() {
+        private int Gen() {
             if(cursor > chunk.Length - sizeof(int)) {
                 InitSeed(Seed++);
             }
@@ -74,8 +74,11 @@ namespace Figlotech.Core.Autokryptex
             return gen;
         }
 
+        public int Next() {
+            return this.Gen();
+        }
         public int Next(int Maximum) {
-            if(Maximum == 0) return 0;
+            if (Maximum == 0) return 0;
             var retv = this.Gen();
             return retv % Maximum;
         }

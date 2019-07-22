@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Autokryptex.Legacy;
+﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Autokryptex.Legacy;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
@@ -16,7 +17,7 @@ namespace Figlotech.Core {
     }
 
     public class RID {
-        static Random rng = new Random();
+        static FiRandom rng = new FiRandom();
         static LegacyCrossRandom mRng = new LegacyCrossRandom();
 
         byte[] Signature = new byte[32];
