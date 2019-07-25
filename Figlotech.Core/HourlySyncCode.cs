@@ -35,19 +35,28 @@ namespace Figlotech.Core {
         }
 
         public static HourlySyncCode Generate(DateTime KeyMoment, String Password = null) {
-            Password = Password ?? "";
+            Password = "FTH_HOURLYSYNC:" + (Password ?? "");
             var mins = (long)(TimeSpan.FromTicks(KeyMoment.Ticks)).TotalMinutes;
             FiRandom cs = new FiRandom(mins);
             byte[] barr = new byte[64];
             for (int i = 0; i < barr.Length; i++) {
                 barr[i] = (byte)cs.Next(256);
             }
-
-            int passCount = 32;
+            var hash = Fi.Tech.ComputeHash(Password);
+            int passCount;
+            passCount = 16;
             while (passCount-- > 0) {
                 for (int i = 0; i < Password.Length; i++) {
                     var place = cs.Next(0, barr.Length);
                     barr[place] ^= (byte)Password[i];
+                }
+            }
+            passCount = 16;
+            while (passCount-- > 0) {
+                for (int i = 0; i < hash.Length; i++) {
+                    var place = cs.Next(0, barr.Length);
+                    barr[place] ^= (byte)hash[i];
+                    hash[i] += barr[place];
                 }
             }
 
