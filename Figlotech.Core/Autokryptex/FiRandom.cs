@@ -34,14 +34,14 @@ namespace Figlotech.Core.Autokryptex
             byte[] hash;
             var bytes = BitConverter.GetBytes(seed);
             for (int x = 0; x < chunk.Length / sizeof(Int64); x++) {
-                bytes[2] ^= (byte)(bytes[3] * bytes[0]);
-                bytes[3] ^= (byte)(bytes[0] * bytes[1]);
-                bytes[0] ^= (byte)(bytes[bytes[1] % bytes.Length]);
-                bytes[1] ^= (byte)(bytes[bytes[2] % bytes.Length]);
-                bytes[0] ^= (byte)(bytes[1] * bytes[2]);
-                bytes[1] ^= (byte)(bytes[2] * bytes[3]);
-                bytes[2] ^= (byte)(bytes[bytes[3] % bytes.Length]);
-                bytes[3] ^= (byte)(bytes[bytes[0] % bytes.Length]);
+                bytes[2] += (byte)(bytes[3] * bytes[0]);
+                bytes[3] += (byte)(bytes[0] * bytes[1]);
+                bytes[0] += (byte)(bytes[bytes[1] % bytes.Length]);
+                bytes[1] += (byte)(bytes[bytes[2] % bytes.Length]);
+                bytes[0] += (byte)(bytes[1] * bytes[2]);
+                bytes[1] += (byte)(bytes[2] * bytes[3]);
+                bytes[2] += (byte)(bytes[bytes[3] % bytes.Length]);
+                bytes[3] += (byte)(bytes[bytes[0] % bytes.Length]);
                 Array.Copy(bytes, 0, chunk, x * sizeof(Int64), sizeof(Int64));
             }
             {
@@ -54,8 +54,8 @@ namespace Figlotech.Core.Autokryptex
                 }
                 if (g1 > 8)
                     for(int i = 0; i < 32; i++) {
-                        for(int j = 0; j < 8; j++) {
-                            chunk[i * j] ^= hashs[7 - j][i];
+                        for(int j = 0; j < Math.Min(g1 - 1, 8); j++) {
+                            chunk[i * j] ^= hashs[j][i];
                         }
                     }
                 hash = Fi.Tech.ComputeHash(chunk);
