@@ -25,7 +25,6 @@ namespace Figlotech.Core.Autokryptex
         const int chunkSize = 256;
         byte[][] hashs = new byte[8][];
         byte[] chunk = new byte[chunkSize];
-        const int maxHashCount = 1024;
         int cursor = 0;
 
         private void InitSeed(long seed) {
