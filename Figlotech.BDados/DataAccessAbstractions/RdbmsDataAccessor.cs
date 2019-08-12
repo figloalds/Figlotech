@@ -1193,7 +1193,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i2 = 0;
-            int cut = 2500;
+            int cut = 5000;
             int rst = 0;
             List<T> temp;
 
@@ -1208,7 +1208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<IDataObject> successfulSaves = new List<IDataObject>();
             List<IDataObject> failedObjects = new List<IDataObject>();
             transaction?.Benchmarker.Mark($"Begin SaveList process");
-            WorkQueuer wq = rs.Count > cut ? new WorkQueuer("SaveList_Annonymous_Queuer", Environment.ProcessorCount, true) : null;
+            WorkQueuer wq = rs.Count > cut ? new WorkQueuer("SaveList_Annonymous_Queuer", 1, true) : null;
 
             while (i2 * cut < rs.Count) {
                 int i = i2;

@@ -58,13 +58,13 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static FiHttpResult Init(string verb, HttpWebRequest req, Action<Stream> UploadRequestStream) {
+        public static FiHttpResult Init(string verb, HttpWebRequest req, byte[] data) {
             var retv = new FiHttpResult();
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
                     try {
                         using (var reqStream = req.GetRequestStream()) {
-                            UploadRequestStream?.Invoke(reqStream);
+                            reqStream.Write(data, 0, data.Length);
                             reqStream.Flush();
                         }
                     } catch(Exception x) {
@@ -82,6 +82,7 @@ namespace Figlotech.Core {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
+                throw x;
             }
             return retv;
         }
@@ -327,15 +328,30 @@ namespace Figlotech.Core {
 
         public FiHttpResult Custom(String verb, String Url, Action<Stream> UploadRequestStream = null) {
             var req = GetRequest(Url);
+            byte[] bytes;
+            using (var ms = new MemoryStream()) {
+                UploadRequestStream?.Invoke(ms);
+                bytes = ms.ToArray();
+            }
             req.Proxy = this.Proxy;
             req.Method = verb;
             req.UserAgent = UserAgent;
             UpdateSyncCode();
             AddHeaders(req);
 
-            return FiHttpResult.Init(verb, req, UploadRequestStream);
+            return FiHttpResult.Init(verb, req, bytes);
         }
+        public FiHttpResult Custom(String verb, String Url, byte[] data) {
+            var req = GetRequest(Url);
+            req.Proxy = this.Proxy;
+            req.ContentLength = data.Length;
+            req.Method = verb;
+            req.UserAgent = UserAgent;
+            UpdateSyncCode();
+            AddHeaders(req);
 
+            return FiHttpResult.Init(verb, req, data);
+        }
         public FiHttpResult Post(String Url, Action<Stream> UploadRequestStream = null) {
             return Custom("POST", Url, UploadRequestStream);
         }

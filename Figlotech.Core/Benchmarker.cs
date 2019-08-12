@@ -11,9 +11,9 @@ namespace System {
 
     public static class BenchMarkerExtensions {
         public static double Mark(this Benchmarker self, String txt, Exception ex = null) {
-            if (!FiTechCoreExtensions.EnableBenchMarkers)
-                return 0;
             if (self == null) return 0;
+            if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
+                return 0;
             if (!self.Active)
                 return 0;
             try {
@@ -55,6 +55,9 @@ namespace System {
         }
 
         public static T Wrap<T>(this Benchmarker self, string label, Func<T> action) {
+            if (self == null) {
+                return default(T);
+            }
             T retv;
             try {
                 self.Mark($"[RegionStart] {label}");
@@ -81,7 +84,10 @@ namespace System {
         }
 
         public static void Assert(this Benchmarker self, Expression<Func<bool>> expr) {
-            if (!FiTechCoreExtensions.EnableBenchMarkers || expr == null)
+            if(self == null) {
+                return;
+            }
+            if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 return;
             try {
                 bool result = expr.Compile().Invoke();
@@ -98,14 +104,14 @@ namespace System {
         }
 
         public static IEnumerable<String> VerboseLog(this Benchmarker self) {
-            if (!FiTechCoreExtensions.EnableBenchMarkers)
-                yield break;
             if (self == null)
+                yield break;
+            if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 yield break;
 
             var lines = new List<String>();
 
-            var retv = (self.marks[self.marks.Count-1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+            var retv = TotalTime(self);
             yield return ($"--------------------------");
             yield return ($"{self.myName}");
             yield return ($"--------------------------");
@@ -126,10 +132,14 @@ namespace System {
             yield return ($"Total: {retv}ms");
         }
 
+        public static double TotalTime(this Benchmarker self) {
+            return (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+        }
+
         public static double FinalMark(this Benchmarker self) {
-            if (!FiTechCoreExtensions.EnableBenchMarkers)
-                return 0;
             if (self == null) return 0;
+            if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
+                return 0;
             if (!self.Active)
                 return 0;
             try {
@@ -168,9 +178,10 @@ namespace System {
     public class Benchmarker {
         internal String myName;
         internal List<TimeMark> marks = new List<TimeMark>();
-
-        public Benchmarker(String name = "") {
-            if (!FiTechCoreExtensions.EnableBenchMarkers)
+        public bool EnabledInProduction { get; private set; }
+        public Benchmarker(String name = "", bool enabledInProduction = false) {
+            EnabledInProduction = enabledInProduction;
+            if (!EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 return;
             if (String.IsNullOrEmpty(name))
                 name = new RID().AsBase36;

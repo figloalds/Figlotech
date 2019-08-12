@@ -33,7 +33,7 @@ namespace Figlotech.Core {
         public String Name { get; set; } = null;
 
         public void Await() {
-            while (completed == null) {
+            while (completed == null && AssignedThread != Thread.CurrentThread) {
                 WaitHandle.WaitOne();
             }
         }
@@ -298,14 +298,16 @@ namespace Figlotech.Core {
                         Thread.CurrentThread.IsBackground = false;
 
                         job.dequeued = DateTime.Now;
+                        job.AssignedThread = Thread.CurrentThread;
                         Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {Name}:{job.id} dequeued for execution after {(job.dequeued.Value - job.enqueued.Value).TotalMilliseconds}ms");
                         var callPoint = job?.action?.Method.DeclaringType?.DeclaringType?.Name;
 
                         try {
-                                job?.action?.Invoke();
+                            job?.action?.Invoke();
                             job.status = WorkJobStatus.Finished;
                             job?.finished?.Invoke();
                             job.completed = DateTime.Now;
+                            job.AssignedThread = null;
                             Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {Name}@{callPoint}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                         } catch (Exception x) {
                             job.completed = DateTime.Now;

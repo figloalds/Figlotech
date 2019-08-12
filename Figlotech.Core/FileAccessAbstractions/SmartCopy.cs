@@ -476,6 +476,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (options.AllowDelete) {
                 destination.ForFilesIn(path, (f) => {
                     if (DeleteLimit < 1) return;
+                    if (Excludes.Any(x => CheckMatch(f, x))) {
+                        return;
+                    }
                     if (!origin.Exists(f)) {
                         if (DeleteLimit-- > 0) {
                             destination.Delete(f);
