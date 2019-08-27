@@ -17,6 +17,9 @@ namespace Figlotech.Core.Helpers {
         public static bool DerivesFromGeneric(this Type t, Type ancestorType) {
             return ReflectionTool.TypeDerivesFromGeneric(t, ancestorType);
         }
+        public static MemberInfo[] GetFieldsAndProperties(this Type t) {
+            return ReflectionTool.FieldsAndPropertiesOf(t);
+        }
         public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(this Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
             var members = ReflectionTool.FieldsAndPropertiesOf(type);
             if (act == null) {

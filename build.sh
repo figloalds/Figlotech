@@ -1,1 +1,9 @@
-dotnet publish -f netstandard2.0 -o ../_dist
+REVISION=$(git rev-list --count master)
+ARGS=$(echo -o ..\_nuget -p:PackageVersion=1.0.$REVISION;TargetFrameworks=netstandard2.0)
+
+dotnet pack Figlotech.Core $ARGS
+dotnet pack Figlotech.BDados $ARGS
+dotnet pack Figlotech.BDados.MySqlDataAccessor $ARGS
+dotnet pack Figlotech.BDados.PostgreSQLDataAccessor $ARGS
+dotnet pack Figlotech.BDados.SQLiteDataAccessor $ARGS
+dotnet pack Figlotech.ExcelUtil $ARGS

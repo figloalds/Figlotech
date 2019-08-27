@@ -310,15 +310,19 @@ namespace Figlotech.Core {
                             job.AssignedThread = null;
                             Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {Name}@{callPoint}:{job.id} finished in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms");
                         } catch (Exception x) {
-                            job.completed = DateTime.Now;
-                            Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {Name}@{callPoint}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
-                            //var callPoint = job?.action?.Method.DeclaringType?.Name;
-                            var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
-                            var msg = $"Error executing WorkJob {Name}/{jobdescription}@{callPoint}: {x.Message}";
                             try {
-                                job?.handling?.Invoke(new Exception(msg, x));
-                            } catch (Exception y) {
-                                Fi.Tech.Throw(y);
+                                job.completed = DateTime.Now;
+                                Fi.Tech.WriteLine("FTH:WorkQueuer", $"[{Thread.CurrentThread.Name}] Job {Name}@{callPoint}:{job.id} failed in {(job.completed.Value - job.dequeued.Value).TotalMilliseconds}ms with message: {x.Message}");
+                                //var callPoint = job?.action?.Method.DeclaringType?.Name;
+                                var jobdescription = $"{job.Name ?? "annonymous_job"}::{job.id}";
+                                var msg = $"Error executing WorkJob {Name}/{jobdescription}@{callPoint}: {x.Message}";
+                                try {
+                                    job?.handling?.Invoke(new Exception(msg, x));
+                                } catch (Exception y) {
+                                    Fi.Tech.Throw(y);
+                                }
+                            } catch(Exception z) {
+                                System.Diagnostics.Debugger.Break();
                             }
                         }
                         job.status = WorkJobStatus.Finished;
