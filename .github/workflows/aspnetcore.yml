@@ -4,9 +4,7 @@ on: [push]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-    
     steps:
     - uses: actions/checkout@v1
     - name: Setup .NET Core
@@ -14,5 +12,6 @@ jobs:
       with:
         dotnet-version: 2.2.108
     - name: Build with dotnet
-      uses: ./
-      run: build.sh
+      steps:
+      - uses: ./
+      - run: build.sh
