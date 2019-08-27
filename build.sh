@@ -1,4 +1,4 @@
-REVISION=$(git rev-list --count master)
+REVISION=$(git rev-list --count HEAD)
 ARGS=$(echo -o ..\_nuget -p:PackageVersion=1.0.$REVISION;TargetFrameworks=netstandard2.0)
 
 dotnet pack Figlotech.Core $ARGS
