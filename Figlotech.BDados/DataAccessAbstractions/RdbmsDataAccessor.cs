@@ -1775,7 +1775,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (ridcol != null) {
                 ridname = ridcol;
             }
-            OnObjectsDeleted(obj.GetType(), obj.ToSingleElementList().ToArray());
+            OnObjectsDeleted?.Invoke(obj.GetType(), obj.ToSingleElementList().ToArray());
             var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
             retv = Execute(transaction, query) > 0;
             return retv;
