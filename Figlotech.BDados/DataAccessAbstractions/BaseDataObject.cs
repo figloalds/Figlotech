@@ -15,7 +15,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public BaseDataObject() {
-            DS.Default.SmartResolve(this, true);
         }
 
         public override string ToString() {
