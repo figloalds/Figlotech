@@ -115,6 +115,13 @@ namespace Figlotech.Core {
             retv.CopyFrom(other);
             return retv;
         }
+        public static T CloneDataObject<T>(this Fi _selfie, T other) where T : IDataObject, new() {
+            T retv = new T();
+            Fi.Tech.CloneDataObject(other, retv);
+            retv.Id = 0;
+            retv.RID = null;
+            return retv;
+        }
 
         private static bool CheckParams(IEnumerable<Type> types, IEnumerable<object> vals) {
             var numitems = 0;
@@ -388,7 +395,7 @@ namespace Figlotech.Core {
 
         public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
             if(value == null) {
-                var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}";
+                var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}".ToString();
                 lock (lockStr) {
                     if (value == null) {
                         value = init.Invoke();
@@ -1498,6 +1505,26 @@ namespace Figlotech.Core {
                 });
             });
         }
+
+        public static void CloneDataObject(this Fi _selfie, object origin, object destination) {
+            if (origin == null)
+                return;
+            if (destination == null)
+                return;
+            ObjectReflector.Open(origin, (objA) => {
+                ObjectReflector.Open(destination, (objB) => {
+                    foreach (var field in objB) {
+                        if (objA.ContainsKey(field.Key.Name)) {
+                            objB[field.Key] = objA[field.Key.Name];
+                        }
+                    }
+                });
+
+                objA["Id"] = 0;
+                objA["RID"] = null;
+            });
+        }
+
         static Random rng = new Random();
         public static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
 

@@ -34,26 +34,28 @@ namespace Figlotech.Core.Helpers {
 
     public class ReflectionTool {
 
-        public static LenientDictionary<Type, MemberInfo[]> MembersCache = new Dictionary<Type, MemberInfo[]>();
+        private static LenientDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new LenientDictionary<Type, MemberInfo[]>();
 
         public static bool StrictMode { get; set; } = false;
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
             if (type == null)
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
-            if (!MembersCache.ContainsKey(type)) {
-                var members = new List<MemberInfo>();
-                members.AddRange(type.GetFields().Where(m=> !m.IsStatic && m.IsPublic));
-                members.AddRange(type.GetProperties().Where(
-                    m =>
-                        (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                        (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
-                ));
-                MembersCache[type] = members.ToArray();
+            lock("ACCESS_MEMBER_CACHE") {
+                if (!MembersCache.ContainsKey(type)) {
+                    var members = new List<MemberInfo>();
+                    members.AddRange(type.GetFields().Where(m=> !m.IsStatic && m.IsPublic));
+                    members.AddRange(type.GetProperties().Where(
+                        m =>
+                            (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
+                            (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
+                    ));
+                    MembersCache[type] = members.ToArray();
+                }
+                // It is not clear rather the .Net Runtime caches or not 
+                // the member info or if they do lookups all the time
+                // It could be good to cache this, but I'm not sure yet.
+                return MembersCache[type];
             }
-            // It is not clear rather the .Net Runtime caches or not 
-            // the member info or if they do lookups all the time
-            // It could be good to cache this, but I'm not sure yet.
-            return MembersCache[type];
         }
 
         public static bool TypeImplements(Type t, Type interfaceType) {
