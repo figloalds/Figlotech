@@ -68,15 +68,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var fieldNames = fieldNamesDict[myPrefix];
                 for (int i = 0; i < fieldNames.Item1.Length; i++) {
                     var val = reader.GetValue(fieldNames.Item1[i]);
-                    string kind = "";
                     if (val is DateTime dt && dt.Kind != DateTimeKind.Utc) {
-                        kind = dt.Kind.ToString();
                         // I reluctantly admit that I'm using this horrible gimmick
                         // It pains my soul to do this, because the MySQL Connector doesn't support
                         // Timezone field in the connection string
                         // And besides, this is code is supposed to be abstract for all ADO Plugins
                         // But I'll go with "If it isn't UTC, then you're saving dates wrong"
-                        val = new DateTime(dt.Ticks, DateTimeKind.Utc);
+                        val = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour ,dt.Minute, dt.Second, dt.Millisecond, DateTimeKind.Utc);
                     }
                     refl[fieldNames.Item2[i]] = val;
                 }

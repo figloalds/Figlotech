@@ -75,7 +75,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IDbCommand CreateCommand(IQueryBuilder query) {
             var retv = CreateCommand();
-            query.ApplyToComand(retv, this.DataAccessor.Plugin);
+            query.ApplyToCommand(retv, this.DataAccessor.Plugin);
             return retv;
         }
 
@@ -841,7 +841,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
          * it took a lot of coffee to achieve.
          */
         private static void MakeQueryAggregations(ref JoinDefinition query, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
-            var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType);
+            var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType)
+                .OrderBy(x=> x.Name.GetHashCode())
+                .ToList();
             //var reflectedJoinMethod = query.GetType().GetMethod("Join");
 
             String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
@@ -1410,7 +1412,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 transaction?.Benchmarker?.Mark($"Execute Query <{query.Id}>");
                 using (var reader = command.ExecuteReader()) {
                     return BuildStateUpdateQueryResult(transaction, reader, workingTypes, fields);
@@ -1493,7 +1495,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 command.CommandTimeout = 999999;
                 VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 transaction?.Benchmarker?.Mark($"@SendLocalUpdates Execute Query <{query.Id}>");
                 using (var reader = command.ExecuteReader()) {
                     using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024 * 64, true)) {
@@ -1705,7 +1707,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DateTime Inicio = DateTime.Now;
             using (var command = transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
                 List<T> retv;
@@ -2020,14 +2022,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 using (var command = transaction?.CreateCommand()) {
                     var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
-                    transaction?.Benchmarker?.Mark($"Generate Join Query");
-                    //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
-                    query.ApplyToComand(command, Plugin);
-                    transaction?.Benchmarker?.Mark($"Start build AggregateListDirect <{query.Id}>");
-                    var retv = BuildAggregateListDirect<T>(transaction, command, join, 0, args.ContextObject);
-                    transaction?.Benchmarker?.Mark($"Finished building the result <{query.Id}>");
-                    return retv;
+                    try {
+                        transaction?.Benchmarker?.Mark($"Generate Join Query");
+                        //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
+                        query.ApplyToCommand(command, Plugin);
+                        transaction?.Benchmarker?.Mark($"Start build AggregateListDirect <{query.Id}>");
+                        var retv = BuildAggregateListDirect<T>(transaction, command, join, 0, args.ContextObject);
+                        transaction?.Benchmarker?.Mark($"Finished building the result <{query.Id}>");
+                        return retv;
+                    } catch(Exception x) {
+                        throw new BDadosException($"Error executing AggregateLoad query; Linear? {args.Linear}; Query Text: {query.GetCommandText()}", x);
+                    }
                 }
 
             } else {
@@ -2078,7 +2084,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 IDataReader reader;
                 try {
 
@@ -2129,7 +2135,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DataTable retv = new DataTable();
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
                 using (var reader = command.ExecuteReader()) {
@@ -2147,7 +2153,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DataTable retv = new DataTable();
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
                 DataSet ds;
@@ -2188,7 +2194,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using (var command = transaction.CreateCommand()) {
                 try {
                     VerboseLogQueryParameterization(transaction, query);
-                    query.ApplyToComand(command, Plugin);
+                    query.ApplyToCommand(command, Plugin);
                     transaction.Benchmarker?.Mark($"[{accessId}] Execute");
                     lock (transaction) {
                         result = command.ExecuteNonQuery();

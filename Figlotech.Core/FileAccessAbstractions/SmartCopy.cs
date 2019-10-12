@@ -379,11 +379,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public void DeleteExtras(IFileSystem fs, string path, List<FileData> workinglist, bool recursive) {
+            if(!options.AllowDelete) {
+                return;
+            }
             Func<FileData, string, bool> cmpFn = (wl,file) => wl.RelativePath == file;
             if (!fs.IsCaseSensitive) {
                 cmpFn = (wl, file) => wl.RelativePath?.ToLower() == file?.ToLower();
             }
             fs.ForFilesIn(path, file => {
+                if(Excludes.Any(x=> CheckMatch(file, x))) {
+                    return;
+                }
                 if (!workinglist.Any(wl=> cmpFn(wl, file))) {
                     try {
                         fs.Delete(file);
@@ -498,7 +504,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!isRecursing) {
 
                 wq.Start();
-                wq.Stop();
+                wq.Stop(true);
 
                 if (options.UseHashList) {
                     HashList.RemoveAll((f) =>

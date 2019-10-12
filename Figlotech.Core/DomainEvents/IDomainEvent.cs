@@ -12,6 +12,7 @@ namespace Figlotech.Core.DomainEvents
         string d_RaiseOrigin { get; set; }
         DateTime TimeStamp { get; }
         long Time { get; }
+        string RID { get; }
         long Id { get; }
     }
 }

@@ -139,7 +139,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 refl.Slot(obj);
                 for (int i = 0; i < meta.Item2.Length; i++) {
                     var o = reader.GetValue(i);
-                    refl[meta.Item2[i]] = o;
+                    refl[meta.Item2[i]] = Fi.Tech.ProperMapValue(o);
                 }
                 yield return (T) refl.Retrieve();
             }

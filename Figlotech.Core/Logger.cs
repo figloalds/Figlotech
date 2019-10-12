@@ -53,7 +53,7 @@ namespace Figlotech.Core {
                 if (EnableConsoleLogging)
                     Console.Error.WriteLine(log);
                 log = Regex.Replace(log, @"\s+", " ");
-                lock ("BDADOS_LOG_LOCK") {
+                lock (this) {
                     String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
                     List<String> Lines = new List<String>();
                     Lines.AddRange(BDadosLogCache);
@@ -115,7 +115,7 @@ namespace Figlotech.Core {
             WriteLog(x.StackTrace);
             WriteLog(new String('-', 20));
             if (x.InnerException != null) {
-                WriteLog(x);
+                WriteLog(x.InnerException);
             }
             if (x is AggregateException ag) {
                 foreach (var agex in ag.InnerExceptions) {

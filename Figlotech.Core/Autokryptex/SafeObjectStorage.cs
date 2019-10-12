@@ -13,16 +13,19 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex {
-    public class SafeDataPayload {
+namespace Figlotech.Core.Autokryptex
+{
+    public class SafeDataPayload
+    {
         public string Type { get; set; }
         public byte[] Hash { get; set; }
         public byte[] Data { get; set; }
         public long CreatedTime { get; set; }
         [JsonIgnore]
-        internal string RID {get;set;}
+        internal string RID { get; set; }
     }
-    public class SafeObjectStorage {
+    public class SafeObjectStorage
+    {
         IFileSystem fileSystem { get; set; }
         IEncryptionMethod dataEncryptor { get; set; }
         IEncryptionMethod fileEncryptor { get; set; }
@@ -32,12 +35,13 @@ namespace Figlotech.Core.Autokryptex {
 
         public int CacheLength {
             get {
-                return Cache.Count;
+                lock (Cache) {
+                    return Cache.Count;
+                }
             }
         }
 
         List<Type> KnownTypes { get; set; } = new List<Type>();
-        int _fetchLock = 0;
 
         public SafeObjectStorage(IFileSystem fs) {
             fileSystem = fs;
@@ -58,7 +62,9 @@ namespace Figlotech.Core.Autokryptex {
         }
 
         public void PreloadAll() {
-            var cachedRids = Cache.Select(c => c.RID);
+            List<string> cachedRids;
+            lock (Cache)
+                cachedRids = Cache.Select(c => c.RID).ToList();
             var newList = new List<SafeDataPayload>();
             fileSystem.ForFilesIn("", rid => {
                 if (cachedRids.Contains(rid)) {
@@ -66,7 +72,7 @@ namespace Figlotech.Core.Autokryptex {
                 }
                 _cachePayload(_getPayloadFromFile(rid));
             });
-            lock(Cache) {
+            lock (Cache) {
                 Cache.Sort((a, b) =>
                     a.CreatedTime > b.CreatedTime ? 1 :
                     a.CreatedTime < b.CreatedTime ? -1 :
@@ -77,19 +83,21 @@ namespace Figlotech.Core.Autokryptex {
 
         public int CacheCount<T>() {
             lock (Cache)
-                return Cache.Count(payload=> payload.Type == typeof(T).Name);
+                return Cache.Count(payload => payload.Type == typeof(T).Name);
         }
 
         public IEnumerable<(string RID, Type Type, object Value)> CacheFetch() {
-            lock(Cache)
-                foreach(var payload in Cache) {
-                    var type = KnownTypes.FirstOrDefault(t => t.Name == payload.Type);
-                    if(type == null) {
-                        continue;
-                    }
-                    var value = _decryptObject(type, payload.Data);
-                    yield return (payload.RID, type, value);
+            List<SafeDataPayload> localCopyCache;
+            lock (Cache)
+                localCopyCache = new List<SafeDataPayload>(Cache);
+            foreach (var payload in localCopyCache) {
+                var type = KnownTypes.FirstOrDefault(t => t.Name == payload.Type);
+                if (type == null) {
+                    continue;
                 }
+                var value = _decryptObject(type, payload.Data);
+                yield return (payload.RID, type, value);
+            }
         }
 
         private byte[] _gzip(byte[] data) {
@@ -141,9 +149,10 @@ namespace Figlotech.Core.Autokryptex {
         }
 
         public IEnumerable<(string RID, T Data)> Fetch<T>() {
-            _fetchLock++;
             try {
-                var cachedRids = Cache.Select(c => c.RID);
+                List<string> cachedRids;
+                lock (Cache)
+                    cachedRids = Cache.Select(c => c.RID).ToList();
                 var newList = new List<SafeDataPayload>();
                 var t = Task.Run(() => {
                     fileSystem.ForFilesIn("", rid => {
@@ -154,7 +163,10 @@ namespace Figlotech.Core.Autokryptex {
                     });
                 });
 
-                foreach (var payload in Cache) {
+                List<SafeDataPayload> localCopyCache;
+                lock (Cache)
+                    localCopyCache = new List<SafeDataPayload>(Cache);
+                foreach (var payload in localCopyCache) {
                     if (payload.Type == typeof(T).Name)
                         yield return (payload.RID, _getObjectFromPayload<T>(payload));
                 }
@@ -165,32 +177,30 @@ namespace Figlotech.Core.Autokryptex {
                         yield return (payload.RID, _getObjectFromPayload<T>(payload));
                 }
             } finally {
-                _fetchLock--;
+
             }
+
             lock (DeletionQueue)
                 while (DeletionQueue.Count > 0) {
                     Delete(DeletionQueue.Dequeue());
                 }
+            yield break;
         }
 
         public void Delete(string rid) {
-            if (_fetchLock > 0) {
-                QueueDelete(rid);
-                return;
-            }
-            lock(Cache)
+            lock (Cache)
                 Cache.RemoveAll(c => c.RID == rid);
             fileSystem.Delete(rid);
         }
 
         public void QueueDelete(string rid) {
-            lock(DeletionQueue)
+            lock (DeletionQueue)
                 DeletionQueue.Enqueue(rid);
         }
 
         public string Put(object item) {
             var t = item.GetType();
-            if(!KnownTypes.Contains(t)) {
+            if (!KnownTypes.Contains(t)) {
                 AddWorkingTypes(t);
             }
             var data = _encryptObject(item);
@@ -210,17 +220,17 @@ namespace Figlotech.Core.Autokryptex {
             var encBytes = fileEncryptor.Encrypt(bytes);
 
             fileSystem.WriteAllBytes(objectRID, encBytes);
-            
+
             return objectRID;
         }
 
         public T GetObject<T>(string rid) {
-            if(!fileSystem.Exists(rid)) {
+            if (!fileSystem.Exists(rid)) {
                 return default(T);
             }
             SafeDataPayload needle;
-            lock(Cache) needle = Cache.FirstOrDefault(c => c.RID == rid);
-            if(needle != null) {
+            lock (Cache) needle = Cache.FirstOrDefault(c => c.RID == rid);
+            if (needle != null) {
                 return _decryptObject<T>(needle.Data);
             }
             return _getObjectFromFile<T>(rid);

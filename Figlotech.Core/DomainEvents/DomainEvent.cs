@@ -20,6 +20,8 @@ namespace Figlotech.Core.DomainEvents {
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
 
+        public string RID { get; set; } = new RID().AsBase36;
+        
         [JsonIgnore]
         public string d_RaiseOrigin { get; set; }
         

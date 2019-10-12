@@ -87,9 +87,10 @@ namespace Figlotech.Core {
     }
 
     public class ScheduledWorkJob {
-        public WorkJob WorkJob;
-        public DateTime ScheduledTime;
-        public string Identifier;
+        public WorkJob WorkJob { get; set; }
+        public DateTime ScheduledTime { get; set; }
+        public TimeSpan? RecurrenceInterval { get; set; }
+        public string Identifier { get; set; }
     }
 
     public delegate dynamic ComputeField(dynamic o);
@@ -118,8 +119,6 @@ namespace Figlotech.Core {
         public static T CloneDataObject<T>(this Fi _selfie, T other) where T : IDataObject, new() {
             T retv = new T();
             Fi.Tech.CloneDataObject(other, retv);
-            retv.Id = 0;
-            retv.RID = null;
             return retv;
         }
 
@@ -389,6 +388,10 @@ namespace Figlotech.Core {
                 var schedules = GlobalScheduledJobs.Splice(j=> DateTime.UtcNow >= j.ScheduledTime);
                 foreach(var schedule in schedules) {
                     FiTechRAF.Enqueue(schedule.WorkJob);
+                    if(schedule.RecurrenceInterval != null) {
+                        schedule.ScheduledTime += schedule.RecurrenceInterval.Value;
+                        GlobalScheduledJobs.Add(schedule);
+                    }
                 }
             }
         }
@@ -405,14 +408,15 @@ namespace Figlotech.Core {
             return value;
         }
 
-        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job) {
-            
+        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+
             lock (GlobalScheduledJobs) {
                 GlobalScheduledJobs.Add(new ScheduledWorkJob {
                     Identifier = identifier,
                     WorkJob = job,
                     ScheduledTime = when,
-                });
+                    RecurrenceInterval = RecurrenceInterval
+                }) ;
             }
         }
 
@@ -498,8 +502,20 @@ namespace Figlotech.Core {
                 } else {
                     objField = col.ColumnName;
                 }
-                objBuilder[objField] = o;
+                objBuilder[objField] = Fi.Tech.ProperMapValue(o);
             }
+        }
+
+        public static object ProperMapValue(this Fi __selfie, object o) {
+            if (o is DateTime dt && dt.Kind != DateTimeKind.Utc) {
+                // I reluctantly admit that I'm using this horrible gimmick
+                // It pains my soul to do this, because the MySQL Connector doesn't support
+                // Timezone field in the connection string
+                // And besides, this is code is supposed to be abstract for all ADO Plugins
+                // But I'll go with "If it isn't UTC, then you're saving dates wrong"
+                o = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, DateTimeKind.Utc);
+            }
+            return o;
         }
 
         public static T[] CombineArrays<T>(this Fi __selfie, params T[][] arrays) {
@@ -1518,10 +1534,9 @@ namespace Figlotech.Core {
                             objB[field.Key] = objA[field.Key.Name];
                         }
                     }
+                    objB["Id"] = 0;
+                    objB["RID"] = null;
                 });
-
-                objA["Id"] = 0;
-                objA["RID"] = null;
             });
         }
 

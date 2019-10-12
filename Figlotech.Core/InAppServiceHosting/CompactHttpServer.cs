@@ -32,6 +32,26 @@ namespace Figlotech.Core.InAppServiceHosting
 
     }
 
+    public class GenericInlineHandler : ApiHandler
+    {
+        Func<string, string, bool> CanHandle { get; set; }
+        Action<string, Dictionary<string, string> , Dictionary<string, string>, byte[], Stream> DoHandle { get; set; }
+
+        public GenericInlineHandler(Func<string, string, bool> canHandle, Action<string, Dictionary<string, string>, Dictionary<string, string>, byte[], Stream> doHandle) {
+            this.CanHandle = canHandle;
+            this.DoHandle = doHandle;
+        }
+
+        public override bool CanHandleApi(string method, string uri) {
+            return this.CanHandle(method, uri);
+        }
+        public override void HandleRequest(string reqUri, Dictionary<string, string> query, Dictionary<string, string> reqHeaders, byte[] bodyBytes, Stream stream) {
+            DoHandle(reqUri, query, reqHeaders, bodyBytes, stream);
+        }
+
+    }
+
+
     public static class SelfHostCacheService
     {
         public static LenientDictionary<string, object> DataCache = new LenientDictionary<string, object>();
@@ -139,6 +159,12 @@ namespace Figlotech.Core.InAppServiceHosting
             serverThread.Join();
         }
 
+        List<IApiHandler> Handlers { get; set; } = new List<IApiHandler>();
+
+        public void AddHandler(Func<string, string, bool> canHandle, Action<string, Dictionary<string, string>, Dictionary<string, string>, byte[], Stream> doHandle) {
+            this.Handlers.Add(new GenericInlineHandler(canHandle, doHandle));
+        }
+
         public void Start() {
             if (started || running) {
                 return;
@@ -147,15 +173,7 @@ namespace Figlotech.Core.InAppServiceHosting
             ServicePointManager.MaxServicePoints = Int32.MaxValue;
             ServicePointManager.ReusePort = true;
             ServicePointManager.UseNagleAlgorithm = false;
-
-            List<IApiHandler> Handlers = new List<IApiHandler>();
-            Handlers.AddRange(
-                typeof(SelfHost).Assembly
-                    .GetTypes()
-                    .Where(t => !t.IsAbstract && t.Implements(typeof(IApiHandler)))
-                    .Select(t => (IApiHandler)Activator.CreateInstance(t))
-            );
-
+            
             serverThread = Fi.Tech.SafeCreateThread((Action)(() => {
                 running = true;
                 var listener = new TcpListener(Ip, Port);

@@ -153,6 +153,9 @@ namespace Figlotech.Core.DomainEvents {
             }
             domainEvent.EventsHub = this;
             lock (EventCache) {
+                if(EventCache.Any(x=> x.RID == domainEvent.RID)) {
+                    return;
+                }
                 EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
             }
 

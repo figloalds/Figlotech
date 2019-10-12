@@ -12,12 +12,41 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public static void ExecuteUsing(this IQueryBuilder query, IDbConnection conn, IRdbmsPluginAdapter Plugin) {
             using (var command = conn.CreateCommand()) {
-                query.ApplyToComand(command, Plugin);
+                query.ApplyToCommand(command, Plugin);
                 command.ExecuteNonQuery();
             }
         }
 
-        public static void ApplyToComand(this IQueryBuilder query, IDbCommand command, IRdbmsPluginAdapter Plugin) {
+        public static void ApplyToCommand(this IQueryBuilder query, IDbCommand command, Func<object, object> ProcessParameterValue = null) {
+            String QueryText = query.GetCommandText();
+            command.CommandText = QueryText;
+            // Adiciona os parametros
+            var paramRefl = new ObjectReflector();
+            foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
+                var cmdParam = command.CreateParameter();
+                cmdParam.ParameterName = param.Key;
+
+                var usableValue = param.Value;
+                if (ProcessParameterValue != null) {
+                    usableValue = ProcessParameterValue.Invoke(param.Value);
+                }
+                if (usableValue == null) {
+                    cmdParam.Value = DBNull.Value;
+                } else
+                if (usableValue is String str) {
+                    cmdParam.Value = str;
+                    cmdParam.DbType = DbType.String;
+                    paramRefl.Slot(cmdParam);
+                    paramRefl["Encoding"] = Fi.StandardEncoding;
+                } else {
+                    cmdParam.Value = usableValue;
+                }
+                cmdParam.Direction = ParameterDirection.Input;
+
+                command.Parameters.Add(cmdParam);
+            }
+        }
+        public static void ApplyToCommand(this IQueryBuilder query, IDbCommand command, IRdbmsPluginAdapter Plugin) {
             String QueryText = query.GetCommandText();
             command.CommandText = QueryText;
             // Adiciona os parametros
@@ -41,7 +70,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 command.Parameters.Add(cmdParam);
             }
-
         }
     }
 
