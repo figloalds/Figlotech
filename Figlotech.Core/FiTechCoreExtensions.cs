@@ -86,7 +86,9 @@ namespace Figlotech.Core {
         }
     }
 
-    public class ScheduledWorkJob {
+    public class ScheduledWorkJob
+    {
+        public WorkQueuer Queuer { get; set; }
         public WorkJob WorkJob { get; set; }
         public DateTime ScheduledTime { get; set; }
         public TimeSpan? RecurrenceInterval { get; set; }
@@ -387,7 +389,7 @@ namespace Figlotech.Core {
             lock (GlobalScheduledJobs) {
                 var schedules = GlobalScheduledJobs.Splice(j=> DateTime.UtcNow >= j.ScheduledTime);
                 foreach(var schedule in schedules) {
-                    FiTechRAF.Enqueue(schedule.WorkJob);
+                    (schedule.Queuer??FiTechRAF).Enqueue(schedule.WorkJob);
                     if(schedule.RecurrenceInterval != null) {
                         schedule.ScheduledTime += schedule.RecurrenceInterval.Value;
                         GlobalScheduledJobs.Add(schedule);
@@ -412,11 +414,24 @@ namespace Figlotech.Core {
 
             lock (GlobalScheduledJobs) {
                 GlobalScheduledJobs.Add(new ScheduledWorkJob {
+                    Queuer = FiTechRAF,
                     Identifier = identifier,
                     WorkJob = job,
                     ScheduledTime = when,
                     RecurrenceInterval = RecurrenceInterval
-                }) ;
+                });
+            }
+        }
+        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+
+            lock (GlobalScheduledJobs) {
+                GlobalScheduledJobs.Add(new ScheduledWorkJob {
+                    Queuer = queuer,
+                    Identifier = identifier,
+                    WorkJob = job,
+                    ScheduledTime = when,
+                    RecurrenceInterval = RecurrenceInterval
+                });
             }
         }
 

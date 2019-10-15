@@ -22,14 +22,12 @@ namespace System
     }
 
     public static class ObjectExtensions {
-        public static void CopyFrom(this Object me, object other) {
+        public static void CopyFrom(this object me, object other) {
             if (me == null) {
-                throw new NullReferenceException("Figlotech CopyFrom Extension method called on a null value, this is a natural NullReferenceException");
+                throw new NullReferenceException("Trying to copy into null");
             }
-
             if (other == null) {
-                me = null;
-                return;
+                throw new NullReferenceException("Trying to copy a null value");
             }
 
             Fi.Tech.MemberwiseCopy(other, me);
