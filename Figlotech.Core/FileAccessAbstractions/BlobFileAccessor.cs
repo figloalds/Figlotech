@@ -67,9 +67,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             BlobContainer = cloudBlobClient.GetContainerReference(containerName);
 
-            if (!IsReadOnly) {
-                BlobContainer.CreateIfNotExistsAsync().Wait();
-            }
+            //if (!IsReadOnly) {
+            //    BlobContainer.CreateIfNotExistsAsync().Wait();
+            //}
         }
 
         string BaseDirectory { get; set; }
@@ -118,27 +118,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void RenDir(string relative, string newName) {
-            FixRelative(ref relative);
-            foreach (var f in Directory.GetFiles(relative)) {
-                lock (newName) {
-                    lock (relative) {
-                        var fname = f;
-                        var fnew = f.Replace(relative, newName);
-                        if (File.Exists(fname))
-                            File.Delete(fname);
-                        File.Move(fname, fnew);
-                    }
-                }
-            }
-            foreach (var f in Directory.GetDirectories(relative)) {
-                lock (newName) {
-                    lock (relative) {
-                        RenDir(f, f.Replace(relative, newName));
-                    }
-                }
-            }
-
-            Directory.Delete(relative);
+            
         }
 
         public void Rename(string relative, string newName) {
@@ -252,14 +232,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
         public void ForDirectoriesIn(String relative, Action<String> execFunc) {
-            FixRelative(ref relative);
-            var blobs = ListBlobs(relative);
-            var list = blobs.Select(
-                (a) => a.Uri.PathAndQuery.Substring(0, ContainerName.Length + relative.Length + 2))
-                .Where((a) => a.Count((b) => b == '/') == 0)
-                .GroupBy((a) => a)
-                .First();
-            foreach (var a in list) {
+            foreach (var a in GetDirectoriesIn(relative)) {
                 execFunc(a);
             }
         }
@@ -282,14 +255,23 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public IEnumerable<string> GetDirectoriesIn(String relative) {
             FixRelative(ref relative);
-            BlobContinuationToken bct = new BlobContinuationToken();
-            var blobs = ListBlobs(relative);
-            var list = blobs.Select(
-                (a) => a.Uri.PathAndQuery.Substring(0, ContainerName.Length + relative.Length + 2))
-                .Where((a) => a.Count((b) => b == '/') == 0)
-                .GroupBy((a) => a)
-                .First();
-            return list;
+            BlobContinuationToken bucet = new BlobContinuationToken();
+            BlobResultSegment result;
+            var directory = BlobContainer.GetDirectoryReference(relative);
+            int numResults = 0;
+            do {
+                result = directory.ListBlobsSegmentedAsync(bucet).Result;
+                bucet = result.ContinuationToken;
+                var folders = result.Results.Where(x=> x as CloudBlobDirectory != null);
+                foreach(var folder in result.Results) {
+                    var retv = folder.Uri.LocalPath.Replace($"/{this.ContainerName.ToLower()}", "").Replace(this.BaseDirectory, "").Substring(1);
+                    if(retv.EndsWith("/")) {
+                        retv = retv.Substring(0, retv.Length - 1);
+                    }
+                    yield return retv;
+                }
+            } while (numResults > 0);
+            yield break;
         }
 
         public bool Read(String relative, Action<Stream> func) {
@@ -322,17 +304,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
             FixRelative(ref relative);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
             byte[] bytes = new byte[4096];
-            lock (relative) {
-                using (MemoryStream ms = new MemoryStream()) {
-                    using (var stream = blob.OpenReadAsync().Result) {
-                        int bytesRead = 0;
-                        do {
-                            bytesRead = stream.Read(bytes, 0, bytes.Length);
-                            ms.Write(bytes, 0, bytesRead);
-                        } while (bytesRead > 0);
+            using (MemoryStream ms = new MemoryStream()) {
+                using (var stream = blob.OpenReadAsync().Result) {
+                    int bytesRead = 0;
+                    do {
+                        bytesRead = stream.Read(bytes, 0, bytes.Length);
+                        ms.Write(bytes, 0, bytesRead);
+                    } while (bytesRead > 0);
 
-                        return ms.ToArray();
-                    }
+                    return ms.ToArray();
                 }
             }
         }

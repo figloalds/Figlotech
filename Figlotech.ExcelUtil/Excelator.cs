@@ -155,9 +155,10 @@ namespace Figlotech.ExcelUtil {
             return this;
         }
         
-        public ExcelatorRowWriter IterateThrough<T>(IEnumerable<T> values, Action<T> fn, bool autoNextRow = true) {
+        public ExcelatorRowWriter IterateThrough<T>(IEnumerable<T> values, Action<T, int> fn, bool autoNextRow = true) {
+            int i = 0;
             foreach(var a in values) {
-                fn(a);
+                fn(a, i++);
                 if (autoNextRow) {
                     NextRow();
                 }
@@ -232,7 +233,10 @@ namespace Figlotech.ExcelUtil {
             excelator.ConditionalFormat(Row, Row, fc + offsetCols, tc + offsetCols, statement, fn);
             return this;
         }
-
+        public ExcelatorRowWriter PreviousRow() {
+            Row--;
+            return this;
+        }
         public ExcelatorRowWriter NextRow() {
             Row++;
             return this;

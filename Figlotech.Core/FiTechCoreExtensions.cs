@@ -1530,7 +1530,7 @@ namespace Figlotech.Core {
                 ObjectReflector.Open(destination, (objB) => {
                     foreach (var field in objB) {
                         if (objA.ContainsKey(field.Key.Name)) {
-                            objB[field.Key] = objA[field.Key.Name];
+                            objB[field] = objA[field];
                         }
                     }
                 });

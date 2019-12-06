@@ -37,7 +37,8 @@ namespace Figlotech.Core.DomainEvents {
     }
 
     public class DomainEventsHub {
-        public static DomainEventsHub Global = new DomainEventsHub();
+
+        public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
         private readonly DomainEventsHub parentHub;
         private ManualResetEvent WaitHandle { get; set; } = new ManualResetEvent(true);
 
@@ -54,8 +55,11 @@ namespace Figlotech.Core.DomainEvents {
         List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
         private List<ScheduledDomainEvent> ScheduledEvents { get; set; } = new List<ScheduledDomainEvent>();
 
-        public DomainEventsHub(DomainEventsHub parentHub = null) {
+        private WorkQueuer MainQueuer { get; set; }
+
+        public DomainEventsHub(WorkQueuer queuer = null, DomainEventsHub parentHub = null) {
             this.parentHub = parentHub;
+            MainQueuer = queuer ?? FiTechCoreExtensions.GlobalQueuer;
         }
 
         private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
@@ -64,7 +68,7 @@ namespace Figlotech.Core.DomainEvents {
         //public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
 
         // Wanna grab hold of tasks so that GC won't kill them.
-        List<Task> EventTasks = new List<Task>();
+        List<WorkJob> EventTasks = new List<WorkJob>();
         
         public void Schedule(IDomainEvent evt, DateTime when, string identifier) {
             var due = when.ToUniversalTime() - DateTime.UtcNow;
@@ -161,75 +165,37 @@ namespace Figlotech.Core.DomainEvents {
 
             // Raise event on all listeners.
             Listeners.RemoveAll(l => l == null);
-            var eventTask = new List<Task>();
+            var eventTask = new List<WorkJob>();
             foreach (var listener in Listeners) {
-                eventTask.Add(Fi.Tech.FireTask(() => {
-                    try {
-                        listener.OnEventTriggered(domainEvent);
-                        if (domainEvent.AllowPropagation) {
-                            parentHub?.Raise(domainEvent);
-                        }
-                    } catch (Exception x) {
-                        try {
-                            listener.OnEventHandlingError(domainEvent, x);
-                        } catch (Exception y) {
-                            Fi.Tech.Throw(x);
-                        }
+                eventTask.Add(MainQueuer.Enqueue(() => {
+                    listener.OnEventTriggered(domainEvent);
+                    if (domainEvent.AllowPropagation) {
+                        parentHub?.Raise(domainEvent);
                     }
+                }, x=> {
+                    try {
+                        listener.OnEventHandlingError(domainEvent, x);
+                    } catch (Exception y) {
+                        Fi.Tech.Throw(x);
+                    }
+                }, ()=> { 
+                    
                 }));
             }
-            lock(EventTasks) {
+
+            lock(EventTasks) { 
                 EventTasks.AddRange(eventTask);
-                EventTasks.Add(Fi.Tech.FireTask(async () => {
-                    await Task.WhenAll(eventTask.ToArray());
-                    lock(EventCache)
-                        EventCache.Add(domainEvent);
-                }));
+                EventCache.Add(domainEvent);
             }
 
             // Clear "Ran to completion" tasks;
             lock(EventTasks) {
-                EventTasks.RemoveAll(t => t.IsCompleted || t.IsFaulted || t.IsCanceled);
+                EventTasks.RemoveAll(t=> t.completed != null);
             }
 
             WaitHandle.Set();
             WaitHandle.Reset();
         }
-
-        ///// <summary>
-        ///// Invokes previously registered domain hub validators within the same specified phase.
-        ///// </summary>
-        ///// <typeparam name="T"></typeparam>
-        ///// <param name="validator">The object to run validations against</param>
-        ///// <param name="phase">The validation phase to apply, only validation rules in this phase will be invoked.</param>
-        //public ValidationErrors RunValidators<T>(T validationTarget, int? phase = null) where T : IBusinessObject, new() {
-        //    ValidationErrors errs = new ValidationErrors();
-
-        //    foreach (var validation in CustomValidators) {
-        //        if (validation.ValidationPhase == phase) {
-        //            try {
-        //                validation.Validator.Validate(validationTarget as IBusinessObject, errs);
-        //            } catch (Exception x) {
-        //                errs.Add("Application", $"Validation has throw an Exception");
-        //                this.WriteLog(x.Message);
-        //                this.WriteLog(x.StackTrace);
-        //            }
-        //        }
-        //    }
-
-        //    return errs;
-        //}
-
-        ///// <summary>
-        ///// Adds a custom validator to this domain hub, with the option to specify a custom validation phase.
-        ///// When Running validations from this same hub, only validations within the same phase will be invoked.
-        ///// </summary>
-        ///// <typeparam name="T"></typeparam>
-        ///// <param name="validator">The validator function to invoke</param>
-        ///// <param name="validationPhase">The validation phase in which this validation rule should apply, only validations runs invoking this phase will effectively invoke this rule..</param>
-        //public void SubscribeValidator<T>(IValidationRule<T> validator, int? validationPhase = null) where T : IBusinessObject, new() {
-        //    CustomValidators.Add(new CustomDomainValidation(validator, validationPhase));
-        //}
 
         public bool IsTimeInDomainCacheDuration(DateTime dt) {
             return DateTime.UtcNow.Subtract(dt) > EventCacheDuration;

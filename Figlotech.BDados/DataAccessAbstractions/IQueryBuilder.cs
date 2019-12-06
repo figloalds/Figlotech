@@ -37,7 +37,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
                     paramRefl.Slot(cmdParam);
-                    paramRefl["Encoding"] = Fi.StandardEncoding;
+                    //paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else {
                     cmdParam.Value = usableValue;
                 }
@@ -62,7 +62,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
                     paramRefl.Slot(cmdParam);
-                    paramRefl["Encoding"] = Fi.StandardEncoding;
+                    //paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else {
                     cmdParam.Value = usableValue;
                 }

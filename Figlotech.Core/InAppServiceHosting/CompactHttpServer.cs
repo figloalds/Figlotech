@@ -178,7 +178,6 @@ namespace Figlotech.Core.InAppServiceHosting
                 running = true;
                 var listener = new TcpListener(Ip, Port);
                 listener.Start();
-                Console.WriteLine($"");
 
                 while (running) {
                     try {

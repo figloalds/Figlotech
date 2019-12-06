@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 
 namespace Figlotech.Core {
 
@@ -100,8 +101,12 @@ namespace Figlotech.Core {
             ContentType = resp.ContentType;
             ContentLength = resp.ContentLength;
             using (var respStream = resp.GetResponseStream()) {
+                respStream.ReadTimeout = Timeout.Infinite;
+                respStream.WriteTimeout = Timeout.Infinite;
                 this.ResultStream = new MemoryStream();
-                respStream.CopyTo(this.ResultStream);
+
+                respStream.CopyTo(ResultStream);
+
                 this.ResultStream.Seek(0, SeekOrigin.Begin);
             }
             for (int i = 0; i < resp.Headers.Count; ++i) {
@@ -273,6 +278,7 @@ namespace Figlotech.Core {
 
         public HttpWebRequest GetRequest(string Url) {
             var request = HttpWebRequest.CreateHttp(MapUrl(Url));
+            request.Timeout = Timeout.Infinite;
             return request;
         }
 

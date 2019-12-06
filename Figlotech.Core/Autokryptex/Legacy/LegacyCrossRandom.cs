@@ -53,11 +53,11 @@ namespace Figlotech.Core.Autokryptex.Legacy
         };
 
         public static void UseAppSecret(String secret) {
-            var secretBytes = MathUtils.CramString(secret, 16);
-            for (int i = 0; i < secretBytes.Length; i++) {
-                if (i <= AppSecret.Length)
-                    AppSecret[i] = Primes[secretBytes[i] % Primes.Length];
-            }
+            //var secretBytes = MathUtils.CramString(secret, 16);
+            //for (int i = 0; i < secretBytes.Length; i++) {
+            //    if (i <= AppSecret.Length)
+            //        AppSecret[i] = Primes[secretBytes[i] % Primes.Length];
+            //}
         }
         public void UseInstanceSecret(String secret) {
             var secretBytes = CramStringPlus(secret, 16);

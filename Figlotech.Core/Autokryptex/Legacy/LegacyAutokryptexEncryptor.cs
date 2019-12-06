@@ -45,7 +45,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
             }
             var passBytes = instancePassword;
             Type[] availableMethods = new Type[] {
-                typeof(LegacyBinaryBlur),
+                typeof(BinaryBlur),
                 typeof(BinaryNegativation),
                 typeof(LegacyBinaryScramble),
                 typeof(LegacyEnigmaEncryptor),

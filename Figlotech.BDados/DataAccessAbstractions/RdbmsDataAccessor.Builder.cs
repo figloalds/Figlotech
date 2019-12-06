@@ -17,7 +17,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark("Enter lock command");
             lock (command) {
                 transaction?.Benchmarker.Mark("- Starting Execute Query");
-                using (var reader = command.ExecuteReader()) {
+                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo)) {
                     transaction?.Benchmarker.Mark("- Starting build");
                     return Fi.Tech.MapFromReader<T>(reader).ToList();
                 }
@@ -65,6 +65,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if(!fieldNamesDict.ContainsKey(myPrefix)) {
                     throw new BDadosException($"Failed to build aggregate list: Aggregated reference {myPrefix} of type {joinTables[thisIndex].ValueObject.Name} was not present in the resulting fields");
                 }
+
                 var fieldNames = fieldNamesDict[myPrefix];
                 for (int i = 0; i < fieldNames.Item1.Length; i++) {
                     var val = reader.GetValue(fieldNames.Item1[i]);
@@ -222,7 +223,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Debugger.Break();
             }
             lock (command) {
-                using (var reader = command.ExecuteReader()) {
+                transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
                     Benchmarker.Assert(()=> join != null);

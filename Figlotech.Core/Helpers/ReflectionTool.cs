@@ -42,19 +42,25 @@ namespace Figlotech.Core.Helpers {
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
             lock("ACCESS_MEMBER_CACHE") {
                 if (!MembersCache.ContainsKey(type)) {
-                    var members = new List<MemberInfo>();
-                    members.AddRange(type.GetFields().Where(m=> !m.IsStatic && m.IsPublic));
-                    members.AddRange(type.GetProperties().Where(
-                        m =>
-                            (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                            (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
-                    ));
-                    MembersCache[type] = members.ToArray();
+                    MembersCache[type] = CollectMembers(type).ToArray();
                 }
                 // It is not clear rather the .Net Runtime caches or not 
                 // the member info or if they do lookups all the time
                 // It could be good to cache this, but I'm not sure yet.
                 return MembersCache[type];
+            }
+        }
+
+        private static IEnumerable<MemberInfo> CollectMembers(Type type) {
+            foreach(var a in type.GetFields().Where(m => !m.IsStatic && m.IsPublic)) {
+                yield return a;
+            }
+            foreach(var a in type.GetProperties().Where(
+                m =>
+                    (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
+                    (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
+            )) {
+                yield return a;
             }
         }
 
@@ -97,8 +103,10 @@ namespace Figlotech.Core.Helpers {
             foreach (var a in methods) {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
-                } catch (Exception) {
-
+                } catch (Exception x) {
+                    if(Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
                 }
             }
             return null;
@@ -112,37 +120,39 @@ namespace Figlotech.Core.Helpers {
             return member.GetCustomAttribute<T>();
         }
 
-        public static MemberInfo GetMember(Type t, string fieldName) {
-            if (t == null) return null;
-            MemberInfo member = ((MemberInfo)
-                t
-                    .GetFields()
-                    .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault()) ?? ((MemberInfo)
-                t
-                    .GetProperties()
-                    .Where((field) => field.Name == fieldName)
-                    .FirstOrDefault());
-            var retv = member ?? GetMember(t.BaseType, fieldName);
-
-            if(retv == null) {
-                member = ((MemberInfo)
-                t
-                    .GetFields()
-                    .Where((field) => field.Name?.ToLower() == fieldName?.ToLower())
-                    .FirstOrDefault()) ?? ((MemberInfo)
-                t
-                    .GetProperties()
-                    .Where((field) => field.Name?.ToLower() == fieldName?.ToLower())
-                    .FirstOrDefault());
-                retv = member;
+        private static SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>> MemberCacheFromString = new SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>>(
+            t => {
+                if (t == null) return null;
+                var retv = new Dictionary<string, MemberInfo>();
+                var members = ReflectionTool.FieldsAndPropertiesOf(t);
+                members.ForEach(x => {
+                    retv[x.Name] = x;
+                });
+                return retv;
             }
+        );
+        //private static SelfInitializerDictionary<Type, MemberInfo[]> MemberCacheFromInt = new SelfInitializerDictionary<Type, MemberInfo[]>(
+        //    t => {
+        //        if (t == null) return null;
+        //        var members = ReflectionTool.FieldsAndPropertiesOf(t);
+        //        var retv = new MemberInfo[members.Length];
+        //        for(int i = 0; i < members.Length; i++) {
+        //            retv[i] = members[i];
+        //        }
 
-            return retv;
+        //        return retv;
+        //    }
+        //);
+
+        public static MemberInfo GetMember(Type t, string fieldName) {
+            return MemberCacheFromString[t][fieldName];
+        }
+        public static MemberInfo GetMember(Type t, int i) {
+            return MembersCache[t][i];
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {
-            try {
+            try { 
                 MemberInfo member = GetMember(target?.GetType(), fieldName);
                 if (member == null) {
                     return false;
@@ -150,6 +160,9 @@ namespace Figlotech.Core.Helpers {
                 SetMemberValue(member, target, value);
                 return true;
             } catch (Exception x) {
+                if(Debugger.IsAttached) {
+                    Debugger.Break();
+                }
                 if (StrictMode) {
                     throw x;
                 }
@@ -317,6 +330,9 @@ namespace Figlotech.Core.Helpers {
                             return Enum.Parse(t, strEnum);
                         } catch (Exception) {
 
+                            if (Debugger.IsAttached) {
+                                Debugger.Break();
+                            }
                         }
                     }
                 }
@@ -401,6 +417,9 @@ namespace Figlotech.Core.Helpers {
                 }
 
             } catch (Exception x) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
                 if (StrictMode) {
                     Console.WriteLine($"RTSV Error | {target?.GetType()?.Name}::{member?.Name}={value?.ToString()} ({value?.GetType()?.Name})");
                     if (Debugger.IsAttached) {
@@ -433,6 +452,9 @@ namespace Figlotech.Core.Helpers {
                 return false;
             } catch (Exception) {
 
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
             }
             return false;
         }
@@ -443,6 +465,9 @@ namespace Figlotech.Core.Helpers {
                 return retv;
             } catch (Exception) {
 
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
             }
             return null;
         }

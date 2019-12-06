@@ -155,7 +155,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"{string.Join("|", this.Joins.Select(j=> $"{j.TableName}({j.Args})"))}";
+            return $"{string.Join("|", this.Joins.Select(j=> $"{j.TableName}"))}";
         }
 
         private String GetAPrefix(String Alias)

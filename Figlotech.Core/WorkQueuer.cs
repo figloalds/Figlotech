@@ -384,10 +384,11 @@ namespace Figlotech.Core {
         public static void Live(Action<WorkQueuer> act, int parallelSize = -1) {
             if (parallelSize <= 0)
                 parallelSize = Environment.ProcessorCount;
-            var queuer = new WorkQueuer($"AnnonymousLiveQueuer", parallelSize);
-            queuer.Start();
-            act(queuer);
-            queuer.Stop();
+            using (var queuer = new WorkQueuer($"AnnonymousLiveQueuer", parallelSize)) {
+                queuer.Start();
+                act(queuer);
+                queuer.Stop();
+            }
         }
         public void AccompanyJob(Action a, Action f = null, Action<Exception> e = null) {
             var wj = Enqueue(a, e, f);
@@ -422,9 +423,12 @@ namespace Figlotech.Core {
             var retv = new WorkJob(a, exceptionHandler, finished);
             return Enqueue(retv);
         }
-
+        
         public void Dispose() {
-            Stop();
+            while (this.workers.Count > 0) {
+                Start();
+                Stop(true);
+            }
         }
     }
 }

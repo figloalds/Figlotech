@@ -136,9 +136,6 @@ namespace Figlotech.BDados.Helpers {
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
             try {
                 var retv = ParseExpression(c.expression, typeof(T));
-                if(Debugger.IsAttached) {
-                    Console.WriteLine(retv.GetCommandText());
-                }
                 return retv;
             } catch(Exception x) {
                 throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}", x);
@@ -152,9 +149,6 @@ namespace Figlotech.BDados.Helpers {
                 }
                 rootType = typeof(T);
                 var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
-                if (Debugger.IsAttached) {
-                    Console.WriteLine(retv.GetCommandText());
-                }
                 return retv;
             } catch(Exception x) {
                 throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);

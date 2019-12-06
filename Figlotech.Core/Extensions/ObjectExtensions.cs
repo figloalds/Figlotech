@@ -29,7 +29,6 @@ namespace System
             if (other == null) {
                 throw new NullReferenceException("Trying to copy a null value");
             }
-
             Fi.Tech.MemberwiseCopy(other, me);
         }
 

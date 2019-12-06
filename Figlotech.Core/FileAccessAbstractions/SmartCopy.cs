@@ -441,6 +441,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             workedFiles = 0;
+            long thresholdSaveListBytes = 0;
             origin.ForFilesIn(path, (f) => {
                 if (f == HASHLIST_FILENAME) {
                     return;
@@ -462,6 +463,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                     if (changed) {
                         lock (f) {
+                            thresholdSaveListBytes += origin.GetSize(f);
                             if (way == MirrorWay.Up) {
                                 processFileUp(origin, destination, f);
                             }
@@ -471,6 +473,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         }
                     }
                     OnReportProcessedFile?.Invoke(changed, f);
+                    if (thresholdSaveListBytes > 64 * 1024 * 1024) {
+                        lock (HashList) {
+                            if (thresholdSaveListBytes > 64 * 1024 * 1024) {
+                                thresholdSaveListBytes = 0;
+                                SaveHashList(origin, destination);
+                            }
+                        }
+                    }
                 }, (x) => {
                     OnFileCopyException?.Invoke(f, x);
                     //Console.WriteLine(x.Message);
@@ -505,12 +515,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                 wq.Start();
                 wq.Stop(true);
+                SaveHashList(origin, destination);
+            }
 
+        }
+
+        private void SaveHashList(IFileSystem origin, IFileSystem destination) {
+            lock(HashList) {
                 if (options.UseHashList) {
                     HashList.RemoveAll((f) =>
                         !origin.Exists(f?.RelativePath)
                         );
-
+                    Console.WriteLine("Saving HashList...");
                     if (HashList.Count > 0) {
                         destination.Delete(HASHLIST_FILENAME);
                         destination.Write(HASHLIST_FILENAME, (stream) => {
@@ -528,7 +544,6 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                 }
             }
-
         }
 
         private String ProcessPath(string path) {
