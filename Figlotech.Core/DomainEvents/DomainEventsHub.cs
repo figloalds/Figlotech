@@ -40,18 +40,12 @@ namespace Figlotech.Core.DomainEvents {
 
         public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
         private readonly DomainEventsHub parentHub;
-        private ManualResetEvent WaitHandle { get; set; } = new ManualResetEvent(true);
+        private CancellationTokenSource CancelationTokenSource { get; set; } = new CancellationTokenSource();
 
         private bool IsTerminationIssued = false;
 
         public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(2);
-        public DateTime LastEventDateTime {
-            get {
-                lock(EventCache) {
-                    return EventCache.Count == 0 ? DateTime.MinValue : EventCache[EventCache.Count - 1]?.TimeStamp ?? DateTime.MinValue;
-                }
-            }
-        }
+        public DateTime LastEventDateTime { get; set; }
         List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
         private List<ScheduledDomainEvent> ScheduledEvents { get; set; } = new List<ScheduledDomainEvent>();
 
@@ -62,6 +56,7 @@ namespace Figlotech.Core.DomainEvents {
             MainQueuer = queuer ?? FiTechCoreExtensions.GlobalQueuer;
         }
 
+        public bool EnableEventCache { get; set; } = true;
         private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
@@ -109,8 +104,9 @@ namespace Figlotech.Core.DomainEvents {
             tempLi.ForEach(evt => Raise(evt));
         }
 
+        object LockFlushSwitch = new object();
         public void FlushAllInlineListeners() {
-            lock("FLUSH_SWITCH") {
+            lock(LockFlushSwitch) {
                 foreach (var a in FlushOrderTokens) {
                     a.IsFlushIssued = true;
                 }
@@ -185,16 +181,17 @@ namespace Figlotech.Core.DomainEvents {
 
             lock(EventTasks) { 
                 EventTasks.AddRange(eventTask);
-                EventCache.Add(domainEvent);
+                if(EnableEventCache) {
+                    EventCache.Add(domainEvent);
+                }
             }
 
             // Clear "Ran to completion" tasks;
             lock(EventTasks) {
                 EventTasks.RemoveAll(t=> t.completed != null);
             }
-
-            WaitHandle.Set();
-            WaitHandle.Reset();
+            LastEventDateTime = Fi.Tech.GetUtcTime();
+            CancelationTokenSource = new CancellationTokenSource();
         }
 
         public bool IsTimeInDomainCacheDuration(DateTime dt) {
@@ -234,14 +231,20 @@ namespace Figlotech.Core.DomainEvents {
                         events = getEvents().ToArray();
                     }
                     if (events.Length > 0) {
-                        WriteLog($"Event pooling returned  {events.Length} {String.Join(", ", events.Select(e=> e.GetType().Name))}");
+                        WriteLog($"Event pooling returned  {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
                         return events;
                     }
-                    if(flushOrder.IsFlushIssued) {
+                    if (flushOrder.IsFlushIssued) {
                         WriteLog($"Event flushing issued {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
                         return events;
                     }
-                    WaitHandle.WaitOne(maximumPollTime);
+
+                    var wh = CancelationTokenSource;
+                    try {
+                        await Task.Delay(maximumPollTime, CancelationTokenSource.Token);
+                    } catch(Exception x) {
+
+                    }
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
                 flushOrder.IsReleased = true;
                 lock ("FLUSH_SWITCH") {

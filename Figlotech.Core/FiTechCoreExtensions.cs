@@ -401,7 +401,7 @@ namespace Figlotech.Core {
         public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
             if(value == null) {
                 var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}".ToString();
-                lock (lockStr) {
+                lock (String.Intern(lockStr)) {
                     if (value == null) {
                         value = init.Invoke();
                     }
@@ -520,7 +520,7 @@ namespace Figlotech.Core {
                 objBuilder[objField] = Fi.Tech.ProperMapValue(o);
             }
         }
-
+        
         public static object ProperMapValue(this Fi __selfie, object o) {
             if (o is DateTime dt && dt.Kind != DateTimeKind.Utc) {
                 // I reluctantly admit that I'm using this horrible gimmick
@@ -579,7 +579,11 @@ namespace Figlotech.Core {
         public static Lazy<IBDadosStringsProvider> _Strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
         public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
-        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Environment.ProcessorCount, true));
+        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", 2, true) {
+            MainWorkerTimeout = 60000,
+            ExtraWorkers = 0,
+            ExtraWorkerTimeout = 120000,
+        });
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
         public static int currentBDadosConnections = 0;
@@ -1526,11 +1530,16 @@ namespace Figlotech.Core {
                 return;
             if (destination == null)
                 return;
+            var sametype = origin.GetType() == destination.GetType();
             ObjectReflector.Open(origin, (objA) => {
                 ObjectReflector.Open(destination, (objB) => {
                     foreach (var field in objB) {
-                        if (objA.ContainsKey(field.Key.Name)) {
+                        if (sametype) {
                             objB[field] = objA[field];
+                        } else {
+                            if (objA.ContainsKey(field.Key.Name)) {
+                                objB[field.Key.Name] = objA[field.Key.Name];
+                            }
                         }
                     }
                 });

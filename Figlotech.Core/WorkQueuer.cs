@@ -344,11 +344,12 @@ namespace Figlotech.Core {
                     }
                 });
                 workerThread.Priority = DefaultWorkerPriority;
-                workerThread.Name = $"FTWQ_{Name}_Worker_{workers.Count + 1}";
+                workerThread.Name = $"FTWQ_{Name}_Worker_{workerIds++}";
                 workers.Add(workerThread);
                 workerThread.Start();
             }
         }
+        int workerIds = 1;
 
         public void Close() {
             closed = true;

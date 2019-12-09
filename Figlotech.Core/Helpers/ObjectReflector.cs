@@ -27,8 +27,7 @@ namespace Figlotech.Core.Helpers {
         }
 
         public bool ContainsKey(String key) {
-            return ReflectionTool.FieldsAndPropertiesOf(target.GetType())
-                .Any(m => m.Name == key);
+            return ReflectionTool.DoesTypeHaveFieldOrProperty(target?.GetType(), key);
         }
 
         public object this[KeyValuePair<MemberInfo, object> key] {

@@ -329,12 +329,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private T LockRegion<T>(String wd, Func<T> act) {
-            lock (wd) {
+            lock (FileLocks[wd]) {
                 return act.Invoke();
             }
         }
+        DynaLocks FileLocks = new DynaLocks();
         private void LockRegion(String wd, Action act) {
-            lock ($"FILE_ACCESSOR_LOCK_REGION:{wd}") {
+            lock (FileLocks[wd]) {
                 act?.Invoke();
             }
         }

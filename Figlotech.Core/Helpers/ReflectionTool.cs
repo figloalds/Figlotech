@@ -40,7 +40,7 @@ namespace Figlotech.Core.Helpers {
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
             if (type == null)
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
-            lock("ACCESS_MEMBER_CACHE") {
+            lock(String.Intern($"ACCESS_MEMBER_CACHE_{type.Name}")) {
                 if (!MembersCache.ContainsKey(type)) {
                     MembersCache[type] = CollectMembers(type).ToArray();
                 }
@@ -500,6 +500,10 @@ namespace Figlotech.Core.Helpers {
                     throw new ReflectionException($"Há um erro em uma função de reflexão ao acessar o campo {f.Name} de um objeto {f.DeclaringType.Name};");
                 }
             }
+        }
+
+        public static bool DoesTypeHaveFieldOrProperty(Type type, string key) {
+            return MemberCacheFromString[type].ContainsKey(key);
         }
     }
 }

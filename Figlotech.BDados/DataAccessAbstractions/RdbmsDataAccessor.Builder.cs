@@ -229,7 +229,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Dictionary<string, (int[], string[])> fieldNamesDict;
                     Benchmarker.Assert(()=> join != null);
                     var jstr = join.ToString();
-                    lock (jstr) {
+                    lock (String.Intern(jstr)) {
                         if (!_autoAggregateCache.ContainsKey(jstr)) {
                             // This is only ever used in the auto aggregations
                             // So it would be a waste of processing power to reflect these fieldNames and their indexes every time

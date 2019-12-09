@@ -304,7 +304,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public void Commit() {
             if (CurrentTransaction != null && CurrentTransaction.IsUsingRdbmsTransaction) {
                 WriteLog("Committing Transaction");
-                lock ($"DATA_ACCESSOR_COMMIT_{myId}") {
+                lock (CurrentTransaction) {
                     CurrentTransaction?.Commit();
                 }
 
@@ -1340,7 +1340,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
-            QueryBuilder query = Qb.Fmt($"SELECT * FROM {typeof(T).Name} WHERE ");
+            IQueryBuilder query = QueryGenerator.GenerateSelectAll<T>().Append("WHERE");
             if (cnd != null) {
                 PrefixMaker pm = new PrefixMaker();
                 query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS {pm.GetAliasFor("root", typeof(T).Name, String.Empty)} WHERE ");
@@ -1349,8 +1349,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (list.Count > 0) {
 
-                query += Qb.And();
-                query += Qb.NotIn(rid, list, l => l.RID);
+                query.Append("AND");
+                query.Append(Qb.NotIn(rid, list, l => l.RID));
                 //for (var i = 0; i < list.Count; i++) {
                 //    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
                 //    if (i < list.Count - 1)

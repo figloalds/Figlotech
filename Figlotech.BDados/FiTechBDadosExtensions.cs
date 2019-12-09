@@ -111,17 +111,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //            return v;
         //        }
 
-        public static (string[], MemberInfo[]) GetMapFromReaderMeta<T>(this Fi __selfie, IDataReader reader) {
-            var cols = new string[reader.FieldCount];
-            var members = new MemberInfo[cols.Length];
-            for (int i = 0; i < cols.Length; i++) {
-                cols[i] = reader.GetName(i);
-                members[i] = ReflectionTool.GetMember(typeof(T), cols[i]);
-            }
-
-            return (cols, members);
-        }
-
         /// <summary>
         /// deprecated
         /// this gimmick should barely be used by the data accessors
@@ -131,15 +120,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="valor"></param>
         /// <returns></returns>
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader) where T : new() {
-            var meta = GetMapFromReaderMeta<T>(_selfie, reader);
-
             var refl = new ObjectReflector();
+            var existingKeys = new List<(int, string)>();
+            for (int i = 0; i < reader.FieldCount; i++) {
+                var name = reader.GetName(i);
+                if(name != null) {
+                    if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
+                        existingKeys.Add((i, name));
+                    }
+                }
+            }
             while (reader.Read()) {
                 T obj = new T();
                 refl.Slot(obj);
-                for (int i = 0; i < meta.Item2.Length; i++) {
-                    var o = reader.GetValue(i);
-                    refl[meta.Item2[i]] = Fi.Tech.ProperMapValue(o);
+                for (int i = 0; i < existingKeys.Count; i++) {
+                    var o = reader.GetValue(existingKeys[i].Item1);
+                    refl[existingKeys[i].Item2] = Fi.Tech.ProperMapValue(o);
                 }
                 yield return (T) refl.Retrieve();
             }

@@ -31,9 +31,7 @@ namespace Figlotech.Core.DomainEvents {
         static long generateTimeStamp() {
             var retv = DateTime.UtcNow.Ticks;
             retv -= Int16.MaxValue;
-            lock("anti_collider_access") {
                 retv += antiCollider++;
-            }
             return retv;
         }
 

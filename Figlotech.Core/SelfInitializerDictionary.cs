@@ -15,11 +15,11 @@ namespace Figlotech.Core {
                 lock (key) {
                     TValue retv;
                     if (!_dmmy.ContainsKey(key)) {
-                        var init = SelfInitFn(key);
-                        if(AllowNullValueCaching || init != null) {
-                            _dmmy.Add(key, init);
+                        if(FullDictionaryLockOnInit) {
+                            lock (_dmmy) retv = Initialize(key);
+                        } else {
+                            retv = Initialize(key);
                         }
-                        retv = init;
                     } else {
                         retv = _dmmy[key];
                     }
@@ -36,8 +36,19 @@ namespace Figlotech.Core {
             }
         }
 
-        public SelfInitializerDictionary(Func<TKey, TValue> initFn) {
+        private TValue Initialize(TKey key) {
+            var init = SelfInitFn(key);
+            if (AllowNullValueCaching || init != null) {
+                _dmmy.Add(key, init);
+            }
+            return init;
+        }
+
+        bool FullDictionaryLockOnInit = false;
+
+        public SelfInitializerDictionary(Func<TKey, TValue> initFn, bool fullDictionaryLockOnInit = false) {
             SelfInitFn = initFn;
+            FullDictionaryLockOnInit = fullDictionaryLockOnInit;
         }
 
 
