@@ -18,7 +18,7 @@ using System.Xml.Serialization;
 namespace Figlotech.Core.Extensions {
 
     public static class IMultiSerializableObjectExtensions {
-        public static void ToJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
+        public static async Task ToJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
             using (var ms = new MemoryStream()) {
@@ -28,31 +28,33 @@ namespace Figlotech.Core.Extensions {
                 ms.Seek(0, SeekOrigin.Begin);
 
                 var StreamOptions = GetSaveStreamOptions(options);
-                StreamOptions
-                    .Process(ms, (usableStream) => {
+                await StreamOptions
+                    .Process(ms, async (usableStream) => {
+                        await Task.Yield();
                         usableStream.CopyTo(rawStream);
                     });
             }
         }
 
-        public static void ToJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+        public static async Task ToJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
             //lock(obj) {
-            fs.Write(fileName, fstream => {
-                obj.ToJson(fstream, options);
+            await fs.Write(fileName, async fstream => {
+                await Task.Yield();
+                await obj.ToJson(fstream, options);
             });
             //}
         }
 
-        public static void FromJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
+        public static async Task FromJson(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
 
             var StreamOptions = GetOpenStreamOptions(options);
 
-            StreamOptions
-                .Process(rawStream, (usableStream) => {
+            await StreamOptions
+                .Process(rawStream, async (usableStream) => {
                     using (var reader = new StreamReader(usableStream, Fi.StandardEncoding)) {
-                        var json = reader.ReadToEnd();
+                        var json = await reader.ReadToEndAsync();
                         try {
                             var parse = JsonConvert.DeserializeObject(json, obj.GetType());
                             Fi.Tech.MemberwiseCopy(parse, obj);
@@ -64,10 +66,11 @@ namespace Figlotech.Core.Extensions {
                 });
         }
 
-        public static void FromJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+        public static async Task FromJsonFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
             //lock(obj) {
-            fs.Read(fileName, fstream => {
-                obj.FromJson(fstream, options);
+            await fs.Read(fileName, async fstream => {
+                await Task.Yield();
+                await obj.FromJson(fstream, options);
             });
             //}
         }
@@ -93,7 +96,7 @@ namespace Figlotech.Core.Extensions {
             return retv;
         }
 
-        public static void ToXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
+        public static async Task ToXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
 
@@ -116,9 +119,10 @@ namespace Figlotech.Core.Extensions {
                         using (var sw = new StreamWriter(ms, Fi.StandardEncoding)) {
                             sw.Write(xml);
                             ms.Seek(0, SeekOrigin.Begin);
-                            StreamOptions
-                                .Process(ms, (usableStream) => {
-                                    usableStream.CopyTo(rawStream);
+                            await StreamOptions
+                                .Process(ms, async (usableStream) => {
+                                    await Task.Yield();
+                                    await usableStream.CopyToAsync(rawStream);
                                 });
                         }
                     }
@@ -126,21 +130,22 @@ namespace Figlotech.Core.Extensions {
             }
         }
 
-        public static void ToXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
-            fs.Write(fileName, fstream => {
-                obj.ToXml(fstream, options);
+        public static async Task ToXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            await fs.Write(fileName, async fstream => {
+                await Task.Yield();
+                await obj.ToXml(fstream, options);
             });
         }
 
-        public static void FromXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
+        public static async Task FromXml(this IMultiSerializableObject obj, Stream rawStream, FTHSerializableOptions options = null) {
             if (obj == null)
                 return;
 
             var StreamOptions = GetOpenStreamOptions(options);
 
-            StreamOptions
-                .Process(rawStream, (usableStream) => {
-
+            await StreamOptions
+                .Process(rawStream, async (usableStream) => {
+                    await Task.Yield();
                     var serializer = new XmlSerializer(obj.GetType());
                     // this is necessary because XML Deserializer is a bitch
 
@@ -151,9 +156,9 @@ namespace Figlotech.Core.Extensions {
                 });
         }
 
-        public static void FromXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
-            fs.Read(fileName, fstream => {
-                obj.FromXml(fstream, options);
+        public static async Task FromXmlFile(this IMultiSerializableObject obj, IFileSystem fs, String fileName, FTHSerializableOptions options = null) {
+            await fs.Read(fileName, async fstream => {
+                await obj.FromXml(fstream, options);
             });
         }
     }

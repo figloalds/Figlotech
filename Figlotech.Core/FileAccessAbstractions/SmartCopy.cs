@@ -9,6 +9,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
     public class FileData {
@@ -59,9 +60,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
 
-        public static String GetHash(IFileSystem fa, String path) {
+        public static async Task<string> GetHash(IFileSystem fa, String path) {
             string hash = "";
-            fa.Read(path, (stream) => {
+            await fa.Read(path, async (stream) => {
+                await Task.Yield();
                 hash = GetHash(stream);
             });
 
@@ -97,7 +99,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                 var changed = CopyDecisionCriteria != null ?
                     CopyDecisionCriteria(f) :
-                    Changed(origin, destination, f);
+                    Changed(origin, destination, f).Result;
 
                 if (changed) {
                     adds.Enqueue(new FileData {
@@ -136,7 +138,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             foreach (var a in HashList) {
                 string hash = "";
                 if (local.Exists(a.RelativePath)) {
-                    local.Read(a.RelativePath, (stream) => {
+                    local.Read(a.RelativePath, async (stream) => {
                         hash = GetHash(stream);
                     });
                 }
@@ -234,12 +236,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private List<FileData> HashList = new List<FileData>();
 
-        private bool Changed(IFileSystem o, IFileSystem d, String f) {
+        private async Task<bool> Changed(IFileSystem o, IFileSystem d, String f) {
             if (options.UseHashList) {
                 FileData match;
                 lock (HashList)
                     match = HashList.FirstOrDefault(fd => fd.RelativePath == f);
-                var hash = GetHash(o, f);
+                var hash = await GetHash(o, f);
                 if (match != null) {
                     if (hash != match.Hash) {
                         Fi.Tech.WriteLine($"SmartCopy: Hash Changed: {f} ({hash}) ({match.Hash})");
@@ -295,7 +297,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
 
-        private void MirrorFromList(string path) {
+        private async Task MirrorFromList(string path) {
             HashList = SmartCopy.GetHashList(remote, true);
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
             var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
@@ -306,13 +308,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
             workingList.RemoveAll(f => Excludes.Any(excl=> CheckMatch(f.RelativePath, excl)));
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {
-                wq.Enqueue(() => {
+                wq.Enqueue(async () => {
+                    await Task.Yield();
                     if (a.RelativePath == HASHLIST_FILENAME || Excludes.Any(excl => CheckMatch(a.RelativePath, excl))) {
                         return;
                     }
                     string hash = "";
                     if (local.Exists(a.RelativePath)) {
-                        local.Read(a.RelativePath, (stream) => {
+                        await local.Read(a.RelativePath, async (stream) => {
+                            await Task.Yield();
                             hash = GetHash(stream);
                         });
                     }
@@ -326,9 +330,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     while ((a.Hash != hash || !local.Exists(a.RelativePath)) && maxTries-- > 0) {
                         processed = true;
                         if (remote.Exists(a.RelativePath + gzSuffix)) {
-                            remote.Read(a.RelativePath + gzSuffix, (downStream) => {
+                            await remote.Read(a.RelativePath + gzSuffix, async (downStream) => {
+                                await Task.Yield();
                                 //local.Delete(a.RelativePath);
-                                local.Write(a.RelativePath + "_$ft_new", (fileStream) => {
+                                await local.Write(a.RelativePath + "_$ft_new", async (fileStream) => {
+                                    await Task.Yield();
                                     if (options.UseGZip)
                                         downStream = new GZipStream(downStream, CompressionMode.Decompress);
 
@@ -340,7 +346,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                                 }
                                 local.Rename(a.RelativePath + "_$ft_new", a.RelativePath);
                                 if (local.Exists(a.RelativePath)) {
-                                    local.Read(a.RelativePath, (stream) => {
+                                    await local.Read(a.RelativePath, async (stream) => {
+                                        await Task.Yield();
                                         hash = GetHash(stream);
                                     });
                                 }
@@ -356,7 +363,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                             });
                         }
 
-                        local.Read(a.RelativePath, (stream) => {
+                        await local.Read(a.RelativePath, async (stream) => {
+                            await Task.Yield();
                             hash = GetHash(stream);
                         });
                         if (a.Hash != hash) {
@@ -365,15 +373,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                     OnReportProcessedFile?.Invoke(processed, a.RelativePath);
 
-                }, (ex) => {
+                }, async (ex) => {
+                    await Task.Yield();
                     OnFileCopyException?.Invoke(a.RelativePath, ex);
-                }, () => {
-
                 });
             }
             
             wq.Start();
-            wq.Stop();
+            await wq.Stop(true);
 
             DeleteExtras(local, path, workingList, true);
         }
@@ -387,7 +394,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 cmpFn = (wl, file) => wl.RelativePath?.ToLower() == file?.ToLower();
             }
             fs.ForFilesIn(path, file => {
-                if(Excludes.Any(x=> CheckMatch(file, x))) {
+                if (Excludes.Any(x=> CheckMatch(file, x))) {
                     return;
                 }
                 if (!workinglist.Any(wl=> cmpFn(wl, file))) {
@@ -399,6 +406,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                 }
             });
+
             if(recursive) {
                 fs.ForDirectoriesIn(path, dir => DeleteExtras(fs, dir, workinglist, recursive));
             }
@@ -429,7 +437,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
 
-        private void Mirror(IFileSystem origin, IFileSystem destination, string path, MirrorWay way, WorkQueuer wq = null) {
+        private async Task Mirror(IFileSystem origin, IFileSystem destination, string path, MirrorWay way, WorkQueuer wq = null) {
             bool isRecursing = wq != null;
             if (wq == null) {
                 int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
@@ -450,7 +458,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     return;
                 }
 
-                wq.Enqueue(() => {
+                wq.Enqueue(async () => {
+                    await Task.Yield();
                     try {
                         OnFileStaged?.Invoke(f);
                     } catch (Exception x) {
@@ -459,7 +468,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                     var changed = CopyDecisionCriteria != null ?
                         CopyDecisionCriteria(f) :
-                        Changed(origin, destination, f);
+                        await Changed(origin, destination, f);
 
                     if (changed) {
                         lock (f) {
@@ -481,10 +490,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
                             }
                         }
                     }
-                }, (x) => {
+                }, async (x) => {
+                    await Task.Yield();
                     OnFileCopyException?.Invoke(f, x);
                     //Console.WriteLine(x.Message);
-                }, () => {
                 });
             });
 
@@ -514,7 +523,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!isRecursing) {
 
                 wq.Start();
-                wq.Stop(true);
+                await wq.Stop(true);
                 SaveHashList(origin, destination);
             }
 
@@ -529,17 +538,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     Console.WriteLine("Saving HashList...");
                     if (HashList.Count > 0) {
                         destination.Delete(HASHLIST_FILENAME);
-                        destination.Write(HASHLIST_FILENAME, (stream) => {
+                        destination.Write(HASHLIST_FILENAME, async (stream) => {
+                            await Task.Yield();
                             string text = JsonConvert.SerializeObject(HashList);
                             byte[] writev = Fi.StandardEncoding.GetBytes(text);
                             stream.Write(writev, 0, writev.Length);
                         });
 
                         origin.Delete(HASHLIST_FILENAME);
-                        origin.Write(HASHLIST_FILENAME, (stream) => {
+                        origin.Write(HASHLIST_FILENAME, async (stream) => {
+                            await Task.Yield();
                             string text = JsonConvert.SerializeObject(HashList);
                             byte[] writev = Fi.StandardEncoding.GetBytes(text);
-                            stream.Write(writev, 0, writev.Length);
+                            await stream.WriteAsync(writev, 0, writev.Length);
                         });
                     }
                 }
@@ -553,18 +564,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return Path.Combine(l2);
         }
 
-        private void processFileUp(IFileSystem origin, IFileSystem destination, string workingFile) {
+        private async Task processFileUp(IFileSystem origin, IFileSystem destination, string workingFile) {
             workingFile = ProcessPath(workingFile);
 
             var outPostFix = "";
             if (options.UseGZip)
                 outPostFix = GZIP_FILE_SUFFIX;
 
-            origin.Read(workingFile, (input) => {
+            await origin.Read(workingFile, async (input) => {
+                await Task.Yield();
                 var bufferSize = (int)options.BufferSize / options.NumWorkers;
                 if (bufferSize <= 0) bufferSize = Int32.MaxValue;
 
-                destination.Write(workingFile + outPostFix, (output) => {
+
+                await destination.Write(workingFile + outPostFix, async (output) => {
+                    await Task.Yield();
                     //BatchStreamProcessor processor = new BatchStreamProcessor();
                     //if (options.UseGZip) {
                     //    processor.Add(new GzipCompressStreamProcessor(true));
@@ -588,22 +602,24 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var destHash = GetHash(origin, workingFile);
             if (originHash != destHash) {
                 Console.Error.Write($"Hash Mismatch: {workingFile}{originHash}/{destHash}");
-                processFileUp(origin, destination, workingFile);
+                await processFileUp(origin, destination, workingFile);
             }
         }
 
-        private void processFileDown(IFileSystem origin, IFileSystem destination, string workingFile) {
+        private async Task processFileDown(IFileSystem origin, IFileSystem destination, string workingFile) {
             workingFile = ProcessPath(workingFile);
 
             var outPostFix = "";
             if (options.UseGZip)
                 outPostFix = GZIP_FILE_SUFFIX;
 
-            origin.Read(workingFile + outPostFix, (input) => {
+            await origin.Read(workingFile + outPostFix, async (input) => {
+                await Task.Yield();
                 var bufferSize = (int)options.BufferSize / options.NumWorkers;
                 if (bufferSize < 0) bufferSize = Int32.MaxValue;
 
-                destination.Write(workingFile, (output) => {
+                await destination.Write(workingFile, async (output) => {
+                    await Task.Yield();
                     if (options.UseGZip) {
                         using (var gzipOut = new GZipStream(input, CompressionMode.Decompress)) {
                             gzipOut.CopyTo(output);

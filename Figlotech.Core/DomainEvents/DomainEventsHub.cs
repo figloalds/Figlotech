@@ -31,7 +31,7 @@ namespace Figlotech.Core.DomainEvents {
     }
 
     public static class DomainEventsHubExtensions {
-        public static void SubscribeInline<T>(this DomainEventsHub self, Action<T> fn, Action<T, Exception> handler = null) where T: IDomainEvent {
+        public static void SubscribeInline<T>(this DomainEventsHub self, Func<T, Task> fn, Func<T, Exception, Task> handler = null) where T: IDomainEvent {
             self.SubscribeListener(InlineLambdaListener.Create<T>(fn, handler));
         }
     }
@@ -62,9 +62,6 @@ namespace Figlotech.Core.DomainEvents {
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
         //public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
 
-        // Wanna grab hold of tasks so that GC won't kill them.
-        List<WorkJob> EventTasks = new List<WorkJob>();
-        
         public void Schedule(IDomainEvent evt, DateTime when, string identifier) {
             var due = when.ToUniversalTime() - DateTime.UtcNow;
             var sched = ScheduledEvents.FirstOrDefault(s=> s.Identifier == identifier) ??
@@ -161,37 +158,33 @@ namespace Figlotech.Core.DomainEvents {
 
             // Raise event on all listeners.
             Listeners.RemoveAll(l => l == null);
-            var eventTask = new List<WorkJob>();
             foreach (var listener in Listeners) {
-                eventTask.Add(MainQueuer.Enqueue(() => {
+                MainQueuer.Enqueue(async () => {
+                    await Task.Yield();
                     listener.OnEventTriggered(domainEvent);
                     if (domainEvent.AllowPropagation) {
                         parentHub?.Raise(domainEvent);
                     }
-                }, x=> {
+                }, async x=> {
+                    await Task.Yield();
                     try {
                         listener.OnEventHandlingError(domainEvent, x);
                     } catch (Exception y) {
                         Fi.Tech.Throw(x);
                     }
-                }, ()=> { 
-                    
-                }));
+                }, async (b)=> {
+                    await Task.Yield();
+                });
             }
 
-            lock(EventTasks) { 
-                EventTasks.AddRange(eventTask);
-                if(EnableEventCache) {
+            if(EnableEventCache) {
+                lock (EventCache) {
                     EventCache.Add(domainEvent);
                 }
+                LastEventDateTime = Fi.Tech.GetUtcTime();
+                CancelationTokenSource.Cancel();
+                CancelationTokenSource = new CancellationTokenSource();
             }
-
-            // Clear "Ran to completion" tasks;
-            lock(EventTasks) {
-                EventTasks.RemoveAll(t=> t.completed != null);
-            }
-            LastEventDateTime = Fi.Tech.GetUtcTime();
-            CancelationTokenSource = new CancellationTokenSource();
         }
 
         public bool IsTimeInDomainCacheDuration(DateTime dt) {

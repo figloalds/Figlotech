@@ -14,8 +14,8 @@ namespace Figlotech.Core {
         public DateTime Start;
         public WorkScheduler Parent;
 
-        public WorkSchedule(WorkScheduler parent, Action act, Action<Exception> handle, Action finished, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
-            Job = new WorkJob(() => { act(); }, handle, ()=> { finished(); });
+        public WorkSchedule(WorkScheduler parent, Func<Task> act, Func<Exception, Task> handle, Func<bool, Task> finished, DateTime start, bool repeat = false, TimeSpan interval = default(TimeSpan)) {
+            Job = new WorkJob(act, handle, finished);
             Parent = parent;
             Start = start;
             Interval = interval;
@@ -55,15 +55,15 @@ namespace Figlotech.Core {
                 Start();
         }
 
-        public WorkSchedule OneTimeSched(DateTime dt, Action a, Action finished = null, Action<Exception> handler = null) {
+        public WorkSchedule OneTimeSched(DateTime dt, Func<Task> a, Func<Exception, Task> handler = null, Func<bool, Task> finished = null) {
             lock (schedules) {
-                var sched = new WorkSchedule(this, a,handler, finished, dt);
+                var sched = new WorkSchedule(this, a ,handler, finished, dt);
                 schedules.Add(sched);
 
                 return sched;
             }
         }
-        public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Action a, Action finished = null, Action<Exception> handler = null) {
+        public WorkSchedule RecurringSched(DateTime dt, TimeSpan interval, Func<Task> a, Func<Exception,Task> handler = null, Func<bool,Task> finished = null) {
             lock (schedules) {
                 var sched = new WorkSchedule(this, a, handler, finished, dt, true, interval);
                 schedules.Add(sched);

@@ -7,24 +7,24 @@ using System.Threading.Tasks;
 namespace Figlotech.Core.DomainEvents
 {
     public interface IDomainEventListener {
-        void OnEventTriggered(IDomainEvent evt);
-        void OnEventHandlingError(IDomainEvent evt, Exception x);
+        Task OnEventTriggered(IDomainEvent evt);
+        Task OnEventHandlingError(IDomainEvent evt, Exception x);
     }
 
     public abstract class DomainEventListener<T> : IDomainEventListener where T: IDomainEvent {
 
-        public abstract void OnEventTriggered(T evt);
-        public abstract void OnEventHandlingError(T evt, Exception x);
+        public abstract Task OnEventTriggered(T evt);
+        public abstract Task OnEventHandlingError(T evt, Exception x);
 
-        public void OnEventTriggered(IDomainEvent evt) {
+        public async Task OnEventTriggered(IDomainEvent evt) {
             if(evt is T t) {
-                OnEventTriggered(t);
+                await OnEventTriggered(t);
             }
         }
 
-        public void OnEventHandlingError(IDomainEvent evt, Exception x) {
+        public async Task OnEventHandlingError(IDomainEvent evt, Exception x) {
             if (evt is T t) {
-                OnEventHandlingError(t, x);
+                await OnEventHandlingError(t, x);
             }
         }
     }

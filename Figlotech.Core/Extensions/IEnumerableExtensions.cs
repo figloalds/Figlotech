@@ -302,11 +302,6 @@ namespace System
             return max;
         }
 
-        public static void ParallelForEach<T>(this IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
-            var tempLi = list.ToList();
-            Fi.Tech.BackgroundProcessList(tempLi, work, perWorkExceptionHandler, preWork, postWork, preWorkExceptionHandling, postWorkExceptionHandling);
-        }
-
         public static IEnumerable<T> Splice<T>(this List<T> li, Predicate<T> predicate) {
             for(int i = li.Count-1; i >= 0; i--) {
                 if(predicate(li[i])) {

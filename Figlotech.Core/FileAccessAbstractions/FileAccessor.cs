@@ -65,21 +65,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
             absMkDirs(AssemblePath(RootDirectory, dir));
         }
 
-        public void Write(String relative, Action<Stream> func) {
+        public async Task Write(String relative, Func<Stream, Task> func) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
-            LockRegion(WorkingDirectory, () => {
-                if (!File.Exists(WorkingDirectory)) {
-                    using (var f = File.Create(WorkingDirectory)) { }
-                }
-                using (Stream fs = Open(relative, FileMode.Truncate, FileAccess.Write)) {
-                    func(fs);
-                }
-            });
+            if (!File.Exists(WorkingDirectory)) {
+                using (var f = File.Create(WorkingDirectory)) { }
+            }
+            using (Stream fs = Open(relative, FileMode.Truncate, FileAccess.Write)) {
+                await func(fs);
+            }
         }
 
         private void RenDir(string relative, string newName) {
@@ -269,7 +267,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 }));
         }
 
-        public bool Read(String relative, Action<Stream> func) {
+        public async Task<bool> Read(String relative, Func<Stream, Task> func) {
             FixRel(ref relative);
             if (!Exists(relative)) {
                 return false;
@@ -278,12 +276,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!File.Exists(WorkingDirectory)) {
                 return false;
             }
-            return LockRegion(WorkingDirectory, () => {
-                using (Stream fs = Open(relative, FileMode.Open, FileAccess.Read)) {
-                    func(fs);
-                }
-                return true;
-            });
+            using (Stream fs = Open(relative, FileMode.Open, FileAccess.Read)) {
+                await func(fs);
+            }
+            return true;
         }
 
         public void SetLastModified(String relative, DateTime dt) {
@@ -418,7 +414,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             FixRel(ref relative);
-            Fi.Tech.RunAndForget(() => {
+            Fi.Tech.RunAndForget(async () => {
+                await Task.Yield();
                 var WorkingDirectory = AssemblePath(RootDirectory, relative);
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                     absMkDirs(Path.GetDirectoryName(WorkingDirectory));

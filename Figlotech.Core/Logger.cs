@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public class Logger : ILogger {
@@ -18,7 +19,7 @@ namespace Figlotech.Core {
         public bool Enabled { get; set; } = true;
         public IFileSystem FileAccessor { get; set; }
 
-        public List<String> BDadosLogCache = new List<String>();
+        public List<String> logLinesCache = new List<String>();
         private object BDLogLock = new Object();
 
         public bool EnableConsoleLogging { get; set; } = true;
@@ -49,20 +50,21 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             //Debug.WriteLine(log);
-            Fi.Tech.RunAndForget(() => {
+            Fi.Tech.RunAndForget(async () => {
+                await Task.Yield();
                 if (EnableConsoleLogging)
                     Console.Error.WriteLine(log);
-                log = Regex.Replace(log, @"\s+", " ");
+                List<String> Lines = new List<String>();
                 lock (this) {
+                    log = Regex.Replace(log, @"\s+", " ");
                     String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
-                    List<String> Lines = new List<String>();
-                    Lines.AddRange(BDadosLogCache);
+                    Lines.AddRange(logLinesCache);
                     Lines.Add(line);
-                    FileAccessor.AppendAllLines(
-                        Filename.Value, Lines);
-                    BDadosLogCache.Clear();
+                    logLinesCache.Clear();
                 }
-            }, x=> {
+                FileAccessor.AppendAllLines(
+                    Filename.Value, Lines
+                );
             });
         }
 

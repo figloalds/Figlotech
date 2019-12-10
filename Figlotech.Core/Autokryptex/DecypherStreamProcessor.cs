@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using Figlotech.Core.Autokryptex;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex
 {
@@ -16,7 +17,7 @@ namespace Figlotech.Core.Autokryptex
             _method = method;
         }
 
-        public void Process(Stream input, Action<Stream> act) {
+        public async Task Process(Stream input, Func<Stream, Task> act) {
             using (MemoryStream ms = new MemoryStream()) {
                 input.CopyTo(ms);
                 ms.Seek(0, SeekOrigin.Begin);
@@ -24,7 +25,7 @@ namespace Figlotech.Core.Autokryptex
                 var cypheredBytes = _method.Decrypt(bytes);
                 using (MemoryStream output = new MemoryStream(cypheredBytes)) {
 
-                    act(output);
+                    await act(output);
                 }
             }
         }

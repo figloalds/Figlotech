@@ -32,17 +32,18 @@ namespace System
             Fi.Tech.MemberwiseCopy(other, me);
         }
 
-        public static void CopyFile(this IFileSystem fs, string relative, IFileSystem other, string relative2, Action<ProgressEvent> onProgress = null) {
-            fs.Read(relative, input => {
-                other.Write(relative2, output => {
+        public static async Task CopyFile(this IFileSystem fs, string relative, IFileSystem other, string relative2, Action<ProgressEvent> onProgress = null) {
+            await fs.Read(relative, async input => {
+                await Task.Yield();
+                await other.Write(relative2, async output => {
+                    await Task.Yield();
                     int bufferSize = 81920;
                     byte[] buffer = new byte[bufferSize];
                     int read;
-                    long totalRead = 0;
                     var pe = new ProgressEvent();
                     pe.Total = input.Length;
-                    while ((read = input.Read(buffer, 0, buffer.Length)) != 0) {
-                        output.Write(buffer, 0, read);
+                    while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) != 0) {
+                        await output.WriteAsync(buffer, 0, read);
                         pe.Current += read;
                         onProgress?.Invoke(pe);
                     }

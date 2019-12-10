@@ -12,6 +12,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
@@ -29,10 +30,10 @@ namespace Figlotech.Core {
 
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
-        public static FiHttpResult InitFromGet(HttpWebRequest req) {
+        public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req) {
             var retv = new FiHttpResult();
             try {
-                using (var resp = req.GetResponse()) {
+                using (var resp = await req.GetResponseAsync()) {
                     retv.Init(resp);
                 }
             } catch (WebException wex) {
@@ -59,20 +60,20 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static FiHttpResult Init(string verb, HttpWebRequest req, byte[] data) {
+        public static async Task<FiHttpResult> Init(string verb, HttpWebRequest req, byte[] data) {
             var retv = new FiHttpResult();
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
                     try {
-                        using (var reqStream = req.GetRequestStream()) {
-                            reqStream.Write(data, 0, data.Length);
+                        using (var reqStream = await req.GetRequestStreamAsync()) {
+                            await reqStream.WriteAsync(data, 0, data.Length);
                             reqStream.Flush();
                         }
                     } catch(Exception x) {
                         throw x;
                     }
                 }
-                using (var resp = req.GetResponse()) {
+                using (var resp = await req.GetResponseAsync()) {
                     retv.Init(resp);
                 }
             } catch (WebException wex) {
@@ -196,9 +197,9 @@ namespace Figlotech.Core {
             return Use<T>(i => i.As<T>());
         }
 
-        public void SaveToFile(IFileSystem fs, string fileName) {
+        public async Task SaveToFile(IFileSystem fs, string fileName) {
             ResultStream.Seek(0, SeekOrigin.Begin);
-            fs.Write(fileName, stream => ResultStream.CopyTo(stream));
+            await fs.Write(fileName, async stream => await ResultStream.CopyToAsync(stream));
         }
 
         public void Dispose() {
@@ -245,18 +246,18 @@ namespace Figlotech.Core {
             return $"{UrlPrefix}/{Url}";
         }
 
-        public bool Check(string Url) {
-            var st = (int)(Get(Url)).StatusCode;
+        public async Task<bool> Check(string Url) {
+            var st = (int) (await (Get(Url))).StatusCode;
             return st >= 200 && st < 300;
         }
 
-        public T Get<T>(string Url) {
+        public async Task<T> Get<T>(string Url) {
             T retv = default(T);
 
-            Get(Url, async (status, rstream) => {
-
+            await Get(Url, async (status, rstream) => {
+                await Task.Yield();
                 using (StreamReader sr = new StreamReader(rstream)) {
-                    var json = sr.ReadToEnd();
+                    var json = await sr.ReadToEndAsync();
                     try {
                         T obj = JsonConvert.DeserializeObject<T>(json);
                         retv = obj;
@@ -282,14 +283,14 @@ namespace Figlotech.Core {
             return request;
         }
 
-        public FiHttpResult Get(string Url) {
+        public async Task<FiHttpResult> Get(string Url) {
             var req = GetRequest(Url);
             req.Proxy = this.Proxy;
             req.Method = "GET";
             req.UserAgent = UserAgent;
             UpdateSyncCode();
             AddHeaders(req);
-            return FiHttpResult.InitFromGet(req);
+            return await FiHttpResult.InitFromGet(req);
         }
 
         private void AddHeaders(HttpWebRequest req) {
@@ -307,7 +308,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public HttpStatusCode Get(string Url, Action<HttpStatusCode, Stream> ActOnResponse = null) {
+        public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
             var req = GetRequest(Url);
             req.Proxy = this.Proxy;
             req.Method = "GET";
@@ -318,21 +319,21 @@ namespace Figlotech.Core {
             try {
                 using (var resp = req.GetResponse() as HttpWebResponse) {
                     using (var stream = resp.GetResponseStream()) {
-                        ActOnResponse?.Invoke(resp.StatusCode, stream);
+                        await ActOnResponse?.Invoke(resp.StatusCode, stream);
                     }
                     return resp.StatusCode;
                 }
             } catch (WebException x) {
                 using (var resp = x.Response as HttpWebResponse) {
                     using (var stream = resp.GetResponseStream()) {
-                        ActOnResponse?.Invoke(resp.StatusCode, stream);
+                        await ActOnResponse?.Invoke(resp.StatusCode, stream);
                     }
                     return resp.StatusCode;
                 }
             }
         }
 
-        public FiHttpResult Custom(String verb, String Url, Action<Stream> UploadRequestStream = null) {
+        public async Task<FiHttpResult> Custom(String verb, String Url, Func<Stream, Task> UploadRequestStream = null) {
             var req = GetRequest(Url);
             byte[] bytes;
             using (var ms = new MemoryStream()) {
@@ -345,9 +346,9 @@ namespace Figlotech.Core {
             UpdateSyncCode();
             AddHeaders(req);
 
-            return FiHttpResult.Init(verb, req, bytes);
+            return await FiHttpResult.Init(verb, req, bytes);
         }
-        public FiHttpResult Custom(String verb, String Url, byte[] data) {
+        public async Task<FiHttpResult> Custom(String verb, String Url, byte[] data) {
             var req = GetRequest(Url);
             req.Proxy = this.Proxy;
             req.ContentLength = data.Length;
@@ -356,18 +357,18 @@ namespace Figlotech.Core {
             UpdateSyncCode();
             AddHeaders(req);
 
-            return FiHttpResult.Init(verb, req, data);
+            return await FiHttpResult.Init(verb, req, data);
         }
-        public FiHttpResult Post(String Url, Action<Stream> UploadRequestStream = null) {
-            return Custom("POST", Url, UploadRequestStream);
+        public async Task<FiHttpResult> Post(String Url, Func<Stream, Task> UploadRequestStream = null) {
+            return await Custom("POST", Url, UploadRequestStream);
         }
 
-        public FiHttpResult Post<T>(String Url, T postData) {
+        public async Task<FiHttpResult> Post<T>(String Url, T postData) {
             var buff = Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(postData));
             ContentType = "application/json";
             ContentLength = buff.Length;
-            return Post(Url, (upstream) => {
-                upstream.Write(buff, 0, buff.Length);
+            return await Post(Url, async (upstream) => {
+                await upstream.WriteAsync(buff, 0, buff.Length);
             });
         }
 

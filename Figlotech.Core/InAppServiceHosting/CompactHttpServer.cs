@@ -14,6 +14,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.InAppServiceHosting
 {
@@ -184,7 +185,8 @@ namespace Figlotech.Core.InAppServiceHosting
                         var client = listener.AcceptTcpClient();
                         Console.WriteLine($"Request {client.Client.RemoteEndPoint.ToString()}");
                         client.NoDelay = false;
-                        work.Enqueue(() => {
+                        work.Enqueue(async () => {
+                            await Task.Yield();
                             using (client) {
                                 using (var stream = client.GetStream()) {
                                     var row = 0;
@@ -303,7 +305,8 @@ namespace Figlotech.Core.InAppServiceHosting
                                     }
                                 }
                             }
-                        }, x => {
+                        }, async x => {
+                            await Task.Yield();
                             Console.WriteLine(x.Message);
                         });
                     } catch (Exception ex) {

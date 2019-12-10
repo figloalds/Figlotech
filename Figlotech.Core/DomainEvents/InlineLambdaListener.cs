@@ -6,29 +6,29 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
     public static class InlineLambdaListener {
-        public static InlineLambdaListener<T> Create<T>(Action<T> action, Action<T, Exception> handler) where T : IDomainEvent {
+        public static InlineLambdaListener<T> Create<T>(Func<T, Task> action, Func<T, Exception, Task> handler) where T : IDomainEvent {
             return new InlineLambdaListener<T>(action, handler);
         }
     }
 
     public class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
-        public Action<T> OnRaise;
-        public Action<T, Exception> OnHandle;
+        public Func<T, Task> OnRaise;
+        public Func<T, Exception, Task> OnHandle;
         public DomainEventsHub EventsHub { get; set; }
-        public InlineLambdaListener(Action<T> action, Action<T, Exception> handler = null) {
+        public InlineLambdaListener(Func<T, Task> action, Func<T, Exception, Task> handler = null) {
             OnRaise = action;
             OnHandle = handler;
         }
 
-        public override void OnEventTriggered(T evt) {
-            OnRaise?.Invoke(evt);
+        public override async Task OnEventTriggered(T evt) {
+            await OnRaise?.Invoke(evt);
         }
 
-        public override void OnEventHandlingError(T evt, Exception x) {
+        public override async Task OnEventHandlingError(T evt, Exception x) {
             if(OnHandle == null) {
                 Fi.Tech.Throw(x);
             }
-            OnHandle?.Invoke(evt, x);
+            await OnHandle?.Invoke(evt, x);
         }
 
         private DomainEventsHub _registeredHub = null;

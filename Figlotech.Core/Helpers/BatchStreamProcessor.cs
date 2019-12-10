@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
     public class BatchStreamProcessor : IStreamProcessor {
@@ -13,7 +14,7 @@ namespace Figlotech.Core.Helpers {
             processors.Add(processor);
         }
 
-        public void Process(Stream input, Action<Stream> act, int n) {
+        public async Task Process(Stream input, Func<Stream, Task> act, int n) {
             if (!Enable) {
                 using (input) {
                     act?.Invoke(input);
@@ -22,14 +23,14 @@ namespace Figlotech.Core.Helpers {
             if (processors.Count < 1 || n == processors.Count)
                 act?.Invoke(input);
             else {
-                processors[n]?.Process(input, (output) => {
-                    Process(output, act, n + 1);
+                await processors[n]?.Process(input, async (output) => {
+                    await Process(output, act, n + 1);
                 });
             }
         }
 
-        public void Process(Stream input, Action<Stream> act) {
-            Process(input, act, 0);
+        public async Task Process(Stream input, Func<Stream, Task> act) {
+            await Process(input, act, 0);
         }
     }
 }

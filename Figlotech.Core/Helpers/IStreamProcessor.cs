@@ -9,6 +9,6 @@ namespace Figlotech.Core.Helpers
 {
     public interface IStreamProcessor
     {
-        void Process(Stream input, Action<Stream> act);
+        Task Process(Stream input, Func<Stream, Task> act);
     }
 }

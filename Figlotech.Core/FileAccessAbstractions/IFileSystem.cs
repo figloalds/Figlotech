@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
 
@@ -32,7 +33,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         bool IsCaseSensitive { get; }
 
-        void Write(string relative, Action<Stream> func);
+        Task Write(string relative, Func<Stream, Task> func);
 
         void ForFilesIn(string relative, Action<string> execFunc, Action<String, Exception> handler = null);
         IEnumerable<string> GetFilesIn(string relative);
@@ -40,7 +41,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         void ForDirectoriesIn(string relative, Action<string> execFunc);
         IEnumerable<string> GetDirectoriesIn(string relative);
 
-        bool Read(string relative, Action<Stream> func);
+        Task<bool> Read(string relative, Func<Stream, Task> func);
 
         string ReadAllText(string relative);
 
@@ -70,7 +71,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         bool IsDirectory(string relative);
         bool IsFile(string relative);
-
+        
         void AppendAllLines(string relative, IEnumerable<string> content);
         void Hide(string relative);
         void Show(string relative);

@@ -1238,9 +1238,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             lock (successfulSaves)
                                 successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
                         } catch (Exception x) {
-                            Fi.Tech.RunAndForget(() => {
-                                OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
-                            });
+                            if(OnFailedSave != null) {
+                                Fi.Tech.RunAndForget(async () => {
+                                    await Task.Yield();
+                                    OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
+                                });
+                            }
 
                             lock (failedSaves)
                                 failedSaves.Add(x);
@@ -1266,9 +1269,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             lock (successfulSaves)
                                 successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
                         } catch (Exception x) {
-                            Fi.Tech.RunAndForget(() => {
-                                OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
-                            });
+                            if(OnFailedSave != null) {
+                                Fi.Tech.RunAndForget(async () => {
+                                    await Task.Yield();
+                                    OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
+                                });
+                            }
                             lock (failedSaves)
                                 failedSaves.Add(x);
                         }
@@ -1296,18 +1302,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 //    failedObjects.AddRange(successfulSaves.Where(a => a.Id <= 0).Select(a => (IDataObject)a));
                 //    successfulSaves.RemoveAll(a => a.Id <= 0);
                 //}
-                Fi.Tech.RunAndForget(() => {
-                    int newHash = 0;
-                    successfulSaves.ForEach(it => {
-                        newHash = it.SpFthComputeDataFieldsHash();
-                        if (it.PersistedHash != newHash) {
-                            it.PersistedHash = newHash;
-                            it.AlteredBy = IDataObjectExtensions.localInstanceId;
-                        }
-                    });
-                    transaction.NotifyChange(successfulSaves.ToArray());
-                    OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
+                int newHash = 0;
+                successfulSaves.ForEach(it => {
+                    newHash = it.SpFthComputeDataFieldsHash();
+                    if (it.PersistedHash != newHash) {
+                        it.PersistedHash = newHash;
+                        it.AlteredBy = IDataObjectExtensions.localInstanceId;
+                    }
                 });
+                transaction.NotifyChange(successfulSaves.ToArray());
+                if(OnSuccessfulSave!=null) {
+                    Fi.Tech.RunAndForget(async () => {
+                        await Task.Yield();
+                        OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
+                    }, async ex => {
+                        await Task.Yield();
+                        Fi.Tech.Throw(ex);
+                    });
+                }
             }
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
@@ -1315,9 +1327,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (failedObjects.Any()) {
                 var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);
-                Fi.Tech.RunAndForget(() => {
-                    OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
-                });
+                if(OnFailedSave!=null) {
+                    Fi.Tech.RunAndForget(async () => {
+                        await Task.Yield();
+                        OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
+                    });
+                }
             }
 
             return retv;
@@ -1568,7 +1583,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 String line;
                 while (!string.IsNullOrEmpty(line = reader.ReadLine())) {
                     var values = JsonConvert.DeserializeObject<object[]>(line);
-                    objAssembly.Enqueue(() => {
+                    objAssembly.Enqueue(async () => {
+                        await Task.Yield();
                         var v = values;
                         Type type = types.FirstOrDefault(t => t.Name == values[0] as String);
                         if (type == null)
@@ -1629,7 +1645,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 lock (cache) {
                     var persistenceBatch = new List<IDataObject>(cache);
                     cache.Clear();
-                    persistenceQueue.Enqueue(() => {
+                    persistenceQueue.Enqueue(async () => {
                         var grouping = persistenceBatch.GroupBy(item => item.GetType());
                         foreach (var g in grouping) {
                             var listOfType = g.ToList();
@@ -1637,7 +1653,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             listOfType.ForEach(i => i.IsReceivedFromSync = true);
                             SaveList(transaction, listOfType, false);
                         }
-                    }, x => {
+                    }, async x => {
+                        await Task.Yield();
                         Console.WriteLine($"Error persisting batch {x.Message}");
                     });
                 }
@@ -1853,11 +1870,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 rs = Execute(transaction, query);
                 transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
             } catch (Exception x) {
-                Fi.Tech.RunAndForget(() => {
-                    OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
-                }, (xe) => {
-                    Fi.Tech.Throw(xe);
-                });
+                if(OnFailedSave!=null) {
+                    Fi.Tech.RunAndForget(async () => {
+                        await Task.Yield();
+                        OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                    }, async (xe) => {
+                        await Task.Yield();
+                        Fi.Tech.Throw(xe);
+                    });
+                }
                 throw x;
             }
             if (rs == 0) {
@@ -1912,11 +1933,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             if (Debugger.IsAttached) {
                                 Debugger.Break();
                             }
-                            Fi.Tech.RunAndForget(() => {
-                                OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
-                            }, (xe) => {
-                                Fi.Tech.Throw(xe);
-                            });
+                            if(OnFailedSave != null) {
+                                Fi.Tech.RunAndForget(async () => {
+                                    await Task.Yield();
+                                    OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                                }, async (xe) => {
+                                    await Task.Yield();
+                                    Fi.Tech.Throw(xe);
+                                });
+                            }
                         }
                     }
 
@@ -1934,11 +1959,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 retv = true;
             }
 
-            Fi.Tech.RunAndForget(() => {
-                OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
-            }, (xe) => {
-                Fi.Tech.Throw(xe);
-            });
+            if(OnSuccessfulSave != null) {
+                Fi.Tech.RunAndForget(async () => {
+                    await Task.Yield();
+                    OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
+                }, async (xe) => {
+                    await Task.Yield();
+                    Fi.Tech.Throw(xe);
+                });
+            }
 
             return retv;
         }

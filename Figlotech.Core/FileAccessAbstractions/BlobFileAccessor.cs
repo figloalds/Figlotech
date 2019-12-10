@@ -107,11 +107,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return relative;
         }
 
-        public void Write(String relative, Action<Stream> func) {
+        public async Task Write(String relative, Func<Stream, Task> func) {
             FixRelative(ref relative);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
             using (var stream = blob.OpenWriteAsync().Result) {
-                func(stream);
+                await func(stream);
             }
             blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
             blob.SetPropertiesAsync().Wait();
@@ -274,14 +274,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             yield break;
         }
 
-        public bool Read(String relative, Action<Stream> func) {
+        public async Task<bool> Read(String relative, Func<Stream, Task> func) {
             FixRelative(ref relative);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
             if (!blob.ExistsAsync().Result)
                 return false;
 
             using (var stream = blob.OpenReadAsync().Result) {
-                func(stream);
+                await func(stream);
             }
 
             return true;

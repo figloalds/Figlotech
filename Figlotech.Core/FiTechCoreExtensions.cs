@@ -246,6 +246,7 @@ namespace Figlotech.Core {
             set => fthLogStream = value;
         }
 
+        static bool isNtpTimeRequestedAlready = false;
         static SyncTimeStampSource _globalTimeStampSource = null;
         public static SyncTimeStampSource GlobalTimeStampSource {
             get {
@@ -253,9 +254,19 @@ namespace Figlotech.Core {
                     return _globalTimeStampSource;
                 }
                 _globalTimeStampSource = SyncTimeStampSource.FromLocalTime();
-                Fi.Tech.RunAndForget(() => {
-                    _globalTimeStampSource = SyncTimeStampSource.FromNtpServer("pool.ntp.org");
-                });
+                bool shouldRequestNtpTime = false;
+                lock("NTP_TIME_REQUESTAL") {
+                    if (!isNtpTimeRequestedAlready) {
+                        shouldRequestNtpTime = true;
+                        isNtpTimeRequestedAlready = true;
+                    }
+                }
+                if(shouldRequestNtpTime) {
+                    Fi.Tech.RunAndForget(async () => {
+                        await Task.Yield();
+                        _globalTimeStampSource = await SyncTimeStampSource.FromNtpServer("pool.ntp.org");
+                    });
+                }
                 return _globalTimeStampSource;
             }
         }
@@ -269,7 +280,7 @@ namespace Figlotech.Core {
         }
 
         // stackoverflow.com/questions/1193955
-        public static DateTime GetUtcNetworkTime(this Fi _selfie, string ntpServer) {
+        public static async Task<DateTime> GetUtcNetworkTime(this Fi _selfie, string ntpServer) {
 
             // NTP message size - 16 bytes of the digest (RFC 2030)
             var ntpData = new byte[48];
@@ -284,13 +295,13 @@ namespace Figlotech.Core {
             //NTP uses UDP
 
             using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)) {
-                socket.Connect(ipEndPoint);
+                await socket.ConnectAsync(ipEndPoint);
 
                 //Stops code hang if NTP is blocked
                 socket.ReceiveTimeout = 3000;
 
-                socket.Send(ntpData);
-                socket.Receive(ntpData);
+                await Task.Run(() => socket.Send(ntpData));
+                await Task.Run(() => socket.Receive(ntpData));
                 socket.Close();
             }
 
@@ -1224,6 +1235,9 @@ namespace Figlotech.Core {
 
 
         public static void Throw(this Fi _selfie, Exception x) {
+            if(Debugger.IsAttached) {
+                Debugger.Break();
+            }
             try {
                 OnUltimatelyUnhandledException?.Invoke(x);
             } catch (Exception y) {
@@ -1364,7 +1378,7 @@ namespace Figlotech.Core {
                 Fi.Tech.Error(x);
             }
         }
-        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
+        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Func<Task> a, Func<Exception, Task> h = null, Func<bool, Task> t = null) {
             if (DateTime.UtcNow > max)
                 return;
             RunAndForget(__selfie, a, h, t);
@@ -1423,49 +1437,34 @@ namespace Figlotech.Core {
                 .MakeGenericMethod(src, typeof(T))
                 .Invoke(null, new object[] { null, o });
         }
-
-        public static void BackgroundProcessList<T>(this Fi _selfie, IEnumerable<T> list, Action<T> work, Action<Exception> perWorkExceptionHandler = null, Action preWork = null, Action postWork = null, Action<Exception> preWorkExceptionHandling = null, Action<Exception> postWorkExceptionHandling = null) {
-            RunAndForgetTasks(_selfie, (wq) => {
-                try {
-                    preWork?.Invoke();
-                } catch (Exception x) {
-                    preWorkExceptionHandling?.Invoke(x);
-                    return;
-                }
-                list.ForEach(i => wq.Enqueue(() => work?.Invoke(i), perWorkExceptionHandler));
-                try {
-                    postWork?.Invoke();
-                } catch (Exception x) {
-                    postWorkExceptionHandling?.Invoke(x);
-                    return;
-                }
-            });
-        }
-
+        
         public static void RunAndForgetTasks(this Fi _selfie, Action<WorkQueuer> action, string name = "Annonymous_multi_tasks") {
-            RunAndForget(_selfie, () => {
+            RunAndForget(_selfie, async () => {
+                await Task.Yield();
                 var wq = new WorkQueuer(name, Environment.ProcessorCount);
                 action?.Invoke(wq);
-                wq.Stop(true);
-            }, x => {
+                await wq.Stop(true);
+            }, async x => {
+                await Task.Yield();
                 Throw(_selfie, x);
             });
         }
         public static bool InlineRunAndForget { get; set; }
         static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 45000, ExtraWorkers = Environment.ProcessorCount * 4 };
-        public static WorkJob RunAndForget(this Fi _selfie, string name, Action job, Action<Exception> handler = null, Action then = null) {
+        public static WorkJob RunAndForget(this Fi _selfie, string name, Func<Task> job, Func<Exception,Task> handler = null, Func<bool, Task> then = null) {
             if (InlineRunAndForget) {
                 try {
                     job?.Invoke();
+                    then?.Invoke(true);
                 } catch (Exception x) {
                     try {
                         handler?.Invoke(x);
                     } catch (Exception y) {
                         Throw(_selfie, y);
                     }
+                    then?.Invoke(false);
                 } finally {
                     try {
-                        then?.Invoke();
                     } catch (Exception y) {
                         Throw(_selfie, y);
                     }
@@ -1479,7 +1478,7 @@ namespace Figlotech.Core {
             return wj;
         }
 
-        public static WorkJob RunAndForget(this Fi _selfie, Action job, Action<Exception> handler = null, Action then = null) {
+        public static WorkJob RunAndForget(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
             return RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
         }
 
