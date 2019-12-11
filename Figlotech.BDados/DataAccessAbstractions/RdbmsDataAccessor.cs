@@ -1632,7 +1632,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            objAssembly.Stop();
+            objAssembly.Stop(true).Wait();
         }
 
         public void ReceiveRemoteUpdatesAndPersist(ConnectionInfo transaction, IEnumerable<Type> types, Stream stream) {
@@ -1646,6 +1646,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var persistenceBatch = new List<IDataObject>(cache);
                     cache.Clear();
                     persistenceQueue.Enqueue(async () => {
+                        await Task.Yield();
                         var grouping = persistenceBatch.GroupBy(item => item.GetType());
                         foreach (var g in grouping) {
                             var listOfType = g.ToList();
@@ -1673,7 +1674,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             flushAndPersist();
-            persistenceQueue.Stop();
+            persistenceQueue.Stop(true).Wait();
         }
 
         public bool Delete<T>(ConnectionInfo transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {

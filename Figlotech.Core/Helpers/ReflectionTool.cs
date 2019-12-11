@@ -160,9 +160,9 @@ namespace Figlotech.Core.Helpers {
                 SetMemberValue(member, target, value);
                 return true;
             } catch (Exception x) {
-                if(Debugger.IsAttached) {
-                    Debugger.Break();
-                }
+                //if(Debugger.IsAttached) {
+                //    Debugger.Break();
+                //}
                 if (StrictMode) {
                     throw x;
                 }
@@ -417,9 +417,9 @@ namespace Figlotech.Core.Helpers {
                 }
 
             } catch (Exception x) {
-                if (Debugger.IsAttached) {
-                    Debugger.Break();
-                }
+                //if (Debugger.IsAttached) {
+                //    Debugger.Break();
+                //}
                 if (StrictMode) {
                     Console.WriteLine($"RTSV Error | {target?.GetType()?.Name}::{member?.Name}={value?.ToString()} ({value?.GetType()?.Name})");
                     if (Debugger.IsAttached) {

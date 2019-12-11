@@ -43,11 +43,11 @@ namespace Figlotech.Core {
             }
             return retv;
         }
-        public static FiHttpResult InitFromPost(HttpWebRequest req, Action<Stream> UploadRequestStream) {
+        public static async Task<FiHttpResult> InitFromPost(HttpWebRequest req, Func<Stream, Task> UploadRequestStream) {
             var retv = new FiHttpResult();
             try {
-                using (var reqStream = req.GetRequestStream()) {
-                    UploadRequestStream?.Invoke(reqStream);
+                using (var reqStream = await req.GetRequestStreamAsync()) {
+                    await UploadRequestStream?.Invoke(reqStream);
                 }
                 using (var resp = req.GetResponse()) {
                     retv.Init(resp);
@@ -67,7 +67,7 @@ namespace Figlotech.Core {
                     try {
                         using (var reqStream = await req.GetRequestStreamAsync()) {
                             await reqStream.WriteAsync(data, 0, data.Length);
-                            reqStream.Flush();
+                            await reqStream.FlushAsync();
                         }
                     } catch(Exception x) {
                         throw x;
@@ -337,7 +337,7 @@ namespace Figlotech.Core {
             var req = GetRequest(Url);
             byte[] bytes;
             using (var ms = new MemoryStream()) {
-                UploadRequestStream?.Invoke(ms);
+                await UploadRequestStream?.Invoke(ms);
                 bytes = ms.ToArray();
             }
             req.Proxy = this.Proxy;

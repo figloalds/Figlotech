@@ -207,17 +207,6 @@ namespace Figlotech.Core {
             return v1;
         }
 
-
-
-        public static void StdoutLogs(this Fi _selfie, bool status) {
-            EnableStdoutLogs = status;
-            if (status) {
-                FthLogStreamWriter.Start();
-            } else {
-                FthLogStreamWriter.Stop(false);
-            }
-        }
-
         public static void Write(this Fi _selfie, string s = "") {
 
             if (!EnableStdoutLogs)
@@ -275,9 +264,9 @@ namespace Figlotech.Core {
             return GlobalTimeStampSource.GetUtc();
         }
 
-        public static Func<Task> ActionToTask(this Fi _selfie, Action fn) {
-            return async () => FireTask(_selfie, fn);
-        }
+        //public static Func<Task> ActionToTask(this Fi _selfie, Action fn) {
+        //    return async () => await FireTask(_selfie, fn);
+        //}
 
         // stackoverflow.com/questions/1193955
         public static async Task<DateTime> GetUtcNetworkTime(this Fi _selfie, string ntpServer) {
@@ -591,9 +580,7 @@ namespace Figlotech.Core {
         public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
         private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", 2, true) {
-            MainWorkerTimeout = 60000,
-            ExtraWorkers = 0,
-            ExtraWorkerTimeout = 120000,
+            
         });
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
@@ -1280,7 +1267,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static async Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
+        public static Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
             // Could just call the other function here
             // Decided to CTRL+C in favor of runtime performance.
             bool success = false;
@@ -1323,7 +1310,7 @@ namespace Figlotech.Core {
             });
             lock (FiredTasksPreventGC)
                 FiredTasksPreventGC.Add(retv);
-            return await retv;
+            return retv;
         }
 
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
@@ -1450,7 +1437,7 @@ namespace Figlotech.Core {
             });
         }
         public static bool InlineRunAndForget { get; set; }
-        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Environment.ProcessorCount, true) { MinWorkers = Environment.ProcessorCount, MainWorkerTimeout = 60000, ExtraWorkerTimeout = 45000, ExtraWorkers = Environment.ProcessorCount * 4 };
+        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Int32.MaxValue, true) { };
         public static WorkJob RunAndForget(this Fi _selfie, string name, Func<Task> job, Func<Exception,Task> handler = null, Func<bool, Task> then = null) {
             if (InlineRunAndForget) {
                 try {

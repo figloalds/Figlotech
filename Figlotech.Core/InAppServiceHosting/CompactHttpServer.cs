@@ -112,7 +112,7 @@ namespace Figlotech.Core.InAppServiceHosting
         }
 
         WorkQueuer work = new WorkQueuer("EmbededRequestHandler", 32, true) {
-            MinWorkers = 16
+            MaxParallelTasks = 16
         };
 
         TcpListener listener;

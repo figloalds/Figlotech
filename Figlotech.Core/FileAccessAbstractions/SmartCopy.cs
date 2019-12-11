@@ -139,8 +139,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 string hash = "";
                 if (local.Exists(a.RelativePath)) {
                     local.Read(a.RelativePath, async (stream) => {
+                        await Task.Yield();
                         hash = GetHash(stream);
-                    });
+                    }).Wait();
                 }
 
                 var gzSuffix = "";
@@ -158,29 +159,29 @@ namespace Figlotech.Core.FileAcessAbstractions {
         /// Copies files from local/origin accessor to remote/destination accessor
         /// Uploads data from the local to the remote accessor
         /// </summary>
-        public void MirrorUp(string path = "") {
+        public async Task MirrorUp(string path = "") {
             if (remote == null) {
                 throw new NullReferenceException("The Remote server was not specified, do call SetRemote(IFileAccessor) to specify it.");
             }
             var totalFilesCount = CountFiles(local, path);
             OnReportTotalFilesCount?.Invoke(totalFilesCount);
-            Mirror(local, remote, path, MirrorWay.Up);
+            await Mirror(local, remote, path, MirrorWay.Up);
         }
 
         /// <summary>
         /// Copies files remote/destination from accessor to local/origin accessor
         /// Downloads data from the remote to the local accessor
         /// </summary>
-        public void MirrorDown(string path = "") {
+        public async Task MirrorDown(string path = "") {
             if (remote == null) {
                 throw new NullReferenceException("The Remote server was not specified, do call SetRemote(IFileAccessor) to specify it.");
             }
             if (options.UseHashList) {
-                MirrorFromList(path);
+                await MirrorFromList(path);
             } else {
                 var totalFilesCount = CountFiles(remote, path);
                 OnReportTotalFilesCount?.Invoke(totalFilesCount);
-                Mirror(remote, local, path, MirrorWay.Down);
+                await Mirror(remote, local, path, MirrorWay.Down);
             }
         }
 
@@ -471,14 +472,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         await Changed(origin, destination, f);
 
                     if (changed) {
-                        lock (f) {
-                            thresholdSaveListBytes += origin.GetSize(f);
-                            if (way == MirrorWay.Up) {
-                                processFileUp(origin, destination, f);
-                            }
-                            if (way == MirrorWay.Down) {
-                                processFileDown(origin, destination, f);
-                            }
+                        thresholdSaveListBytes += origin.GetSize(f);
+                        if (way == MirrorWay.Up) {
+                            await processFileUp(origin, destination, f);
+                        }
+                        if (way == MirrorWay.Down) {
+                            await processFileDown(origin, destination, f);
                         }
                     }
                     OnReportProcessedFile?.Invoke(changed, f);
@@ -514,19 +513,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             if (options.Recursive) {
-                origin.ForDirectoriesIn(path, (dir) => {
+                foreach(var dir in origin.GetDirectoriesIn(path)) {
                     destination.MkDirs(dir);
-                    Mirror(origin, destination, dir, way, wq);
-                });
+                    await Mirror(origin, destination, dir, way, wq);
+                }
             }
 
             if (!isRecursing) {
-
                 wq.Start();
                 await wq.Stop(true);
                 SaveHashList(origin, destination);
             }
-
         }
 
         private void SaveHashList(IFileSystem origin, IFileSystem destination) {

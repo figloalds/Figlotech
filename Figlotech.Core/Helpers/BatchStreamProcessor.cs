@@ -17,11 +17,11 @@ namespace Figlotech.Core.Helpers {
         public async Task Process(Stream input, Func<Stream, Task> act, int n) {
             if (!Enable) {
                 using (input) {
-                    act?.Invoke(input);
+                    await act?.Invoke(input);
                 }
             }
             if (processors.Count < 1 || n == processors.Count)
-                act?.Invoke(input);
+                await act?.Invoke(input);
             else {
                 await processors[n]?.Process(input, async (output) => {
                     await Process(output, act, n + 1);

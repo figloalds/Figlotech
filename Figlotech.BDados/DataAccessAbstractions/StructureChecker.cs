@@ -752,8 +752,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         handleException.Invoke(x);
                 });
             }
-            wq.Stop();
-            cliQ.Stop();
+            await wq.Stop(true);
+            await cliQ.Stop();
             if (exces.Any()) {
                 throw new AggregateException("There were errors executing actions", exces);
             }
