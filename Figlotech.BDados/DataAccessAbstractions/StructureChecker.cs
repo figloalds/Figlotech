@@ -733,15 +733,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<Exception> exces = new List<Exception>();
             while (enny.MoveNext()) {
                 var thisAction = enny.Current;
-                wq.Enqueue(async () => {
+                var t = wq.Enqueue(async () => {
                     await Task.Yield();
                     retv += thisAction.Execute(DataAccessor);
                     //lock(wq) {
                     int myWent = went++;
-                    cliQ.Enqueue(async () => {
-                        await Task.Yield();
-                        onActionExecuted?.Invoke(thisAction, myWent);
-                    });
+                    onActionExecuted?.Invoke(thisAction, myWent);
                     //}
                 }, async (x) => {
                     await Task.Yield();

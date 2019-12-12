@@ -251,7 +251,7 @@ namespace Figlotech.Core {
                     }
                 }
                 if(shouldRequestNtpTime) {
-                    Fi.Tech.RunAndForget(async () => {
+                    Fi.Tech.FireTask(async () => {
                         await Task.Yield();
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServer("pool.ntp.org");
                     });
@@ -263,10 +263,6 @@ namespace Figlotech.Core {
         public static DateTime GetUtcTime(this Fi _selfie) {
             return GlobalTimeStampSource.GetUtc();
         }
-
-        //public static Func<Task> ActionToTask(this Fi _selfie, Action fn) {
-        //    return async () => await FireTask(_selfie, fn);
-        //}
 
         // stackoverflow.com/questions/1193955
         public static async Task<DateTime> GetUtcNetworkTime(this Fi _selfie, string ntpServer) {
@@ -1240,14 +1236,6 @@ namespace Figlotech.Core {
             //logger.WriteLog(x);
         }
 
-        public static void FireTaskAndForget<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
-            var t = FireTask<T>(_selfie, task, handling, executeAnywaysWhenFinished);
-        }
-
-        public static async Task FireTask(this Fi _selfie, Action task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
-            await FireTask<int>(_selfie, () => { task?.Invoke(); return 0; }, handling, executeAnywaysWhenFinished);
-        }
-
         public static IEnumerable<Exception> ToExceptionArray(this Exception ex) {
             return Fi.Tech.ExceptionTreeToArray(ex);
         }
@@ -1265,52 +1253,6 @@ namespace Figlotech.Core {
                 }
                 ex = ex.InnerException;
             }
-        }
-
-        public static Task<T> FireTask<T>(this Fi _selfie, Func<T> task, Action<Exception> handling = null, Action<bool> executeAnywaysWhenFinished = null) {
-            // Could just call the other function here
-            // Decided to CTRL+C in favor of runtime performance.
-            bool success = false;
-            Task<T> retv = Task.Run<T>(() => {
-                if (task != null) {
-                    try {
-                        return task.Invoke();
-                    } catch (Exception x) {
-                        try {
-                            handling?.Invoke(x);
-                        } catch (Exception z) {
-                            Fi.Tech.Throw(z);
-                        }
-                    } finally {
-                        try {
-                            executeAnywaysWhenFinished?.Invoke(success);
-                            lock (FiredTasksPreventGC) {
-                                FiredTasksPreventGC
-                                    .Where(t => t.IsCanceled || t.IsCompleted || t.IsFaulted)
-                                    .ForEach(t => {
-                                        if (t.Exception != null) {
-                                            Fi.Tech.WriteLine($"Task {t.Id} threw {t.Exception.GetType().Name}:{t.Exception.Message}");
-                                            // "Handling" need not apply maybe.
-                                            // It probably didn't even throw an exception.
-                                            // I'm checking this just to tell the .Net API to not crash the application
-                                            // When this task is GC'ed
-                                            // Because .Net loves to fuck my life by causing exceptions in tasks to completely break 
-                                            // the entire program. I don't like that at all.
-                                            Fi.Tech.Throw(t.Exception);
-                                        }
-                                    });
-                                FiredTasksPreventGC.RemoveAll(t => t.IsCanceled || t.IsCompleted || t.IsFaulted);
-                            }
-                        } catch (Exception x) {
-                            Fi.Tech.Throw(x);
-                        }
-                    }
-                }
-                return default(T);
-            });
-            lock (FiredTasksPreventGC)
-                FiredTasksPreventGC.Add(retv);
-            return retv;
         }
 
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
@@ -1368,7 +1310,7 @@ namespace Figlotech.Core {
         public static void RunOnlyUntil(this Fi __selfie, DateTime max, Func<Task> a, Func<Exception, Task> h = null, Func<bool, Task> t = null) {
             if (DateTime.UtcNow > max)
                 return;
-            RunAndForget(__selfie, a, h, t);
+            FireTask(__selfie, a, h, t);
         }
 
         public static event Action<Exception> OnUltimatelyUnhandledException;
@@ -1425,8 +1367,8 @@ namespace Figlotech.Core {
                 .Invoke(null, new object[] { null, o });
         }
         
-        public static void RunAndForgetTasks(this Fi _selfie, Action<WorkQueuer> action, string name = "Annonymous_multi_tasks") {
-            RunAndForget(_selfie, async () => {
+        public static void FireTaskTasks(this Fi _selfie, Action<WorkQueuer> action, string name = "Annonymous_multi_tasks") {
+            FireTask(_selfie, async () => {
                 await Task.Yield();
                 var wq = new WorkQueuer(name, Environment.ProcessorCount);
                 action?.Invoke(wq);
@@ -1436,10 +1378,10 @@ namespace Figlotech.Core {
                 Throw(_selfie, x);
             });
         }
-        public static bool InlineRunAndForget { get; set; }
-        static WorkQueuer FiTechRAF = new WorkQueuer("RunAndForgetHost", Int32.MaxValue, true) { };
-        public static WorkJob RunAndForget(this Fi _selfie, string name, Func<Task> job, Func<Exception,Task> handler = null, Func<bool, Task> then = null) {
-            if (InlineRunAndForget) {
+        public static bool InlineFireTask { get; set; }
+        static WorkQueuer FiTechRAF = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
+        public static WorkJob FireTask(this Fi _selfie, string name, Func<Task> job, Func<Exception,Task> handler = null, Func<bool, Task> then = null) {
+            if (InlineFireTask) {
                 try {
                     job?.Invoke();
                     then?.Invoke(true);
@@ -1465,8 +1407,33 @@ namespace Figlotech.Core {
             return wj;
         }
 
-        public static WorkJob RunAndForget(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
-            return RunAndForget(_selfie, "Anonymous_RunAndForget", job, handler, then);
+        public static WorkJob FireTask(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+            return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
+        }
+
+        public static void FireAndForget(this Fi _selfie, string name, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+            var ignoreWarnings = FireTask(_selfie, name, job, handler, then);
+        }
+
+        public static void FireAndForget(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+            var ignoreWarnings = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
+        }
+
+        public static async Task<T> Promisify<T>(this Fi _selfie, Func<T> fn) {
+            T retv = default(T);
+            await Fi.Tech.FireTask(async () => {
+                await Task.Yield();
+                retv = fn();
+            });
+            return retv;
+        }
+        public static async Task<T> Promisify<T>(this Fi _selfie, Func<Task<T>> fn) {
+            T retv = default(T);
+            await Fi.Tech.FireTask(async () => {
+                await Task.Yield();
+                retv = await fn();
+            });
+            return retv;
         }
 
         public static byte[] GenerateKey(this Fi _selfie, string Str) {

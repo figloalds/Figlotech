@@ -161,14 +161,14 @@ namespace Figlotech.Core.DomainEvents {
             foreach (var listener in Listeners) {
                 MainQueuer.Enqueue(async () => {
                     await Task.Yield();
-                    listener.OnEventTriggered(domainEvent);
+                    await listener.OnEventTriggered(domainEvent);
                     if (domainEvent.AllowPropagation) {
                         parentHub?.Raise(domainEvent);
                     }
                 }, async x=> {
                     await Task.Yield();
                     try {
-                        listener.OnEventHandlingError(domainEvent, x);
+                        await listener.OnEventHandlingError(domainEvent, x);
                     } catch (Exception y) {
                         Fi.Tech.Throw(x);
                     }

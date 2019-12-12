@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
     public static class BadassReflectionExtensions {
@@ -120,13 +121,14 @@ namespace Figlotech.Core.Helpers {
             return member.GetCustomAttribute<T>();
         }
 
-        private static SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>> MemberCacheFromString = new SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>>(
+        private static SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>> MemberCacheFromString { get; set; } = new SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>>(
             t => {
                 if (t == null) return null;
                 var retv = new Dictionary<string, MemberInfo>();
                 var members = ReflectionTool.FieldsAndPropertiesOf(t);
                 members.ForEach(x => {
                     retv[x.Name] = x;
+                    retv[x.Name.ToLower()] = x;
                 });
                 return retv;
             }

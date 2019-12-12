@@ -377,20 +377,25 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
+        static DynaLocks LocksAutoSelectCache = new DynaLocks();
         static Dictionary<Type, QueryBuilder> AutoSelectCache = new Dictionary<Type, QueryBuilder>();
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             
             var alias = "tba";
             QueryBuilder Query = new QueryBuilder();
-            if (!AutoSelectCache.ContainsKey(typeof(T))) {
-                Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
-                QueryBuilder baseSelect = new QbFmt("SELECT ");
-                baseSelect.Append(GenerateFieldsString(typeof(T), false));
-                baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
-                AutoSelectCache[typeof(T)] = baseSelect;
+
+            lock(LocksAutoSelectCache[$"MYSQL_SELECTS_{typeof(T).Name}"]) {
+                if (!AutoSelectCache.ContainsKey(typeof(T))) {
+                    Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
+                    QueryBuilder baseSelect = new QbFmt("SELECT ");
+                    baseSelect.Append(GenerateFieldsString(typeof(T), false));
+                    baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
+                    AutoSelectCache[typeof(T)] = baseSelect;
+                }
+
+                Query.Append(AutoSelectCache[typeof(T)]);
             }
 
-            Query.Append(AutoSelectCache[typeof(T)]);
 
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");

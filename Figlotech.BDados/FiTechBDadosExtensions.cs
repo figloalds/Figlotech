@@ -119,7 +119,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// </summary>
         /// <param name="valor"></param>
         /// <returns></returns>
-        public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader) where T : new() {
+        public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader, bool ignoreCase = false) where T : new() {
             var refl = new ObjectReflector();
             var existingKeys = new List<(int, string)>();
             for (int i = 0; i < reader.FieldCount; i++) {

@@ -39,6 +39,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var schemalessConfig = new MySqlPluginConfiguration();
             schemalessConfig.CopyFrom(Config);
             schemalessConfig.Database = null;
+            MySqlDataReader m;
             return new MySqlConnection(schemalessConfig.GetConnectionString());
         }
 

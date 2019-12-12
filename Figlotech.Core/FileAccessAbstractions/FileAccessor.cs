@@ -414,7 +414,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             FixRel(ref relative);
-            Fi.Tech.RunAndForget(async () => {
+            Fi.Tech.FireAndForget(async () => {
                 await Task.Yield();
                 var WorkingDirectory = AssemblePath(RootDirectory, relative);
                 if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {

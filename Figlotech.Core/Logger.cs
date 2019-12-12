@@ -50,7 +50,7 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             //Debug.WriteLine(log);
-            Fi.Tech.RunAndForget(async () => {
+            Fi.Tech.FireAndForget(async () => {
                 await Task.Yield();
                 if (EnableConsoleLogging)
                     Console.Error.WriteLine(log);

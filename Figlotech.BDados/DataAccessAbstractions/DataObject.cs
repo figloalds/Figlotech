@@ -73,12 +73,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override async Task<bool> Save() {
-            return await Fi.Tech.FireTask(() => DataAccessor.SaveItem(this));
+            return await Fi.Tech.Promisify(() => DataAccessor.SaveItem(this));
         }
 
         public override async Task<bool> Load() {
 
-            return await Fi.Tech.FireTask(() => {
+            return await Fi.Tech.Promisify(() => {
                 if (this.Id > 0) {
                     Fi.Tech.MemberwiseCopy(
                         DataAccessor.LoadByRid<T>(this.RID), this);

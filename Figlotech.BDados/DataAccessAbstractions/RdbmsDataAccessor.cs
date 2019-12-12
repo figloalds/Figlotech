@@ -1239,7 +1239,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
                         } catch (Exception x) {
                             if(OnFailedSave != null) {
-                                Fi.Tech.RunAndForget(async () => {
+                                Fi.Tech.FireAndForget(async () => {
                                     await Task.Yield();
                                     OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
                                 });
@@ -1270,7 +1270,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
                         } catch (Exception x) {
                             if(OnFailedSave != null) {
-                                Fi.Tech.RunAndForget(async () => {
+                                Fi.Tech.FireAndForget(async () => {
                                     await Task.Yield();
                                     OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
                                 });
@@ -1312,7 +1312,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 });
                 transaction.NotifyChange(successfulSaves.ToArray());
                 if(OnSuccessfulSave!=null) {
-                    Fi.Tech.RunAndForget(async () => {
+                    Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
                     }, async ex => {
@@ -1328,7 +1328,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (failedObjects.Any()) {
                 var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);
                 if(OnFailedSave!=null) {
-                    Fi.Tech.RunAndForget(async () => {
+                    Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
                     });
@@ -1872,7 +1872,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
             } catch (Exception x) {
                 if(OnFailedSave!=null) {
-                    Fi.Tech.RunAndForget(async () => {
+                    Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
                     }, async (xe) => {
@@ -1935,7 +1935,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 Debugger.Break();
                             }
                             if(OnFailedSave != null) {
-                                Fi.Tech.RunAndForget(async () => {
+                                Fi.Tech.FireAndForget(async () => {
                                     await Task.Yield();
                                     OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
                                 }, async (xe) => {
@@ -1961,7 +1961,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             if(OnSuccessfulSave != null) {
-                Fi.Tech.RunAndForget(async () => {
+                Fi.Tech.FireAndForget(async () => {
                     await Task.Yield();
                     OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
                 }, async (xe) => {
