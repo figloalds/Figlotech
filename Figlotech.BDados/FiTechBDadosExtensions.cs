@@ -281,19 +281,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //            int max = 1;
         //            int current = 0;
         //        }
+        public static SelfInitializerDictionary<Type, Type> RidFieldType { get; private set; } = new SelfInitializerDictionary<Type, Type>(
+            t => ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(t).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null))
+        );
+
         static int gid = 0;
         static string sid = IntEx.GenerateShortRid();
         public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
 
             int x = 0;
+            var ridType = RidFieldType[typeof(T)];
 
             int ggid = ++gid;
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder().Append(
                         $"@r_{i}",
-                        set[i].RID
+                        Convert.ChangeType(set[i].RID, ridType)
                     )
                 );
                 if (i < set.Count - 1)

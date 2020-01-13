@@ -11,6 +11,7 @@ using System.Linq.Expressions;
 using Figlotech.Core.Interfaces;
 using System.IO;
 using Figlotech.Core;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     
@@ -98,5 +99,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ConnectionInfo transaction, 
             LoadAllArgs<T> args = null) where T : IDataObject, new();
 
+        List<FieldAttribute> GetInfoSchemaColumns();
     }
 }

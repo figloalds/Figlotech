@@ -261,6 +261,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        public List<FieldAttribute> GetInfoSchemaColumns() {
+            var dbName = this.SchemaName;
+            var map = Plugin.InfoSchemaColumnsMap;
+
+            List<FieldAttribute> retv = new List<FieldAttribute>();
+
+            return UseTransaction((conn) => {
+                using (var cmd = conn.CreateCommand(this.QueryGenerator.InformationSchemaQueryColumns(dbName))) {
+                    using (var reader = cmd.ExecuteReader()) {
+                        return Fi.Tech.ReaderToObjectListUsingMap<FieldAttribute>(reader, map);
+                    }
+                }
+            }, x=> {
+                throw x;
+            });
+
+        }
+
         public IRdbmsDataAccessor Fork() {
             return new RdbmsDataAccessor(Plugin);
         }
@@ -1190,10 +1208,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<T> conflicts = new List<T>();
             QueryReader(transaction, Plugin.QueryGenerator.QueryIds(rs), reader => {
                 while (reader.Read()) {
-                    var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == reader[0] as long? || item.RID == reader[1] as string);
+                    var vId = (long?) Convert.ChangeType(reader[0], typeof(long));
+                    var vRid = (string) Convert.ChangeType(reader[1], typeof(string));
+                    var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == vId || item.RID == vRid);
                     if (rowEquivalentObject != null) {
-                        rowEquivalentObject.Id = (reader[0] as long?) ?? rowEquivalentObject.Id;
-                        rowEquivalentObject.RID = (reader[0] as string) ?? rowEquivalentObject.RID;
+                        rowEquivalentObject.Id = vId ?? rowEquivalentObject.Id;
+                        rowEquivalentObject.RID = vRid ?? rowEquivalentObject.RID;
                         rowEquivalentObject.IsPersisted = true;
                     }
                 }
@@ -1203,7 +1223,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
             int i2 = 0;
-            int cut = 5000;
+            int cut = 500;
             int rst = 0;
             List<T> temp;
 
@@ -1719,7 +1739,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     pval = $"'{pval}'";
                 }
 
-                WriteLog($"[{accessId}] SET @{param.Key} = {pval}");
+                WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {param.Value?.GetType()?.Name}");
             }
         }
 
@@ -1847,7 +1867,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             input.IsPersisted = false;
             var persistedMap = Query(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList()));
             foreach (DataRow a in persistedMap.Rows) {
-                if (input.RID == a[1] as String) {
+                if (input.RID == (string) Convert.ChangeType(a[1], typeof(String))) {
                     input.IsPersisted = true;
                 }
             }

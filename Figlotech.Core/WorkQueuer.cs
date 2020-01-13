@@ -34,20 +34,26 @@ namespace Figlotech.Core {
         public DateTime? CompletedTime;
         public EventWaitHandle WaitHandle { get; private set; } = new EventWaitHandle(false, EventResetMode.ManualReset);
         public String Name { get; set; } = null;
+        public CancellationTokenSource JobConclusionCancellation = new CancellationTokenSource();
 
         public TaskAwaiter GetAwaiter() {
-            return (TaskObject ?? ThrowIfWorkJobIsNotEnqueued()).GetAwaiter();
+            return (TaskObject ?? GetAwaitableMethod()).GetAwaiter();
         }
 
         public void Wait() {
-            (TaskObject ?? ThrowIfWorkJobIsNotEnqueued()).Wait();
+            (TaskObject ?? GetAwaitableMethod()).Wait();
         }
 
-        private async Task ThrowIfWorkJobIsNotEnqueued() {
+        private async Task GetAwaitableMethod() {
             await Task.Yield();
-            if (this.TaskObject == null) {
-                throw new Exception("Trying to await a WorkJob that is not enqueued");
+            while(TaskObject == null) {
+                try {
+                    await Task.Delay(1000, this.JobConclusionCancellation.Token);
+                } catch (Exception x) {
+                    break;
+                }
             }
+            await TaskObject;
         }
 
         public void OnCompleted(Action continuation) {
@@ -145,7 +151,7 @@ namespace Figlotech.Core {
                         } else {
                             break;
                         }
-                        if(ActiveJobs.Count == 0 && peekJob != null) {
+                        if(ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
                             SpawnWorker2();
                         }
                     }
@@ -241,7 +247,7 @@ namespace Figlotech.Core {
             }
         }
         public async Task AccompanyJob(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
-            var wj = Enqueue(a, exceptionHandler, finished);
+            var wj = EnqueueTask(a, exceptionHandler, finished);
             await wj;
         }
 
@@ -270,36 +276,6 @@ namespace Figlotech.Core {
             //SpawnWorker(shouldForceSpawnWorker);
             job.EqueuedTime = DateTime.UtcNow;
             job.status = WorkJobStatus.Queued;
-            job.TaskObject = new Task(async () => {
-                try {
-                    job.DequeuedTime = DateTime.UtcNow;
-                    job.status = WorkJobStatus.Running;
-                    await job.action();
-                    if (job.finished != null) {
-                        await job.finished(true);
-                    }
-                } catch (Exception x) {
-                    if (job.handling != null) {
-                        await job.handling(x);
-                    } else {
-                        Fi.Tech.Throw(x);
-                    }
-                    if (job.finished != null) {
-                        await job.finished(false);
-                    }
-                } finally {
-                    job.CompletedTime = DateTime.UtcNow;
-                    job.status = WorkJobStatus.Finished;
-                    WorkDone++;
-                    lock (PendingOrExecutingJobs) {
-                        PendingOrExecutingJobs.Remove(job);
-                    }
-                    lock (Tasks) {
-                        Tasks.Remove(job.TaskObject);
-                    }
-                    SpawnWorker2();
-                }
-            });
 
             SpawnWorker2();
             QueueResetEvent.Set();
@@ -307,6 +283,7 @@ namespace Figlotech.Core {
 
             return job;
         }
+
         object selfLockSpawnWorker2 = new object();
         int i;
         private void SpawnWorker2() {
@@ -318,10 +295,39 @@ namespace Figlotech.Core {
                             ActiveJobs.RemoveAll(x => x.CompletedTime != null);
                             while(ActiveJobs.Count < this.MaxParallelTasks && WorkQueue.Count > 0) {
                                 var job = WorkQueue.Dequeue();
-                                var task = job.TaskObject;
-                                task.Start();
-                                lock(Tasks) {
-                                    Tasks.Add(task);
+                                job.TaskObject = Task.Run(async () => {
+                                    try {
+                                        job.DequeuedTime = DateTime.UtcNow;
+                                        job.status = WorkJobStatus.Running;
+                                        await job.action();
+                                        if (job.finished != null) {
+                                            await job.finished(true);
+                                        }
+                                    } catch (Exception x) {
+                                        if (job.handling != null) {
+                                            await job.handling(x);
+                                        } else {
+                                            Fi.Tech.Throw(x);
+                                        }
+                                        if (job.finished != null) {
+                                            await job.finished(false);
+                                        }
+                                    } finally {
+                                        job.CompletedTime = DateTime.UtcNow;
+                                        job.status = WorkJobStatus.Finished;
+                                        WorkDone++;
+                                        lock (PendingOrExecutingJobs) {
+                                            PendingOrExecutingJobs.Remove(job);
+                                        }
+                                        lock (Tasks) {
+                                            Tasks.Remove(job.TaskObject);
+                                        }
+                                        job.JobConclusionCancellation.Cancel();
+                                        SpawnWorker2();
+                                    }
+                                });
+                                lock (Tasks) {
+                                    Tasks.Add(job.TaskObject);
                                 }
                                 ActiveJobs.Add(job);
                             }
@@ -331,7 +337,11 @@ namespace Figlotech.Core {
             }, null);
         }
 
-        public WorkJob Enqueue(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
+        public void Enqueue(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
+            var retv = new WorkJob(a, exceptionHandler, finished);
+            var t = Enqueue(retv);
+        }
+        public WorkJob EnqueueTask(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
             var retv = new WorkJob(a, exceptionHandler, finished);
             return Enqueue(retv);
         }

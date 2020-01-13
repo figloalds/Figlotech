@@ -94,7 +94,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 return "VARCHAR(128)";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             var nome = field.Name;
-            String tipo = GetDatabaseType(field, info);
+            String tipo = GetDatabaseTypeWithLength(field, info);
             if (info.Type != null && info.Type.Length > 0)
                 tipo = info.Type;
             var options = "";
@@ -118,6 +118,19 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return $"{nome} {tipo} {options}";
         }
 
+        public String GetDatabaseTypeWithLength(MemberInfo field, FieldAttribute info = null) {
+            String retv = GetDatabaseType(field, info);
+            if (info.Type != null && info.Type.Length > 0)
+                retv = info.Type;
+            if (retv == "VARCHAR" || retv == "VARBINARY") {
+                retv += $"({(info.Size > 0 ? info.Size : 100)})";
+            }
+            if (retv == "FLOAT" || retv == "DOUBLE" || retv == "DECIMAL") {
+                retv += "(16,3)";
+            }
+            return retv;
+        }
+
         public String GetDatabaseType(MemberInfo field, FieldAttribute info = null) {
             if (info == null)
                 foreach (var att in field.GetCustomAttributes())
@@ -125,7 +138,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                         info = (FieldAttribute)att; break;
                     }
             if (info == null)
-                return "VARCHAR(100)";
+                return "VARCHAR";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             string tipoDados;
             if (Nullable.GetUnderlyingType(typeOfField) != null)
@@ -135,13 +148,13 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (typeOfField.IsEnum) {
                 return "INT";
             }
-            String type = "VARCHAR(20)";
+            String type = "VARCHAR";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
-                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
+                        type = $"VARCHAR";
                         break;
                     case "int":
                     case "int32":
@@ -157,13 +170,13 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                         break;
                     case "bool":
                     case "boolean":
-                        type = $"TINYINT(1)";
+                        type = $"TINYINT";
                         break;
                     case "float":
                     case "double":
                     case "single":
                     case "decimal":
-                        type = $"FLOAT(16,3)";
+                        type = $"FLOAT";
                         break;
                     case "datetime":
                         type = $"DATETIME";
@@ -454,9 +467,15 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
             return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
         }
+        public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
+        }
+        public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
+        }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP CONSTRAINT {constraint};");
         }
         public IQueryBuilder DropColumn(string table, string column) {
             return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column};");

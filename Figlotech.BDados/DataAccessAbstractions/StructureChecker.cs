@@ -7,6 +7,7 @@ using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -29,6 +30,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public string REFERENCED_COLUMN_NAME { get => RefColumn; set => RefColumn = value; }
         public string REFERENCED_TABLE_NAME { get => RefTable; set => RefTable = value; }
         public string CONSTRAINT_NAME { get => KeyName; set => KeyName = value; }
+        public string CONSTRAINT_TYPE { get; set; }
 
         public String Table { get; set; }
         public String Column { get; set; }
@@ -45,7 +47,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     case ScStructuralKeyType.Index:
                         return $"{(IsUnique ? "uk_" : "idx_")}{Table}_{Column}".ToLower();
                     case ScStructuralKeyType.PrimaryKey:
-                        return "PRIMARY";
+                        return $"pk_{Table.ToLower()}";
                 }
                 return "";
             }
@@ -121,7 +123,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Drop unique {_table}.{_constraint}";
+            return $"Drop index {_table}.{_constraint}";
         }
 
     }
@@ -173,7 +175,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Create unique key {keyInfo.Table}.{keyInfo.KeyName}";
+            return $"Create {(keyInfo.IsUnique ? "UNIQUE KEY" : "INDEX" )} {keyInfo.Table}.{keyInfo.KeyName}";
         }
     }
 
@@ -359,7 +361,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _column.AllowNull = true;
             return Exec(DataAccessor,
                 Qb.Fmt($@"
-                    ALTER TABLE {_table} CHANGE COLUMN {_column.Name} {_column.Name} {_column.Type} DEFAULT NULL
+                    ALTER TABLE {_table} ALTER COLUMN {_column.Name} DROP NOT NULL
+                ")
+            ) + Exec(DataAccessor,
+                Qb.Fmt($@"
+                    ALTER TABLE {_table} ALTER COLUMN {_column.Name} SET DEFAULT NULL
                 ")
             );
             //Exec(DataAccessor, Qb.Fmt(
@@ -378,26 +384,49 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class AlterColumnDefinitionScAction : AbstractIStructureCheckNecessaryAction {
+    public class AlterColumnDataTypeScAction : AbstractIStructureCheckNecessaryAction
+    {
         String _table;
-        String _column;
-        MemberInfo _columnMember;
+        MemberInfo _member;
+        FieldAttribute _fieldAttribute;
 
-        public AlterColumnDefinitionScAction(
+        public AlterColumnDataTypeScAction(
             IRdbmsDataAccessor dataAccessor,
-            string table, string column, MemberInfo columnMember, string reason) : base(dataAccessor, reason) {
+            string table, MemberInfo field, FieldAttribute fieldAttribute, string reason) : base(dataAccessor, reason) {
             _table = table;
-            _column = column;
-            _columnMember = columnMember;
+            _member = field;
+            _fieldAttribute = fieldAttribute;
         }
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
-            return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.AlterColumnDataType(_table, _member, _fieldAttribute));
         }
 
         public override string ToString() {
-            return $"Change column definition of {_columnMember.Name}";
+            return $"Change column type of {_member.Name}";
+        }
+    }
+
+    public class AlterColumnNullabilityScAction : AbstractIStructureCheckNecessaryAction
+    {
+        String _table;
+        MemberInfo _member;
+        FieldAttribute _fieldAttribute;
+
+        public AlterColumnNullabilityScAction(
+            IRdbmsDataAccessor dataAccessor,
+            string table, MemberInfo field, FieldAttribute fieldAttribute, string reason) : base(dataAccessor, reason) {
+            _table = table;
+            _member = field;
+            _fieldAttribute = fieldAttribute;
+        }
+
+        public override int Execute(IRdbmsDataAccessor DataAccessor) {
+            return Exec(DataAccessor, DataAccessor.QueryGenerator.AlterColumnNullability(_table, _member, _fieldAttribute));
+        }
+
+        public override string ToString() {
+            return $"Change column nulability of {_member.Name}";
         }
     }
 
@@ -489,27 +518,35 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (a.Type != n.Type)
                 return false;
-            switch(a.Type) {
-                case ScStructuralKeyType.Index:
-                    return
-                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
-                            a.Table.ToLower() == n.Table.ToLower() &&
-                            a.Column.ToLower() == n.Column.ToLower()
-                        );
-                case ScStructuralKeyType.ForeignKey:
-                    return
-                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
-                            a.Table.ToLower() == n.Table.ToLower() &&
-                            a.Column.ToLower() == n.Column.ToLower() &&
-                            a.RefTable.ToLower() == n.RefTable.ToLower() &&
-                            a.RefColumn.ToLower() == n.RefColumn.ToLower()
-                        );
-                case ScStructuralKeyType.PrimaryKey:
-                    return
-                        (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
-                            a.Table.ToLower() == n.Table.ToLower() &&
-                            a.Column.ToLower() == n.Column.ToLower()
-                        );
+            if(a.Type == ScStructuralKeyType.Index && a.Column == null) {
+                a.Column = a.CONSTRAINT_NAME.Substring(a.CONSTRAINT_NAME.LastIndexOf("_") + 1);
+            }
+            try {
+                switch(a.Type) {
+                    case ScStructuralKeyType.Index:
+                        return
+                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
+                                a.Table.ToLower() == n.Table.ToLower() &&
+                                a.Column.ToLower() == n.Column.ToLower()
+                            );
+                    case ScStructuralKeyType.ForeignKey:
+                        return
+                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                                a.Table.ToLower() == n.Table.ToLower() &&
+                                a.Column.ToLower() == n.Column.ToLower() &&
+                                a.RefTable.ToLower() == n.RefTable.ToLower() &&
+                                a.RefColumn.ToLower() == n.RefColumn.ToLower()
+                            );
+                    case ScStructuralKeyType.PrimaryKey:
+                        return
+                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                                a.Table.ToLower() == n.Table.ToLower() &&
+                                a.Column.ToLower() == n.Column.ToLower()
+                            );
+                }
+            } catch(Exception x) {
+                Debugger.Break();
+                throw new Exception($"Error comparing Key Definitions {a.ToString()} | {n.ToString()}", x);
             }
             throw new Exception("Something supposedly impossible happened within StructureChecker internal logic.");
         }
@@ -599,7 +636,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         keys.Add(new ScStructuralLink {
                             Column = Fi.Tech.GetIdColumn(type),
                             Type = ScStructuralKeyType.PrimaryKey,
-                            KeyName = "PRIMARY",
+                            KeyName = $"pk_{type.Name.ToLower()}",
                             IsUnique = true,
                             Table = type.Name
                         });
@@ -672,20 +709,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var sizesMatch = !typesToCheckSize.Contains(datatype) || length == fieldAtt.Size;
                             var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
                             //var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
-                            if (
-                                columnIsNullable != fieldAtt.AllowNull ||
-                                !sizesMatch ||
-                                datatype.ToUpper() != dbDefinition.ToUpper()
-                                ) {
+                            if (columnIsNullable != fieldAtt.AllowNull) {
+                                yield return new AlterColumnNullabilityScAction(DataAccessor, type.Name, field, fieldAtt, $"Column Nullability mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
+                            }
+                            if (!sizesMatch || datatype.ToUpper() != dbDefinition.ToUpper()) {
                                 foreach(var a in EvaluateForColumnDekeyal(type.Name, field.Name, keys)) {
                                     yield return a;
                                 }
                                 if(columnIsNullable && !fieldAtt.AllowNull && fieldAtt.DefaultValue != null) {
                                     yield return new UpdateExNullableColumnScAction(DataAccessor, type.Name, field.Name, fieldAtt.DefaultValue, $"Need to update formerly nullable column {type.Name}.{field.Name} with the new default value");
                                 }
-                                yield return new AlterColumnDefinitionScAction(DataAccessor, type.Name, field.Name, field, $"Definition mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
-                            } else {
-
+                                yield return new AlterColumnDataTypeScAction(DataAccessor, type.Name, field, fieldAtt, $"Definition mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
                             }
                         }
 
@@ -716,7 +750,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     foreach(var action in EvaluateForColumnDekeyal(c.Table, c.Name, keys)) {
                         yield return action;
                     }
-                    yield return new DropColumnScAction(DataAccessor, c.Table, c, type, "Column does not exist in structure");
+                    if(!c.AllowNull || c.DefaultValue != null) {
+                        yield return new DropColumnScAction(DataAccessor, c.Table, c, type, "Column does not exist in structure");
+                    }
                 }
             }
 
@@ -733,7 +769,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<Exception> exces = new List<Exception>();
             while (enny.MoveNext()) {
                 var thisAction = enny.Current;
-                var t = wq.Enqueue(async () => {
+                wq.Enqueue(async () => {
                     await Task.Yield();
                     retv += thisAction.Execute(DataAccessor);
                     //lock(wq) {
@@ -760,7 +796,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public IEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
-            var columns = GetInfoSchemaColumns();
+            var columns = DataAccessor.GetInfoSchemaColumns();
+            Console.WriteLine("Evaluating Necessary Actions:");
+            Console.WriteLine($"{tables.Count} tables, {columns.Count} columns, {keys.Count} keys");
+
             TablesToCreate.Clear();
             foreach (var a in EvaluateLegacyKeys(keys))
                 yield return a;
@@ -793,11 +832,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var constraint = new ScStructuralLink();
 
-                    if (uk != null && uk.Unique) {
+                    if (uk != null && (uk.Unique || uk.Index)) {
                         yield return new ScStructuralLink {
                             Table = t.Name,
                             Column = f.Name,
-                            IsUnique = true,
+                            IsUnique = uk.Unique,
                             Type = ScStructuralKeyType.Index,
                         };
                     }
@@ -814,6 +853,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
                     if (fk != null) {
+                        if (fk.RefColumn == null) {
+                            fk.RefColumn = FiTechBDadosExtensions.RidColumnOf[fk.RefType];
+                        }
+                        if(fk.RefColumn == null) {
+                            throw new Exception($"Trying to create relation {fk.ToString()} but the target type {fk.RefType.Name} does not have a [ReliableId]");
+                        }
                         constraint = ScStructuralLink.FromFkAttribute(fk);
                         constraint.Table = t.Name;
                         constraint.Column = f.Name;
@@ -971,6 +1016,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var needFK = GetNecessaryLinks().ToList();
 
             needFK.RemoveAll(a => keys.Any(b => CheckMatch(a, b)));
+            needFK.Sort((a, b) => {
+                if (a.Type == ScStructuralKeyType.PrimaryKey && b.Type != ScStructuralKeyType.PrimaryKey) {
+                    return -1;
+                }
+                if (a.Type != ScStructuralKeyType.PrimaryKey && b.Type == ScStructuralKeyType.PrimaryKey) {
+                    return 1;
+                }
+
+                return 0;
+            });
 
             foreach (var fk in needFK) {
                 if (!keys.Any(n => CheckMatch(fk, n))) {
@@ -1008,22 +1063,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .QueryGenerator
                     .InformationSchemaQueryKeys(dbName)
             );
-            fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
-            fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
+            //fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
+            //fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
             retv.AddRange(fk);
             var idx = DataAccessor.Query<ScStructuralLink>(
                  DataAccessor
                      .QueryGenerator
                      .InformationSchemaIndexes(dbName)
              );
-            idx.ForEach(a => {
-                a.Type = ScStructuralKeyType.Index;
-                a.IsUnique = !a.IsUnique;
-                if (a.KeyName == "PRIMARY") {
-                    a.Type = ScStructuralKeyType.PrimaryKey;
+            retv.AddRange(idx.Where(x=> !retv.Any(b=> b.CONSTRAINT_NAME == x.INDEX_NAME)));
+            retv.ForEach(a => {
+                switch (a.CONSTRAINT_TYPE) {
+                    case "PRIMARY KEY":
+                        a.Type = ScStructuralKeyType.PrimaryKey;
+                        break;
+                    case "FOREIGN KEY":
+                        a.Type = ScStructuralKeyType.ForeignKey;
+                        break;
+                    case "UNIQUE":
+                        a.Type = ScStructuralKeyType.Index;
+                        a.IsUnique = true;
+                        break;
+                    default:
+                        a.Type = ScStructuralKeyType.Index;
+                        break;
                 }
             });
-            retv.AddRange(idx);
             var wtNames = workingTypes.Select(wt => wt.Name.ToLower());
             retv.RemoveAll(r => !wtNames.Contains(r.Table.ToLower()));
             return retv;
@@ -1037,12 +1102,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 .Columns["TABLE_NAME"]
                 .ToEnumerable<String>()
                 .ToList();
-        }
-        private List<FieldAttribute> GetInfoSchemaColumns() {
-            var dbName = DataAccessor.SchemaName;
-            return DataAccessor.Query<FieldAttribute>(
-                    DataAccessor.QueryGenerator.InformationSchemaQueryColumns(dbName)
-            );
         }
 
         public async Task CheckStructureAsync(

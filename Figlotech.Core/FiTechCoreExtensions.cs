@@ -251,7 +251,7 @@ namespace Figlotech.Core {
                     }
                 }
                 if(shouldRequestNtpTime) {
-                    Fi.Tech.FireTask(async () => {
+                    Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServer("pool.ntp.org");
                     });
@@ -472,6 +472,22 @@ namespace Figlotech.Core {
             using (var md5 = MD5.Create()) {
                 return Convert.ToBase64String(md5.ComputeHash(stream));
             }
+        }
+
+        public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, Dictionary<string, string> map) where T: new() {
+            var retv = new List<T>();
+            var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
+            while (reader.Read()) {
+                var field = new T();
+                var refl = field.AsReflectable();
+                foreach (var kvp in map) {
+                    if (readerNames.Contains(kvp.Value.ToUpper())) {
+                        refl[kvp.Key] = reader[kvp.Value];
+                    }
+                }
+                retv.Add(field);
+            }
+            return retv;
         }
 
         public static Tuple<List<MemberInfo>, List<DataColumn>> MapMeta(this Fi _selfie, Type t, DataTable dt) {
@@ -1389,19 +1405,17 @@ namespace Figlotech.Core {
                     try {
                         handler?.Invoke(x);
                     } catch (Exception y) {
-                        Throw(_selfie, y);
+                        throw y;
+                        //Throw(_selfie, y);
                     }
                     then?.Invoke(false);
                 } finally {
-                    try {
-                    } catch (Exception y) {
-                        Throw(_selfie, y);
-                    }
+
                 }
                 return null;
             }
 
-            var wj = FiTechRAF.Enqueue(job, handler, then);
+            var wj = FiTechRAF.EnqueueTask(job, handler, then);
             wj.Name = name;
             FiTechRAF.Start();
             return wj;
@@ -1421,9 +1435,13 @@ namespace Figlotech.Core {
 
         public static async Task<T> Promisify<T>(this Fi _selfie, Func<T> fn) {
             T retv = default(T);
-            await Fi.Tech.FireTask(async () => {
-                await Task.Yield();
-                retv = fn();
+            await Task.Run(async () => {
+                try {
+                    await Task.Yield();
+                    retv = fn();
+                } catch (Exception x) {
+                    throw x;
+                }
             });
             return retv;
         }

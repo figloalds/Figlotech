@@ -14,6 +14,8 @@ namespace Figlotech.BDados.DataAccessAbstractions
         int CommandTimeout { get; }
         string SchemaName { get; }
 
+        Dictionary<string, string> InfoSchemaColumnsMap { get; }
+
         object ProcessParameterValue(object value);
     }
 }

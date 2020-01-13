@@ -36,7 +36,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         }
 
         public ForeignKeyAttribute() { }
-        public ForeignKeyAttribute(Type foreignType, String foreignColumn = "RID")
+        public ForeignKeyAttribute(Type foreignType, String foreignColumn = null)
         {
             RefType = foreignType;
             RefTable = RefType.Name;

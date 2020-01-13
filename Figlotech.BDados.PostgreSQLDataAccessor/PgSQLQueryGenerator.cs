@@ -91,9 +91,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 return "VARCHAR(128)";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             var nome = field.Name;
-            String tipo = GetDatabaseType(field, info);
-            if (info.Type != null && info.Type.Length > 0)
-                tipo = info.Type;
+            String tipo = GetDatabaseTypeWithLength(field, info);
             var options = "";
             if (info.Options != null && info.Options.Length > 0) {
                 options = info.Options;
@@ -139,6 +137,20 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return Fi.Tech.CheapSanitize(input);
         }
 
+        public String GetDatabaseTypeWithLength(MemberInfo field, FieldAttribute info = null) {
+            String retv = GetDatabaseType(field, info);
+            if (info.Type != null && info.Type.Length > 0)
+                retv = info.Type;
+            if (retv == "VARCHAR" || retv == "VARBINARY") {
+                retv += $"({(info.Size > 0 ? info.Size : 100)})";
+            }
+            if (retv == "FLOAT" || retv == "DOUBLE" || retv == "DECIMAL" || retv == "NUMERIC") {
+                retv += "(16,3)";
+            }
+
+            return retv;
+        }
+
         /// <summary>
         /// deprecated
         /// Must implement this on each rdbms query generator
@@ -153,7 +165,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                         info = (FieldAttribute)att; break;
                     }
             if (info == null)
-                return "VARCHAR(100)";
+                return "VARCHAR";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             string tipoDados;
             if (Nullable.GetUnderlyingType(typeOfField) != null)
@@ -161,40 +173,43 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             else
                 tipoDados = typeOfField.Name;
             if (typeOfField.IsEnum) {
-                return "INT";
+                return "INT4";
             }
-            String type = "VARCHAR(20)";
+            String type = "VARCHAR";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
-                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
+                        type = $"VARCHAR";
                         break;
                     case "int":
                     case "int32":
-                        type = $"INT";
+                        type = $"INT4";
                         break;
                     case "short":
                     case "int16":
-                        type = $"SMALLINT";
+                        type = $"INT2";
                         break;
                     case "long":
                     case "int64":
-                        type = $"BIGINT";
+                        type = $"INT8";
                         break;
                     case "bool":
                     case "boolean":
-                        type = $"BOOLEAN";
+                        type = $"BOOL";
                         break;
                     case "float":
                     case "double":
                     case "single":
                     case "decimal":
-                        type = $"DECIMAL(16,3)";
+                        type = $"NUMERIC";
+                        break;
+                    case "byte[]":
+                        type = $"BLOB";
                         break;
                     case "datetime":
-                        type = $"TIMEsTAMP";
+                        type = $"TIMESTAMP";
                         break;
                 }
             }
@@ -388,7 +403,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 return null;
             }
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"UPDATE IGNORE {typeof(T).Name} ");
+            Query.Append($"UPDATE {typeof(T).Name} ");
             Query.Append("SET ");
 
             // -- 
@@ -400,7 +415,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
                     string sid = IntEx.GenerateShortRid();
-                    Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
+                    Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", Convert.ChangeType(a.RID, FiTechBDadosExtensions.RidFieldType[a.GetType()]), ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {
@@ -474,33 +489,57 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder InformationSchemaQueryTables(String schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.tables WHERE TABLE_CATALOG=@1 AND TABLE_SCHEMA='public';", schema);
         }
         public IQueryBuilder InformationSchemaQueryColumns(String schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_CATALOG=@1 AND TABLE_SCHEMA='public';", schema);
         }
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append(
+                @"SELECT
+	                tc.*,
+                    kcu.COLUMN_NAME, 
+                    kcu.table_schema AS REFERENCED_TABLE_SCHEMA,
+                    kcu.table_name AS REFERENCED_TABLE_NAME,
+                    kcu.column_name AS REFERENCED_COLUMN_NAME
+                FROM 
+                    information_schema.table_constraints AS tc 
+                    LEFT JOIN information_schema.key_column_usage AS kcu
+                      ON tc.constraint_name = kcu.constraint_name
+                      AND tc.table_schema = kcu.table_schema
+                    LEFT JOIN information_schema.constraint_column_usage AS ccu
+                      ON ccu.constraint_name = tc.constraint_name AND
+                        ccu.table_name = tc.table_name
+                        AND ccu.table_schema = tc.table_schema AND tc.CONSTRAINT_TYPE='FOREIGN KEY'
+  
+                WHERE tc.CONSTRAINT_CATALOG=@1 AND tc.CONSTRAINT_SCHEMA='public' AND tc.CONSTRAINT_TYPE!='CHECK';", schema);
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE INDEX_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append(
+                @"SELECT *, relname AS TABLE_NAME, indexrelname AS CONSTRAINT_NAME, pg_size_pretty(pg_relation_size(indexrelname::text))
+                FROM pg_stat_all_indexes
+                WHERE schemaname = 'public';");
         }
 
-
-
         public IQueryBuilder RenameTable(string tabName, string newName) {
-            return new QueryBuilder().Append($"RENAME TABLE {tabName} TO {newName};");
+            return new QueryBuilder().Append($"ALTER TABLE {tabName} RENAME TO {newName};");
         }
 
         public IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions) {
             return new QueryBuilder().Append($"UPDATE {table} SET {column}=@value WHERE ").Append(conditions);
         }
-        public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
+        public IQueryBuilder RenameColumn(string table, string column, string newName) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} RENAME COLUMN {column} TO {newName};");
+        }
+        public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)};");
+        }
+        public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} {(fieldAttribute.AllowNull ? "DROP" : "SET")} NOT NULL;");
         }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP FOREIGN KEY {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP CONSTRAINT {constraint};");
         }
         public IQueryBuilder DropColumn(string table, string column) {
             return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column};");
@@ -509,7 +548,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint};");
         }
         public IQueryBuilder DropIndex(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP INDEX {constraint};");
+            return new QueryBuilder().Append($"DROP INDEX {constraint};");
         }
         public IQueryBuilder DropPrimary(string target, string constraint) {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP PRIMARY KEY;");
@@ -520,7 +559,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder AddIndex(string table, string column, string constraintName) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX {constraintName} ({column});");
+            return new QueryBuilder().Append($"CREATE INDEX {constraintName} ON {table} ({column});");
         }
         public IQueryBuilder AddForeignKey(string table, string column, string refTable, string refColumn, string constraintName) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} FOREIGN KEY ({column}) REFERENCES {refTable}({refColumn})");
@@ -529,17 +568,17 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"alter table {table} ADD INDEX {column} ({column});");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX {column} ({column});");
         }
         public IQueryBuilder AddUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} UNIQUE ({column});");
+            return new QueryBuilder().Append($"CREATE UNIQUE INDEX {constraintName} ON {table} ({column});");
         }
         public IQueryBuilder AddPrimaryKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} PRIMARY KEY({column})");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ADD CONSTRAINT {constraintName} PRIMARY KEY ({column})");
         }
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
@@ -585,8 +624,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             var type = rs.FirstOrDefault()?.GetType()??typeof(T);
             var id = FiTechBDadosExtensions.IdColumnOf[type];
             var rid = FiTechBDadosExtensions.RidColumnOf[type];
+            var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));
 
-            return Qb.Fmt($"SELECT {id}, {rid} FROM {type.Name} WHERE") + Qb.In(rid, rs, i => i.RID);
+            return Qb.Fmt($"SELECT {id} AS Id, {rid} AS RID FROM {type.Name} WHERE") + Qb.In(rid, rs, i => Convert.ChangeType(i.RID, ridType));
         }
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {

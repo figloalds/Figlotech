@@ -45,13 +45,14 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public string COLUMN_NAME { get => Name; set => Name = value; }
         public object COLUMN_DEFAULT { get => DefaultValue; set => DefaultValue = value; }
         public string IS_NULLABLE { get => AllowNull ? "YES" : "NO"; set => AllowNull = value?.ToLower() == "yes"; }
-        public string COLUMN_TYPE { get => Type; set => Type = value; }
+        public string DATA_TYPE { get => Type; set => Type = value; }
         public long CHARACTER_MAXIMUM_LENGTH { get => Size; set => Size = value; }
         public int NUMERIC_PRECISION { get => Precision; set => Precision = value; }
         public string CHARACTER_SET_NAME { get => Charset; set => Charset = value; }
         public string COLLATION_NAME { get => Collation; set => Collation = value; }
         public string COLUMN_COMMENT { get => Comment; set => Comment = value; }
         public string GENERATION_EXPRESSION { get => GenerationExpression; set => GenerationExpression = value; }
+        public bool Index { get; set; }
 
         public FieldAttribute(string tipo, string opcoes)
         {

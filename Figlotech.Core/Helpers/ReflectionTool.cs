@@ -121,7 +121,7 @@ namespace Figlotech.Core.Helpers {
             return member.GetCustomAttribute<T>();
         }
 
-        private static SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>> MemberCacheFromString { get; set; } = new SelfInitializerDictionary<Type, Dictionary<string, MemberInfo>>(
+        private static SelfInitializerDictionary<Type, LenientDictionary<string, MemberInfo>> MemberCacheFromString { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, MemberInfo>>(
             t => {
                 if (t == null) return null;
                 var retv = new Dictionary<string, MemberInfo>();

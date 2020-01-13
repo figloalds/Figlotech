@@ -29,6 +29,20 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
         public string SchemaName => Config.Schema;
 
+        public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {
+            { "TABLE_NAME"              , "TABLE_NAME"                  },
+            { "COLUMN_NAME"             , "COLUMN_NAME"                 },
+            { "COLUMN_DEFAULT"          , "COLUMN_DEFAULT"              },
+            { "IS_NULLABLE"             , "IS_NULLABLE"                 },
+            { "DATA_TYPE"               , "DATA_TYPE"                 },
+            { "CHARACTER_MAXIMUM_LENGTH", "CHARACTER_MAXIMUM_LENGTH"    },
+            { "NUMERIC_PRECISION"       , "NUMERIC_PRECISION"           },
+            { "CHARACTER_SET_NAME"      , "CHARACTER_SET_NAME"          },
+            { "COLLATION_NAME"          , "COLLATION_NAME"              },
+            { "COLUMN_COMMENT"          , "COLUMN_COMMENT"              },
+            { "GENERATION_EXPRESSION"   , "GENERATION_EXPRESSION"       },
+        };
+
         public IDbConnection GetNewConnection() {
             return new SqliteConnection(Config.GetConnectionString());
         }

@@ -140,6 +140,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             CreateTable.Append(" );");
             return CreateTable;
         }
+        
+
 
         /// <summary>
         /// deprecated
@@ -155,9 +157,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 return "VARCHAR(128)";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             var nome = field.Name;
-            String tipo = GetDatabaseType(field, info);
-            if (info.Type != null && info.Type.Length > 0)
-                tipo = info.Type;
+            String tipo = GetDatabaseTypeWithLength(field, info);
             var options = "";
             if (info.Options != null && info.Options.Length > 0) {
                 options = info.Options;
@@ -166,6 +166,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     options += " NOT NULL";
                 } else if (Nullable.GetUnderlyingType(typeOfField) == null && typeOfField.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
+                }
+                if(info.Unsigned) {
+                    options += " UNSIGNED";
                 }
                 if (info.Unique)
                     options += " UNIQUE";
@@ -179,6 +182,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return $"{nome} {tipo} {options}";
         }
 
+        public String GetDatabaseTypeWithLength(MemberInfo field, FieldAttribute info = null) {
+            String retv = GetDatabaseType(field, info);
+            if (info.Type != null && info.Type.Length > 0)
+                retv = info.Type;
+            if (retv == "VARCHAR" || retv == "VARBINARY") {
+                retv += $"({(info.Size > 0 ? info.Size : 100)})";
+            }
+            if (retv == "FLOAT" || retv == "DOUBLE" || retv == "DECIMAL") {
+                retv += "(16,3)";
+            }
+            return retv;
+        }
+
         public String GetDatabaseType(MemberInfo field, FieldAttribute info = null) {
             if (info == null)
                 foreach (var att in field.GetCustomAttributes())
@@ -186,7 +202,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                         info = (FieldAttribute)att; break;
                     }
             if (info == null)
-                return "VARCHAR(100)";
+                return "VARCHAR";
             var typeOfField = ReflectionTool.GetTypeOf(field);
             string tipoDados;
             if (Nullable.GetUnderlyingType(typeOfField) != null)
@@ -194,49 +210,49 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             else
                 tipoDados = typeOfField.Name;
             if (typeOfField.IsEnum) {
-                return "INT(11)";
+                return "INT";
             }
-            String type = "VARCHAR(20)";
+            String type = "VARCHAR";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
                 switch (tipoDados.ToLower()) {
                     case "string":
-                        type = $"VARCHAR({(info.Size > 0 ? info.Size : 128)})";
+                        type = $"VARCHAR";
                         break;
                     case "short":
                     case "int16":
-                        type = $"SMALLINT(3)";
+                        type = $"SMALLINT";
                         break;
                     case "ushort":
                     case "uint16":
-                        type = $"SMALLINT(3) UNSIGNED";
+                        type = $"SMALLINT";
                         break;
                     case "int":
                     case "int32":
-                        type = $"INT(11)";
+                        type = $"INT";
                         break;
                     case "uint":
                     case "uint32":
-                        type = $"INT(11) UNSIGNED";
+                        type = $"INT";
                         break;
                     case "long":
                     case "int64":
-                        type = $"BIGINT(20)";
+                        type = $"BIGINT";
                         break;
                     case "ulong":
                     case "uint64":
-                        type = $"BIGINT(20) UNSIGNED";
+                        type = $"BIGINT";
                         break;
                     case "bool":
                     case "boolean":
-                        type = $"TINYINT(1)";
+                        type = $"TINYINT";
                         break;
                     case "float":
                     case "double":
                     case "single":
                     case "decimal":
-                        type = $"DECIMAL(20,3)";
+                        type = $"DECIMAL";
                         break;
                     case "byte[]":
                         type = $"BLOB";
@@ -571,7 +587,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
         }
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append(
+                @"SELECT
+                    tc.*,
+                    kcu.COLUMN_NAME, 
+	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_schema ELSE NULL END) AS REFERENCED_TABLE_SCHEMA,
+	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_name ELSE NULL END) AS REFERENCED_TABLE_NAME,
+	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.column_name ELSE NULL END) AS REFERENCED_COLUMN_NAME
+                FROM 
+                    information_schema.table_constraints AS tc 
+                    LEFT JOIN information_schema.key_column_usage AS kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                        AND tc.table_name = kcu.table_name
+
+                WHERE tc.CONSTRAINT_SCHEMA=@1;", schema
+            );
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
             return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE TABLE_SCHEMA=@1;", schema);
@@ -585,7 +616,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder().Append($"UPDATE {table} SET {column}=@value WHERE ").Append(conditions);
         }
         public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {newDefinition};");
+            return new QueryBuilder().Append($"ALTER TABLE {table} RENAME {column} TO {newDefinition};");
+        }
+        public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
+        }
+        public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
         }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {

@@ -308,7 +308,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             workingList.RemoveAll(f => Excludes.Any(excl=> CheckMatch(f.RelativePath, excl)));
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {
-                var w = wq.Enqueue(async () => {
+                wq.Enqueue(async () => {
                     await Task.Yield();
                     if (a.RelativePath == HASHLIST_FILENAME || Excludes.Any(excl => CheckMatch(a.RelativePath, excl))) {
                         return;
@@ -480,7 +480,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             workedFiles = 0;
             var files = await EnumerateFilesForMirroring(origin, destination, path, way);
             foreach(var f in files) {
-                var t = wq.Enqueue(async () => {
+                wq.Enqueue(async () => {
                     
                     await Task.Yield();
                     OnFileStaged?.Invoke(f.RelativePath);
