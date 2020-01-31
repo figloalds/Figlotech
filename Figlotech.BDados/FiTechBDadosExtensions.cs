@@ -8,6 +8,7 @@ using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -134,8 +135,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 T obj = new T();
                 refl.Slot(obj);
                 for (int i = 0; i < existingKeys.Count; i++) {
-                    var o = reader.GetValue(existingKeys[i].Item1);
-                    refl[existingKeys[i].Item2] = Fi.Tech.ProperMapValue(o);
+                    try {
+                        var o = reader.GetValue(existingKeys[i].Item1);
+                        refl[existingKeys[i].Item2] = Fi.Tech.ProperMapValue(o);
+                    } catch(Exception x) {
+                        Debugger.Break();
+                        throw x;
+                    }
                 }
                 yield return (T) refl.Retrieve();
             }

@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Figlotech.Core {
@@ -33,9 +34,13 @@ namespace Figlotech.Core {
                 }
 
                 try {
-
-                    var di = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System)));
-
+                    DirectoryInfo rootDir;
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                        var di = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System)));
+                        rootDir = di.RootDirectory;
+                    } else {
+                        rootDir = new DirectoryInfo("/");
+                    }
                     var lbif = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(i => i.NetworkInterfaceType == NetworkInterfaceType.Loopback);
                     var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
 
@@ -62,7 +67,7 @@ namespace Figlotech.Core {
 
                     }), 32);
                     var id = lbif.Id.RegExReplace("[^0-9A-F]", "");
-                    var segmentA = BitConverter.GetBytes(di.RootDirectory.CreationTimeUtc.Ticks);
+                    var segmentA = BitConverter.GetBytes(rootDir.CreationTimeUtc.Ticks);
                     var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(id), 8);
                     var segmentC = new byte[32 - (segmentA.Length + segmentB.Length)];
                     segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng.Next(256))));

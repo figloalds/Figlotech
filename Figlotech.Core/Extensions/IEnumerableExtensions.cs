@@ -106,6 +106,19 @@ namespace System
             });
         }
 
+        public static int GetIndexOf<T>(this IEnumerable<T> self, T obj) {
+            var enny = self.GetEnumerator();
+            int i = 0;
+            while(enny.MoveNext()) {
+                if (enny.Current?.Equals(obj) ?? false) {
+                    return i;
+                } else {
+                    i++;
+                }
+            }
+            return -1;
+        }
+
         public static IEnumerable<T> PickRandom<T>(this IEnumerable<T> me, int count) {
             var arr = me.ToArray();
             var r = new Random();

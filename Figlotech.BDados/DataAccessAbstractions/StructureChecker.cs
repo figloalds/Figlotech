@@ -274,7 +274,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Create column {_columnMember.Name}";
+            return $"Create column {_table}.{_columnMember.Name}";
         }
     }
 
@@ -403,7 +403,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Change column type of {_member.Name}";
+            return $"Change column type of {_table}.{_member.Name}";
         }
     }
 
@@ -426,7 +426,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Change column nulability of {_member.Name}";
+            return $"Change column nulability of {_table}.{_member.Name} to {(_fieldAttribute.AllowNull ? "ALLOW NULL" : "NOT NULL")}";
         }
     }
 
@@ -626,7 +626,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             foreach (var a in EvaluateForFullTableDekeyal(old.Value, tables, keys)) {
                                 yield return a;
                             }
-                            yield return new RenameTableScAction(DataAccessor, old.Value, old.Key, $"Table OldName attribute and structure state matches for {old.Value} -> {old.Key}");
+                            yield return new RenameTableScAction(
+                                DataAccessor, 
+                                old.Value, 
+                                old.Key, 
+                                $"Table OldName attribute and structure state matches for {old.Value} -> {old.Key}"
+                            );
                             renamed = true;
                             break;
                         }
@@ -640,7 +645,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             IsUnique = true,
                             Table = type.Name
                         });
-                        yield return new CreateTableScAction(DataAccessor, type, $"Table {type.Name} does not exit in the structure state.");
+                        yield return new CreateTableScAction(
+                            DataAccessor, 
+                            type, 
+                            $"Table {type.Name} does not exit in the structure state."
+                        );
                     }
                 }
             }
@@ -681,13 +690,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     foreach (var a in EvaluateForColumnDekeyal(type.Name, ona.Name, keys)) {
                                         yield return a;
                                     }
-                                    yield return new RenameColumnScAction(DataAccessor, type.Name, ona.Name, field, $"OldName attribute matches with structure state {type.Name}::{ona.Name} -> {field}");
+                                    yield return new RenameColumnScAction(
+                                        DataAccessor, 
+                                        type.Name, 
+                                        ona.Name, 
+                                        field, 
+                                        $"OldName attribute matches with structure state {type.Name}::{ona.Name} -> {field}"
+                                    );
                                 }
                             }
                         }
 
                         if (!oldExists && !TablesToCreate.Contains(type.Name.ToLower())) {
-                            yield return new CreateColumnScAction(DataAccessor, type.Name, field.Name, field, $"Column {field} does not exist in structure state");
+                            yield return new CreateColumnScAction(
+                                DataAccessor, 
+                                type.Name, 
+                                field.Name, 
+                                field, 
+                                $"Column {field} does not exist in structure state"
+                            );
                         }
 
                     } else {
@@ -706,7 +727,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var typesToCheckSize = new string[] {
                                 "VARCHAR", "VARBINARY"
                             };
-                            var sizesMatch = !typesToCheckSize.Contains(datatype) || length == fieldAtt.Size;
+                            var sizesMatch = !typesToCheckSize.Contains(datatype.ToUpper()) || length == fieldAtt.Size;
                             var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
                             //var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                             if (columnIsNullable != fieldAtt.AllowNull) {
@@ -717,9 +738,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     yield return a;
                                 }
                                 if(columnIsNullable && !fieldAtt.AllowNull && fieldAtt.DefaultValue != null) {
-                                    yield return new UpdateExNullableColumnScAction(DataAccessor, type.Name, field.Name, fieldAtt.DefaultValue, $"Need to update formerly nullable column {type.Name}.{field.Name} with the new default value");
+                                    yield return new UpdateExNullableColumnScAction(
+                                        DataAccessor, 
+                                        type.Name, 
+                                        field.Name, 
+                                        fieldAtt.DefaultValue, 
+                                        $"Need to update formerly nullable column {type.Name}.{field.Name} with the new default value"
+                                    );
                                 }
-                                yield return new AlterColumnDataTypeScAction(DataAccessor, type.Name, field, fieldAtt, $"Definition mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
+                                yield return new AlterColumnDataTypeScAction(
+                                    DataAccessor,
+                                    type.Name, 
+                                    field, 
+                                    fieldAtt,
+                                    $"Definition mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  "
+                                );
                             }
                         }
 
@@ -727,7 +760,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 }
             }
-
 
             yield break;
         }

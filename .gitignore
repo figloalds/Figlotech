@@ -3,6 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+pack-to-local-nuget.cmd
+
 # User-specific files
 *.suo
 *.user

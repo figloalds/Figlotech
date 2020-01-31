@@ -1256,13 +1256,16 @@ namespace Figlotech.Core {
             return Fi.Tech.ExceptionTreeToArray(ex);
         }
 
-        public static IEnumerable<Exception> ExceptionTreeToArray(this Fi _selfie, Exception x) {
+        public static IEnumerable<Exception> ExceptionTreeToArray(this Fi _selfie, Exception x, int maxRecursionDepth = 12) {
             var ex = x;
+            if(maxRecursionDepth <= 0) {
+                yield break;
+            }
             while (ex != null) {
                 yield return ex;
                 if (ex is AggregateException agex) {
                     foreach (var inex in agex.InnerExceptions) {
-                        foreach(var inex2 in ExceptionTreeToArray(_selfie, inex)) {
+                        foreach(var inex2 in ExceptionTreeToArray(_selfie, inex, ++maxRecursionDepth)) {
                             yield return inex2;
                         }
                     }

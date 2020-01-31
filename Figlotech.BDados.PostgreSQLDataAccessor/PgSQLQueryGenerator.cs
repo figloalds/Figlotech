@@ -32,11 +32,11 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             var type = inputObject.GetType();
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
-            query.Append(GenerateFieldsString(type, true));
+            query.Append(GenerateFieldsString(type, false));
             query.Append(")");
             query.Append("VALUES (");
             var members = GetMembers(type);
-            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            // members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             for (int i = 0; i < members.Count; i++) {
                 query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
                 if (i < members.Count - 1) {
@@ -206,7 +206,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                         type = $"NUMERIC";
                         break;
                     case "byte[]":
-                        type = $"BLOB";
+                        type = $"BYTEA";
                         break;
                     case "datetime":
                         type = $"TIMESTAMP";
@@ -347,11 +347,14 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var rid = FiTechBDadosExtensions.RidColumnOf[tabelaInput.GetType()];
+            var type = tabelaInput.GetType();
+            var rid = FiTechBDadosExtensions.RidColumnOf[type];
+            var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));
+
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, false));
-            Query.Append($" WHERE {rid} = @rid;", tabelaInput.RID);
+            Query.Append($" WHERE {rid} = @rid;", Convert.ChangeType(tabelaInput.RID, ridType));
             return Query;
         }
 
@@ -379,7 +382,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
             if (OmmitPK) {
-                fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+                fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null && m.GetCustomAttribute<ReliableIdAttribute>() == null);
             }
             for (int i = 0; i < fields.Count; i++) {
                 Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
@@ -390,7 +393,6 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return Query;
 
         }
-
 
         public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
             // -- 
@@ -430,7 +432,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = false) where T : IDataObject {
             List<T> workingSet = new List<T>();
             workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
@@ -479,7 +481,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = GetMembers(type);
             for (int i = 0; i < fields.Count; i++) {
-                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null && fields[i].GetCustomAttribute<ReliableIdAttribute>() == null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");

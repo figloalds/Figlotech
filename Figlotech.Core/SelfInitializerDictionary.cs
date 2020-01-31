@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -61,6 +62,9 @@ namespace Figlotech.Core {
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
 
         public void Add(TKey key, TValue value) {
+            if(key == null) {
+                Debugger.Break();
+            }
             ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
         }
 

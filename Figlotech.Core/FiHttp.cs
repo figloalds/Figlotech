@@ -68,8 +68,10 @@ namespace Figlotech.Core {
                         using (var reqStream = await req.GetRequestStreamAsync()) {
                             await reqStream.WriteAsync(data, 0, data.Length);
                             await reqStream.FlushAsync();
+                            reqStream.Close();
                         }
                     } catch(Exception x) {
+                        Debugger.Break();
                         throw x;
                     }
                 }
@@ -279,6 +281,7 @@ namespace Figlotech.Core {
 
         public HttpWebRequest GetRequest(string Url) {
             var request = HttpWebRequest.CreateHttp(MapUrl(Url));
+            request.ServicePoint.Expect100Continue = false;
             request.Timeout = Timeout.Infinite;
             return request;
         }

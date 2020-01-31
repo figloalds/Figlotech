@@ -47,12 +47,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void absMkDirs(string dir) {
+            if(string.IsNullOrEmpty(dir)) {
+                return;
+            }
             FixRel(ref dir);
+
             try {
                 if (!Directory.Exists(Path.GetDirectoryName(dir))) {
                     absMkDirs(Path.GetDirectoryName(dir));
                 }
-            } catch (Exception) { }
+            } catch (Exception x) {
+                Console.Error.WriteLine($"Error creating directory tree for {dir}: {x.Message}");
+                throw x;
+            }
             try {
                 Directory.CreateDirectory(dir);
             } catch (Exception x) {
@@ -240,6 +247,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }));
         }
         public void ForDirectoriesIn(String relative, Action<String> execFunc) {
+
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
@@ -392,6 +400,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 .Where(s => !string.IsNullOrEmpty(s))
                 .ToArray();
             var retv = string.Join(S.ToString(), seg);
+            if(segments[0].StartsWith($"{S}")) {
+                retv = S + retv;   
+            }
             return retv;
         }
 

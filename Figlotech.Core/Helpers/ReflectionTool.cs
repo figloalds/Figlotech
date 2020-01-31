@@ -21,6 +21,14 @@ namespace Figlotech.Core.Helpers {
         public static MemberInfo[] GetFieldsAndProperties(this Type t) {
             return ReflectionTool.FieldsAndPropertiesOf(t);
         }
+        public static IEnumerable<Type> BaseTypeTree(this Type t) {
+            yield return t;
+            if(t != typeof(Object) && t.BaseType != null) {
+                foreach(var a in BaseTypeTree(t.BaseType)) {
+                    yield return a;
+                }
+            }
+        }
         public static IEnumerable<MemberInfo> AttributedMembersWhere<T>(this Type type, Func<MemberInfo, T, bool> act) where T : Attribute {
             var members = ReflectionTool.FieldsAndPropertiesOf(type);
             if (act == null) {
@@ -505,6 +513,10 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool DoesTypeHaveFieldOrProperty(Type type, string key) {
+            if(key == null || type == null || MemberCacheFromString[type] == null) {
+                Debugger.Break();
+                return false;
+            }
             return MemberCacheFromString[type].ContainsKey(key);
         }
     }

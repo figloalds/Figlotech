@@ -286,8 +286,12 @@ namespace Figlotech.ExcelUtil {
         }
 
         public void AdjustCols() {
-            for (int c = 0; c < CurrentWorksheet.Dimension.Columns + 1; c++) {
-                CurrentWorksheet.Column(c + 1).AutoFit();
+            try {
+                for (int c = 0; c < CurrentWorksheet.Dimension.Columns + 1; c++) {
+                    CurrentWorksheet.Column(c + 1).AutoFit();
+                }
+            } catch(Exception x) {
+                Fi.Tech.WriteLine("EXCELATOR", $"AutoFit threw an exception {x.Message}");
             }
         }
 

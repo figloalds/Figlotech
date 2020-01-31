@@ -594,18 +594,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_schema ELSE NULL END) AS REFERENCED_TABLE_SCHEMA,
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_name ELSE NULL END) AS REFERENCED_TABLE_NAME,
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.column_name ELSE NULL END) AS REFERENCED_COLUMN_NAME
-                FROM 
-                    information_schema.table_constraints AS tc 
-                    LEFT JOIN information_schema.key_column_usage AS kcu
+                FROM (
+                    SELECT * FROM information_schema.table_constraints
+                    WHERE TABLE_SCHEMA=@1
+                ) AS tc
+                LEFT JOIN (
+                    SELECT * FROM information_schema.key_column_usage AS kcu
+                    WHERE TABLE_SCHEMA=@1
+                ) kcu
                     ON tc.constraint_name = kcu.constraint_name
-                        AND tc.table_schema = kcu.table_schema
-                        AND tc.table_name = kcu.table_name
-
-                WHERE tc.CONSTRAINT_SCHEMA=@1;", schema
+                    AND tc.table_schema = kcu.table_schema
+                    AND tc.table_name = kcu.table_name
+                WHERE tc.TABLE_SCHEMA=@1 AND kcu.TABLE_SCHEMA=@1;", schema
             );
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE TABLE_SCHEMA=@1;", schema);
+            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE TABLE_SCHEMA=@1 AND NON_UNIQUE=1;", schema);
         }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
