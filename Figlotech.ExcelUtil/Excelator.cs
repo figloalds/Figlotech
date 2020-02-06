@@ -135,6 +135,17 @@ namespace Figlotech.ExcelUtil {
             excelator = parent;
         }
 
+        public ExcelatorRowRangeWriter this[int i] {
+            get {
+                return this.Cell(i);
+            }
+        }
+        public ExcelatorRowRangeWriter this[int i, int j] {
+            get {
+                return this.Range(i, j);
+            }
+        }
+
         public ExcelatorRowWriter SetFormula(int column, string formula) {
             excelator.SetFormula(Row, column + offsetCols, column + offsetCols, formula);
             return this;
@@ -308,6 +319,12 @@ namespace Figlotech.ExcelUtil {
                 var en = pack.Workbook.Worksheets.GetEnumerator();
                 en.MoveNext();
                 CurrentWorksheet = en.Current;
+            }
+        }
+
+        public ExcelatorRowWriter this[int i] {
+            get {
+                return this.Row(i);
             }
         }
 

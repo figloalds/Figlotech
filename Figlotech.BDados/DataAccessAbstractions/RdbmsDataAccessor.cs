@@ -94,10 +94,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public void BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
-            if (useTransaction) {
-                Transaction = Connection?.BeginTransaction(ilev);
-            }
+        public void BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
+            Transaction = Connection?.BeginTransaction(ilev);
         }
 
         public void Commit() {
@@ -283,7 +281,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return new RdbmsDataAccessor(Plugin);
         }
 
-        public IDbConnection BeginTransaction(bool useTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
+        public IDbConnection BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
             lock (this) {
                 if (CurrentTransaction == null) {
                     //if (FiTechCoreExtensions.EnableDebug) {
@@ -294,7 +292,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var connection = Plugin.GetNewConnection();
                         OpenConnection(connection);
                         CurrentTransaction = new ConnectionInfo(this, connection);
-                        CurrentTransaction?.BeginTransaction(useTransaction, ilev);
+                        CurrentTransaction?.BeginTransaction(ilev);
                         CurrentTransaction.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
                         CurrentTransaction.usingExternalBenchmarker = bmark != null;
                         WriteLog("Transaction Open");
@@ -689,14 +687,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public event Action<Type, IDataObject[]> OnDataObjectAltered;
         public event Action<Type, IDataObject[]> OnObjectsDeleted;
 
-        public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null, bool useTransaction = false) {
+        public void Access(Action<ConnectionInfo> functions, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             var i = Access<int>((transaction) => {
                 functions?.Invoke(transaction);
                 return 0;
-            }, handler);
+            }, handler, ilev);
         }
 
-        public T Access<T>(Func<ConnectionInfo, T> functions, Action<Exception> handler = null, bool useTransaction = false) {
+        public T Access<T>(Func<ConnectionInfo, T> functions, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             if (functions == null) return default(T);
 
             //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
@@ -720,7 +718,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog(String.Format("---- Access [{0}] Finished", aid));
                 }
                 return retv;
-            }, handler, useTransaction);
+            }, handler, ilev);
         }
 
         public DataTable Query(IQueryBuilder query) {
@@ -778,7 +776,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        private T UseTransaction<T>(Func<ConnectionInfo, T> func, Action<Exception> handler = null, bool useTransaction = false) {
+        private T UseTransaction<T>(Func<ConnectionInfo, T> func, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
 
             if (func == null) return default(T);
 
@@ -791,7 +789,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return default(T);
             }
 
-            using (var connection = BeginTransaction(useTransaction)) {
+            using (var connection = BeginTransaction(ilev)) {
                 var b = CurrentTransaction.Benchmarker;
                 if (FiTechCoreExtensions.EnableDebug) {
                     try {
@@ -826,22 +824,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     b.Mark("Run User Code");
                     var retv = func.Invoke(CurrentTransaction);
 
-                    if (useTransaction) {
-                        WriteLog($"[{accessId}] Committing");
-                        b.Mark($"[{accessId}] Begin Commit");
-                        Commit();
-                        b.Mark($"[{accessId}] End Commit");
-                        WriteLog($"[{accessId}] Commited OK ");
-                    }
+                    WriteLog($"[{accessId}] Committing");
+                    b.Mark($"[{accessId}] Begin Commit");
+                    Commit();
+                    b.Mark($"[{accessId}] End Commit");
+                    WriteLog($"[{accessId}] Commited OK ");
                     return retv;
                 } catch (Exception x) {
-                    if (useTransaction) {
-                        WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
-                        b.Mark($"[{accessId}] Begin Rollback");
-                        Rollback();
-                        b.Mark($"[{accessId}] End Rollback");
-                        WriteLog($"[{accessId}] Transaction rolled back ");
-                    }
+                    WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
+                    b.Mark($"[{accessId}] Begin Rollback");
+                    Rollback();
+                    b.Mark($"[{accessId}] End Rollback");
+                    WriteLog($"[{accessId}] Transaction rolled back ");
                     if (handler != null) {
                         handler?.Invoke(x);
                     } else {
@@ -2084,15 +2078,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("Construct Join Definition");
 
-                var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
-                var builtConditionsRoot = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions, false));
-
                 transaction?.Benchmarker?.Mark("Resolve ordering Member");
                 var om = GetOrderingMember(args.OrderingMember);
                 transaction?.Benchmarker?.Mark("--");
 
                 using (var command = transaction?.CreateCommand()) {
                     var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
+
+                    var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
+                    var builtConditionsRoot = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions, false));
+
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
                     try {
                         transaction?.Benchmarker?.Mark($"Generate Join Query");

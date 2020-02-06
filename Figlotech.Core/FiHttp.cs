@@ -10,48 +10,52 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public class FiHttpResult : IDisposable {
+    public sealed class FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
         public String ContentType { get; set; }
         public long ContentLength { get; set; }
+        public WebResponse Response { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
-        private MemoryStream ResultStream { get; set; }
+        private Stream ResultStream { get; set; }
+        bool UseResponseBuffer { get; set; }
 
-        internal FiHttpResult() {
-
+        internal FiHttpResult(bool useBuffer) {
+            UseResponseBuffer = useBuffer;
+        }
+        ~FiHttpResult() {
+            Dispose();
         }
 
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
-        public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req) {
-            var retv = new FiHttpResult();
+        public static async Task<FiHttpResult> InitFromGet(HttpWebRequest req, bool useBuffer) {
+            var retv = new FiHttpResult(useBuffer);
             try {
-                using (var resp = await req.GetResponseAsync()) {
-                    retv.Init(resp);
-                }
+                retv.Response = await req.GetResponseAsync();
+                retv.Init(retv.Response);
+                
             } catch (WebException wex) {
-                using (var resp = wex.Response) {
-                    retv.Init(resp);
-                }
+                retv.Response = wex.Response;
+                retv.Init(retv.Response);
             }
             return retv;
         }
-        public static async Task<FiHttpResult> InitFromPost(HttpWebRequest req, Func<Stream, Task> UploadRequestStream) {
-            var retv = new FiHttpResult();
+        public static async Task<FiHttpResult> InitFromPost(HttpWebRequest req, Func<Stream, Task> UploadRequestStream, bool useBuffer) {
+            var retv = new FiHttpResult(useBuffer);
             try {
                 using (var reqStream = await req.GetRequestStreamAsync()) {
                     await UploadRequestStream?.Invoke(reqStream);
                 }
-                using (var resp = req.GetResponse()) {
-                    retv.Init(resp);
-                }
+                retv.Response = req.GetResponse();
+                retv.Init(retv.Response);
             } catch (WebException wex) {
                 using (var resp = wex.Response) {
                     retv.Init(resp);
@@ -60,8 +64,8 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        public static async Task<FiHttpResult> Init(string verb, HttpWebRequest req, byte[] data) {
-            var retv = new FiHttpResult();
+        public static async Task<FiHttpResult> Init(string verb, HttpWebRequest req, byte[] data, bool useBuffer) {
+            var retv = new FiHttpResult(useBuffer);
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
                     try {
@@ -75,9 +79,10 @@ namespace Figlotech.Core {
                         throw x;
                     }
                 }
-                using (var resp = await req.GetResponseAsync()) {
-                    retv.Init(resp);
-                }
+
+                var resp = await req.GetResponseAsync();
+                retv.Init(resp);
+                
             } catch (WebException wex) {
                 using (var resp = wex.Response) {
                     retv.Init(resp);
@@ -103,15 +108,7 @@ namespace Figlotech.Core {
             }
             ContentType = resp.ContentType;
             ContentLength = resp.ContentLength;
-            using (var respStream = resp.GetResponseStream()) {
-                respStream.ReadTimeout = Timeout.Infinite;
-                respStream.WriteTimeout = Timeout.Infinite;
-                this.ResultStream = new MemoryStream();
 
-                respStream.CopyTo(ResultStream);
-
-                this.ResultStream.Seek(0, SeekOrigin.Begin);
-            }
             for (int i = 0; i < resp.Headers.Count; ++i) {
                 string key = resp.Headers.GetKey(i);
                 foreach (string value in resp.Headers.GetValues(i)) {
@@ -125,51 +122,77 @@ namespace Figlotech.Core {
             if (this.Headers.ContainsKey("ContentLength") && Int64.TryParse(this.Headers["ContentLength"], out long cl)) {
                 this.ContentLength = cl;
             }
+            if (UseResponseBuffer) {
+                using (var respStream = resp.GetResponseStream()) {
+                    respStream.ReadTimeout = Timeout.Infinite;
+                    respStream.WriteTimeout = Timeout.Infinite;
+                    this.ResultStream = new MemoryStream();
+
+                    respStream.CopyTo(ResultStream);
+
+                    this.ResultStream.Seek(0, SeekOrigin.Begin);
+                }
+            } else {
+                this.ResultStream = resp.GetResponseStream();
+            }
         }
 
         public string AsString() {
-            ResultStream.Seek(0, SeekOrigin.Begin);
-            var bytes = ResultStream.ToArray();
-            var retv = Fi.StandardEncoding.GetString(bytes);
+            if(ResultStream.CanSeek) {
+                ResultStream.Seek(0, SeekOrigin.Begin);
+            }
+            var retv = Fi.StandardEncoding.GetString(AsBuffer());
             return retv;
         }
 
         public string AsDecodedString(IEncryptionMethod method) {
-            ResultStream.Seek(0, SeekOrigin.Begin);
-            var bytes = ResultStream.ToArray();
-            var retv = Fi.StandardEncoding.GetString(method.Decrypt(bytes));
+            var retv = Fi.StandardEncoding.GetString(method.Decrypt(AsBuffer()));
             return retv;
         }
 
         public Stream AsStream() {
-            ResultStream.Seek(0, SeekOrigin.Begin);
+            if (ResultStream.CanSeek) {
+                ResultStream.Seek(0, SeekOrigin.Begin);
+            }
             return ResultStream;
         }
 
-        public Stream AsRawStream() {
-            var rawStream = new MemoryStream();
-            using (var writer = new StreamWriter(rawStream, new UTF8Encoding(), 8192, true)) {
-                writer.WriteLine($"HTTP/1.1 {StatusCode} {StatusDescription}");
-                lock (this.Headers) {
-                    this.Headers.ForEach(header => {
-                        writer.WriteLine();
-                    });
-                }
-                writer.WriteLine();
-            }
-            ResultStream.CopyTo(rawStream);
-            rawStream.Seek(0, SeekOrigin.Begin);
-            return rawStream;
-        }
+        //public Stream AsRawStream() {
+        //    var rawStream = new MemoryStream();
+        //    using (var writer = new StreamWriter(rawStream, new UTF8Encoding(), 8192, true)) {
+        //        writer.WriteLine($"HTTP/1.1 {StatusCode} {StatusDescription}");
+        //        lock (this.Headers) {
+        //            this.Headers.ForEach(header => {
+        //                writer.WriteLine();
+        //            });
+        //        }
+        //        writer.WriteLine();
+        //    }
+        //    ResultStream.CopyTo(rawStream);
+        //    rawStream.Seek(0, SeekOrigin.Begin);
+        //    return rawStream;
+        //}
 
         public byte[] AsBuffer() {
-            ResultStream.Seek(0, SeekOrigin.Begin);
-            return ResultStream.ToArray();
+            if (ResultStream.CanSeek) {
+                ResultStream.Seek(0, SeekOrigin.Begin);
+            }
+            byte[] bytes;
+            if (ResultStream is MemoryStream rsms) {
+                bytes = rsms.ToArray();
+            } else {
+                using (var ms = new MemoryStream()) {
+                    ResultStream.CopyTo(ms);
+                    ms.Seek(0, SeekOrigin.Begin);
+                    bytes = ms.ToArray();
+                }
+            }
+            return bytes;
         }
 
         public byte[] AsDecodedBuffer(IEncryptionMethod method) {
             ResultStream.Seek(0, SeekOrigin.Begin);
-            return method.Decrypt(ResultStream.ToArray());
+            return method.Decrypt(AsBuffer());
         }
 
         public T As<T>() {
@@ -205,11 +228,14 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
+            Response?.Dispose();
             ResultStream?.Dispose();
         }
     }
 
-    public class FiHttp {
+    public class FiHttp
+    {
+        public bool UseResponseBuffer { get; set; }
         public string SyncKeyCodePassword { get; set; } = null;
         IDictionary<string, string> headers = new Dictionary<string, string>();
         public IWebProxy Proxy { get; set; } = null;
@@ -293,7 +319,7 @@ namespace Figlotech.Core {
             req.UserAgent = UserAgent;
             UpdateSyncCode();
             AddHeaders(req);
-            return await FiHttpResult.InitFromGet(req);
+            return await FiHttpResult.InitFromGet(req, UseResponseBuffer);
         }
 
         private void AddHeaders(HttpWebRequest req) {
@@ -312,27 +338,10 @@ namespace Figlotech.Core {
         }
 
         public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
-            var req = GetRequest(Url);
-            req.Proxy = this.Proxy;
-            req.Method = "GET";
-            req.UserAgent = UserAgent;
-            UpdateSyncCode();
-            AddHeaders(req);
-
-            try {
-                using (var resp = req.GetResponse() as HttpWebResponse) {
-                    using (var stream = resp.GetResponseStream()) {
-                        await ActOnResponse?.Invoke(resp.StatusCode, stream);
-                    }
-                    return resp.StatusCode;
-                }
-            } catch (WebException x) {
-                using (var resp = x.Response as HttpWebResponse) {
-                    using (var stream = resp.GetResponseStream()) {
-                        await ActOnResponse?.Invoke(resp.StatusCode, stream);
-                    }
-                    return resp.StatusCode;
-                }
+            using (var result = await Custom("GET", Url)) {
+                var code = result.StatusCode;
+                await ActOnResponse?.Invoke(code, result.AsStream());
+                return code;
             }
         }
 
@@ -349,7 +358,7 @@ namespace Figlotech.Core {
             UpdateSyncCode();
             AddHeaders(req);
 
-            return await FiHttpResult.Init(verb, req, bytes);
+            return await FiHttpResult.Init(verb, req, bytes, UseResponseBuffer);
         }
         public async Task<FiHttpResult> Custom(String verb, String Url, byte[] data) {
             var req = GetRequest(Url);
@@ -360,7 +369,7 @@ namespace Figlotech.Core {
             UpdateSyncCode();
             AddHeaders(req);
 
-            return await FiHttpResult.Init(verb, req, data);
+            return await FiHttpResult.Init(verb, req, data, UseResponseBuffer);
         }
         public async Task<FiHttpResult> Post(String Url, Func<Stream, Task> UploadRequestStream = null) {
             return await Custom("POST", Url, UploadRequestStream);

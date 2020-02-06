@@ -24,8 +24,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         void EnsureDatabaseExists();
 
         int DefaultQueryLimit { get; set; }
-        void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);
-        T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null, bool useTransaction = false);
+        void Access(Action<ConnectionInfo> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        T Access<T>(Func<ConnectionInfo, T> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
 
         List<T> LoadAll<T>(string where = "TRUE", params object[] args) where T : IDataObject, new();
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
@@ -55,7 +55,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IRdbmsDataAccessor Fork();
 
-        IDbConnection BeginTransaction(bool useRdbmsTransaction = false, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
+        IDbConnection BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
         void EndTransaction();
 
