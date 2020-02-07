@@ -185,14 +185,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         }
         public void ForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
-            FixRelative(ref relative);
             try {
-                var blobs = ListBlobs(relative);
-                var list = blobs.Select(
-                    (a) => a.Name.Replace(BaseDirectory, ""))
-                    //.Where((a) => a.Count((b) => b == '/') == 0)
-                    .ToList();
-                foreach (var a in list) {
+                foreach (var a in GetFilesIn(relative)) {
                     try {
                         execFunc(a);
                     } catch (Exception x) {
@@ -207,16 +201,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         public IEnumerable<string> GetFilesIn(String relative) {
             FixRelative(ref relative);
-            try {
-                var blobs = ListBlobs(relative);
-                var list = blobs.Select(
-                    (a) => a.Name.Replace(BaseDirectory, ""))
-                    .Where((a) => a.Count((b) => b == '/') == 0)
-                    .GroupBy((a) => a)
-                    .First();
-                return list;
-            } catch (StorageException) { } catch (Exception) { }
-            return new string[0];
+            var blobs = ListBlobs(relative);
+            var list = blobs.Select(
+                (a) => a.Name.Replace(BaseDirectory, ""))
+                //.Where((a) => a.Count((b) => b == '/') == 0)
+                .ToList();
+            return list;
         }
 
         public void ParallelForDirectoriesIn(String relative, Action<String> execFunc) {
@@ -243,7 +233,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
             List<CloudBlockBlob> retv = new List<CloudBlockBlob>();
             int numResults = 0;
             do {
-                result = BlobContainer.GetDirectoryReference(relative).ListBlobsSegmentedAsync(true, BlobListingDetails.Snapshots, 500, bucet, null, null).Result;
+                var reference = BlobContainer.GetDirectoryReference(relative);
+                result = reference.ListBlobsSegmentedAsync(false, BlobListingDetails.None, 500, bucet, null, null).Result;
                 bucet = result.ContinuationToken;
                 var blobResults = result.Results.ToList();
                 retv.AddRange(blobResults.Select(a => new CloudBlockBlob(a.Uri)));
@@ -267,8 +258,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     var retv = folder.Uri.LocalPath.Replace($"/{this.ContainerName.ToLower()}", "").Replace(this.BaseDirectory, "").Substring(1);
                     if(retv.EndsWith("/")) {
                         retv = retv.Substring(0, retv.Length - 1);
+                        yield return retv;
                     }
-                    yield return retv;
                 }
             } while (numResults > 0);
             yield break;

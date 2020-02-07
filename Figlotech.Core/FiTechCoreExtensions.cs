@@ -1273,7 +1273,7 @@ namespace Figlotech.Core {
                 ex = ex.InnerException;
             }
         }
-
+        
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
             TryIf(__selfie, () => !Console.IsInputRedirected, () => { Console.ReadKey(); });
         }
@@ -1283,12 +1283,11 @@ namespace Figlotech.Core {
                 args.ForEach(a => a?.Invoke());
             };
         }
-
         public static byte[] BinaryHashPad(this Fi __selfie, byte[] input, int sz) {
             var retv = new byte[sz];
             Array.Copy(input, 0, retv, 0, Math.Min(retv.Length, input.Length));
-            if(retv.Length < input.Length) {
-                for(int i = retv.Length; i < input.Length; i++) {
+            if (retv.Length < input.Length) {
+                for (int i = retv.Length; i < input.Length; i++) {
                     retv[i % retv.Length] ^= input[i];
                 }
             }
