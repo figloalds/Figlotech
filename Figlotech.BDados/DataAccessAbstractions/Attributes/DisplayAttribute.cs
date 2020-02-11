@@ -26,6 +26,20 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         Money,
         NoFormat,
     }
+
+    public interface ICustomDisplayFormatter
+    {
+        object Format(object input);
+    }
+
+    public abstract class CustomDisplayFormatter<T>
+    {
+        public object Format(object input) {
+            return Format((T) input);
+        }
+        public abstract object Format(T input);
+    }
+
     /// <summary>
     /// Tells tools how to display this field on a screen.
     /// can be used to generate forms or tables from dataobject metadata
@@ -37,5 +51,6 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public int Order;
         public DisplayFormatType Format;
         public String FormatString;
+        public Type CustomFormatter;
     }
 }

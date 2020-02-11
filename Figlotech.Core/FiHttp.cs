@@ -157,6 +157,16 @@ namespace Figlotech.Core {
             return ResultStream;
         }
 
+        public MemoryStream AsSeekableStream() {
+            if (ResultStream.CanSeek) {
+                ResultStream.Seek(0, SeekOrigin.Begin);
+            }
+            var ms = new MemoryStream();
+            ResultStream.CopyTo(ms);
+            ResultStream.Flush();
+            return ms;
+        }
+
         //public Stream AsRawStream() {
         //    var rawStream = new MemoryStream();
         //    using (var writer = new StreamWriter(rawStream, new UTF8Encoding(), 8192, true)) {
@@ -196,7 +206,6 @@ namespace Figlotech.Core {
         }
 
         public T As<T>() {
-            ResultStream.Seek(0, SeekOrigin.Begin);
             T retv = default(T);
             var json = this.AsString();
             try {

@@ -7,12 +7,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public class IntermediateRdbmsLoadAllArgs<T> where T : IDataObject, new() {
 
-        public IntermediateRdbmsLoadAllArgs(ConnectionInfo transaction, LoadAllArgs<T> largs) {
+        public IntermediateRdbmsLoadAllArgs(BDadosTransaction transaction, LoadAllArgs<T> largs) {
             Transaction = transaction;
             LoadAllArgs = largs;
         }
 
-        private ConnectionInfo Transaction { get; set; }
+        private BDadosTransaction Transaction { get; set; }
         private LoadAllArgs<T> LoadAllArgs { get; set; }
 
         public List<T> Aggregate() {
@@ -27,7 +27,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public static class RdbmsLoadAllExtensions {
-        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, ConnectionInfo transaction) where T: IDataObject, new() {
+        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, BDadosTransaction transaction) where T: IDataObject, new() {
             return new IntermediateRdbmsLoadAllArgs<T>(transaction, me);
         }
     }

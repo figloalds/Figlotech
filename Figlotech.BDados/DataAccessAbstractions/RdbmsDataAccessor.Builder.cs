@@ -12,7 +12,7 @@ using System.Reflection;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable  {
 
-        public List<T> GetObjectList<T>(ConnectionInfo transaction, IDbCommand command) where T : new() {
+        public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             var refl = new ObjectReflector();
             transaction?.Benchmarker.Mark("Enter lock command");
             lock (command) {
@@ -53,7 +53,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public void BuildAggregateObject(ConnectionInfo transaction,
+        public void BuildAggregateObject(BDadosTransaction transaction,
             Type t, IDataReader reader, ObjectReflector refl,
             object obj, Dictionary<string, (int[], string[])> fieldNamesDict, JoiningTable[] joinTables, IDictionary<int, Relation[]> joinRelations,
             int thisIndex, bool isNew,
@@ -213,7 +213,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public List<T> BuildAggregateListDirect<T>(ConnectionInfo transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins.ToArray();
@@ -317,7 +317,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        private List<IDataObject> BuildStateUpdateQueryResult(ConnectionInfo transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
+        private List<IDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
             var retv = new List<IDataObject>();
             transaction?.Benchmarker?.Mark("Init Build Result");
             ObjectReflector refl = new ObjectReflector();
