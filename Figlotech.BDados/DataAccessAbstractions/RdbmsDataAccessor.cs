@@ -205,10 +205,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public T ForceExist<T>(Func<T> Default, String query, params object[] args) where T : IDataObject, new() {
-            return ForceExist<T>(Default, Qb.Fmt(query, args));
-        }
-
         public T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
                 return ForceExist<T>(CurrentTransaction, Default, qb);
@@ -541,10 +537,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => Query<T>(transaction, query));
         }
 
-        public List<T> Query<T>(string queryString, params object[] args) where T : new() {
-            return Query<T>(Qb.Fmt(queryString, args));
-        }
-
         public static String GetIdColumn<T>() where T : IDataObject, new() { return GetIdColumn(typeof(T)); }
         public static String GetIdColumn(Type type) {
             var fields = new List<FieldInfo>();
@@ -580,11 +572,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => LoadByRid<T>(transaction, RID));
         }
 
-        public List<T> LoadAll<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
-            return Fetch<T>(Qb.Fmt(where, args)).ToList();
-        }
-
-
         public List<T> LoadAll<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
             return Fetch<T>(args).ToList();
         }
@@ -596,10 +583,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => {
                 return LoadAll<T>(transaction, conditions, skip, limit, orderingMember, ordering).ToList();
             });
-        }
-
-        public IEnumerable<T> Fetch<T>(String where = "TRUE", params object[] args) where T : IDataObject, new() {
-            return Fetch<T>(Qb.Fmt(where, args));
         }
 
         public IEnumerable<T> Fetch<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
@@ -747,11 +730,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => {
                 return Query(transaction, query);
             });
-        }
-
-
-        public DataTable Query(String Query, params Object[] args) {
-            return this.Query(Qb.Fmt(Query, args));
         }
 
         private const string RDB_SYSTEM_LOGID = "FTH:RDB";

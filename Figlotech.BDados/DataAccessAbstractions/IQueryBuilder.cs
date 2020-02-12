@@ -1,4 +1,5 @@
-﻿using Figlotech.Core;
+﻿using Figlotech.BDados.Builders;
+using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(command, Plugin);
                 command.ExecuteNonQuery();
             }
+        }
+
+        public static IQueryBuilder ToQueryBuilder(this string query) {
+            return Qb.Fmt(query);
+        }
+        public static IQueryBuilder ToAutoQuery(this FormattableString query) {
+            return Qb.S(query);
         }
 
         public static void ApplyToCommand(this IQueryBuilder query, IDbCommand command, Func<object, object> ProcessParameterValue = null) {
