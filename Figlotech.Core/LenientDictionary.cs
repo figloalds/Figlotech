@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core
 {
     public class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
-        Dictionary<TKey, TValue> _dmmy = new Dictionary<TKey, TValue>();
+        AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
                 if(key == null) {
@@ -24,10 +24,10 @@ namespace Figlotech.Core
             }
         }
         public static implicit operator Dictionary<TKey, TValue>(LenientDictionary<TKey, TValue> a) {
-            return a._dmmy;
+            return a._dmmy._dmmy;
         }
         public static implicit operator LenientDictionary<TKey, TValue>(Dictionary<TKey, TValue> a) {
-            return new LenientDictionary<TKey, TValue>() { _dmmy = a };
+            return new LenientDictionary<TKey, TValue>() { _dmmy = new AtomicDictionary<TKey, TValue> { _dmmy = a } };
         }
 
         public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys;

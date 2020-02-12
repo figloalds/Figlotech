@@ -498,10 +498,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             );
         }
 
-
-        Benchmarker Benchmarker;
-
-
         public bool IsDataObject(Type t) {
             if (t == null) return false;
             if (t == typeof(Object)) return false;
@@ -584,7 +580,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var columnName = keys[i].Column;
                     var refColumnName = keys[i].RefColumn;
                     var constraint = keys[i].KeyName;
-                    Benchmarker.Mark($"Dekey Table {tableName} from {constraint} references {refTableName}");
                     yield return new DropFkScAction(DataAccessor, keys[i], $"Key {tableName}::{keys[i].KeyName} needs to be removed to alter table {target}");
                 }
             }

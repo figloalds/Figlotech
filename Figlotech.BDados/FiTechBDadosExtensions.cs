@@ -1,5 +1,4 @@
-﻿using Figlotech.BDados.Authentication;
-using Figlotech.BDados.Builders;
+﻿using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
@@ -324,49 +323,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     retv.Append(",");
             }
             return retv;
-        }
-
-        static int numPerms = Enum.GetValues(typeof(Acl)).Length;
-        static string notEnoughBytesMsg =
-@"
-        Your implementation of IBDadosUserPermissions doesn't have enough bytes.
-        You need at least 5 * 'bpmi' bits, being bpmi the 'biggest permission index' you intend to use
-        This math is in bits, do divide by 8 and round up to get the exact count of bytes you need for
-        your program.
-        EG: If I need a permission BDADOS_CREATE_SKYNET and that permission is runtime int value of
-        77, I'll need (this Fi _selfie, (77 * 5)+BDPIndex) / 8 = 49 bytes on my permissions buffer because this permisison will be
-        saught for using this logic:
-        byteIndex=((77 * 5)+BDPIndex) / 8;
-        bitIndex=((77 * 5)+BDPIndex) % 8;
-        permissionCheck = (Permissions[byteIndex] & (1 << bitOffset)) > 0
-        Refer to the source code for more info
-        ";
-        internal static bool CheckForPermission(this Fi _selfie, byte[] buffer, Acl p, int permission) {
-            if (buffer == null)
-                return false;
-            var permIndex = (permission * numPerms) + (int)p;
-            var byteIndex = permIndex / 8;
-            if (buffer.Length < byteIndex) {
-                throw new IndexOutOfRangeException(notEnoughBytesMsg);
-            }
-            var bitOffset = permIndex % 8;
-            return (buffer[byteIndex] & (1 << bitOffset)) > 0;
-        }
-        internal static void SetPermission(this Fi _selfie, byte[] buffer, Acl p, int permission, bool value) {
-            if (buffer == null)
-                return;
-            var permIndex = (permission * numPerms) + (int)p;
-            var byteIndex = permIndex / 8;
-            if (buffer.Length < byteIndex) {
-                throw new IndexOutOfRangeException(notEnoughBytesMsg);
-            }
-            var bitOffset = permIndex % 8;
-            byte targetBit = (byte)(1 << bitOffset);
-            if (value) {
-                buffer[byteIndex] |= targetBit;
-            } else {
-                buffer[byteIndex] ^= targetBit;
-            }
         }
 
         public static QueryBuilder ListIds<T>(this Fi _selfie, RecordSet<T> set) where T : IDataObject, new() {

@@ -11,7 +11,9 @@ namespace Figlotech.Core
         );
         public object this[string key] {
             get {
-                return DynaLockMutexes[key];
+                lock(string.Intern($"{this.GetHashCode()}_{key}")) {
+                    return DynaLockMutexes[key];
+                }
             }
         }
     }

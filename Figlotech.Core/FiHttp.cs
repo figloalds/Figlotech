@@ -161,10 +161,12 @@ namespace Figlotech.Core {
             if (ResultStream.CanSeek) {
                 ResultStream.Seek(0, SeekOrigin.Begin);
             }
-            var ms = new MemoryStream();
-            ResultStream.CopyTo(ms);
-            ResultStream.Flush();
-            return ms;
+            using (ResultStream) {
+                var ms = new MemoryStream();
+                ResultStream.CopyTo(ms);
+                ResultStream.Flush();
+                return ms;
+            }
         }
 
         //public Stream AsRawStream() {

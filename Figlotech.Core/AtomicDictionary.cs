@@ -7,69 +7,38 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
-        AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
+    public class AtomicDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
+        internal Dictionary<TKey, TValue> _dmmy = new Dictionary<TKey, TValue>();
         Func<TKey, TValue> SelfInitFn { get; set; }
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {
                 lock (this) {
-                    TValue retv;
-                    if (!_dmmy.ContainsKey(key)) {
-                        if(FullDictionaryLockOnInit) {
-                            lock (_dmmy) retv = Initialize(key);
-                        } else {
-                            retv = Initialize(key);
-                        }
-                    } else {
-                        retv = _dmmy[key];
-                    }
-                    return retv;
+                    return _dmmy[key];
                 }
             }
             set {
                 lock (this) {
-                    if(!AllowNullValueCaching && value ==  null) {
-                        return;
-                    }
                     _dmmy[key] = value;
                 }
             }
         }
 
-        private TValue Initialize(TKey key) {
-            lock(this) {
-                var init = SelfInitFn(key);
-                if (AllowNullValueCaching || init != null) {
-                    _dmmy.Add(key, init);
-                }
-                return init;
-            }
+        public AtomicDictionary() {
+
         }
 
-        bool FullDictionaryLockOnInit = false;
+        public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys.ToList();
 
-        public SelfInitializerDictionary(Func<TKey, TValue> initFn, bool fullDictionaryLockOnInit = false) {
-            SelfInitFn = initFn;
-            FullDictionaryLockOnInit = fullDictionaryLockOnInit;
-        }
-
-
-        public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys;
-
-        public ICollection<TValue> Values => ((IDictionary<TKey, TValue>)_dmmy).Values;
+        public ICollection<TValue> Values => ((IDictionary<TKey, TValue>)_dmmy).Values.ToList();
 
         public int Count => ((IDictionary<TKey, TValue>)_dmmy).Count;
 
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
 
         public void Add(TKey key, TValue value) {
-            lock(this) {
-                if(key == null) {
-                    Debugger.Break();
-                }
+            lock(this)
                 ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
-            }
         }
 
         public void Add(KeyValuePair<TKey, TValue> item) {

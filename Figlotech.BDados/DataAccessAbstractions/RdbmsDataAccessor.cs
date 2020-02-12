@@ -137,14 +137,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
     }
-
-    public class RdbmsDataAccessor<T> : RdbmsDataAccessor where T : IRdbmsPluginAdapter, new() {
-        public RdbmsDataAccessor(IDictionary<String, object> Configuration) : base(new T()) {
-            Plugin = new T();
-            Plugin.SetConfiguration(Configuration);
-        }
-    }
-
+    
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
         public ILogger Logger { get; set; }
 
@@ -166,6 +159,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return;
             }
             OnDataObjectAltered?.Invoke(ido.First().GetType(), ido);
+        }
+        public static RdbmsDataAccessor Using<T>(IDictionary<String, object> Configuration) where T : IRdbmsPluginAdapter, new() {
+            var Plugin = new T();
+            Plugin.SetConfiguration(Configuration);
+            return new RdbmsDataAccessor(
+                Plugin
+            );
         }
 
         #region **** Global Declaration ****

@@ -534,26 +534,26 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} RENAME COLUMN {column} TO {newName};");
         }
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)};");
+            return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING({member.Name}::{GetDatabaseType(member, fieldAttribute)});");
         }
         public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} {(fieldAttribute.AllowNull ? "DROP" : "SET")} NOT NULL;");
         }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP CONSTRAINT {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP CONSTRAINT {constraint} CASCADE;");
         }
         public IQueryBuilder DropColumn(string table, string column) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column};");
+            return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column} CASCADE;");
         }
         public IQueryBuilder DropUnique(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint};");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint} CASCADE;");
         }
         public IQueryBuilder DropIndex(string target, string constraint) {
-            return new QueryBuilder().Append($"DROP INDEX {constraint};");
+            return new QueryBuilder().Append($"DROP INDEX {constraint} CASCADE;");
         }
         public IQueryBuilder DropPrimary(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP PRIMARY KEY;");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP PRIMARY KEY CASCADE;");
         }
 
         public IQueryBuilder AddColumn(string table, string columnDefinition) {
