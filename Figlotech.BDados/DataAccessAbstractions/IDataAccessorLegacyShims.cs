@@ -1,12 +1,40 @@
-﻿using Figlotech.Core.Interfaces;
+﻿using Figlotech.BDados.Builders;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public static class ILegacyLoadAllOptionsShimExtensions {
+
+        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : IDataObject, new() {
+            return self.LoadAll((IQueryBuilder)Qb.Fmt(query, args), (int?)null, (int?)null, (Expression<Func<T, object>>)null, OrderingType.Asc, (object)null);
+        }
+        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : IDataObject, new() {
+            return self.LoadAll(transaction, (IQueryBuilder)Qb.Fmt(query, args), (int?)null, (int?)null, (Expression<Func<T, object>>)null, OrderingType.Asc, (object)null);
+        }
+        public static List<T> Query<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : IDataObject, new() {
+            return self.Query<T>((IQueryBuilder)Qb.Fmt(query, args));
+        }
+        public static List<T> Query<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : IDataObject, new() {
+            return self.Query<T>(transaction, (IQueryBuilder)Qb.Fmt(query, args));
+        }
+        public static DataTable Query(this IRdbmsDataAccessor self, string query, params object[] args) {
+            return self.Query(Qb.Fmt(query, args));
+        }
+        public static DataTable Query(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) {
+            return self.Query(transaction, Qb.Fmt(query, args));
+        }
+        public static int Execute(this IRdbmsDataAccessor self, string query, params object[] args) {
+            return self.Execute((IQueryBuilder)Qb.Fmt(query, args));
+        }
+        public static int Execute(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) {
+            return self.Execute(transaction, (IQueryBuilder)Qb.Fmt(query, args));
+        }
+
         public static List<T> LoadAll<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
             where T : IDataObject, new() {
             return self.LoadAll<T>(

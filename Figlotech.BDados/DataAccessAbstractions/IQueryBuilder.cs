@@ -18,8 +18,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public static IQueryBuilder ToQueryBuilder(this string query) {
-            return Qb.Fmt(query);
+        public static IQueryBuilder ToQueryBuilder(this string query, params object[] args) {
+            return Qb.Fmt(query, args);
         }
         public static IQueryBuilder ToAutoQuery(this FormattableString query) {
             return Qb.S(query);

@@ -156,6 +156,7 @@ namespace Figlotech.BDados.Builders {
             return new Qb(s);
         }
     }
+    
     public class QbFmt : QueryBuilder {
         public QbFmt(String str, params object[] args) {
             Append(str, args);
