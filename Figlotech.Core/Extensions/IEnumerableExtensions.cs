@@ -164,6 +164,14 @@ namespace System
                 }
             }
         }
+        public static async Task ForEach<T>(this IEnumerable<T> me, Func<T, Task> act) {
+            var enumerator = me.GetEnumerator();
+            while (enumerator.MoveNext()) {
+                if (enumerator.Current != null) {
+                    await act?.Invoke(enumerator.Current);
+                }
+            }
+        }
 
         public static IDictionary<TKey, TValue> ToIndex<TKey, TValue>(this IEnumerable<TValue> self, Func<TValue, TKey> keyFn) {
             Dictionary<TKey, TValue> retv = new Dictionary<TKey, TValue>();

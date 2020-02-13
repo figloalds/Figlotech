@@ -148,19 +148,18 @@ namespace Figlotech.Core.Autokryptex
             ), type);
         }
 
-        public IEnumerable<(string RID, T Data)> Fetch<T>() {
+        public List<(string RID, T Data)> Fetch<T>() {
+            List<(string RID, T Data)> retv = new List<(string RID, T Data)>();
             try {
                 List<string> cachedRids;
                 lock (Cache)
                     cachedRids = Cache.Select(c => c.RID).ToList();
                 var newList = new List<SafeDataPayload>();
-                var t = Task.Run(() => {
-                    fileSystem.ForFilesIn("", rid => {
-                        if (cachedRids.Contains(rid)) {
-                            return;
-                        }
-                        newList.Add(_getPayloadFromFile(rid));
-                    });
+                fileSystem.ForFilesIn("", rid => {
+                    if (cachedRids.Contains(rid)) {
+                        return;
+                    }
+                    newList.Add(_getPayloadFromFile(rid));
                 });
 
                 List<SafeDataPayload> localCopyCache;
@@ -168,23 +167,27 @@ namespace Figlotech.Core.Autokryptex
                     localCopyCache = new List<SafeDataPayload>(Cache);
                 foreach (var payload in localCopyCache) {
                     if (payload.Type == typeof(T).Name)
-                        yield return (payload.RID, _getObjectFromPayload<T>(payload));
+                        retv.Add((payload.RID, _getObjectFromPayload<T>(payload)));
                 }
-                t.Wait();
                 foreach (var payload in newList) {
                     _cachePayload(payload);
                     if (payload.Type == typeof(T).Name)
-                        yield return (payload.RID, _getObjectFromPayload<T>(payload));
+                        retv.Add((payload.RID, _getObjectFromPayload<T>(payload)));
                 }
             } finally {
 
             }
 
+            ExecuteDeleteQueue();
+
+            return retv;
+        }
+
+        public void ExecuteDeleteQueue() {
             lock (DeletionQueue)
                 while (DeletionQueue.Count > 0) {
                     Delete(DeletionQueue.Dequeue());
                 }
-            yield break;
         }
 
         public void Delete(string rid) {

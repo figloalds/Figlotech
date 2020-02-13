@@ -93,6 +93,23 @@ namespace Figlotech.Core {
         public DateTime ScheduledTime { get; set; }
         public TimeSpan? RecurrenceInterval { get; set; }
         public string Identifier { get; set; }
+        public Timer Timer { get; set; }
+        public RecurrenceMode RecurrenceMode { get; set; }
+    }
+
+    public enum RecurrenceMode
+    {
+        /// <summary>
+        /// The task is re-scheduled only after it finished executing, the RecurrenceInterval will refer to how to wait after
+        /// the END of the last execution
+        /// </summary>
+        Regular,
+
+        /// <summary>
+        /// The task is scheduled to run every interval, regardless of how long it takes to execute.
+        /// If the task takes longer than the interval to execute it might be triggered more than once at the same time.
+        /// </summary>
+        Periodic,
     }
 
     public delegate dynamic ComputeField(dynamic o);
@@ -379,21 +396,6 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
-        private static Timer _globalTimer { get; set; } = new Timer(_timerFn, null, TimeSpan.FromSeconds(0), TimeSpan.FromSeconds(5));
-        private static void _timerFn(object a) {
-            lock (GlobalScheduledJobs) {
-                var schedules = GlobalScheduledJobs.Splice(j=> DateTime.UtcNow >= j.ScheduledTime);
-                foreach(var schedule in schedules) {
-                    (schedule.Queuer??FiTechRAF).Enqueue(schedule.WorkJob);
-                    if(schedule.RecurrenceInterval != null) {
-                        schedule.ScheduledTime += schedule.RecurrenceInterval.Value;
-                        GlobalScheduledJobs.Add(schedule);
-                    }
-                }
-            }
-        }
-
         public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
             if(value == null) {
                 var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}".ToString();
@@ -406,34 +408,57 @@ namespace Figlotech.Core {
             return value;
         }
 
-        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+        static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
+        
+        private static void Reschedule(ScheduledWorkJob sched) {
+            sched.Timer.Change(Timeout.Infinite, Timeout.Infinite);
+            sched.Timer.Dispose();
+            sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)sched.RecurrenceInterval.Value.TotalMilliseconds), Timeout.Infinite);
+        }
 
-            lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.Add(new ScheduledWorkJob {
-                    Queuer = FiTechRAF,
-                    Identifier = identifier,
-                    WorkJob = job,
-                    ScheduledTime = when,
-                    RecurrenceInterval = RecurrenceInterval
-                });
+        private static void _timerFn(object a) {
+            var sched = a as ScheduledWorkJob;
+            var newWj = new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished);
+            newWj = sched.Queuer.Enqueue(newWj);
+            if(sched.RecurrenceInterval.HasValue) {
+                if(sched.RecurrenceMode == RecurrenceMode.Regular) {
+                    newWj.GetAwaiter().OnCompleted(() => {
+                        Reschedule(sched);
+                    });
+                } else if(sched.RecurrenceMode == RecurrenceMode.Periodic) {
+                    Reschedule(sched);
+                }
             }
         }
-        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
+            ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval, recurrence);
+        }
+        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
 
             lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.Add(new ScheduledWorkJob {
+                var sched = new ScheduledWorkJob {
                     Queuer = queuer,
                     Identifier = identifier,
                     WorkJob = job,
                     ScheduledTime = when,
-                    RecurrenceInterval = RecurrenceInterval
-                });
+                    RecurrenceInterval = RecurrenceInterval,
+                    RecurrenceMode = recurrence,
+                };
+                sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)(when - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
+                GlobalScheduledJobs.Add(sched);
             }
         }
 
         public static void Unschedule(this Fi _selfie, string identifier) {
             lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.RemoveAll(s => s.Identifier == identifier);
+                GlobalScheduledJobs.RemoveAll(s => {
+                    if(s.Identifier == identifier) {
+                        s.Timer.Dispose();
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
             }
         }
 
