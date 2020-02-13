@@ -358,10 +358,12 @@ namespace Figlotech.Core {
 
         public async Task<FiHttpResult> Custom(String verb, String Url, Func<Stream, Task> UploadRequestStream = null) {
             var req = GetRequest(Url);
-            byte[] bytes;
-            using (var ms = new MemoryStream()) {
-                await UploadRequestStream?.Invoke(ms);
-                bytes = ms.ToArray();
+            byte[] bytes = new byte[0];
+            if(UploadRequestStream != null) {
+                using (var ms = new MemoryStream()) {
+                    await UploadRequestStream.Invoke(ms);
+                    bytes = ms.ToArray();
+                }
             }
             req.Proxy = this.Proxy;
             req.Method = verb;
