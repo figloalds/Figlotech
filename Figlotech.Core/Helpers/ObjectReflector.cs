@@ -7,7 +7,7 @@ using System.Reflection;
 
 namespace Figlotech.Core.Helpers {
     public class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>> {
-        private object target;
+        internal object target;
 
         public ObjectReflector() {
         }
