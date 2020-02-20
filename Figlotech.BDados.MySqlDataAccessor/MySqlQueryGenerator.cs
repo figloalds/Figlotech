@@ -470,7 +470,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        static string sid = IntEx.GenerateShortRid();
         static int gid = 0;
 
         public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {

@@ -22,12 +22,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static int DefaultPageSize = 200;
         public static int PageSize { get; set; } = DefaultPageSize;
         public static bool LinearLoad = false;
-        
+
+        static uint upseq = 0;
         public static Qb ListRids<T>(this List<T> me) where T: IDataObject, new() {
             Qb retv = new Qb();
-            var uni = IntEx.GenerateShortRid();
             for (int i = 0; i < me.Count; i++) {
-                retv.Append($"@{uni}{i}", me[i].RID);
+                retv.Append($"@{++upseq}_{i}", me[i].RID);
                 if (i < me.Count - 1)
                     retv.Append(",");
             }

@@ -254,11 +254,15 @@ namespace System
 
         public static IEnumerable<T> Slice<T>(this IEnumerable<T> t, int start, int end) {
             return t.Skip(start).Take(end);
-        }
+        } 
         public static IEnumerable<T> Flatten<T>(this IEnumerable<IEnumerable<T>> t) {
-            foreach(var a in t) {
-                foreach(var b in a) {
-                    yield return b;
+            if(t != null) {
+                foreach(var a in t) {
+                    if(a != null) {
+                        foreach(var b in a) {
+                            yield return b;
+                        }
+                    }
                 }
             }
         }

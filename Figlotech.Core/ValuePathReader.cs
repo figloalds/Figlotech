@@ -22,7 +22,11 @@ namespace Figlotech.Core
                 t => {
                     return t
                         .GetMethods()
-                        .FirstOrDefault(x => x.Name == "get_Item" && x.GetParameters().Length == 1 && x.GetParameters()[0].ParameterType == typeof(String));
+                        .FirstOrDefault(
+                            x => x.Name == "get_Item" && 
+                                x.GetParameters().Length == 1 && 
+                                x.GetParameters()[0].ParameterType == typeof(String)
+                            );
                 }
             ) {
                 AllowNullValueCaching = true
@@ -32,7 +36,11 @@ namespace Figlotech.Core
                 t => {
                     return t
                         .GetMethods()
-                        .FirstOrDefault(x => x.Name == "get_Item" && x.GetParameters().Length == 1 && x.GetParameters()[0].ParameterType == typeof(Int32));
+                        .FirstOrDefault(
+                            x => x.Name == "get_Item" && 
+                                x.GetParameters().Length == 1 && 
+                                x.GetParameters()[0].ParameterType == typeof(Int32)
+                            );
                 }
             ) {
                 AllowNullValueCaching = true
@@ -78,7 +86,9 @@ namespace Figlotech.Core
                     // If the get-value logic throws a known exception,
                     // we ignore it and return null
                     // This is done on purpose and by design
-                    catch (IndexOutOfRangeException) {
+                    catch(TargetInvocationException) {
+                        return null;
+                    } catch (IndexOutOfRangeException) {
                         return null;
                     } catch(ArgumentOutOfRangeException) {
                         return null;

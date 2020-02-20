@@ -344,7 +344,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
-            var cod = IntEx.GenerateShortRid();
+            var cod = "_gv";
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
             if (OmmitPK) {
@@ -383,8 +383,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
                 foreach (var a in inputRecordset) {
-                    string sid = IntEx.GenerateShortRid();
-                    Query.Append($"WHEN {rid}=@{sid}{x++} THEN @{sid}{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
+                    Query.Append($"WHEN {rid}=@_mu{x++} THEN @_mu{x++}", a.RID, ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {

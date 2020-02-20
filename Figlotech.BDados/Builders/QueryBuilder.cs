@@ -55,16 +55,14 @@ namespace Figlotech.BDados.Builders {
             return new Qb($"@{paramId}", o);
         }
 
-        static readonly string defParam = IntEx.GenerateShortRid();
         static int pids = 0;
-        public static string paramId => $"{defParam}{++pids}";
+        public static string paramId => $"_qb{++pids}";
 
         private static QbFmt ListQueryFunction<T>(string column, List<T> o, Func<T, object> fn, bool isIn) {
             if (!o.Any()) {
                 return Qb.Fmt(isIn ? "FALSE" : "TRUE");
             }
             var retv = Qb.Fmt($"{column} {(isIn ? "IN" : "NOT IN")} (");
-            var sRetv = IntEx.GenerateShortRid();
             for (int i = 0; i < o.Count; i++) {
                 retv.Append($"@{paramId}", fn?.Invoke(o[i]));
                 if (i < o.Count - 1) {
@@ -141,10 +139,9 @@ namespace Figlotech.BDados.Builders {
         public static QbFmt Fmt(String str, params object[] args) {
             return new QbFmt(str, args);
         }
-        static string fmtPrefix = IntEx.GenerateShortRid();
         static int fmtCnt = 0;
         public static QbFmt S(FormattableString fmtstr) {
-            var fmt = fmtstr.Format.RegExReplace(@"\{([^\}]*)\}", () => $"@{fmtPrefix}{fmtCnt++}");
+            var fmt = fmtstr.Format.RegExReplace(@"\{([^\}]*)\}", () => $"@_qbs{fmtCnt++}");
             return new QbFmt(fmt, fmtstr.GetArguments());
         }
 

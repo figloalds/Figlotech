@@ -291,7 +291,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         );
 
         static int gid = 0;
-        static string sid = IntEx.GenerateShortRid();
         public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
 
@@ -324,13 +323,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             return retv;
         }
-
+        static uint upseq = 0;
         public static QueryBuilder ListIds<T>(this Fi _selfie, RecordSet<T> set) where T : IDataObject, new() {
             QueryBuilder retv = new QueryBuilder();
+            uint seq = 0;
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QbFmt(
-                        $"@{IntEx.GenerateShortRid()}",
+                        $"@{++upseq}_{++seq}",
                         set[i].Id
                     )
                 );

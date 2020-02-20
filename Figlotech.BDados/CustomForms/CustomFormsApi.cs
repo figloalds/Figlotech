@@ -127,7 +127,7 @@ namespace Figlotech.BDados.CustomForms {
             var tableName = GetPrefixedTableName(ref cf);
 
             QueryBuilder retv = new QueryBuilder();
-
+            int seq = 0;
             retv.Append("SELECT Id, ");
             for(int i = 0; i < cf.Fields.Count; i++) {
                 retv.Append($"{cf.Fields[i].Name},");
@@ -145,10 +145,10 @@ namespace Figlotech.BDados.CustomForms {
                     retv.Append("WHERE");
                     for (var a = 0; a < validConditions.Count; a++) {
                         if(validConditions.ElementAt(a).Value is String) {
-                            retv.Append($"{validConditions.ElementAt(a).Key} LIKE CONCAT('%', @{IntEx.GenerateShortRid()}, '%')", validConditions.ElementAt(a).Value);
+                            retv.Append($"{validConditions.ElementAt(a).Key} LIKE CONCAT('%', @_sq{seq++}, '%')", validConditions.ElementAt(a).Value);
                         }
                         else {
-                            retv.Append($"{validConditions.ElementAt(a).Key}=@{IntEx.GenerateShortRid()}", validConditions.ElementAt(a).Value);
+                            retv.Append($"{validConditions.ElementAt(a).Key}=@_sq{seq++}", validConditions.ElementAt(a).Value);
                         }
                     }
                 }
@@ -203,11 +203,11 @@ namespace Figlotech.BDados.CustomForms {
             }
             retv.Append("RID");
             retv.Append(") VALUES (");
-
+            int seq = 0;
             for (var i = 0; i < form.Fields.Count; i++) {
-                retv.Append($"@{IntEx.GenerateShortRid()},", o.Get(form.Fields[i].Name));
+                retv.Append($"@_sq{seq++},", o.Get(form.Fields[i].Name));
             }
-            retv.Append($"@{IntEx.GenerateShortRid()})", IntEx.GenerateUniqueRID());
+            retv.Append($"@_sq{seq++})", IntEx.GenerateUniqueRID());
             return retv;
         }
 
@@ -216,19 +216,20 @@ namespace Figlotech.BDados.CustomForms {
             if(!(o.Get("Id") is long) || ((o.Get("Id") as long?)??0) < 1) {
                 throw new Exception("Can't build an update query for an object that has no Id");
             }
+            uint seq = 0;
             QueryBuilder retv = new QueryBuilder();
             retv.Append($"UPDATE {tableName} SET ");
             for (var i = 0; i < form.Fields.Count; i++) {
-                retv.Append($"{form.Fields[i].Name}=@{IntEx.GenerateShortRid()}", o.Get(form.Fields[i].Name));
+                retv.Append($"{form.Fields[i].Name}=@_uq{++seq}", o.Get(form.Fields[i].Name));
             }
             /* LMAO GET RID */
             retv.If(o.Get("RID") != null).Then()
-                    .Append($"RID=@{IntEx.GenerateShortRid()}", o.Get("RID"))
+                    .Append($"RID=@_uq{++seq}", o.Get("RID"))
                 .Else()
-                    .Append($"RID=@{IntEx.GenerateShortRid()}", IntEx.GenerateUniqueRID())
+                    .Append($"RID=@_uq{++seq}", IntEx.GenerateUniqueRID())
                 .EndIf();
 
-            retv.Append($"WHERE Id=@{IntEx.GenerateShortRid()};", o.Get("Id"));
+            retv.Append($"WHERE Id=@_uq{++seq};", o.Get("Id"));
 
             return retv;
         }

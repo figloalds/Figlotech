@@ -247,6 +247,7 @@ namespace Figlotech.Core {
     public class FiHttp
     {
         public bool UseResponseBuffer { get; set; }
+        public bool UseRequestBuffer { get; set; } = true;
         public string SyncKeyCodePassword { get; set; } = null;
         IDictionary<string, string> headers = new Dictionary<string, string>();
         public IWebProxy Proxy { get; set; } = null;
@@ -357,21 +358,32 @@ namespace Figlotech.Core {
         }
 
         public async Task<FiHttpResult> Custom(String verb, String Url, Func<Stream, Task> UploadRequestStream = null) {
-            var req = GetRequest(Url);
-            byte[] bytes = new byte[0];
-            if(UploadRequestStream != null) {
-                using (var ms = new MemoryStream()) {
-                    await UploadRequestStream.Invoke(ms);
-                    bytes = ms.ToArray();
+            if(UploadRequestStream == null || UseRequestBuffer) {
+                byte[] bytes = new byte[0];
+                if (UploadRequestStream != null) {
+                    using (var ms = new MemoryStream()) {
+                        await UploadRequestStream.Invoke(ms);
+                        ms.Seek(0, SeekOrigin.Begin);
+                        bytes = ms.ToArray();
+                    }
                 }
-            }
-            req.Proxy = this.Proxy;
-            req.Method = verb;
-            req.UserAgent = UserAgent;
-            UpdateSyncCode();
-            AddHeaders(req);
+                var req = GetRequest(Url);
+                req.Proxy = this.Proxy;
+                req.Method = verb;
+                req.UserAgent = UserAgent;
+                UpdateSyncCode();
+                AddHeaders(req);
 
-            return await FiHttpResult.Init(verb, req, bytes, UseResponseBuffer);
+                return await FiHttpResult.Init(verb, req, bytes, UseResponseBuffer);
+            } else {
+                var req = GetRequest(Url);
+                req.Proxy = this.Proxy;
+                req.Method = verb;
+                req.UserAgent = UserAgent;
+                UpdateSyncCode();
+                AddHeaders(req);
+                return await FiHttpResult.InitFromPost(req, UploadRequestStream, UseResponseBuffer);
+            }
         }
         public async Task<FiHttpResult> Custom(String verb, String Url, byte[] data) {
             var req = GetRequest(Url);

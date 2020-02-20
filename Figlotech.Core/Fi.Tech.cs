@@ -35,8 +35,8 @@ namespace Figlotech.Core {
         public static Fi Tech = new Fi();
 
         public static IEnumerable<int> Range(int min, int max, int skip = 1) {
-            if(skip < 0) {
-                for (int i = max-1; i >= min; i += skip) {
+            if (skip < 0) {
+                for (int i = max - 1; i >= min; i += skip) {
                     yield return i;
                 }
             } else {
@@ -47,7 +47,7 @@ namespace Figlotech.Core {
         }
 
         public static Encoding StandardEncoding => new UTF8Encoding(false);
-        
+
         /// <summary>
         /// This is here because ain't nobody got time to write
         /// FormattableString.Invariant(), it's also a shame this isn't the default for the $"" syntax
@@ -64,7 +64,7 @@ namespace Figlotech.Core {
         public static With<T> With<T>(T value) {
             return new With<T>(value);
         }
-                
+
         public FnVal<T> V<T>(Func<T> fn) {
             return new FnVal<T>(fn);
         }

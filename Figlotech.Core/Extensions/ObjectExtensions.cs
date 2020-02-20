@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -189,7 +190,19 @@ namespace System
             if (me == null) {
                 throw new NullReferenceException("Figlotech ToDictionary Extension method called on a null value, this is a natural NullReferenceException");
             }
-            return JsonConvert.SerializeObject(me, formatted ? Formatting.Indented : Formatting.None);
+            return JsonConvert.SerializeObject(me, new JsonSerializerSettings {
+                Formatting = formatted ? Formatting.Indented : Formatting.None,
+                DateTimeZoneHandling = DateTimeZoneHandling.Utc,
+                DateFormatHandling = DateFormatHandling.IsoDateFormat,
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            });
+        }
+        public static byte[] ToJsonb(this Object me, bool formatted = false) {
+            return Fi.StandardEncoding.GetBytes(ToJson(me, formatted));
+        }
+        public static async Task WriteObjectAsJsonAsync(this Stream me, object obj) {
+            var bytes = obj.ToJsonb();
+            await me.WriteAsync(bytes, 0, bytes.Length);
         }
 
         public static void FromJson(this Object me, string json) {
@@ -197,6 +210,12 @@ namespace System
                 throw new NullReferenceException("Figlotech ToDictionary Extension method called on a null value, this is a natural NullReferenceException");
             }
             Fi.Tech.MemberwiseCopy(JsonConvert.DeserializeObject(json, me.GetType()), me);
+        }
+        public static object ToObjectFromJsonB<T>(this byte[] me) {
+            if (me == null) {
+                throw new NullReferenceException("Figlotech ToDictionary Extension method called on a null value, this is a natural NullReferenceException");
+            }
+            return JsonConvert.DeserializeObject<T>(Fi.StandardEncoding.GetString(me));
         }
     }
 }

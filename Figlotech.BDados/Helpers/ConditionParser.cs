@@ -182,26 +182,15 @@ namespace Figlotech.BDados.Helpers {
             }
         }
 
+        int idGeneration = -1;
+        string GenerateParameterId => $"_p{++idGeneration}";
+
         private QueryBuilder ParseExpression(Expression foofun, Type typeOfT, String ForceAlias = null, QueryBuilder strBuilder = null, bool fullConditions = true) {
             //if(strBuilder == null)
             strBuilder = new QueryBuilder();
 
             if (foofun is BinaryExpression) {
                 var expr = foofun as BinaryExpression;
-                //if (!fullConditions) {
-                //    var mexp = expr.Left as MemberExpression;
-                //    Expression subexp = mexp;
-                //    while (subexp is MemberExpression && (subexp as MemberExpression).Expression != null)
-                //        subexp = (subexp as MemberExpression).Expression;
-                //    if (subexp is ParameterExpression) {
-                //        // If this member belongs to an AggregateField, then problems problems...
-                //        var aList = new List<MemberInfo>();
-                //        aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == mexp.Member.Name));
-                //        if (!fullConditions && ((subexp as ParameterExpression).Type == typeOfT || !aList.Any())) {
-                //            return new QbFmt("TRUE");
-                //        }
-                //    }
-                //}
                 if (expr.NodeType == ExpressionType.Equal &&
                     expr.Right is ConstantExpression && (expr.Right as ConstantExpression).Value == null) {
                     strBuilder.Append("(");
@@ -233,19 +222,19 @@ namespace Figlotech.BDados.Helpers {
                         var appendFragment = String.Empty;
                         switch (comparisonType) {
                             case DataStringComparisonType.Containing:
-                                appendFragment = $"CONCAT('%', @{IntEx.GenerateShortRid()}, '%')";
+                                appendFragment = $"CONCAT('%', @{GenerateParameterId}, '%')";
                                 break;
                             case DataStringComparisonType.EndingWith:
-                                appendFragment = $"CONCAT('%', @{IntEx.GenerateShortRid()})";
+                                appendFragment = $"CONCAT('%', @{GenerateParameterId})";
                                 break;
                             case DataStringComparisonType.StartingWith:
-                                appendFragment = $"CONCAT(@{IntEx.GenerateShortRid()}, '%')";
+                                appendFragment = $"CONCAT(@{GenerateParameterId}, '%')";
                                 break;
                             case DataStringComparisonType.ExactValue:
-                                appendFragment = $"@{IntEx.GenerateShortRid()}";
+                                appendFragment = $"@{GenerateParameterId}";
                                 break;
                             default:
-                                appendFragment = $"@{IntEx.GenerateShortRid()}";
+                                appendFragment = $"@{GenerateParameterId}";
                                 break;
                         }
                         strBuilder.Append(appendFragment, GetValue(expr.Right));
@@ -328,12 +317,12 @@ namespace Figlotech.BDados.Helpers {
                 } else if (subexp is MethodCallExpression) {
                     strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions).GetCommandText()}.{expr.Member.Name}");
                 } else {
-                    strBuilder.Append($"@{IntEx.GenerateShortRid()}", GetValue(expr));
+                    strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
                 }
             } else
             if (foofun is ConstantExpression) {
                 var expr = foofun as ConstantExpression;
-                strBuilder.Append($"@{IntEx.GenerateShortRid()}", expr.Value);
+                strBuilder.Append($"@{GenerateParameterId}", expr.Value);
             } else
             if (foofun is UnaryExpression) {
                 var expr = foofun as UnaryExpression;
@@ -343,7 +332,7 @@ namespace Figlotech.BDados.Helpers {
                     strBuilder.Append(")");
                 }
                 if (expr.NodeType == ExpressionType.Convert) {
-                    //strBuilder.Append($"@{IntEx.GerarShortRID()}", GetValue(expr));
+                    //strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
                     strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
                 }
             } else
@@ -405,7 +394,7 @@ namespace Figlotech.BDados.Helpers {
             }
             if(foofun is NewExpression newex) {
                 var marshalledValue = newex.Constructor.Invoke(newex.Arguments.Select(arg => GetValue(arg)).ToArray());
-                return Qb.Fmt($"@{IntEx.GenerateShortRid()}", marshalledValue);
+                return Qb.Fmt($"@{GenerateParameterId}", marshalledValue);
             }
             if (fullConditions) {
                 return strBuilder;

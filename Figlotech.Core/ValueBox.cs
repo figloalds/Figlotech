@@ -4,16 +4,13 @@ using System.Text;
 
 namespace Figlotech.Core
 {
-    public class ValueBox<T>
+    public struct ValueBox<T>
     {
         public T Value { get; set; }
         public ValueBox(T value) {
             this.Value = value;
         }
-        public ValueBox() {
-            Value = default(T);
-        }
-
+        
         public static implicit operator T(ValueBox<T> self) {
             return self.Value;
         }

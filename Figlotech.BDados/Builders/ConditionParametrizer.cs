@@ -23,8 +23,7 @@ namespace Figlotech.BDados.Builders {
         int i;
         String RandomId {
             get {
-                String s = IntEx.GenerateShortRid();
-                return $"{s}{i++}";
+                return $"_cnd{i++}";
             }
         }
         public ConditionParametrizer(String fragment, params object[] args) {
