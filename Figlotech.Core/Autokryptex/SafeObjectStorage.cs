@@ -153,13 +153,17 @@ namespace Figlotech.Core.Autokryptex
             try {
                 List<string> cachedRids;
                 lock (Cache)
-                    cachedRids = Cache.Select(c => c.RID).ToList();
+                    lock(DeletionQueue)
+                        cachedRids = Cache.Select(c => c.RID).Where(x=> !DeletionQueue.Contains(x)).ToList();
                 var newList = new List<SafeDataPayload>();
                 fileSystem.ForFilesIn("", rid => {
                     if (cachedRids.Contains(rid)) {
                         return;
                     }
-                    newList.Add(_getPayloadFromFile(rid));
+                    lock (DeletionQueue) 
+                        if(!DeletionQueue.Contains(rid)) {
+                            newList.Add(_getPayloadFromFile(rid));
+                        }
                 });
 
                 List<SafeDataPayload> localCopyCache;
