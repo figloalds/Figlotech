@@ -48,7 +48,7 @@ namespace Figlotech.Core {
             await Task.Yield();
             while(TaskObject == null) {
                 try {
-                    await Task.Delay(1000, this.JobConclusionCancellation.Token);
+                    await Task.Delay(5000, this.JobConclusionCancellation.Token);
                 } catch (Exception x) {
                     break;
                 }

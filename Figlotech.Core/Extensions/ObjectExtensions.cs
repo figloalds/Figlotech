@@ -146,6 +146,13 @@ namespace System
         public static List<T> ToSingleElementList<T>(this T me) {
             return new List<T> { me };
         }
+        public static object ToSingleElementListRefl(this object me) {
+            var t = me.GetType();
+            var li = typeof(List<>).MakeGenericType(t);
+            var retv = Activator.CreateInstance(li);
+            li.GetMethod(nameof(List<object>.Add), new Type[] { t }).Invoke(retv, new object[] { me });
+            return retv;
+        }
 
         public static Any<T> ToAny<T>(this T me) {
             return new Any<T>(me);

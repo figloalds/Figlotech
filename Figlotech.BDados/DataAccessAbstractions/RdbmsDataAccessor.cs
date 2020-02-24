@@ -1180,9 +1180,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             if (rs.Count == 0)
                 return true;
-            if (rs.Count == 1) {
-                return SaveItem(transaction, rs.First());
-            }
+            //if (rs.Count == 1) {
+            //    return SaveItem(transaction, rs.First());
+            //}
             for (int it = 0; it < rs.Count; it++) {
                 if (rs[it].RID == null) {
                     rs[it].RID = new RID().ToString();
@@ -1878,6 +1878,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> generating INSERT query");
                     var query = Plugin.QueryGenerator.GenerateInsertQuery(input);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> executing query");
+                    retv = true;
                     rs = Execute(transaction, query);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
                 }
@@ -1901,64 +1902,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (retv && !input.IsPersisted) {
                     if (input.Id <= 0) {
                         long retvId = 0;
-
-                        //var ridAtt = ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null);
-
-                        if (ReflectionTool.FieldsAndPropertiesOf(input.GetType()).Any(a => a.GetCustomAttribute<ReliableIdAttribute>() != null)) {
-                            try {
-                                var query = (IQueryBuilder)Plugin.QueryGenerator
-                                    .GetType()
-                                    .GetMethod(nameof(Plugin.QueryGenerator.GetIdFromRid))
-                                    .MakeGenericMethod(input.GetType())
-                                    .Invoke(Plugin.QueryGenerator, new Object[] { input.RID });
-                                var gid = ScalarQuery(transaction, query);
-                                if (gid is long l)
-                                    retvId = l;
-                                if (gid is string s) {
-                                    Int64.TryParse(s, out retvId);
-                                }
-                            } catch (Exception) {
-
+                        var method = typeof(IQueryGenerator).GetMethods().FirstOrDefault(x=> x.Name == "QueryIds");
+                        var genericMethod = method.MakeGenericMethod(input.GetType());
+                        var queryIds = Query(transaction, (IQueryBuilder) genericMethod.Invoke(this.QueryGenerator, new object[] { input.ToSingleElementListRefl() }));
+                        foreach (DataRow dr in queryIds.Rows) {
+                            var psave = input;
+                            if (psave != null) {
+                                psave.Id = Int64.Parse(dr[0] as String);
                             }
-                        }
-
-                        if (retvId <= 0) {
-                            try {
-                                var query = (IQueryBuilder)Plugin.QueryGenerator
-                                    .GetType()
-                                    .GetMethod(nameof(Plugin.QueryGenerator.GetLastInsertId))
-                                    .MakeGenericMethod(input.GetType())
-                                    .Invoke(Plugin.QueryGenerator, new Object[0]);
-                                var gid1 = ScalarQuery(transaction, query);
-                                if (gid1 is long l)
-                                    retvId = l;
-                                if (retvId <= 0) {
-                                    var gid = ScalarQuery(transaction, query);
-                                    if (gid is long l2)
-                                        retvId = l2;
-                                    if (gid is string s) {
-                                        if (Int64.TryParse(s, out retvId)) {
-                                        }
-                                    }
-                                }
-                            } catch (Exception x) {
-                                if (Debugger.IsAttached) {
-                                    Debugger.Break();
-                                }
-                                if (OnFailedSave != null) {
-                                    Fi.Tech.FireAndForget(async () => {
-                                        await Task.Yield();
-                                        OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
-                                    }, async (xe) => {
-                                        await Task.Yield();
-                                        Fi.Tech.Throw(xe);
-                                    });
-                                }
-                            }
-                        }
-
-                        if (retvId > 0) {
-                            input.Id = retvId;
                         }
                     }
 
