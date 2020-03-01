@@ -25,35 +25,18 @@ namespace Figlotech.Core {
         private static int idGen = 0;
         internal Thread AssignedThread = null;
         public Func<Task> action;
-        public Task TaskObject { get; set; }
         public Func<bool, Task> finished;
         public Func<Exception, Task> handling;
         public WorkJobStatus status;
         public DateTime? EqueuedTime = DateTime.Now;
         public DateTime? DequeuedTime;
         public DateTime? CompletedTime;
-        public EventWaitHandle WaitHandle { get; private set; } = new EventWaitHandle(false, EventResetMode.ManualReset);
         public String Name { get; set; } = null;
-        public CancellationTokenSource JobConclusionCancellation = new CancellationTokenSource();
 
-        public TaskAwaiter GetAwaiter() {
-            return (TaskObject ?? GetAwaitableMethod()).GetAwaiter();
-        }
+        public TaskCompletionSource<int> TaskCompletionSource { get; set; } = new TaskCompletionSource<int>();
 
-        public void Wait() {
-            (TaskObject ?? GetAwaitableMethod()).Wait();
-        }
-
-        private async Task GetAwaitableMethod() {
-            await Task.Yield();
-            while(TaskObject == null) {
-                try {
-                    await Task.Delay(5000, this.JobConclusionCancellation.Token);
-                } catch (Exception x) {
-                    break;
-                }
-            }
-            await TaskObject;
+        public TaskAwaiter<int> GetAwaiter() {
+            return TaskCompletionSource.Task.GetAwaiter();
         }
 
         public void OnCompleted(Action continuation) {
@@ -77,7 +60,7 @@ namespace Figlotech.Core {
         }
     }
 
-    public class WorkQueuer : IDisposable {
+    public sealed class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
         public String Name;
@@ -295,7 +278,7 @@ namespace Figlotech.Core {
                             ActiveJobs.RemoveAll(x => x.CompletedTime != null);
                             while(ActiveJobs.Count < this.MaxParallelTasks && WorkQueue.Count > 0) {
                                 var job = WorkQueue.Dequeue();
-                                job.TaskObject = Task.Run(async () => {
+                                Task.Run(async () => {
                                     try {
                                         job.DequeuedTime = DateTime.UtcNow;
                                         job.status = WorkJobStatus.Running;
@@ -320,14 +303,14 @@ namespace Figlotech.Core {
                                             PendingOrExecutingJobs.Remove(job);
                                         }
                                         lock (Tasks) {
-                                            Tasks.Remove(job.TaskObject);
+                                            Tasks.Remove(job.TaskCompletionSource.Task);
                                         }
-                                        job.JobConclusionCancellation.Cancel();
+                                        job.TaskCompletionSource.SetResult(0);
                                         SpawnWorker2();
                                     }
                                 });
                                 lock (Tasks) {
-                                    Tasks.Add(job.TaskObject);
+                                    Tasks.Add(job.TaskCompletionSource.Task);
                                 }
                                 ActiveJobs.Add(job);
                             }

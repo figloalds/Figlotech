@@ -32,7 +32,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         object Format(object input);
     }
 
-    public abstract class CustomDisplayFormatter<T>
+    public abstract class CustomDisplayFormatter<T> : ICustomDisplayFormatter
     {
         public object Format(object input) {
             return Format((T) input);

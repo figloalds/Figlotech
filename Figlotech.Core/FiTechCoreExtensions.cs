@@ -1523,25 +1523,32 @@ namespace Figlotech.Core {
             return new string(retval);
         }
 
+        private static SelfInitializerDictionary<(Type, Type), List<(MemberInfo, MemberInfo)>> mwc_MemberRelationCache =
+            new SelfInitializerDictionary<(Type, Type), List<(MemberInfo, MemberInfo)>>
+        (
+            ((Type, Type) tup) => {
+                var (t1, t2) = tup;
+                var retv = new List<(MemberInfo, MemberInfo)>();
+                foreach(var m1 in ReflectionTool.FieldsAndPropertiesOf(t1)) {
+                    foreach(var m2 in ReflectionTool.FieldsAndPropertiesOf(t2)) {
+                        if(m1.Name == m2.Name) {
+                            retv.Add((m1, m2));
+                        }
+                    }
+                }
+                return retv;
+            }
+        );
+
         public static void MemberwiseCopy(this Fi _selfie, object origin, object destination) {
             if (origin == null)
                 return;
             if (destination == null)
                 return;
             var sametype = origin.GetType() == destination.GetType();
-            ObjectReflector.Open(origin, (objA) => {
-                ObjectReflector.Open(destination, (objB) => {
-                    foreach (var field in objB) {
-                        if (sametype) {
-                            objB[field] = objA[field];
-                        } else {
-                            if (objA.ContainsKey(field.Key.Name)) {
-                                objB[field.Key.Name] = objA[field.Key.Name];
-                            }
-                        }
-                    }
-                });
-            });
+            foreach(var rel in mwc_MemberRelationCache[(origin.GetType(), destination.GetType())]) {
+                ReflectionTool.SetMemberValue(rel.Item2, destination, ReflectionTool.GetMemberValue(rel.Item1, origin));
+            }
         }
 
         public static void CloneDataObject(this Fi _selfie, object origin, object destination) {
