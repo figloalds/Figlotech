@@ -1588,7 +1588,7 @@ namespace Figlotech.Core {
         }
         public interface IParallelFlowStepOut<TOut> : IParallelFlowStep {
             TaskAwaiter<List<TOut>> GetAwaiter();
-            Task<List<TOut>> Task { get; }
+            Task<List<TOut>> TaskObj { get; }
         }
         public interface IParallelFlowStepIn<TIn> : IParallelFlowStep {
             void Put(TIn input);
@@ -1599,12 +1599,13 @@ namespace Figlotech.Core {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
             Func<TIn, Task<TOut>> Act { get; set; }
+            Func<Exception, Task> ExceptionHandler { get; set; }
             IParallelFlowStepIn<TOut> ConnectTo { get; set; }
             bool IgnoreOutput { get; set; } = false;
             IParallelFlowStepOut<TIn> Parent { get; set; }
 
             public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
-            public Task<List<TOut>> Task => TaskCompletionSource.Task;
+            public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
             public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.Act = Act;
                 this.Parent = parent;
@@ -1622,10 +1623,31 @@ namespace Figlotech.Core {
                                 ValueQueue.Enqueue(output);
                         }
                     }
+                }, async x=> {
+                    if(ExceptionHandler != null) {
+                        await ExceptionHandler(x);
+                    }
                 });
             }
+            Queue<TaskCompletionSource<int>> AlsoQueue { get; set; } = new Queue<TaskCompletionSource<int>>();
+            public ParallelFlowStepInOut<TIn, TOut> Also(Func<FlowYield<TOut>, Task> yieldFn) {
+                var src = new TaskCompletionSource<int>();
+                AlsoQueue.Enqueue(src);
+                Fi.Tech.FireAndForget(async () => {
+                    await yieldFn(new FlowYield<TOut>(this.ConnectTo)).ConfigureAwait(false);
+                    src.SetResult(0);
+                });
+                return this;
+            }
 
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act, int maxParallelism = -1) {
+            public ParallelFlowStepInOut<TIn, TOut> Except(Func<Exception, Task> except) {
+                this.ExceptionHandler = except;
+                return this;
+            }
+
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act)
+                => Then(Environment.ProcessorCount, act);
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, Task<TNext>> act) {
                 if(maxParallelism < 0) {
                     maxParallelism = Environment.ProcessorCount;
                 }
@@ -1634,7 +1656,13 @@ namespace Figlotech.Core {
                 FlushToConnected();
                 return retv;
             }
-            public IParallelFlowStepOut<TOut> Then(Func<TOut, Task> act, int maxParallelism = -1) {
+
+            public ParallelFlowStepInOut<TOut, TOut> Then(Func<TOut, Task> act)
+                => Then(Environment.ProcessorCount, act);
+            public ParallelFlowStepInOut<TOut, TOut> Then(int maxParallelism, Func<TOut, Task> act) {
+                if (maxParallelism < 0) {
+                    maxParallelism = Environment.ProcessorCount;
+                }
                 var retv = new ParallelFlowStepInOut<TOut, TOut>(async (x) => {
                     await act(x).ConfigureAwait(false);
                     return x;
@@ -1651,6 +1679,9 @@ namespace Figlotech.Core {
                 }
             }
             public async Task NotifyDoneQueueing() {
+                while(AlsoQueue.Count > 0) {
+                    await AlsoQueue.Dequeue().Task;
+                }
                 await queuer.Stop(true).ConfigureAwait(false);
                 if(this.ConnectTo != null) {
                     FlushToConnected();
