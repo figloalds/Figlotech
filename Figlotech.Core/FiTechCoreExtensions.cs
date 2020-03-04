@@ -22,6 +22,7 @@ using System.Threading.Tasks.Dataflow;
 using System.Drawing;
 using System.Text.RegularExpressions;
 using Figlotech.Core.Autokryptex;
+using System.Runtime.CompilerServices;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -256,18 +257,18 @@ namespace Figlotech.Core {
         static SyncTimeStampSource _globalTimeStampSource = null;
         public static SyncTimeStampSource GlobalTimeStampSource {
             get {
-                if(_globalTimeStampSource != null) {
+                if (_globalTimeStampSource != null) {
                     return _globalTimeStampSource;
                 }
                 _globalTimeStampSource = SyncTimeStampSource.FromLocalTime();
                 bool shouldRequestNtpTime = false;
-                lock("NTP_TIME_REQUESTAL") {
+                lock ("NTP_TIME_REQUESTAL") {
                     if (!isNtpTimeRequestedAlready) {
                         shouldRequestNtpTime = true;
                         isNtpTimeRequestedAlready = true;
                     }
                 }
-                if(shouldRequestNtpTime) {
+                if (shouldRequestNtpTime) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServer("pool.ntp.org");
@@ -397,7 +398,7 @@ namespace Figlotech.Core {
         //}
 
         public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
-            if(value == null) {
+            if (value == null) {
                 var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}".ToString();
                 lock (String.Intern(lockStr)) {
                     if (value == null) {
@@ -409,7 +410,7 @@ namespace Figlotech.Core {
         }
 
         static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
-        
+
         private static void Reschedule(ScheduledWorkJob sched) {
             sched.Timer.Change(Timeout.Infinite, Timeout.Infinite);
             sched.Timer.Dispose();
@@ -420,12 +421,12 @@ namespace Figlotech.Core {
             var sched = a as ScheduledWorkJob;
             var newWj = new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished);
             newWj = sched.Queuer.Enqueue(newWj);
-            if(sched.RecurrenceInterval.HasValue) {
-                if(sched.RecurrenceMode == RecurrenceMode.Regular) {
+            if (sched.RecurrenceInterval.HasValue) {
+                if (sched.RecurrenceMode == RecurrenceMode.Regular) {
                     newWj.GetAwaiter().OnCompleted(() => {
                         Reschedule(sched);
                     });
-                } else if(sched.RecurrenceMode == RecurrenceMode.Periodic) {
+                } else if (sched.RecurrenceMode == RecurrenceMode.Periodic) {
                     Reschedule(sched);
                 }
             }
@@ -452,7 +453,7 @@ namespace Figlotech.Core {
         public static void Unschedule(this Fi _selfie, string identifier) {
             lock (GlobalScheduledJobs) {
                 GlobalScheduledJobs.RemoveAll(s => {
-                    if(s.Identifier == identifier) {
+                    if (s.Identifier == identifier) {
                         s.Timer.Dispose();
                         return true;
                     } else {
@@ -463,7 +464,7 @@ namespace Figlotech.Core {
         }
 
         public static byte[] ComputeHash(this Fi _selfie, string str) {
-            using(MemoryStream ms = new MemoryStream(new UTF8Encoding(false).GetBytes(str))) {
+            using (MemoryStream ms = new MemoryStream(new UTF8Encoding(false).GetBytes(str))) {
                 ms.Seek(0, SeekOrigin.Begin);
                 using (var sha = SHA256.Create()) {
                     return sha.ComputeHash(ms);
@@ -499,7 +500,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, Dictionary<string, string> map) where T: new() {
+        public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, Dictionary<string, string> map) where T : new() {
             var retv = new List<T>();
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
             while (reader.Read()) {
@@ -557,7 +558,7 @@ namespace Figlotech.Core {
                 objBuilder[objField] = Fi.Tech.ProperMapValue(o);
             }
         }
-        
+
         public static object ProperMapValue(this Fi __selfie, object o) {
             if (o is DateTime dt && dt.Kind != DateTimeKind.Utc) {
                 // I reluctantly admit that I'm using this horrible gimmick
@@ -594,7 +595,7 @@ namespace Figlotech.Core {
         }
 
         public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
-            if(dt == null) {
+            if (dt == null) {
                 throw new NullReferenceException("Input DataTable to Map<T> cannot be null");
             }
             if (dt.Rows.Count < 1) return new List<T>();
@@ -617,7 +618,7 @@ namespace Figlotech.Core {
         public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
         private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", 2, true) {
-            
+
         });
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
 
@@ -643,7 +644,7 @@ namespace Figlotech.Core {
         }
 
         public static T As<T>(this Fi _selfie, object input) {
-            return (T) ReflectionTool.TryCast(input, typeof(T));
+            return (T)ReflectionTool.TryCast(input, typeof(T));
         }
 
         public static IBDadosStringsProvider GetStrings(this Fi _selfie) {
@@ -1259,7 +1260,7 @@ namespace Figlotech.Core {
 
 
         public static void Throw(this Fi _selfie, Exception x) {
-            if(Debugger.IsAttached) {
+            if (Debugger.IsAttached) {
                 Debugger.Break();
             }
             try {
@@ -1283,14 +1284,14 @@ namespace Figlotech.Core {
 
         public static IEnumerable<Exception> ExceptionTreeToArray(this Fi _selfie, Exception x, int maxRecursionDepth = 12) {
             var ex = x;
-            if(maxRecursionDepth <= 0) {
+            if (maxRecursionDepth <= 0) {
                 yield break;
             }
             while (ex != null) {
                 yield return ex;
                 if (ex is AggregateException agex) {
                     foreach (var inex in agex.InnerExceptions) {
-                        foreach(var inex2 in ExceptionTreeToArray(_selfie, inex, ++maxRecursionDepth)) {
+                        foreach (var inex2 in ExceptionTreeToArray(_selfie, inex, ++maxRecursionDepth)) {
                             yield return inex2;
                         }
                     }
@@ -1298,7 +1299,7 @@ namespace Figlotech.Core {
                 ex = ex.InnerException;
             }
         }
-        
+
         public static void SafeReadKeyOrIgnore(this Fi __selfie) {
             TryIf(__selfie, () => !Console.IsInputRedirected, () => { Console.ReadKey(); });
         }
@@ -1346,7 +1347,7 @@ namespace Figlotech.Core {
                 } finally {
                     t?.Invoke();
                 }
-            } catch(Exception x) {
+            } catch (Exception x) {
                 Fi.Tech.Error(x);
             }
         }
@@ -1400,16 +1401,16 @@ namespace Figlotech.Core {
         }
 
         public static List<TDest> CastList<TSrc, TDest>(this Fi __selfie, List<TSrc> input) {
-            return new List<TDest>(input.Select(i => (TDest) (object) i));
+            return new List<TDest>(input.Select(i => (TDest)(object)i));
         }
 
         public static List<T> CastUnknownList<T>(this Fi __selfie, Type src, object o) {
-            return (List<T>) typeof(FiTechCoreExtensions)
+            return (List<T>)typeof(FiTechCoreExtensions)
                 .GetMethod("CastList")
                 .MakeGenericMethod(src, typeof(T))
                 .Invoke(null, new object[] { null, o });
         }
-        
+
         public static void FireTaskTasks(this Fi _selfie, Action<WorkQueuer> action, string name = "Annonymous_multi_tasks") {
             FireTask(_selfie, async () => {
                 await Task.Yield();
@@ -1423,7 +1424,7 @@ namespace Figlotech.Core {
         }
         public static bool InlineFireTask { get; set; }
         static WorkQueuer FiTechRAF = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
-        public static WorkJob FireTask(this Fi _selfie, string name, Func<Task> job, Func<Exception,Task> handler = null, Func<bool, Task> then = null) {
+        public static WorkJob FireTask(this Fi _selfie, string name, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
             if (InlineFireTask) {
                 try {
                     job?.Invoke();
@@ -1490,7 +1491,7 @@ namespace Figlotech.Core {
                 numArray[index] = (byte)random.Next(256);
             return numArray;
         }
-        
+
         public static byte[] CramString(this Fi _selfie, String input, int digitCount) {
             byte[] workset = Fi.StandardEncoding.GetBytes(input);
             FiRandom cr = new FiRandom(BitConverter.ToInt64(Fi.Tech.ComputeHash(workset), 0));
@@ -1529,9 +1530,9 @@ namespace Figlotech.Core {
             ((Type, Type) tup) => {
                 var (t1, t2) = tup;
                 var retv = new List<(MemberInfo, MemberInfo)>();
-                foreach(var m1 in ReflectionTool.FieldsAndPropertiesOf(t1)) {
-                    foreach(var m2 in ReflectionTool.FieldsAndPropertiesOf(t2)) {
-                        if(m1.Name == m2.Name) {
+                foreach (var m1 in ReflectionTool.FieldsAndPropertiesOf(t1)) {
+                    foreach (var m2 in ReflectionTool.FieldsAndPropertiesOf(t2)) {
+                        if (m1.Name == m2.Name) {
                             retv.Add((m1, m2));
                         }
                     }
@@ -1546,9 +1547,151 @@ namespace Figlotech.Core {
             if (destination == null)
                 return;
             var sametype = origin.GetType() == destination.GetType();
-            foreach(var rel in mwc_MemberRelationCache[(origin.GetType(), destination.GetType())]) {
+            foreach (var rel in mwc_MemberRelationCache[(origin.GetType(), destination.GetType())]) {
                 ReflectionTool.SetMemberValue(rel.Item2, destination, ReflectionTool.GetMemberValue(rel.Item1, origin));
             }
+        }
+
+        private static void RecursiveEnqueue(List<object> retv, object input, IEnumerator<WorkQueuer> queuers, IEnumerator<(Func<object, Task<object>> act, Func<Exception, Task> except)> step) {
+            var hasNext = queuers.MoveNext();
+            if (hasNext) {
+                step.MoveNext();
+                var thisStep = step.Current;
+                queuers.Current.Enqueue(new WorkJob(async () => {
+                    var next = await thisStep.act(input).ConfigureAwait(false);
+                    RecursiveEnqueue(retv, next, queuers, step);
+                }, async (ex) => {
+                    Console.Write(ex.Message);
+                    await thisStep.except(ex);
+                }, async (b) => { }));
+            } else {
+                lock (retv) {
+                    retv.Add(input);
+                }
+            }
+        }
+
+        public class FlowYield<T> {
+            IParallelFlowStepIn<T> root { get; set; }
+            public FlowYield(IParallelFlowStepIn<T> root) {
+                this.root = root;
+            }
+            public void Return(T o) {
+                root.Put(o);
+            }
+            public void ReturnRange(IEnumerable<T> list) {
+                list.ForEach(x => Return(x));
+            }
+        }
+
+        public interface IParallelFlowStep {
+        }
+        public interface IParallelFlowStepOut<TOut> : IParallelFlowStep {
+            TaskAwaiter<List<TOut>> GetAwaiter();
+            Task<List<TOut>> Task { get; }
+        }
+        public interface IParallelFlowStepIn<TIn> : IParallelFlowStep {
+            void Put(TIn input);
+            Task NotifyDoneQueueing();
+        }
+        public class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>
+        {
+            WorkQueuer queuer { get; set; }
+            Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
+            Func<TIn, Task<TOut>> Act { get; set; }
+            IParallelFlowStepIn<TOut> ConnectTo { get; set; }
+            bool IgnoreOutput { get; set; } = false;
+            IParallelFlowStepOut<TIn> Parent { get; set; }
+
+            public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
+            public Task<List<TOut>> Task => TaskCompletionSource.Task;
+            public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
+                this.Act = Act;
+                this.Parent = parent;
+                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Min(1, maxParallelism));
+            }
+
+            public void Put(TIn input) {
+                queuer.Enqueue(async () => {
+                    var output = await Act(input);
+                    if(this.ConnectTo != null) {
+                        this.ConnectTo.Put(output);
+                    } else {
+                        if(!IgnoreOutput) {
+                            lock (ValueQueue)
+                                ValueQueue.Enqueue(output);
+                        }
+                    }
+                });
+            }
+
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act, int maxParallelism = -1) {
+                if(maxParallelism < 0) {
+                    maxParallelism = Environment.ProcessorCount;
+                }
+                var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
+                this.ConnectTo = retv;
+                FlushToConnected();
+                return retv;
+            }
+            public IParallelFlowStepOut<TOut> Then(Func<TOut, Task> act, int maxParallelism = -1) {
+                var retv = new ParallelFlowStepInOut<TOut, TOut>(async (x) => {
+                    await act(x);
+                    return x;
+                }, this, maxParallelism);
+                this.ConnectTo = retv;
+                FlushToConnected();
+                return retv;
+            }
+            public void FlushToConnected() {
+                if(this.ConnectTo != null) {
+                    lock (ValueQueue)
+                        while(ValueQueue.Count > 0)
+                            this.ConnectTo.Put(ValueQueue.Dequeue());
+                }
+            }
+            public async Task NotifyDoneQueueing() {
+                await queuer.Stop(true);
+                if(this.ConnectTo != null) {
+                    FlushToConnected();
+                    await this.ConnectTo.NotifyDoneQueueing();
+                }
+                TaskCompletionSource.SetResult(ValueQueue.ToList());
+            }
+            public TaskAwaiter<List<TOut>> GetAwaiter() {
+                return TaskCompletionSource.Task.GetAwaiter();
+            }
+        }
+
+        public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Func<FlowYield<TIn>, Task> input, int maxParallelism = -1) {
+            if (maxParallelism < 0) {
+                maxParallelism = Environment.ProcessorCount;
+            }
+            var retv = new ParallelFlowStepInOut<TIn, TIn>(async f => {
+                await Task.Yield();
+                return f;
+            }, null, maxParallelism);
+            Fi.Tech.FireAndForget(async () => {
+                await input(new FlowYield<TIn>(retv));
+                await retv.NotifyDoneQueueing();
+            });
+            return retv;
+        }
+
+        public static async Task<List<TResult>> ParallelFlow<TResult, T>(this Fi __selfie, IEnumerable<T> input, params (Func<object, Task<object>> act, Func<Exception, Task> except)[] steps) {
+            WorkQueuer[] queuers = steps.Select(x => new WorkQueuer("ParallelFlow_Step", Environment.ProcessorCount, true)).ToArray();
+            List<object> result = new List<object>();
+            if (typeof(T) == typeof(Task<>)) {
+                Console.WriteLine("ay");
+            }
+            foreach (var item in input) {
+                FiTechCoreExtensions.RecursiveEnqueue(result, item, queuers.AsEnumerable().GetEnumerator(), steps.AsEnumerable().GetEnumerator());
+            }
+            foreach (var q in queuers) {
+                await q.Stop(true);
+            }
+
+            return result.Select(x=> (TResult) x).ToList();
         }
 
         public static void CloneDataObject(this Fi _selfie, object origin, object destination) {

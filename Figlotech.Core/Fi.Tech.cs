@@ -88,7 +88,7 @@ namespace Figlotech.Core {
             IECLongByte,
             IECLongBit,
         }
-
+        
         public static Dictionary<DataUnitGeneralFormat, string[]> DataUnitNames = new Dictionary<DataUnitGeneralFormat, string[]> {
             { DataUnitGeneralFormat.SIShortByte, new string[] {
                 "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"

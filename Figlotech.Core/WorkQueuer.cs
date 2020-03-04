@@ -282,18 +282,18 @@ namespace Figlotech.Core {
                                     try {
                                         job.DequeuedTime = DateTime.UtcNow;
                                         job.status = WorkJobStatus.Running;
-                                        await job.action();
+                                        await job.action().ConfigureAwait(false);
                                         if (job.finished != null) {
-                                            await job.finished(true);
+                                            await job.finished(true).ConfigureAwait(false);
                                         }
                                     } catch (Exception x) {
                                         if (job.handling != null) {
-                                            await job.handling(x);
+                                            await job.handling(x).ConfigureAwait(false);
                                         } else {
                                             Fi.Tech.Throw(x);
                                         }
                                         if (job.finished != null) {
-                                            await job.finished(false);
+                                            await job.finished(false).ConfigureAwait(false);
                                         }
                                     } finally {
                                         job.CompletedTime = DateTime.UtcNow;
