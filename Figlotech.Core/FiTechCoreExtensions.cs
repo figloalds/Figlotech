@@ -1613,7 +1613,7 @@ namespace Figlotech.Core {
 
             public void Put(TIn input) {
                 queuer.Enqueue(async () => {
-                    var output = await Act(input);
+                    var output = await Act(input).ConfigureAwait(false);
                     if(this.ConnectTo != null) {
                         this.ConnectTo.Put(output);
                     } else {
@@ -1636,7 +1636,7 @@ namespace Figlotech.Core {
             }
             public IParallelFlowStepOut<TOut> Then(Func<TOut, Task> act, int maxParallelism = -1) {
                 var retv = new ParallelFlowStepInOut<TOut, TOut>(async (x) => {
-                    await act(x);
+                    await act(x).ConfigureAwait(false);
                     return x;
                 }, this, maxParallelism);
                 this.ConnectTo = retv;
@@ -1651,10 +1651,10 @@ namespace Figlotech.Core {
                 }
             }
             public async Task NotifyDoneQueueing() {
-                await queuer.Stop(true);
+                await queuer.Stop(true).ConfigureAwait(false);
                 if(this.ConnectTo != null) {
                     FlushToConnected();
-                    await this.ConnectTo.NotifyDoneQueueing();
+                    await this.ConnectTo.NotifyDoneQueueing().ConfigureAwait(false);
                 }
                 TaskCompletionSource.SetResult(ValueQueue.ToList());
             }
@@ -1672,8 +1672,8 @@ namespace Figlotech.Core {
                 return f;
             }, null, maxParallelism);
             Fi.Tech.FireAndForget(async () => {
-                await input(new FlowYield<TIn>(retv));
-                await retv.NotifyDoneQueueing();
+                await input(new FlowYield<TIn>(retv)).ConfigureAwait(false);
+                await retv.NotifyDoneQueueing().ConfigureAwait(false);
             });
             return retv;
         }
