@@ -24,9 +24,9 @@ namespace Figlotech.Core {
         public int id = ++idGen;
         private static int idGen = 0;
         internal Thread AssignedThread = null;
-        public Func<Task> action;
-        public Func<bool, Task> finished;
-        public Func<Exception, Task> handling;
+        public Func<ValueTask> action;
+        public Func<bool, ValueTask> finished;
+        public Func<Exception, ValueTask> handling;
         public WorkJobStatus status;
         public DateTime? EqueuedTime = DateTime.Now;
         public DateTime? DequeuedTime;
@@ -47,7 +47,7 @@ namespace Figlotech.Core {
         //        public StackFrame[] ContextStack;
         //#endif
 
-        public WorkJob(Func<Task> method, Func<Exception, Task> errorHandling, Func<bool, Task> actionWhenFinished) {
+        public WorkJob(Func<ValueTask> method, Func<Exception, ValueTask> errorHandling, Func<bool, ValueTask> actionWhenFinished) {
             action = method;
             finished = actionWhenFinished;
             handling = errorHandling;
@@ -229,7 +229,7 @@ namespace Figlotech.Core {
                 await queuer.Stop(true);
             }
         }
-        public async Task AccompanyJob(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
+        public async Task AccompanyJob(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var wj = EnqueueTask(a, exceptionHandler, finished);
             await wj;
         }
@@ -320,11 +320,11 @@ namespace Figlotech.Core {
             }, null);
         }
 
-        public void Enqueue(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
+        public void Enqueue(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var retv = new WorkJob(a, exceptionHandler, finished);
             var t = Enqueue(retv);
         }
-        public WorkJob EnqueueTask(Func<Task> a, Func<Exception, Task> exceptionHandler = null, Func<bool, Task> finished = null) {
+        public WorkJob EnqueueTask(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var retv = new WorkJob(a, exceptionHandler, finished);
             return Enqueue(retv);
         }

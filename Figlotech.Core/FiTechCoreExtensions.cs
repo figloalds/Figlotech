@@ -1351,7 +1351,7 @@ namespace Figlotech.Core {
                 Fi.Tech.Error(x);
             }
         }
-        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Func<Task> a, Func<Exception, Task> h = null, Func<bool, Task> t = null) {
+        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Func<ValueTask> a, Func<Exception, ValueTask> h = null, Func<bool, ValueTask> t = null) {
             if (DateTime.UtcNow > max)
                 return;
             FireTask(__selfie, a, h, t);
@@ -1424,7 +1424,7 @@ namespace Figlotech.Core {
         }
         public static bool InlineFireTask { get; set; }
         static WorkQueuer FiTechRAF = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
-        public static WorkJob FireTask(this Fi _selfie, string name, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+        public static WorkJob FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             if (InlineFireTask) {
                 try {
                     job?.Invoke();
@@ -1449,15 +1449,15 @@ namespace Figlotech.Core {
             return wj;
         }
 
-        public static WorkJob FireTask(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+        public static WorkJob FireTask(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
 
-        public static void FireAndForget(this Fi _selfie, string name, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+        public static void FireAndForget(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             var ignoreWarnings = FireTask(_selfie, name, job, handler, then);
         }
 
-        public static void FireAndForget(this Fi _selfie, Func<Task> job, Func<Exception, Task> handler = null, Func<bool, Task> then = null) {
+        public static void FireAndForget(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             var ignoreWarnings = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
 
@@ -1610,12 +1610,11 @@ namespace Figlotech.Core {
             void Put(TIn input);
             Task NotifyDoneQueueing();
         }
-        public class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>
-        {
+        public class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
-            Func<TIn, Task<TOut>> SimpleAct { get; set; }
-            Func<TIn, FlowYield<TOut>, Task> YieldAct { get; set; }
+            Func<TIn, ValueTask<TOut>> SimpleAct { get; set; }
+            Func<TIn, FlowYield<TOut>, ValueTask> YieldAct { get; set; }
             Func<Exception, Task> ExceptionHandler { get; set; }
             IParallelFlowStepIn<TOut> ConnectTo { get; set; }
             bool IgnoreOutput { get; set; } = false;
@@ -1623,12 +1622,12 @@ namespace Figlotech.Core {
 
             public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
             public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
-            public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
+            public ParallelFlowStepInOut(Func<TIn, ValueTask<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.SimpleAct = Act;
                 this.Parent = parent;
                 this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
             }
-            public ParallelFlowStepInOut(Func<TIn, FlowYield<TOut>, Task> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
+            public ParallelFlowStepInOut(Func<TIn, FlowYield<TOut>, ValueTask> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.YieldAct = Act;
                 this.Parent = parent;
                 this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
@@ -1636,25 +1635,25 @@ namespace Figlotech.Core {
 
             public void Put(TIn input) {
                 queuer.Enqueue(async () => {
-                    if(SimpleAct != null) {
+                    if (SimpleAct != null) {
                         var output = await SimpleAct(input).ConfigureAwait(false);
-                        if(this.ConnectTo != null) {
+                        if (this.ConnectTo != null) {
                             this.ConnectTo.Put(output);
                         } else {
-                            if(!IgnoreOutput) {
+                            if (!IgnoreOutput) {
                                 lock (ValueQueue)
                                     ValueQueue.Enqueue(output);
                             }
                         }
-                    } else if(YieldAct != null) {
-                        if(this.ConnectTo != null) {
+                    } else if (YieldAct != null) {
+                        if (this.ConnectTo != null) {
                             await YieldAct(input, new FlowYield<TOut>(this.ConnectTo));
                         } else {
                             await YieldAct(input, new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue)));
                         }
                     }
-                }, async x=> {
-                    if(ExceptionHandler != null) {
+                }, async x => {
+                    if (ExceptionHandler != null) {
                         await ExceptionHandler(x);
                     }
                 });
@@ -1675,9 +1674,11 @@ namespace Figlotech.Core {
                 return this;
             }
 
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act)
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, TNext> act)
+                => Then(Environment.ProcessorCount, (i)=> Fi.Result(act(i)));
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, ValueTask<TNext>> act)
                 => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, Task<TNext>> act) {
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, ValueTask<TNext>> act) {
                 if (maxParallelism < 0) {
                     maxParallelism = Environment.ProcessorCount;
                 }
@@ -1686,9 +1687,14 @@ namespace Figlotech.Core {
                 FlushToConnected();
                 return retv;
             }
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, FlowYield<TNext>, Task> act)
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Action<TOut, FlowYield<TNext>> act)
+                => Then<TNext>(Environment.ProcessorCount, (o, yield) => {
+                    act(o, yield);
+                    return Fi.Result();
+                });
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, FlowYield<TNext>, ValueTask> act)
                 => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, FlowYield<TNext>, Task> act) {
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, FlowYield<TNext>, ValueTask> act) {
                 if (maxParallelism < 0) {
                     maxParallelism = Environment.ProcessorCount;
                 }
@@ -1735,13 +1741,18 @@ namespace Figlotech.Core {
             }
         }
 
-        public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Func<FlowYield<TIn>, Task> input, int maxParallelism = -1) {
+        public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Action<FlowYield<TIn>> input, int maxParallelism = -1) {
+            return ParallelFlow<TIn>(__selfie, (yield) => {
+                input(yield);
+                return Fi.Result();
+            }, maxParallelism);
+        }
+        public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Func<FlowYield<TIn>, ValueTask> input, int maxParallelism = -1) {
             if (maxParallelism < 0) {
                 maxParallelism = Environment.ProcessorCount;
             }
-            var retv = new ParallelFlowStepInOut<TIn, TIn>(async f => {
-                await Task.Yield();
-                return f;
+            var retv = new ParallelFlowStepInOut<TIn, TIn>(f => {
+                return Fi.Result(f);
             }, null, maxParallelism);
             Fi.Tech.FireAndForget(async () => {
                 await input(new FlowYield<TIn>(retv)).ConfigureAwait(false);

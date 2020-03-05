@@ -52,6 +52,10 @@ namespace System
             });
         }
 
+        public static Task<T> AsTask<T>(this T me) {
+            return Task.FromResult(me);
+        }
+
         public static void CopyFromAndMergeLists(this Object me, object other) {
             if (me == null) {
                 throw new NullReferenceException("Figlotech CopyFrom Extension method called on a null value, this is a natural NullReferenceException");

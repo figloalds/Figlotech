@@ -48,6 +48,13 @@ namespace Figlotech.Core {
 
         public static Encoding StandardEncoding => new UTF8Encoding(false);
 
+        public static ValueTask<T> Result<T>(T i) {
+            return new ValueTask<T>(i);
+        }
+        public static ValueTask Result() {
+            return new ValueTask();
+        }
+
         /// <summary>
         /// This is here because ain't nobody got time to write
         /// FormattableString.Invariant(), it's also a shame this isn't the default for the $"" syntax
