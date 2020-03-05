@@ -1571,6 +1571,22 @@ namespace Figlotech.Core {
             }
         }
 
+        public class QueueFlowStepIn<T> : IParallelFlowStepIn<T>
+        {
+            Queue<T> Host { get; set; }
+            public QueueFlowStepIn(Queue<T> host) {
+                this.Host = host;
+            }
+
+            public void Put(T input) {
+                this.Host.Enqueue(input);
+            }
+
+            public Task NotifyDoneQueueing() {
+                return Task.FromResult(0);
+            }
+        }
+
         public class FlowYield<T> {
             IParallelFlowStepIn<T> root { get; set; }
             public FlowYield(IParallelFlowStepIn<T> root) {
@@ -1598,7 +1614,8 @@ namespace Figlotech.Core {
         {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
-            Func<TIn, Task<TOut>> Act { get; set; }
+            Func<TIn, Task<TOut>> SimpleAct { get; set; }
+            Func<TIn, FlowYield<TOut>, Task> YieldAct { get; set; }
             Func<Exception, Task> ExceptionHandler { get; set; }
             IParallelFlowStepIn<TOut> ConnectTo { get; set; }
             bool IgnoreOutput { get; set; } = false;
@@ -1607,20 +1624,33 @@ namespace Figlotech.Core {
             public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
             public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
             public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
-                this.Act = Act;
+                this.SimpleAct = Act;
+                this.Parent = parent;
+                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Min(1, maxParallelism));
+            }
+            public ParallelFlowStepInOut(Func<TIn, FlowYield<TOut>, Task> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
+                this.YieldAct = Act;
                 this.Parent = parent;
                 this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Min(1, maxParallelism));
             }
 
             public void Put(TIn input) {
                 queuer.Enqueue(async () => {
-                    var output = await Act(input).ConfigureAwait(false);
-                    if(this.ConnectTo != null) {
-                        this.ConnectTo.Put(output);
-                    } else {
-                        if(!IgnoreOutput) {
-                            lock (ValueQueue)
-                                ValueQueue.Enqueue(output);
+                    if(SimpleAct != null) {
+                        var output = await SimpleAct(input).ConfigureAwait(false);
+                        if(this.ConnectTo != null) {
+                            this.ConnectTo.Put(output);
+                        } else {
+                            if(!IgnoreOutput) {
+                                lock (ValueQueue)
+                                    ValueQueue.Enqueue(output);
+                            }
+                        }
+                    } else if(YieldAct != null) {
+                        if(this.ConnectTo != null) {
+                            await YieldAct(input, new FlowYield<TOut>(this.ConnectTo));
+                        } else {
+                            await YieldAct(input, new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue)));
                         }
                     }
                 }, async x=> {
@@ -1648,7 +1678,18 @@ namespace Figlotech.Core {
             public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act)
                 => Then(Environment.ProcessorCount, act);
             public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, Task<TNext>> act) {
-                if(maxParallelism < 0) {
+                if (maxParallelism < 0) {
+                    maxParallelism = Environment.ProcessorCount;
+                }
+                var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
+                this.ConnectTo = retv;
+                FlushToConnected();
+                return retv;
+            }
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, FlowYield<TNext>, Task> act)
+                => Then(Environment.ProcessorCount, act);
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, FlowYield<TNext>, Task> act) {
+                if (maxParallelism < 0) {
                     maxParallelism = Environment.ProcessorCount;
                 }
                 var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
