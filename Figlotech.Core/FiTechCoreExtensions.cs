@@ -1626,12 +1626,12 @@ namespace Figlotech.Core {
             public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.SimpleAct = Act;
                 this.Parent = parent;
-                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Min(1, maxParallelism));
+                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
             }
             public ParallelFlowStepInOut(Func<TIn, FlowYield<TOut>, Task> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.YieldAct = Act;
                 this.Parent = parent;
-                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Min(1, maxParallelism));
+                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
             }
 
             public void Put(TIn input) {
