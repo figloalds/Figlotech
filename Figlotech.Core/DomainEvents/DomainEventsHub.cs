@@ -160,20 +160,18 @@ namespace Figlotech.Core.DomainEvents {
             Listeners.RemoveAll(l => l == null);
             foreach (var listener in Listeners) {
                 MainQueuer.Enqueue(async () => {
-                    await Task.Yield();
-                    await listener.OnEventTriggered(domainEvent);
+                    await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
                     if (domainEvent.AllowPropagation) {
                         parentHub?.Raise(domainEvent);
                     }
                 }, async x=> {
-                    await Task.Yield();
                     try {
-                        await listener.OnEventHandlingError(domainEvent, x);
+                        await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
                     } catch (Exception y) {
                         Fi.Tech.Throw(x);
                     }
-                }, async (b)=> {
-                    await Task.Yield();
+                }, (b)=> {
+                    return Fi.Result();
                 });
             }
 
@@ -203,17 +201,17 @@ namespace Figlotech.Core.DomainEvents {
             }
         }
 
-        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
-            return await PollForEventsSince(maximumPollTime, ()=> GetEventsSince(Id), e => filter(e));
+        public Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
+            return PollForEventsSince(maximumPollTime, ()=> GetEventsSince(Id), e => filter(e));
         }
 
-        public async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
-            return await PollForEventsSince(maximumPollTime, () => GetEventsSince(dt), e => filter(e));
+        public Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
+            return PollForEventsSince(maximumPollTime, () => GetEventsSince(dt), e => filter(e));
         }
 
-        private async Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
+        private Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
             DateTime pollStart = DateTime.UtcNow;
-            return await Task.Run<IDomainEvent[]>(async () => {
+            return Task.Run<IDomainEvent[]>(async () => {
                 IDomainEvent[] events;
                 var flushOrder = new CustomFlushOrderToken();
                 lock ("FLUSH_SWITCH") {
@@ -234,7 +232,7 @@ namespace Figlotech.Core.DomainEvents {
 
                     var wh = CancelationTokenSource;
                     try {
-                        await Task.Delay(maximumPollTime, CancelationTokenSource.Token);
+                        await Task.Delay(maximumPollTime, CancelationTokenSource.Token).ConfigureAwait(false);
                     } catch(Exception x) {
 
                     }

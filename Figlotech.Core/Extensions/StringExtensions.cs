@@ -12,6 +12,10 @@ namespace System
             return me.Replace(other, String.Empty);
         }
 
+        public static string OrEmpty(this string self) {
+            return self ?? "";
+        }
+
         public static bool RegExp(this string me, string pattern) {
             if (me == null)
                 return false;

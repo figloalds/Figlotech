@@ -376,9 +376,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             }
             return Query;
         }
-
+        uint gvIdGen = 0;
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
-            var cod = "_gv";
+            var cod = $"_gv{++gvIdGen}_";
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
             if (OmmitPK) {

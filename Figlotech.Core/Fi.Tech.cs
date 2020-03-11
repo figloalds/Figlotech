@@ -72,6 +72,10 @@ namespace Figlotech.Core {
             return new With<T>(value);
         }
 
+        public T[] IgnoreNulls<T>(params T[] args) {
+            return args.Where(x => x != null).ToArray();
+        }
+
         public FnVal<T> V<T>(Func<T> fn) {
             return new FnVal<T>(fn);
         }

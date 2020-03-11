@@ -190,7 +190,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 retv += $"({(info.Size > 0 ? info.Size : 100)})";
             }
             if (retv == "FLOAT" || retv == "DOUBLE" || retv == "DECIMAL") {
-                retv += "(16,3)";
+                retv += $"(20,{info.Precision})";
             }
             return retv;
         }

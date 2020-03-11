@@ -270,51 +270,52 @@ namespace Figlotech.Core {
         object selfLockSpawnWorker2 = new object();
         int i;
         private void SpawnWorker2() {
-            ThreadPool.UnsafeQueueUserWorkItem(_ =>
+            ThreadPool.UnsafeQueueUserWorkItem(async _ =>
             {
+                WorkJob job = null;
                 lock(selfLockSpawnWorker2) {
                     lock(WorkQueue) {
                         lock(ActiveJobs) {
                             ActiveJobs.RemoveAll(x => x.CompletedTime != null);
-                            while(ActiveJobs.Count < this.MaxParallelTasks && WorkQueue.Count > 0) {
-                                var job = WorkQueue.Dequeue();
-                                Task.Run(async () => {
-                                    try {
-                                        job.DequeuedTime = DateTime.UtcNow;
-                                        job.status = WorkJobStatus.Running;
-                                        await job.action().ConfigureAwait(false);
-                                        if (job.finished != null) {
-                                            await job.finished(true).ConfigureAwait(false);
-                                        }
-                                    } catch (Exception x) {
-                                        if (job.handling != null) {
-                                            await job.handling(x).ConfigureAwait(false);
-                                        } else {
-                                            Fi.Tech.Throw(x);
-                                        }
-                                        if (job.finished != null) {
-                                            await job.finished(false).ConfigureAwait(false);
-                                        }
-                                    } finally {
-                                        job.CompletedTime = DateTime.UtcNow;
-                                        job.status = WorkJobStatus.Finished;
-                                        WorkDone++;
-                                        lock (PendingOrExecutingJobs) {
-                                            PendingOrExecutingJobs.Remove(job);
-                                        }
-                                        lock (Tasks) {
-                                            Tasks.Remove(job.TaskCompletionSource.Task);
-                                        }
-                                        job.TaskCompletionSource.SetResult(0);
-                                        SpawnWorker2();
-                                    }
-                                });
+                            if(ActiveJobs.Count < this.MaxParallelTasks && WorkQueue.Count > 0) {
+                                job = WorkQueue.Dequeue(); 
                                 lock (Tasks) {
                                     Tasks.Add(job.TaskCompletionSource.Task);
                                 }
                                 ActiveJobs.Add(job);
                             }
                         }
+                    }
+                }
+                if(job != null) {
+                    try {
+                        job.DequeuedTime = DateTime.UtcNow;
+                        job.status = WorkJobStatus.Running;
+                        await job.action().ConfigureAwait(false);
+                        if (job.finished != null) {
+                            await job.finished(true).ConfigureAwait(false);
+                        }
+                    } catch (Exception x) {
+                        if (job.handling != null) {
+                            await job.handling(x).ConfigureAwait(false);
+                        } else {
+                            Fi.Tech.Throw(x);
+                        }
+                        if (job.finished != null) {
+                            await job.finished(false).ConfigureAwait(false);
+                        }
+                    } finally {
+                        job.CompletedTime = DateTime.UtcNow;
+                        job.status = WorkJobStatus.Finished;
+                        WorkDone++;
+                        lock (PendingOrExecutingJobs) {
+                            PendingOrExecutingJobs.Remove(job);
+                        }
+                        lock (Tasks) {
+                            Tasks.Remove(job.TaskCompletionSource.Task);
+                        }
+                        job.TaskCompletionSource.SetResult(0);
+                        SpawnWorker2();
                     }
                 }
             }, null);

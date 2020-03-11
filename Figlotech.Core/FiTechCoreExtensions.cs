@@ -18,7 +18,6 @@ using Figlotech.Core.FileAcessAbstractions;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks.Dataflow;
 using System.Drawing;
 using System.Text.RegularExpressions;
 using Figlotech.Core.Autokryptex;
@@ -434,6 +433,7 @@ namespace Figlotech.Core {
         public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
             ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval, recurrence);
         }
+        public static bool DebugSchedules { get; set; } = false;
         public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
 
             lock (GlobalScheduledJobs) {
@@ -447,6 +447,9 @@ namespace Figlotech.Core {
                 };
                 sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)(when - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
                 GlobalScheduledJobs.Add(sched);
+                if(Debugger.IsAttached && DebugSchedules) {
+                    Debugger.Break();
+                }
             }
         }
 
@@ -1458,7 +1461,7 @@ namespace Figlotech.Core {
         }
 
         public static void FireAndForget(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            var ignoreWarnings = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
+            _ = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
 
         public static async Task<T> Promisify<T>(this Fi _selfie, Func<T> fn) {
