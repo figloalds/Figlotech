@@ -1241,9 +1241,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var updates = sub.Where(it => it.IsPersisted).ToList();
                     if (inserts.Count > 0) {
                         try {
-                            transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} items");
+                            transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} {typeof(T).Name}");
                             var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
-                            transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count}");
+                            transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count} {typeof(T).Name}");
                             lock (transaction)
                                 rst += Execute(transaction, query);
                             lock (successfulSaves)
@@ -1272,9 +1272,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     if (updates.Count > 0) {
                         try {
-                            transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Count} items");
+                            transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Count} {typeof(T).Name}");
                             var query = Plugin.QueryGenerator.GenerateMultiUpdate(updates);
-                            transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} items");
+                            transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} {typeof(T).Name}");
                             lock (transaction)
                                 rst += Execute(transaction, query);
                             lock (successfulSaves)
@@ -1301,9 +1301,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 i2++;
             }
             //wq?.Stop(true);
-            transaction?.Benchmarker.Mark($"End SaveList process");
+            transaction?.Benchmarker.Mark($"End SaveList<{typeof(T).Name}> process");
 
-            transaction?.Benchmarker.Mark($"Dispatch Successful Save events");
+            transaction?.Benchmarker.Mark($"Dispatch Successful Save events {typeof(T).Name}");
             if (successfulSaves.Any()) {
                 //if (recoverIds) {
                 //    var q = Query(transaction, QueryGenerator.QueryIds(rs));
