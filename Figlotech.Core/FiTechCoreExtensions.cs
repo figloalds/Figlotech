@@ -130,6 +130,29 @@ namespace Figlotech.Core {
             return null;
         }
 
+        public static void AssertNotNull(this Fi _selfie, object o) {
+            if(o == null) {
+                try {
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
+                    Debugger.Launch();
+                    var data = new List<string>();
+                    int maxFrames = 20;
+                    var stack = new StackTrace(true);
+                    foreach (var f in stack.GetFrames()) {
+                        data.Add($" at {f.ToString()}");
+                        if (maxFrames-- <= 0) {
+                            break;
+                        }
+                    }
+                    throw new Exception(String.Join("\r\n", data));
+                } catch (Exception) { 
+                    throw new Exception("Error asserting not null");
+                }
+            }
+        }
+
         public static T CopyOf<T>(this Fi _selfie, T other) where T : new() {
             T retv = new T();
             retv.CopyFrom(other);

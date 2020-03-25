@@ -12,6 +12,7 @@ using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -355,9 +356,11 @@ namespace Figlotech.BDados.Builders {
 
                 var args2 = args.Where(a => !a?.GetType()?.Name.Contains("PythonFunction") ?? true).ToArray();
                 if (args2.Length > 0 && args2.Length != matches.Count) {
-                    throw new Exception($@"Parameter count mismatch on QueryBuilder.Append
-                        Text was: {fragment}
-                        Parameters: {string.Join(", ", args)}");
+                    Debugger.Break();
+                    throw new Exception($@"Parameter count mismatch on QueryBuilder.Append\r\n
+                        Text Parameters: {string.Join(", ", args2.Select(x=> $"@{x}"))}\r\n
+                        Parameters: {string.Join(", ", args)}\r\n
+                        Text was: {fragment}\r\n");
                 }
 
                 foreach (Match match in matches) {

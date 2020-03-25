@@ -261,45 +261,45 @@ namespace Figlotech.ExcelUtil {
     }
 
     public class Excelator {
-        ExcelPackage pack { get; set; }
-        ExcelWorksheet CurrentWorksheet { get; set; }
-        String filePath { get; set; }
+        ExcelPackage _pack { get; set; }
+        ExcelWorksheet _currentWorkSheet { get; set; }
+        String _filePath { get; set; }
         Stream _stream { get; set; }
-        List<ExcelWorksheet> Worksheets { get; set; } = new List<ExcelWorksheet>();
+        List<ExcelWorksheet> _workSheets { get; set; } = new List<ExcelWorksheet>();
 
         public Excelator(Stream stream, string name = "Untitled") {
             _stream = stream;
-            pack = new ExcelPackage();
+            _pack = new ExcelPackage();
             if (stream.Length > 0) {
-                pack.Load(stream);
-                var en = pack.Workbook.Worksheets.GetEnumerator();
+                _pack.Load(stream);
+                var en = _pack.Workbook.Worksheets.GetEnumerator();
                 en.MoveNext();
-                CurrentWorksheet = en.Current;
+                _currentWorkSheet = en.Current;
             } else {
-                pack.Workbook.Worksheets.Add(name);
-                var en = pack.Workbook.Worksheets.GetEnumerator();
+                _pack.Workbook.Worksheets.Add(name);
+                var en = _pack.Workbook.Worksheets.GetEnumerator();
                 en.MoveNext();
-                CurrentWorksheet = en.Current;
+                _currentWorkSheet = en.Current;
             }
-            Worksheets.Add(CurrentWorksheet);
+            _workSheets.Add(_currentWorkSheet);
         }
 
         public Excelator() {
-            pack = new ExcelPackage();
+            _pack = new ExcelPackage();
         }
 
         public void NewWorkSheet(string name) {
-            pack.Workbook.Worksheets.Add(name);
-            var sub = pack.Compatibility.IsWorksheets1Based ? 0 : 1;
-            var en = pack.Workbook.Worksheets[pack.Workbook.Worksheets.Count - sub];
-            CurrentWorksheet = en;
-            Worksheets.Add(CurrentWorksheet);
+            _pack.Workbook.Worksheets.Add(name);
+            var sub = _pack.Compatibility.IsWorksheets1Based ? 0 : 1;
+            var en = _pack.Workbook.Worksheets[_pack.Workbook.Worksheets.Count - sub];
+            _currentWorkSheet = en;
+            _workSheets.Add(_currentWorkSheet);
         }
 
         public void AdjustCols() {
             try {
-                for (int c = 0; c < CurrentWorksheet.Dimension.Columns + 1; c++) {
-                    CurrentWorksheet.Column(c + 1).AutoFit();
+                for (int c = 0; c < _currentWorkSheet.Dimension.Columns + 1; c++) {
+                    _currentWorkSheet.Column(c + 1).AutoFit();
                 }
             } catch(Exception x) {
                 Fi.Tech.WriteLine("EXCELATOR", $"AutoFit threw an exception {x.Message}");
@@ -307,18 +307,18 @@ namespace Figlotech.ExcelUtil {
         }
 
         public Excelator(String path, string name = "Untitled") {
-            filePath = path;
-            pack = new ExcelPackage();
+            _filePath = path;
+            _pack = new ExcelPackage();
             if (File.Exists(path)) {
-                pack.Load(new FileStream(path, FileMode.Open));
-                var en = pack.Workbook.Worksheets.GetEnumerator();
+                _pack.Load(new FileStream(path, FileMode.Open));
+                var en = _pack.Workbook.Worksheets.GetEnumerator();
                 en.MoveNext();
-                CurrentWorksheet = en.Current;
+                _currentWorkSheet = en.Current;
             } else {
-                pack.Workbook.Worksheets.Add(name);
-                var en = pack.Workbook.Worksheets.GetEnumerator();
+                _pack.Workbook.Worksheets.Add(name);
+                var en = _pack.Workbook.Worksheets.GetEnumerator();
                 en.MoveNext();
-                CurrentWorksheet = en.Current;
+                _currentWorkSheet = en.Current;
             }
         }
 
@@ -340,7 +340,7 @@ namespace Figlotech.ExcelUtil {
             EnsureColumnRange(fc, tc);
             EnsureRowRange(fr, tr);
             try {
-                fn(CurrentWorksheet.Cells[fr, fc, tr, tc].Style);
+                fn(_currentWorkSheet.Cells[fr, fc, tr, tc].Style);
             } catch(Exception x) {
                 if(Debugger.IsAttached) {
                     Debugger.Break();
@@ -351,7 +351,7 @@ namespace Figlotech.ExcelUtil {
 
         public void ConditionalFormat(int fr, int tr, int fc, int tc, String statement, Action<ExcelDxfStyleConditionalFormatting> fn) {
             var formatRangeAddress = new ExcelAddress(fr, fc, tr, tc);
-            var _cond4 = CurrentWorksheet.ConditionalFormatting.AddExpression(formatRangeAddress);
+            var _cond4 = _currentWorkSheet.ConditionalFormatting.AddExpression(formatRangeAddress);
             fn(_cond4.Style);
             statement = statement.Replace("$???", formatRangeAddress.Address);
             _cond4.Formula = statement;
@@ -379,13 +379,13 @@ namespace Figlotech.ExcelUtil {
             if(line > NumRows + 1 || column > NumCols +1) {
                 return null;
             }
-            return CurrentWorksheet.Cells[line, column].Value;
+            return _currentWorkSheet.Cells[line, column].Value;
         }
         public void SetFormat(int line, int column, String value) {
             EnsureColumnRange(line, line);
             EnsureRowRange(column, column);
             try {
-                CurrentWorksheet.Cells[line, column].Style.Numberformat.Format = value;
+                _currentWorkSheet.Cells[line, column].Style.Numberformat.Format = value;
 
             } catch (Exception x) {
 
@@ -396,9 +396,9 @@ namespace Figlotech.ExcelUtil {
             EnsureColumnRange(line, line);
             EnsureRowRange(columnFrom, columnTo);
             try {
-                CurrentWorksheet.Cells[line, columnFrom, line, columnTo].Value = value;
+                _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Value = value;
                 if (columnFrom != columnTo) {
-                    CurrentWorksheet.Cells[line, columnFrom, line, columnTo].Merge = true;
+                    _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
             }
 
@@ -409,24 +409,24 @@ namespace Figlotech.ExcelUtil {
         }
 
         public void EnsureColumnRange(int columnFrom, int columnTo) {
-            var wdc = (CurrentWorksheet.Dimension?.Columns ?? 0);
+            var wdc = (_currentWorkSheet.Dimension?.Columns ?? 0);
             if (wdc < columnFrom - 1) {
-                CurrentWorksheet.InsertColumn(columnFrom, columnFrom - wdc);
+                _currentWorkSheet.InsertColumn(columnFrom, columnFrom - wdc);
             }
             if(columnTo > columnFrom) {
                 if (wdc < columnTo - 1) {
-                    CurrentWorksheet.InsertColumn(columnTo, columnTo - wdc);
+                    _currentWorkSheet.InsertColumn(columnTo, columnTo - wdc);
                 }
             }
         }
         public void EnsureRowRange(int rowFrom, int rowTo) {
-            var wdr = (CurrentWorksheet.Dimension?.Rows ?? 0);
+            var wdr = (_currentWorkSheet.Dimension?.Rows ?? 0);
             if (wdr < rowFrom - 1) {
-                CurrentWorksheet.InsertRow(rowFrom, rowFrom - wdr);
+                _currentWorkSheet.InsertRow(rowFrom, rowFrom - wdr);
             }
             if(rowTo > rowFrom) {
                 if (wdr < rowTo - 1) {
-                    CurrentWorksheet.InsertRow(rowTo, rowTo - wdr);
+                    _currentWorkSheet.InsertRow(rowTo, rowTo - wdr);
                 }
             }
         }
@@ -435,9 +435,9 @@ namespace Figlotech.ExcelUtil {
             EnsureRowRange(line, line);
             EnsureColumnRange(columnFrom, columnTo);
             try {
-                CurrentWorksheet.Cells[line, columnFrom, line, columnTo].Formula = value;
+                _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Formula = value;
                 if (columnFrom != columnTo) {
-                    CurrentWorksheet.Cells[line, columnFrom, line, columnTo].Merge = true;
+                    _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
             }
 
@@ -448,20 +448,20 @@ namespace Figlotech.ExcelUtil {
         }
 
         public void Save(Stream stream) {
-            pack.SaveAs(stream);
+            _pack.SaveAs(stream);
         }
         public void Save() {
-            pack.SaveAs(_stream);
+            _pack.SaveAs(_stream);
         }
 
         public int NumRows {
             get {
-                return CurrentWorksheet?.Dimension?.Rows ?? 0;
+                return _currentWorkSheet?.Dimension?.Rows ?? 0;
             }
         }
         public int NumCols {
             get {
-                return CurrentWorksheet?.Dimension?.Columns ?? 0;
+                return _currentWorkSheet?.Dimension?.Columns ?? 0;
             }
         }
 
@@ -482,7 +482,7 @@ namespace Figlotech.ExcelUtil {
 
         public void ReadAll(Action<ExcelatorLineReader> lineFun, int skipLines = 0, Action<Exception> handler = null) {
             ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
-            for (var i = 1 + skipLines; i < CurrentWorksheet.Dimension.Rows + 1; i++) {
+            for (var i = 1 + skipLines; i < _currentWorkSheet.Dimension.Rows + 1; i++) {
                 try {
                     xcl.CurrentRow = i;
                     lineFun(xcl);

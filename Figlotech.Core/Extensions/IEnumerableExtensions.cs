@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core;
+using Figlotech.Core.Autokryptex;
 using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Helpers;
 using System;
@@ -125,13 +126,14 @@ namespace System
 
         public static IEnumerable<T> PickRandom<T>(this IEnumerable<T> me, int count) {
             var arr = me.ToArray();
-            var r = new Random();
+            var r = new FiRandom();
             var pickedNumbers = new int[Math.Min(arr.Length, count)];
             pickedNumbers.SetAllTo(-1);
             int cursor = 0;
             for(int i = 0; i < count; i++) {
                 if (cursor >= pickedNumbers.Length) {
                     pickedNumbers.SetAllTo(-1);
+                    cursor = 0;
                 }
                 int pick = 0;
                 do {
@@ -139,7 +141,7 @@ namespace System
                 } while (pickedNumbers.Contains(pick));
                 pickedNumbers[i % pickedNumbers.Length] = pick;
                 cursor++;
-                yield return arr[pickedNumbers[i]];
+                yield return arr[pick];
             }
         }
 

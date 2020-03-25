@@ -123,6 +123,40 @@ namespace Figlotech.Core {
             return progRids.ToString();
         }
 
+        public static IntEx operator ++(IntEx a) {
+            a.Add(1);
+            return a;
+        }
+        public static bool operator <(IntEx a, IntEx b) {
+            for (int i = Math.Max(a.digits.Count, b.digits.Count) - 1; i >= 0; i--) {
+                if (i > a.digits.Count && b.digits[i] > 0) {
+                    return false;
+                }
+                if (i > b.digits.Count && a.digits[i] > 0) {
+                    return false;
+                }
+                if (i > a.digits.Count || i > b.digits.Count) {
+                    continue;
+                }
+                return a.digits[i] < b.digits[i];
+            }
+            return false;
+        }
+        public static bool operator >(IntEx a, IntEx b) {
+            for (int i = Math.Max(a.digits.Count, b.digits.Count) - 1; i >= 0; i--) {
+                if (i > a.digits.Count && b.digits[i] > 0) {
+                    return false;
+                }
+                if (i > b.digits.Count && a.digits[i] > 0) {
+                    return false;
+                }
+                if (i > a.digits.Count || i > b.digits.Count) {
+                    continue;
+                }
+                return a.digits[i] > b.digits[i];
+            }
+            return false;
+        }
         public static IntEx operator +(IntEx a, IntEx b) {
             a.Add(b);
             return a;
@@ -162,27 +196,25 @@ namespace Figlotech.Core {
         }
 
         private void Mult(IntEx numero) {
-            List<IntEx> MultiParts = new List<IntEx>();
+            IntEx[] MultiParts = new IntEx[digits.Count];
             for (int i = 0; i < digits.Count; i++) {
                 IntEx ThisPart = new IntEx() {
-                    digits = new List<byte>()
+                    digits = new List<byte>(new byte[i + numero.digits.Count])
                 };
-                for (int k = 0; k < i; k++)
-                    ThisPart.digits.Add((byte)0);
                 int leftovers = 0;
                 for (int j = 0; j < numero.digits.Count; j++) {
                     int MultiFragment = (byte)digits[i] * (byte)numero.digits[j] + leftovers;
                     leftovers = MultiFragment / BaseSize;
-                    ThisPart.digits.Add((byte)(MultiFragment % BaseSize));
+                    ThisPart.digits[i + j] = (byte)(MultiFragment % BaseSize);
                 }
                 while (leftovers > 0) {
                     ThisPart.digits.Add((byte)(leftovers % BaseSize));
                     leftovers = leftovers / BaseSize;
                 }
-                MultiParts.Add(ThisPart);
+                MultiParts[i] = ThisPart;
             }
-            IntEx Novo = new IntEx(0);
-            for (int i = 0; i < MultiParts.Count; i++) {
+            IntEx Novo = new IntEx(new byte[MultiParts[MultiParts.Length-1].digits.Count]);
+            for (int i = 0; i < MultiParts.Length; i++) {
                 Novo += MultiParts[i];
             }
             digits = Novo.digits;

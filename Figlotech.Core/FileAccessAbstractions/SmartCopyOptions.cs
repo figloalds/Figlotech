@@ -53,5 +53,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         /// Default is 4MB
         /// </summary>
         public bool UseGZip { get; set; } = false;
+        public int RetriesPerFile { get; set; } = 3;
+        public int RetryTimeout { get; set; } = 3000;
     }
 }

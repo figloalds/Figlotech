@@ -565,26 +565,33 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var outPostFix = "";
             if (options.UseGZip)
                 outPostFix = GZIP_FILE_SUFFIX;
+            int tries = 0;
+            while(tries < options.RetriesPerFile) {
+                try {
+                    await origin.Read(workingFile, async (input) => {
+                        await Task.Yield();
+                        var bufferSize = (int)options.BufferSize / options.NumWorkers;
+                        if (bufferSize <= 0) bufferSize = Int32.MaxValue;
 
-            await origin.Read(workingFile, async (input) => {
-                await Task.Yield();
-                var bufferSize = (int)options.BufferSize / options.NumWorkers;
-                if (bufferSize <= 0) bufferSize = Int32.MaxValue;
 
+                        await destination.Write(workingFile + outPostFix, async (output) => {
+                            await Task.Yield();
+                            if (options.UseGZip) {
+                                using (var realOut = new GZipStream(output, CompressionLevel.Optimal)) {
+                                    await input.CopyToAsync(realOut);
+                                }
+                            } else {
+                                await input.CopyToAsync(output);
+                            }
 
-                await destination.Write(workingFile + outPostFix, async (output) => {
-                    await Task.Yield();
-                    if (options.UseGZip) {
-                        using (var realOut = new GZipStream(output, CompressionLevel.Optimal)) {
-                            await input.CopyToAsync(realOut);
-                        }
-                    } else {
-                        await input.CopyToAsync(output);
-                    }
-
-                });
-
-            });
+                        });
+                    });
+                    break;
+                } catch(Exception) {
+                    await Task.Delay(options.RetryTimeout);
+                    continue;
+                }
+            }
 
             if (!this.options.UseHashList) {
                 var originHash = await GetHash(origin, workingFile);
@@ -603,23 +610,32 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (options.UseGZip)
                 outPostFix = GZIP_FILE_SUFFIX;
 
-            await origin.Read(workingFile + outPostFix, async (input) => {
-                await Task.Yield();
-                var bufferSize = (int)options.BufferSize / options.NumWorkers;
-                if (bufferSize < 0) bufferSize = Int32.MaxValue;
+            int tries = 0;
+            while(tries < options.RetriesPerFile) {
+                try {
+                    await origin.Read(workingFile + outPostFix, async (input) => {
+                        await Task.Yield();
+                        var bufferSize = (int)options.BufferSize / options.NumWorkers;
+                        if (bufferSize < 0) bufferSize = Int32.MaxValue;
 
-                await destination.Write(workingFile, async (output) => {
-                    await Task.Yield();
-                    if (options.UseGZip) {
-                        using (var gzipOut = new GZipStream(input, CompressionMode.Decompress)) {
-                            await gzipOut.CopyToAsync(output);
-                        }
-                    } else {
-                        await input.CopyToAsync(output, bufferSize);
-                    }
-                });
+                        await destination.Write(workingFile, async (output) => {
+                            await Task.Yield();
+                            if (options.UseGZip) {
+                                using (var gzipOut = new GZipStream(input, CompressionMode.Decompress)) {
+                                    await gzipOut.CopyToAsync(output);
+                                }
+                            } else {
+                                await input.CopyToAsync(output, bufferSize);
+                            }
+                        });
 
-            });
+                    });
+                    break;
+                } catch (Exception) {
+                    await Task.Delay(options.RetryTimeout);
+                    continue;
+                }
+            }
 
         }
 

@@ -781,7 +781,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     return func.Invoke(CurrentTransaction);
                 } catch (Exception x) {
-                    handler?.Invoke(x);
+                    if (handler != null) {
+                        handler?.Invoke(x);
+                    } else {
+                        throw new BDadosException("Error accessing the database", CurrentTransaction?.FrameHistory, null, x);
+                    }
                 }
                 return default(T);
             }
@@ -1212,9 +1216,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var elaps = DateTime.UtcNow - d1;
 
             var members = ReflectionTool.FieldsAndPropertiesOf(typeof(T))
-                .Where(t => t.GetCustomAttribute<FieldAttribute>() != null);
+                .Where(t => t.GetCustomAttribute<FieldAttribute>() != null)
+                .ToList();
             int i2 = 0;
-            int cut = 500;
+            int cut = Math.Max(500, 37000 / (5 * (members.Count + 1)));
             int rst = 0;
             List<T> temp;
 
@@ -1691,25 +1696,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool Delete<T>(BDadosTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
             transaction.Step();
             bool retv = false;
+            var prefixMaker = new PrefixMaker();
+            var cnd = new ConditionParser(prefixMaker).ParseExpression<T>(conditions);
+            var rid = GetRidColumn<T>();
 
-            T dataObject = (T)Activator.CreateInstance(typeof(T));
-            var id = GetIdColumn<T>();
-            var p = new PrefixMaker();
-            var join = MakeJoin(
-                    (q) => {
-                        // Starting with T itself
-                        var jh = q.AggregateRoot(typeof(T), p.GetAliasFor("root", typeof(T).Name, String.Empty)).As(p.GetAliasFor("root", typeof(T).Name, String.Empty));
-                        jh.OnlyFields(
-                            ReflectionTool.FieldsWithAttribute<FieldAttribute>(typeof(T))
-                            .Select(a => a.Name)
-                        );
-                        MakeQueryAggregations(ref q, typeof(T), "root", typeof(T).Name, String.Empty, p, false);
-                    });
-
-            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
-            query.Append($"{id} IN (SELECT tba_{id} as {id} FROM (");
-            query.Append(join.GenerateQuery(Plugin.QueryGenerator, new ConditionParser(p).ParseExpression<T>(conditions)));
-            query.Append(") as outmost )");
+            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE {rid} in (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} tba WHERE ") + cnd + Qb.Fmt(") a);");
             retv = Execute(transaction, query) > 0;
             return retv;
         }

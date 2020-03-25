@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -105,9 +106,9 @@ namespace Figlotech.Core {
         }
 
         public void WriteEx(String message, Exception x) {
-            writeExInternal(message, x);
+            WriteLog(message);
+            WriteLog(JsonConvert.SerializeObject(x.ToExceptionArray(), Formatting.Indented));
         }
-
 
         public void WriteLog(Exception x) {
             if (!Enabled)

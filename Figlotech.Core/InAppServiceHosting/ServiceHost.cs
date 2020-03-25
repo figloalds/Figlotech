@@ -48,7 +48,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
                             cServ.BreakMainLoop = false;
                             cServ.InterruptIssued = false;
-                            Task[] lt = new Task[2];
+                            Task[] lt = new Task[1];
                             int l = 0;
                             while (!cServ.BreakMainLoop && !cServ.InterruptIssued) {
                                 lt[l] = cServ.MainLoopIteration();
