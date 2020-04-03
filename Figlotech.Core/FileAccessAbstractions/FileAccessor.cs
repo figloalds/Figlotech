@@ -24,7 +24,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public int MaxStreamBufferLength { get; set; } = 64 * 1024 * 1024;
 
         public String FixRel(ref string relative) {
-            return relative = relative?.Replace('\\', '/')
+            return relative = relative?.Replace(Path.DirectorySeparatorChar, '/')
                 .Replace("//", "/")
                 .Replace('/', S);
         }
@@ -216,15 +216,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         public IEnumerable<string> GetFilesIn(String relative) {
-            relative = relative.Replace('/', '\\');
+            relative = relative.Replace('/', Path.DirectorySeparatorChar);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
+            if(!WorkingDirectory.EndsWith(Path.DirectorySeparatorChar.ToString())) {
+                WorkingDirectory += Path.DirectorySeparatorChar.ToString();
+            }
             return Directory.GetFiles(WorkingDirectory).Select(
                     ((a) => {
                         var s = a.Substring(RootDirectory.Length);
-                        if (s.StartsWith("\\")) {
+                        if (s.StartsWith(System.IO.Path.DirectorySeparatorChar.ToString())) {
                             s = s.Substring(1);
                         }
                         return this.UnFixRel(ref s);
@@ -263,7 +266,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         public IEnumerable<string> GetDirectoriesIn(String relative) {
-            relative = relative.Replace('/', '\\');
+            relative = relative.Replace('/', Path.DirectorySeparatorChar);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
