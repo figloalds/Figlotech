@@ -14,6 +14,7 @@ namespace Figlotech.Core.InAppServiceHosting
         private List<IFthService> Services { get; set; } = new List<IFthService>();
         Dictionary<IFthService, Thread> ServiceThreads = new Dictionary<IFthService, Thread>();
         Dictionary<IFthService, FthServiceInfo> ServiceInfos = new Dictionary<IFthService, FthServiceInfo>();
+        Dictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new Dictionary<IFthService, CancellationTokenSource>();
 
         public IFthService InitService<T>(params object[] args) {
             return InitService(typeof(T), args);
@@ -57,7 +58,14 @@ namespace Figlotech.Core.InAppServiceHosting
                                     lt[prev].Wait();
                                 }
                                 l = (l + 1) % lt.Length;
-                                Task.Delay(cServ.IterationDelay).Wait();
+                                try {
+                                    Task.Delay(cServ.IterationDelay, CyclicServiceIterationResets[cServ].Token).Wait();
+                                } catch(Exception) {
+                                    // this catch is because .Net throws on cancellation, cancelling is part of the main plan
+                                    // not the exceptional case for us here.
+                                } finally {
+                                    CyclicServiceIterationResets[cServ] = new CancellationTokenSource();
+                                }
                             }
                         }
                     } catch(Exception x) {
@@ -72,6 +80,7 @@ namespace Figlotech.Core.InAppServiceHosting
                 Services.Add(service);
                 ServiceThreads[service] = t;
                 ServiceInfos[service] = new FthServiceInfo(service);
+                CyclicServiceIterationResets[service] = new CancellationTokenSource();
             }
         }
 
@@ -87,7 +96,15 @@ namespace Figlotech.Core.InAppServiceHosting
                     }
                     ServiceThreads.Remove(service);
                     ServiceInfos.Remove(service);
+                    CyclicServiceIterationResets.Remove(service);
                 }
+            }
+        }
+
+        public void ResetIterationDelay<T>() where T: IFthCyclicService, new() {
+            var instance = GetInstance<T>();
+            if(CyclicServiceIterationResets.ContainsKey(instance)) {
+                CyclicServiceIterationResets[instance].Cancel();
             }
         }
 

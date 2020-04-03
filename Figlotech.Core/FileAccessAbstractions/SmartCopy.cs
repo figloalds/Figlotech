@@ -565,8 +565,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var outPostFix = "";
             if (options.UseGZip)
                 outPostFix = GZIP_FILE_SUFFIX;
+
             int tries = 0;
-            while(tries < options.RetriesPerFile) {
+            List<Exception> exces = new List<Exception>();
+            bool throwErrors = true;
+            while (tries < options.RetriesPerFile) {
                 try {
                     await origin.Read(workingFile, async (input) => {
                         await Task.Yield();
@@ -586,11 +589,17 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                         });
                     });
+                    throwErrors = false;
                     break;
-                } catch(Exception) {
+                } catch(Exception x) {
+                    exces.Add(x);
                     await Task.Delay(options.RetryTimeout);
                     continue;
                 }
+            }
+
+            if(throwErrors) {
+                throw new AggregateException($"Too many errors copying file {workingFile}, maximum retries exceeded", exces);
             }
 
             if (!this.options.UseHashList) {

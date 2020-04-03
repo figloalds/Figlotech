@@ -41,7 +41,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<string[]> FrameHistory { get; private set; } = new List<string[]>(200);
 
         private List<IDataObject> ObjectsToNotify { get; set; } = new List<IDataObject>();
-        public Action OnTransactionEnded { get; internal set; }
+        public Action OnTransactionEnding { get; internal set; }
 
         public void NotifyChange(IDataObject[] ido) {
             if (Transaction == null) {
@@ -115,11 +115,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void EndTransaction() {
             var conn = Connection;
+            if (OnTransactionEnding != null) {
+                this.OnTransactionEnding.Invoke();
+            }
             Transaction?.Dispose();
             conn?.Dispose();
-            if(OnTransactionEnded != null) {
-                this.OnTransactionEnded.Invoke();
-            }
         }
 
         public void Dispose() {
@@ -1219,14 +1219,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null)
                 .ToList();
             int i2 = 0;
-            int cut = Math.Max(500, 37000 / (5 * (members.Count + 1)));
+            int cut = Math.Max(500, 37000 / (7 * (members.Count + 1)));
             int rst = 0;
             List<T> temp;
 
             if (rs.Count > cut) {
                 temp = new List<T>();
-                temp.AddRange(rs);
-                temp.OrderBy(it => it.IsPersisted);
+                temp.AddRange(rs.OrderBy(it => it.IsPersisted));
             } else {
                 temp = rs;
             }
@@ -1889,7 +1888,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
             }
 
-            transaction.OnTransactionEnded += () => {
+            transaction.OnTransactionEnding += () => {
                 if (retv && !input.IsPersisted) {
                     if (input.Id <= 0) {
                         long retvId = 0;
