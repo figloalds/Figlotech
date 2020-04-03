@@ -14,6 +14,8 @@ pack-to-local-nuget.cmd
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
+nuget.config
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
