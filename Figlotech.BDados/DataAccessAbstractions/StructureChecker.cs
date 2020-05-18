@@ -314,7 +314,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
+                _table, _column, _columnMember.Name));
         }
 
         public override string ToString() {

@@ -61,10 +61,20 @@ namespace Figlotech.Core.Helpers {
         }
 
         private static IEnumerable<MemberInfo> CollectMembers(Type type) {
-            foreach(var a in type.GetFields().Where(m => !m.IsStatic && m.IsPublic)) {
+            foreach (var a in type.GetFields(BindingFlags.FlattenHierarchy).Where(m => !m.IsStatic && m.IsPublic)) {
                 yield return a;
             }
-            foreach(var a in type.GetProperties().Where(
+            foreach (var a in type.GetFields().Where(m => !m.IsStatic && m.IsPublic)) {
+                yield return a;
+            }
+            foreach (var a in type.GetProperties(BindingFlags.FlattenHierarchy).Where(
+                m =>
+                    (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
+                    (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
+            )) {
+                yield return a;
+            }
+            foreach (var a in type.GetProperties().Where(
                 m =>
                     (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
                     (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
@@ -165,6 +175,7 @@ namespace Figlotech.Core.Helpers {
             try { 
                 MemberInfo member = GetMember(target?.GetType(), fieldName);
                 if (member == null) {
+                    //Debugger.Break();
                     return false;
                 }
                 SetMemberValue(member, target, value);
@@ -182,7 +193,9 @@ namespace Figlotech.Core.Helpers {
 
         public static List<MemberInfo> FieldsWithAttribute<T>(Type type) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
-            return members.Where((p) => p.GetCustomAttribute<T>() != null).ToList();
+            var retv = members.Where((p) => p.GetCustomAttributes<T>().Count() > 0).ToList();
+            
+            return retv;
         }
         public static void ForAttributedMembers<T>(Type type, Action<MemberInfo, T> act) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);

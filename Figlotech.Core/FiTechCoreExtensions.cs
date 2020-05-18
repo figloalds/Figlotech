@@ -1257,7 +1257,7 @@ namespace Figlotech.Core {
                 extension = extension.Substring(extension.IndexOf('.') + 1);
             }
             if (extension == null) {
-                throw new ArgumentNullException("extension");
+                throw new ArgumentNullException($"Extension not present in {filename}");
             }
 
             if (!extension.StartsWith(".")) {
