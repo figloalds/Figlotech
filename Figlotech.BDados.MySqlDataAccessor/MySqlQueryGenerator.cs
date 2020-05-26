@@ -618,8 +618,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions) {
             return new QueryBuilder().Append($"UPDATE {table} SET {column}=@value WHERE ").Append(conditions);
         }
-        public IQueryBuilder RenameColumn(string table, string column, string newDefinition) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} RENAME {column} TO {newDefinition};");
+        public IQueryBuilder RenameColumn(string table, string column, MemberInfo newDefinition, FieldAttribute info) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {GetColumnDefinition(newDefinition, info)};");
         }
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");

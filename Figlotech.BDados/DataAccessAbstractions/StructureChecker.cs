@@ -303,18 +303,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         String _table;
         String _column;
         MemberInfo _columnMember;
+        FieldAttribute _info;
 
         public RenameColumnScAction(
             IRdbmsDataAccessor dataAccessor,
-            string table, string column, MemberInfo columnMember, string reason) : base(dataAccessor, reason) {
+            string table, string column, MemberInfo columnMember, FieldAttribute info, string reason) : base(dataAccessor, reason) {
             _table = table;
             _column = column;
             _columnMember = columnMember;
+            _info = info;
         }
 
         public override int Execute(IRdbmsDataAccessor DataAccessor) {
             return Exec(DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, _columnMember.Name));
+                _table, _column, _columnMember, _info));
         }
 
         public override string ToString() {
@@ -680,6 +682,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var colName = col.Name;
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
+                                var info = field.GetCustomAttribute<FieldAttribute>();
                                 if (ona.Name.ToLower() == colName.ToLower()) {
                                     oldExists = true;
                                     foreach (var a in EvaluateForColumnDekeyal(type.Name, ona.Name, keys)) {
@@ -689,7 +692,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                         DataAccessor, 
                                         type.Name, 
                                         ona.Name, 
-                                        field, 
+                                        field,
+                                        info,
                                         $"OldName attribute matches with structure state {type.Name}::{ona.Name} -> {field}"
                                     );
                                 }

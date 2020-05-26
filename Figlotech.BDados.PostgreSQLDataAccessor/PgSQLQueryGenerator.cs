@@ -529,8 +529,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions) {
             return new QueryBuilder().Append($"UPDATE {table} SET {column}=@value WHERE ").Append(conditions);
         }
-        public IQueryBuilder RenameColumn(string table, string column, string newName) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} RENAME COLUMN {column} TO {newName};");
+        public IQueryBuilder RenameColumn(string table, string column, MemberInfo newDefinition, FieldAttribute info) {
+            return new QueryBuilder().Append($"ALTER TABLE {table} RENAME COLUMN {column} TO {newDefinition.Name};");
         }
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING({member.Name}::{GetDatabaseType(member, fieldAttribute)});");

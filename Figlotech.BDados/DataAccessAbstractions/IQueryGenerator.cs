@@ -42,7 +42,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder AddUniqueKey(string table, string column, string constraintName);
         IQueryBuilder AddPrimaryKey(string table, string column, string constraintName);
         IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions);
-        IQueryBuilder RenameColumn(string table, string column, string newName);
+        IQueryBuilder RenameColumn(string table, string column, MemberInfo newDefinition, FieldAttribute info);
         IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable);
         IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new();
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
