@@ -293,7 +293,7 @@ namespace Figlotech.Core {
                 if (shouldRequestNtpTime) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        _globalTimeStampSource = await SyncTimeStampSource.FromNtpServer("pool.ntp.org");
+                        _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("pool.ntp.org");
                     });
                 }
                 return _globalTimeStampSource;
