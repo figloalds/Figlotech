@@ -10,8 +10,7 @@ namespace Figlotech.Core.DomainEvents
         DomainEventsHub EventsHub { get; set; }
         bool AllowPropagation { get; set; }
         string d_RaiseOrigin { get; set; }
-        DateTime TimeStamp { get; }
-        long Time { get; }
+        DateTime TimeStamp { get; set; }
         string RID { get; }
         long Id { get; }
     }

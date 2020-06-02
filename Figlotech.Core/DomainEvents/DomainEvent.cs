@@ -15,8 +15,7 @@ namespace Figlotech.Core.DomainEvents {
         long? created = null;
         static long ProgramStarted = DateTime.UtcNow.Ticks;
 
-        public DateTime TimeStamp => new DateTime(Time);
-        public long Time => (created ?? (created = generateTimeStamp())).Value;
+        public DateTime TimeStamp { get; set; }
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
 

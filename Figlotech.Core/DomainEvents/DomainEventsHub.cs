@@ -153,7 +153,7 @@ namespace Figlotech.Core.DomainEvents {
                 if(EventCache.Any(x=> x.RID == domainEvent.RID)) {
                     return;
                 }
-                EventCache.RemoveAll(e => DateTime.UtcNow.Ticks - e.Time > EventCacheDuration.Ticks);
+                EventCache.RemoveAll(e => (DateTime.UtcNow - e.TimeStamp) > EventCacheDuration);
             }
 
             // Raise event on all listeners.
@@ -177,6 +177,7 @@ namespace Figlotech.Core.DomainEvents {
 
             if(EnableEventCache) {
                 lock (EventCache) {
+                    domainEvent.TimeStamp = DateTime.UtcNow;
                     EventCache.Add(domainEvent);
                 }
                 LastEventDateTime = Fi.Tech.GetUtcTime();
@@ -197,7 +198,7 @@ namespace Figlotech.Core.DomainEvents {
 
         public IEnumerable<IDomainEvent> GetEventsSince(DateTime Stamp) {
             lock (EventCache) {
-                return EventCache.Where(e => e.Time > Stamp.Ticks).ToArray();
+                return EventCache.Where(e => e.TimeStamp >= Stamp).ToArray();
             }
         }
 
@@ -222,11 +223,9 @@ namespace Figlotech.Core.DomainEvents {
                         events = getEvents().ToArray();
                     }
                     if (events.Length > 0) {
-                        WriteLog($"Event pooling returned  {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
                         return events;
                     }
                     if (flushOrder.IsFlushIssued) {
-                        WriteLog($"Event flushing issued {events.Length} {String.Join(", ", events.Select(e => e.GetType().Name))}");
                         return events;
                     }
 
@@ -241,17 +240,20 @@ namespace Figlotech.Core.DomainEvents {
                 lock ("FLUSH_SWITCH") {
                     FlushOrderTokens.Remove(flushOrder);
                 }
-                WriteLog($"Event pooling returned no events");
                 return new IDomainEvent[0];
             });
         }
 
         public void SubscribeListener(IDomainEventListener listener) {
-            Listeners.Add(listener);
+            if(!Listeners.Contains(listener)) {
+                Listeners.Add(listener);
+            }
         }
 
         public void RemoveListener(IDomainEventListener listener) {
-            Listeners.Remove(listener);
+            if (Listeners.Contains(listener)) {
+                Listeners.Remove(listener);
+            }
         }
     }
 }
