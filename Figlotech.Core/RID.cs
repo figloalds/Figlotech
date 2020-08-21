@@ -3,6 +3,7 @@ using Figlotech.Core.Autokryptex.Legacy;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -96,6 +97,125 @@ namespace Figlotech.Core {
                 if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
                     Directory.CreateDirectory(Path.GetDirectoryName(fileName));
                 }
+                if (!File.Exists(fileName)) {
+                    _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
+                    _machineRID = new RID();
+                    File.WriteAllBytes(fileName, _machineRID.AsByteArray);
+                    try {
+                        File.SetAttributes(fileName, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
+
+                    } catch(Exception x) {
+
+
+                    }
+                } else {
+                    try {
+                        _machineRID = new RID(File.ReadAllBytes(fileName));
+
+                    } catch (Exception x) {
+
+                        File.Delete(fileName);
+                        return MachineRID;
+                    }
+                }
+                File.SetAttributes(fileName, FileAttributes.Hidden);
+                return _machineRID;
+            }
+        }
+
+        public static RID MachineRID2 {
+            get {
+                if (_machineRID != null) {
+                    return _machineRID;
+                }
+
+                try {
+                    DirectoryInfo rootDir;
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                        var di = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System)));
+                        rootDir = di.RootDirectory;
+                    } else {
+                        rootDir = new DirectoryInfo("/");
+                    }
+                    var lbif = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(i => i.NetworkInterfaceType == NetworkInterfaceType.Loopback);
+                    var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
+
+                        using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
+
+                            if (Environment.OSVersion.Platform == PlatformID.Win32NT) {
+                                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor");
+                                var objs = new List<ManagementObject>();
+                                foreach (ManagementObject obj in searcher.Get()) {
+                                    objs.Add(obj);
+                                }
+                                foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
+                                    var json = JsonConvert.SerializeObject(
+                                        new {
+                                            Name = wmi_HD["Name"] as String,
+                                            ProcessorId = wmi_HD["ProcessorId"] as String,
+                                            UUID = wmi_HD.Qualifiers["UUID"].Value as String
+                                        }
+                                    , Formatting.Indented);
+                                    writer.WriteLine(json);
+                                }
+                            } else {
+                                writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
+                            }
+
+                            if (Environment.OSVersion.Platform == PlatformID.Win32NT) {
+                                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_BaseBoard");
+                                var objs = new List<ManagementObject>();
+                                foreach (ManagementObject obj in searcher.Get()) {
+                                    objs.Add(obj);
+                                }
+                                foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
+                                    var json = JsonConvert.SerializeObject(
+                                        new {
+                                            Product = wmi_HD["Product"] as String,
+                                            SerialNumber = wmi_HD["SerialNumber"] as String,
+                                            UUID = wmi_HD.Qualifiers["UUID"].Value as String
+                                        }
+                                    , Formatting.Indented);
+                                    writer.WriteLine(json);
+                                }
+                            } else {
+                                writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
+                            }
+                        }
+
+                    }), 32);
+                    var id = lbif.Id.RegExReplace("[^0-9A-F]", "");
+                    var segmentA = BitConverter.GetBytes(rootDir.CreationTimeUtc.Ticks);
+                    var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(id), 8);
+                    var segmentC = new byte[32 - (segmentA.Length + segmentB.Length)];
+                    segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng.Next(256))));
+                    var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
+                    finalRid.IterateAssign((v, idx) => (byte)(v ^ hwid[idx]));
+
+                    _mrid2 = new RID(finalRid);
+                    _machineRID = new RID(finalRid);
+                    return _machineRID;
+
+                } catch (Exception x) {
+                    Console.WriteLine(x.Message);
+                }
+
+                if(Environment.UserName == "IISAPPPOOL") {
+                    var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
+                    if (!string.IsNullOrEmpty(envRid)) {
+                        var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
+                        if (itx.Length == 32) {
+                            _machineRID = new RID(itx);
+                            return _machineRID;
+                        }
+                    }
+                }
+
+                var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID");
+                if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
+                    Directory.CreateDirectory(Path.GetDirectoryName(fileName));
+                }
+
                 if (!File.Exists(fileName)) {
                     _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
                     _machineRID = new RID();

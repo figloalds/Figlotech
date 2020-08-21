@@ -87,7 +87,10 @@ namespace Figlotech.Core.Helpers {
             return
                 (t != null && interfaceType.IsInterface) &&
                 t != typeof(Object) &&
-                (t.GetInterfaces().Any(i => i == interfaceType) || TypeImplements(t.BaseType, interfaceType));
+                (
+                    t.GetInterfaces().Any(i => i == interfaceType || (i.IsGenericType && i.GetGenericTypeDefinition() == interfaceType) ) ||
+                    TypeImplements(t.BaseType, interfaceType)
+                );
         }
         public static bool TypeDerivesFrom(Type t, Type ancestorType) {
             return
@@ -219,7 +222,11 @@ namespace Figlotech.Core.Helpers {
 
         public static Object GetMemberValue(MemberInfo member, Object target) {
             if (member is PropertyInfo pi) {
-                return pi.GetValue(target);
+                if(pi.GetIndexParameters().Length == 0) {
+                    return pi.GetValue(target);
+                } else {
+                    return null;
+                }
             }
             if (member is FieldInfo fi) {
                 return fi.GetValue(target);

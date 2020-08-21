@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
-    <PackageReference Include="EPPlus" Version="4.5.3.3" />
+    <PackageReference Include="EPPlus" Version="4.5.3.1" />
   </ItemGroup>
 
   <!-- GIMMICKY PRECOMPILER CONSTANTS -->

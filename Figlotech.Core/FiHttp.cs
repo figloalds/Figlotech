@@ -57,9 +57,8 @@ namespace Figlotech.Core {
                 retv.Response = req.GetResponse();
                 retv.Init(retv.Response);
             } catch (WebException wex) {
-                using (var resp = wex.Response) {
-                    retv.Init(resp);
-                }
+                retv.Response = wex.Response;
+                retv.Init(retv.Response);
             }
             return retv;
         }
@@ -70,7 +69,11 @@ namespace Figlotech.Core {
                 if(verb != "GET" && verb != "OPTIONS") {
                     try {
                         using (var reqStream = await req.GetRequestStreamAsync()) {
-                            await reqStream.WriteAsync(data, 0, data.Length);
+                            var blen = 4096;
+                            for (int i = 0; i * blen < data.Length; i++) {
+                                var span = new Span<byte>(data, blen * i, Math.Min(blen, data.Length - blen * i)).ToArray();
+                                await reqStream.WriteAsync(span, 0, span.Length);
+                            }
                             await reqStream.FlushAsync();
                             reqStream.Close();
                         }
@@ -84,9 +87,8 @@ namespace Figlotech.Core {
                 retv.Init(resp);
                 
             } catch (WebException wex) {
-                using (var resp = wex.Response) {
-                    retv.Init(resp);
-                }
+                retv.Response = wex.Response;
+                retv.Init(retv.Response);
             } catch (Exception x) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();

@@ -288,12 +288,21 @@ namespace Figlotech.ExcelUtil {
             _pack = new ExcelPackage();
         }
 
+        public int From0Idx(int idx) {
+            var add = _pack.Compatibility.IsWorksheets1Based ? 1 : 0;
+            return idx + add;
+        }
+
         public void NewWorkSheet(string name) {
             _pack.Workbook.Worksheets.Add(name);
             var sub = _pack.Compatibility.IsWorksheets1Based ? 0 : 1;
             var en = _pack.Workbook.Worksheets[_pack.Workbook.Worksheets.Count - sub];
             _currentWorkSheet = en;
             _workSheets.Add(_currentWorkSheet);
+        }
+        public void SetWorkSheet(int idx) {
+            var en = _pack.Workbook.Worksheets[idx];
+            _currentWorkSheet = en;
         }
 
         public void AdjustCols() {
@@ -360,7 +369,10 @@ namespace Figlotech.ExcelUtil {
         public T Get<T>(int line, int column) {
             var o = Get(line, column);
             try {
-                if(o == null && o is T obj) {
+                if(o == null) {
+                    return default(T);
+                }
+                if(o != null && o is T obj) {
                     return obj;
                 }
                 if(typeof(T).IsAssignableFrom(o.GetType())) {
