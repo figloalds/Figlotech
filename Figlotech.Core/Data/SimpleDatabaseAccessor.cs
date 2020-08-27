@@ -199,15 +199,6 @@ namespace Figlotech.Data
                 }
             }
         }
-
-
-        //public T DbQuery<T>(Func<TCommand, T> fn) {
-        //    using (var connection = GetConnectionCommand()) {
-        //        using (var cmd = connection.CreateCommand()) {
-        //            return fn((TCommand) cmd);
-        //        }
-        //    }
-        //}
     }
 
     public class SimpleDatabaseAccessor : SimpleDatabaseAccessorBase<DbConnection, DbCommand, DbDataReader>
