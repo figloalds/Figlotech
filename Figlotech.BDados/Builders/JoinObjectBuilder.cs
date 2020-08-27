@@ -24,6 +24,7 @@ using Figlotech.BDados.Helpers;
 using Figlotech.Core.BusinessModel;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.Builders {
     public class JoinObjectBuilder : IJoinBuilder {

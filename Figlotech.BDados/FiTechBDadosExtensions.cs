@@ -4,6 +4,7 @@ using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -121,22 +122,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <returns></returns>
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader, bool ignoreCase = false) where T : new() {
             var refl = new ObjectReflector();
-            var existingKeys = new List<(int, string)>();
+            var existingKeys = new string[reader.FieldCount];
             for (int i = 0; i < reader.FieldCount; i++) {
                 var name = reader.GetName(i);
                 if(name != null) {
                     if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
-                        existingKeys.Add((i, name));
+                        existingKeys[i] = name;
                     }
                 }
             }
             while (reader.Read()) {
                 T obj = new T();
                 refl.Slot(obj);
-                for (int i = 0; i < existingKeys.Count; i++) {
+                for (int i = 0; i < existingKeys.Length; i++) {
                     try {
-                        var o = reader.GetValue(existingKeys[i].Item1);
-                        refl[existingKeys[i].Item2] = Fi.Tech.ProperMapValue(o);
+                        var o = reader.GetValue(i);
+                        refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
                     } catch(Exception x) {
                         Debugger.Break();
                         throw x;

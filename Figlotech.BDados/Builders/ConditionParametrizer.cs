@@ -17,6 +17,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Figlotech.Core;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.Builders {
     public class ConditionParametrizer : QueryBuilder {

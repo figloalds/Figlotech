@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Figlotech.Core.Interfaces;
 using Figlotech.Core;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);

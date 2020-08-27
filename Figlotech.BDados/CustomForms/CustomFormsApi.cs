@@ -2,6 +2,7 @@
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -223,11 +224,11 @@ namespace Figlotech.BDados.CustomForms {
                 retv.Append($"{form.Fields[i].Name}=@_uq{++seq}", o.Get(form.Fields[i].Name));
             }
             /* LMAO GET RID */
-            retv.If(o.Get("RID") != null).Then()
-                    .Append($"RID=@_uq{++seq}", o.Get("RID"))
-                .Else()
-                    .Append($"RID=@_uq{++seq}", IntEx.GenerateUniqueRID())
-                .EndIf();
+            if(o.Get("RID") != null) {
+                retv.Append($"RID=@_uq{++seq}", o.Get("RID"));
+            } else {
+                retv.Append($"RID=@_uq{++seq}", IntEx.GenerateUniqueRID());
+            }
 
             retv.Append($"WHERE Id=@_uq{++seq};", o.Get("Id"));
 

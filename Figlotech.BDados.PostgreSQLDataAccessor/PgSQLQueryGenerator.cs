@@ -6,14 +6,15 @@ using Figlotech.BDados.Helpers;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 /**
- * Figlotech.BDados.Builders.PgSQLQueryGenerator
- * This is a blatant copy from MySQL Query Generator
- * Will fix in time, maybe.
- * 
- * @Author: Felype Rennan Alves dos Santos
- * August/2014
- * 
+* Figlotech.BDados.Builders.PgSQLQueryGenerator
+* This is a blatant copy from MySQL Query Generator
+* Will fix in time, maybe.
+* 
+* @Author: Felype Rennan Alves dos Santos
+* August/2014
+* 
 **/
 
 using System;

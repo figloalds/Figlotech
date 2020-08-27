@@ -12,6 +12,7 @@ using Figlotech.Core.Interfaces;
 using System.IO;
 using Figlotech.Core;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     

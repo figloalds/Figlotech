@@ -7,6 +7,7 @@
 * 
 **/
 using Figlotech.BDados.Builders;
+using Figlotech.Data;
 using System;
 
 namespace Figlotech.BDados.Builders {

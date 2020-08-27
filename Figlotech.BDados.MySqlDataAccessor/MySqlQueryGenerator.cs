@@ -25,6 +25,7 @@ using System.Text.RegularExpressions;
 using Figlotech.BDados.Builders;
 using Figlotech.Core.Helpers;
 using System.Diagnostics;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public class MySqlQueryGenerator : IQueryGenerator {

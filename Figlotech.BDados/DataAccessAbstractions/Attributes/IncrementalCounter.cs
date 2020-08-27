@@ -9,6 +9,8 @@
  * 
 **/
 using Figlotech.BDados.Builders;
+using Figlotech.Core;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;

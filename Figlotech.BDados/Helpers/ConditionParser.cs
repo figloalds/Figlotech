@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using System.Diagnostics;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.Helpers {
     public class ConditionParser {
@@ -399,7 +400,7 @@ namespace Figlotech.BDados.Helpers {
             if (fullConditions) {
                 return strBuilder;
             } else {
-                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder._objParams.Select((pm) => pm.Value).ToArray());
+                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
             }
         }
     }

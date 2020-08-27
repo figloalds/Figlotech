@@ -1,5 +1,7 @@
 ﻿using Figlotech.BDados.Builders;
+using Figlotech.Core;
 using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;

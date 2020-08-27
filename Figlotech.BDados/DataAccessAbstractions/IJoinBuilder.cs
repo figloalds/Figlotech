@@ -4,6 +4,8 @@ using Figlotech.Core.Interfaces;
 using Figlotech.BDados.Helpers;
 using System.Collections.Generic;
 using System.Reflection;
+using Figlotech.Core;
+using Figlotech.Data;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IJoinBuilder {
