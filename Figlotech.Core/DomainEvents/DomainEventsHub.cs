@@ -157,8 +157,12 @@ namespace Figlotech.Core.DomainEvents {
             }
 
             // Raise event on all listeners.
-            Listeners.RemoveAll(l => l == null);
-            foreach (var listener in Listeners) {
+            List<IDomainEventListener> listeners;
+            lock(Listeners) {
+                Listeners.RemoveAll(l => l == null);
+                listeners = Listeners.ToList();
+            }
+            foreach (var listener in listeners) {
                 MainQueuer.Enqueue(async () => {
                     await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
                     if (domainEvent.AllowPropagation) {
@@ -245,14 +249,18 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public void SubscribeListener(IDomainEventListener listener) {
-            if(!Listeners.Contains(listener)) {
-                Listeners.Add(listener);
+            lock(Listeners) {
+                if(!Listeners.Contains(listener)) {
+                    Listeners.Add(listener);
+                }
             }
         }
 
         public void RemoveListener(IDomainEventListener listener) {
-            if (Listeners.Contains(listener)) {
-                Listeners.Remove(listener);
+            lock(Listeners) {
+                if (Listeners.Contains(listener)) {
+                    Listeners.Remove(listener);
+                }
             }
         }
     }

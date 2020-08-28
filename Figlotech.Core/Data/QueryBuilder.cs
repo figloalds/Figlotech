@@ -154,7 +154,11 @@ namespace Figlotech.Data {
 
         public static QueryBuilder And(IQueryBuilder right) {
             var customAnd = Qb.And().Append(right);
-            return (QueryBuilder) customAnd;
+            return (QueryBuilder)customAnd;
+        }
+        public static QueryBuilder And(string query, params object[] args) {
+            var customAnd = Qb.And().Append(query, args);
+            return (QueryBuilder)customAnd;
         }
 
         public static QbFmt In<T>(string column, List<T> o, Func<T, object> fn) {
