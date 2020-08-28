@@ -56,6 +56,20 @@ namespace Figlotech.Data {
                 return (QbIf)this.Append(query, args);
             }
         }
+        public QbIf Then(IQueryBuilder qb) {
+            if (Condition) {
+                return (QbIf)this.Append(qb);
+            } else {
+                return (QbIf)this;
+            }
+        }
+        public QbIf Else(IQueryBuilder qb) {
+            if (Condition) {
+                return (QbIf)this;
+            } else {
+                return (QbIf)this.Append(qb);
+            }
+        }
 
     }
     public class Qb : QueryBuilder {
@@ -136,6 +150,11 @@ namespace Figlotech.Data {
         public static QueryBuilder And(IQueryBuilder left, IQueryBuilder right) {
             var customAnd = Wrap(left, And(), right);
             return customAnd;
+        }
+
+        public static QueryBuilder And(IQueryBuilder right) {
+            var customAnd = Qb.And().Append(right);
+            return (QueryBuilder) customAnd;
         }
 
         public static QbFmt In<T>(string column, List<T> o, Func<T, object> fn) {
