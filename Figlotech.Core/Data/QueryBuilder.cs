@@ -36,11 +36,27 @@ namespace Figlotech.Data {
         }
     }
     public class QbIf : QueryBuilder {
-        public QbIf(bool condition, params object[] args) {
-            if(condition) {
-                AppendQuery(args);
+        bool Condition;
+        public QbIf(bool condition) {
+            this.Condition = condition;
+        }
+
+        public QbIf Then(string query, params object[] args) {
+            if (Condition) {
+                return (QbIf)this.Append(query, args);
+            } else {
+                return (QbIf)this;
             }
         }
+
+        public QbIf Else(string query, params object[] args) {
+            if (Condition) {
+                return (QbIf)this;
+            } else {
+                return (QbIf)this.Append(query, args);
+            }
+        }
+
     }
     public class Qb : QueryBuilder {
         public Qb(params object[] args) {
