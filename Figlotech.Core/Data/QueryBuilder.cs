@@ -157,8 +157,8 @@ namespace Figlotech.Data {
             return new QbFmt(fmt, fmtstr.GetArguments());
         }
 
-        public static QbIf If(bool condition, params object[] args) {
-            return new QbIf(condition, args);
+        public static QbIf If(bool condition) {
+            return new QbIf(condition);
         }
 
         public static explicit operator Qb(string s) {
