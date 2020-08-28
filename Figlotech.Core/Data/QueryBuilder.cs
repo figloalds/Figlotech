@@ -1,20 +1,17 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.Helpers;
-/**
+﻿/**
 * Iaetec.BDados.Builders.QueryBuilder
 * Default implementation for IQueryBuilder
 * 
 * @Author: Felype Rennan Alves dos Santos
 * August/2014
 * 
+* Comment on comments, yep they do tend to become a lie over time.
 **/
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 

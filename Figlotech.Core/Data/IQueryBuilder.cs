@@ -11,13 +11,6 @@ namespace Figlotech.Data
 
     public static class IQueryBuilderExtensions {
 
-        //public static void ExecuteUsing(this IQueryBuilder query, IDbConnection conn, IRdbmsPluginAdapter Plugin) {
-        //    using (var command = conn.CreateCommand()) {
-        //        query.ApplyToCommand(command, Plugin);
-        //        command.ExecuteNonQuery();
-        //    }
-        //}
-
         public static IQueryBuilder ToQueryBuilder(this string query, params object[] args) {
             return Qb.Fmt(query, args);
         }

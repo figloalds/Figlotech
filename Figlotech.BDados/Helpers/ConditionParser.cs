@@ -219,23 +219,22 @@ namespace Figlotech.BDados.Helpers {
                     if (GetValue(expr.Right)?.GetType() == typeof(string)) {
                         strBuilder.Append("(");
                         strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
-                        strBuilder.Append("LIKE");
                         var appendFragment = String.Empty;
                         switch (comparisonType) {
                             case DataStringComparisonType.Containing:
-                                appendFragment = $"CONCAT('%', @{GenerateParameterId}, '%')";
+                                appendFragment = $"LIKE CONCAT('%', @{GenerateParameterId}, '%')";
                                 break;
                             case DataStringComparisonType.EndingWith:
-                                appendFragment = $"CONCAT('%', @{GenerateParameterId})";
+                                appendFragment = $"LIKE CONCAT('%', @{GenerateParameterId})";
                                 break;
                             case DataStringComparisonType.StartingWith:
-                                appendFragment = $"CONCAT(@{GenerateParameterId}, '%')";
+                                appendFragment = $"LIKE CONCAT(@{GenerateParameterId}, '%')";
                                 break;
                             case DataStringComparisonType.ExactValue:
-                                appendFragment = $"@{GenerateParameterId}";
+                                appendFragment = $"=@{GenerateParameterId}";
                                 break;
                             default:
-                                appendFragment = $"@{GenerateParameterId}";
+                                appendFragment = $"=@{GenerateParameterId}";
                                 break;
                         }
                         strBuilder.Append(appendFragment, GetValue(expr.Right));
