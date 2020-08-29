@@ -70,9 +70,12 @@ namespace Figlotech.Core {
                     try {
                         using (var reqStream = await req.GetRequestStreamAsync()) {
                             var blen = 4096;
+                            var buff = new byte[blen];
+                            int chunksz = 0;
                             for (int i = 0; i * blen < data.Length; i++) {
-                                var span = new Span<byte>(data, blen * i, Math.Min(blen, data.Length - blen * i)).ToArray();
-                                await reqStream.WriteAsync(span, 0, span.Length);
+                                chunksz = Math.Min(blen, data.Length - blen * i);
+                                Array.Copy(data, 0, buff, blen * i, chunksz);
+                                await reqStream.WriteAsync(buff, 0, chunksz);
                             }
                             await reqStream.FlushAsync();
                             reqStream.Close();

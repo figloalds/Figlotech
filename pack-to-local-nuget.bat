@@ -10,6 +10,7 @@ echo %rev% > rev
 set args=-o _nuget -p:PackageVersion=1.0.%revision%.%rev%;TargetFrameworks=netstandard2.0
 
 dotnet pack Figlotech.Core %args%
+dotnet pack Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor %args%
 dotnet pack Figlotech.BDados %args%
 dotnet pack Figlotech.BDados.MySqlDataAccessor %args%
 dotnet pack Figlotech.BDados.PostgreSQLDataAccessor %args%
