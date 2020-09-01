@@ -26,8 +26,8 @@ namespace Figlotech.Core {
 
         static uint segmentESequential = 0;
         static uint segmentEOrigin = (uint)(rng.Next(0, Int32.MaxValue)) + (uint)(rng.Next(0, Int32.MaxValue));
-        private static RID _mrid2 = null;
         private static RID _machineRID = null;
+        private static RID _machineRID2 = null;
         public static RID MachineRID {
             get {
                 if (_machineRID != null) {
@@ -75,7 +75,6 @@ namespace Figlotech.Core {
                     var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
                     finalRid.IterateAssign((v, idx) => (byte)(v ^ hwid[idx]));
 
-                    _mrid2 = new RID(finalRid);
                     _machineRID = new RID(finalRid);
                     return _machineRID;
 
@@ -125,8 +124,8 @@ namespace Figlotech.Core {
 
         public static RID MachineRID2 {
             get {
-                if (_machineRID != null) {
-                    return _machineRID;
+                if (_machineRID2 != null) {
+                    return _machineRID2;
                 }
 
                 try {
@@ -192,9 +191,8 @@ namespace Figlotech.Core {
                     var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
                     finalRid.IterateAssign((v, idx) => (byte)(v ^ hwid[idx]));
 
-                    _mrid2 = new RID(finalRid);
-                    _machineRID = new RID(finalRid);
-                    return _machineRID;
+                    _machineRID2 = new RID(finalRid);
+                    return _machineRID2;
 
                 } catch (Exception x) {
                     Console.WriteLine(x.Message);
@@ -205,8 +203,8 @@ namespace Figlotech.Core {
                     if (!string.IsNullOrEmpty(envRid)) {
                         var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
                         if (itx.Length == 32) {
-                            _machineRID = new RID(itx);
-                            return _machineRID;
+                            _machineRID2 = new RID(itx);
+                            return _machineRID2;
                         }
                     }
                 }
@@ -217,9 +215,9 @@ namespace Figlotech.Core {
                 }
 
                 if (!File.Exists(fileName)) {
-                    _machineRID = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
-                    _machineRID = new RID();
-                    File.WriteAllBytes(fileName, _machineRID.AsByteArray);
+                    _machineRID2 = new RID(Fi.Range(0, 32).Select(i => (byte)rng.Next(256)).ToArray());
+                    _machineRID2 = new RID();
+                    File.WriteAllBytes(fileName, _machineRID2.AsByteArray);
                     try {
                         File.SetAttributes(fileName, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
 
@@ -229,7 +227,7 @@ namespace Figlotech.Core {
                     }
                 } else {
                     try {
-                        _machineRID = new RID(File.ReadAllBytes(fileName));
+                        _machineRID2 = new RID(File.ReadAllBytes(fileName));
 
                     } catch (Exception x) {
 
@@ -238,7 +236,7 @@ namespace Figlotech.Core {
                     }
                 }
                 File.SetAttributes(fileName, FileAttributes.Hidden);
-                return _machineRID;
+                return _machineRID2;
             }
         }
 

@@ -24,6 +24,7 @@ namespace Figlotech.Core {
         public const string Hexadecimal = "0123456789ABCDEF";
         public const string Base26 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         public const string Base36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        public const string AlphanumericCS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         public const string Base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         public static string DefaultInputBase = Decimal;
 
