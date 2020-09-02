@@ -891,7 +891,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var tname = type.Name;
                 var pkey = key;
                 // This inversion principle might be fucktastic.
-                childAlias = prefixer.GetAliasFor(thisAlias,
+                childAlias = prefixer.GetNewAliasFor(thisAlias,
                     tname,
                     pkey);
 
