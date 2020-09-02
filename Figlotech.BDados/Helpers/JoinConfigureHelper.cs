@@ -35,8 +35,7 @@ namespace Figlotech.BDados.Helpers
         //    return OnlyFields(fields);
         //}
 
-        public JoinConfigureHelper On(String args)
-        {
+        public JoinConfigureHelper On(String args) {
             _join.Joins[_index].Args = args;
             return this;
         }

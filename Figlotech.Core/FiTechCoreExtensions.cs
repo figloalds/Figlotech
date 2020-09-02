@@ -294,6 +294,8 @@ namespace Figlotech.Core {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("pool.ntp.org");
+                    }, async x => {
+                        Fi.Tech.Throw(x);
                     });
                 }
                 return _globalTimeStampSource;

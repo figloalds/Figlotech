@@ -209,7 +209,7 @@ namespace Figlotech.Core {
                     }
                 }
 
-                var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID");
+                var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID2");
                 if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
                     Directory.CreateDirectory(Path.GetDirectoryName(fileName));
                 }

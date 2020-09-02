@@ -68,13 +68,14 @@ namespace Figlotech.Core {
             try {
                 if(verb != "GET" && verb != "OPTIONS") {
                     try {
+                        req.ContentLength = data.Length;
                         using (var reqStream = await req.GetRequestStreamAsync()) {
-                            var blen = 4096;
+                            var blen = 2048;
                             var buff = new byte[blen];
                             int chunksz = 0;
                             for (int i = 0; i * blen < data.Length; i++) {
                                 chunksz = Math.Min(blen, data.Length - blen * i);
-                                Array.Copy(data, 0, buff, blen * i, chunksz);
+                                Array.Copy(data, blen * i, buff, 0, chunksz);
                                 await reqStream.WriteAsync(buff, 0, chunksz);
                             }
                             await reqStream.FlushAsync();

@@ -7,7 +7,7 @@ set /p rev=<rev
 set /A rev=rev+1
 echo %rev% > rev
 
-set args=-o _nuget -p:PackageVersion=1.0.%revision%.%rev%;TargetFrameworks=netstandard2.0
+set args=-o ..\_nuget -p:PackageVersion=1.0.%revision%.%rev%;TargetFrameworks=netstandard2.0
 
 dotnet pack Figlotech.Core %args%
 dotnet pack Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor %args%

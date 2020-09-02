@@ -7,7 +7,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     public abstract class AbstractAggregationAttribute : Attribute {
         public string Flags { get; set; } = "full";
         string[] _explodedFlags = null;
-        public string[] ExplodedFlags => _explodedFlags ?? (_explodedFlags = Flags.Split(','));
+        public string[] ExplodedFlags => _explodedFlags ?? (_explodedFlags = Flags.ToLower().Split(','));
 
         public AbstractAggregationAttribute() {
         }

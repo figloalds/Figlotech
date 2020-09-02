@@ -12,13 +12,23 @@ namespace Figlotech.BDados.Helpers {
         int seq = 0;
         Dictionary<string, string> dict = new Dictionary<string, string>();
 
+        Dictionary<string, (string parent, string child, string key)> revDict = new Dictionary<string, (string parent, string child, string key)>();
+
         public string GetAliasFor(string parent, string child, string pkey) {
             var k = $"{parent}_{child}_{pkey}".ToLower();
-            lock(dict) {
+            if (parent != "tba" && revDict.ContainsKey(parent)) {
+                var rdparent = revDict[parent];
+                var rdparent2 = revDict[rdparent.parent];
+                if (rdparent.parent != "root" && rdparent2.child == child && rdparent.key == pkey) {
+                    return rdparent.parent;
+                }
+            }
+            lock (dict) {
                 if (dict.ContainsKey(k)) {
                     return dict[k];
                 } else {
                     dict.Add(k, "tb"+new IntEx(seq++).ToString(IntEx.Base26).ToLower());
+                    revDict[dict[k]] = (parent, child, pkey);
                     return dict[k];
                 }
             }
