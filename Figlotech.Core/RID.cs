@@ -20,7 +20,6 @@ namespace Figlotech.Core {
 
     public class RID {
         static FiRandom rng = new FiRandom();
-        static LegacyCrossRandom mRng = new LegacyCrossRandom();
 
         byte[] Signature = new byte[32];
 
@@ -35,6 +34,7 @@ namespace Figlotech.Core {
                 }
 
                 try {
+                    LegacyCrossRandom mRng = new LegacyCrossRandom();
                     DirectoryInfo rootDir;
                     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                         var di = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System)));
@@ -46,7 +46,7 @@ namespace Figlotech.Core {
                     var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
 
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
-                            if(Environment.OSVersion.Platform == PlatformID.Win32NT) {
+                            if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                                 var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMedia");
                                 foreach (ManagementObject wmi_HD in searcher.Get()) {
                                     if(wmi_HD.Path.Path.Contains("CDROM")) {
@@ -63,6 +63,9 @@ namespace Figlotech.Core {
                                 }
                             } else {
                                 writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
+                                foreach(var f in Directory.GetFiles("/dev/disk/by-id")) {
+                                    writer.WriteLine(Path.GetFileName(f));
+                                }
                             }
                         }
 
@@ -136,58 +139,67 @@ namespace Figlotech.Core {
                     } else {
                         rootDir = new DirectoryInfo("/");
                     }
-                    var lbif = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(i => i.NetworkInterfaceType == NetworkInterfaceType.Loopback);
+                    FiRandom mRng2 = new FiRandom(rootDir.CreationTimeUtc.Ticks);
+                    var nwi = NetworkInterface.GetAllNetworkInterfaces();
+                    var lbif = nwi.FirstOrDefault(i => i.NetworkInterfaceType == NetworkInterfaceType.Loopback);
                     var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
 
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
 
-                            if (Environment.OSVersion.Platform == PlatformID.Win32NT) {
-                                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor");
-                                var objs = new List<ManagementObject>();
-                                foreach (ManagementObject obj in searcher.Get()) {
-                                    objs.Add(obj);
+                            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                                { 
+                                    var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor");
+                                    var objs = new List<ManagementObject>();
+                                    foreach (ManagementObject obj in searcher.Get()) {
+                                        objs.Add(obj);
+                                    }
+                                    foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
+                                        var json = JsonConvert.SerializeObject(
+                                            new {
+                                                Name = wmi_HD["Name"] as String,
+                                                ProcessorId = wmi_HD["ProcessorId"] as String,
+                                                UUID = wmi_HD.Qualifiers["UUID"].Value as String
+                                            }
+                                        , Formatting.None);
+                                        writer.WriteLine(json);
+                                    }
                                 }
-                                foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
-                                    var json = JsonConvert.SerializeObject(
-                                        new {
-                                            Name = wmi_HD["Name"] as String,
-                                            ProcessorId = wmi_HD["ProcessorId"] as String,
-                                            UUID = wmi_HD.Qualifiers["UUID"].Value as String
-                                        }
-                                    , Formatting.Indented);
-                                    writer.WriteLine(json);
+                                {
+                                    var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_BaseBoard");
+                                    var objs = new List<ManagementObject>();
+                                    foreach (ManagementObject obj in searcher.Get()) {
+                                        objs.Add(obj);
+                                    }
+                                    foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
+                                        var json = JsonConvert.SerializeObject(
+                                            new {
+                                                Product = wmi_HD["Product"] as String,
+                                                SerialNumber = wmi_HD["SerialNumber"] as String,
+                                                UUID = wmi_HD.Qualifiers["UUID"].Value as String
+                                            }
+                                        , Formatting.None);
+                                        writer.WriteLine(json);
+                                    }
                                 }
                             } else {
                                 writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
-                            }
-
-                            if (Environment.OSVersion.Platform == PlatformID.Win32NT) {
-                                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_BaseBoard");
-                                var objs = new List<ManagementObject>();
-                                foreach (ManagementObject obj in searcher.Get()) {
-                                    objs.Add(obj);
+                                foreach (var f in Directory.GetFiles("/sys/class/dmi/id")) {
+                                    try {
+                                        writer.WriteLine($"{f};{File.ReadAllText(f)}");
+                                    } catch (Exception) {
+                                    
+                                    }
                                 }
-                                foreach (ManagementObject wmi_HD in objs.OrderBy(x => x.Path.Path)) {
-                                    var json = JsonConvert.SerializeObject(
-                                        new {
-                                            Product = wmi_HD["Product"] as String,
-                                            SerialNumber = wmi_HD["SerialNumber"] as String,
-                                            UUID = wmi_HD.Qualifiers["UUID"].Value as String
-                                        }
-                                    , Formatting.Indented);
-                                    writer.WriteLine(json);
-                                }
-                            } else {
-                                writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
                             }
                         }
 
                     }), 32);
+                    var test = Convert.ToBase64String(hwid);
                     var id = lbif.Id.RegExReplace("[^0-9A-F]", "");
                     var segmentA = BitConverter.GetBytes(rootDir.CreationTimeUtc.Ticks);
                     var segmentB = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash(id), 8);
                     var segmentC = new byte[32 - (segmentA.Length + segmentB.Length)];
-                    segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng.Next(256))));
+                    segmentC.IterateAssign((v, idx) => ((byte)((idx % 2 == 0 ? segmentA[idx / 2] : segmentB[idx / 2]) ^ mRng2.Next(256))));
                     var finalRid = Fi.Tech.CombineArrays(segmentA, segmentB, segmentC);
                     finalRid.IterateAssign((v, idx) => (byte)(v ^ hwid[idx]));
 
@@ -232,7 +244,7 @@ namespace Figlotech.Core {
                     } catch (Exception x) {
 
                         File.Delete(fileName);
-                        return MachineRID;
+                        return MachineRID2;
                     }
                 }
                 File.SetAttributes(fileName, FileAttributes.Hidden);
