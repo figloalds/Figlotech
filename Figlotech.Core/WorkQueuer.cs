@@ -129,13 +129,15 @@ namespace Figlotech.Core {
                 WorkJob peekJob = null;
                 while (true) {
                     lock (PendingOrExecutingJobs) {
+                        if (ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
+                            SpawnWorker2();
+                        }
                         if (PendingOrExecutingJobs.Count > 0) {
                             peekJob = PendingOrExecutingJobs[0];
                         } else {
-                            break;
-                        }
-                        if(ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
-                            SpawnWorker2();
+                            if(ActiveJobs.Count == 0) {
+                                break;
+                            }
                         }
                     }
                     if(peekJob != null) {

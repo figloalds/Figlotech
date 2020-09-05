@@ -29,7 +29,7 @@ namespace Figlotech.Core
             } else {
                 try {
                     this.Current = _channel.Receive().ConfigureAwait(false).GetAwaiter().GetResult();
-                    return true;
+                    return this.Current != null;
                 } catch(Exception x) {
                     return false;
                 }
@@ -43,20 +43,28 @@ namespace Figlotech.Core
 
     public class CoroutineChannel<T> : IEnumerable<T>
     {
-        private Queue<T> Buffer = new Queue<T>();
-        private TaskCompletionSource<T> Next = new TaskCompletionSource<T>();
-        bool _outputIsBlocking = false;
+        private Queue<T> AwaitingOutput = new Queue<T>();
+        private Queue<TaskCompletionSource<T>> Next = new Queue<TaskCompletionSource<T>>();
         bool _isClosed = false;
 
-        public bool IsClosed => Buffer.Count == 0 && _isClosed;
+        public bool IsClosed {
+            get {
+                lock(AwaitingOutput) {
+                    return AwaitingOutput.Count == 0 && _isClosed;
+                }
+            }
+        }
 
         public void Send(T data) {
             if (!IsClosed) {
-                if(_outputIsBlocking) {
-                    Next.SetResult(data);
-                    Next = new TaskCompletionSource<T>();
-                } else {
-                    Buffer.Enqueue(data);
+                lock(Next) {
+                    if(Next.Count > 0) {
+                        Next.Dequeue().SetResult(data);
+                        return;
+                    }
+                }
+                lock (AwaitingOutput) {
+                    AwaitingOutput.Enqueue(data);
                 }
             } else {
                 throw new Exception("This channel is closed");
@@ -69,18 +77,22 @@ namespace Figlotech.Core
         }
 
         public void Close() {
-            Next.SetCanceled();
+            Next.ForEach(x=> x.SetCanceled());
             _isClosed = true;
         }
 
+        FiAsyncLock ReceiveLock = new FiAsyncLock();
         public async ValueTask<T> Receive() {
-            if (Buffer.Any()) {
-                return Buffer.Dequeue();
+            lock (AwaitingOutput) {
+                if (AwaitingOutput.Count > 0) {
+                    return AwaitingOutput.Dequeue();
+                }
             }
-            _outputIsBlocking = true;
-            var retv = await Next.Task;
-            _outputIsBlocking = false;
-            return retv;
+            var t = new TaskCompletionSource<T>();
+            lock (Next) {
+                Next.Enqueue(t);
+            }
+            return await t.Task;
         }
 
         public IEnumerator GetEnumerator() {

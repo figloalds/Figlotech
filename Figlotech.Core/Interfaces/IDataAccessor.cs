@@ -88,7 +88,9 @@ namespace Figlotech.Core.Interfaces {
             return DataAccessor.AggregateLoad(LoadAllArgs);
         }
         public IEnumerable<T> Fetch() {
-            return DataAccessor.Fetch(LoadAllArgs);
+            foreach(var ret in DataAccessor.Fetch(LoadAllArgs)) {
+                yield return ret;
+            }
         }
         public List<T> Load() {
             return DataAccessor.LoadAll(LoadAllArgs);

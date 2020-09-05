@@ -592,9 +592,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IEnumerable<T> Fetch<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
             if (CurrentTransaction != null) {
-                return Fetch(CurrentTransaction, args);
+                foreach (var ret in Fetch(CurrentTransaction, args)) {
+                    yield return ret;
+                }
             }
-            return Access((transaction) => Fetch(transaction, args).ToList());
+            using (var tsn = BeginTransaction(IsolationLevel.ReadCommitted)) {
+                foreach (var ret in Fetch(tsn, args)) {
+                    yield return ret;
+                }
+            }
         }
 
         public IEnumerable<T> Fetch<T>(IQueryBuilder conditions, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new() {
@@ -2089,9 +2095,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Benchmarker?.Mark($"Execute SELECT<{typeof(T).Name}>");
             transaction.Step();
             if (query == null || query.GetCommandText() == null) {
-                return new List<T>();
+                yield break;
             }
-            DateTime start = DateTime.Now;
+            DateTime start = DateTime.UtcNow;
             using (var command = transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 VerboseLogQueryParameterization(transaction, query);
@@ -2109,7 +2115,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
 
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(start).TotalMilliseconds} ms]");
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.UtcNow.Subtract(start).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     throw x;
@@ -2117,20 +2123,46 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog("------------------------------------");
                 }
                 transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
-
+                WorkQueuer wq = new WorkQueuer("Fetch Builder", Math.Max(1, Environment.ProcessorCount - 2), true);
                 using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
                     transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id})");
-                    var retv = Fi.Tech.MapFromReader<T>(reader).ToList();
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Run after loads <{typeof(T).Name}> ({query.Id})");
-                    retv = retv.Select(i => RunAfterLoad(i, false, transferObject ?? transaction?.ContextTransferObject)).ToList();
 
+                    var existingKeys = new MemberInfo[reader.FieldCount];
+                    for (int i = 0; i < reader.FieldCount; i++) {
+                        var name = reader.GetName(i);
+                        if (name != null) {
+                            var m = ReflectionTool.GetMember(typeof(T), name);
+                            if(m != null) {
+                                existingKeys[i] = m;
+                            }
+                        }
+                    }
+                    int c = 0;
+                    while (reader.Read()) {
+
+                        object[] values = new object[reader.FieldCount];
+                        for (int i = 0; i < reader.FieldCount; i++) {
+                            values[i] = reader.GetValue(i);
+                        }
+                        T obj = new T();
+                        for (int i = 0; i < existingKeys.Length; i++) {
+                            try {
+                                if(existingKeys[i] != null) {
+                                    ReflectionTool.SetMemberValue(existingKeys[i], obj, Fi.Tech.ProperMapValue(values[i]));
+                                }
+                            } catch (Exception x) {
+                                throw x;
+                            }
+                        }
+                        RunAfterLoad(obj, false, transferObject ?? transaction?.ContextTransferObject);
+                        yield return obj;
+                        c++;
+                    }
                     double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                    WriteLog($"[{accessId}] -------- <{query.Id}> Fetch [OK] ({retv.Count} results) [{elaps} ms]");
-
-                    return retv;
+                    WriteLog($"[{accessId}] -------- <{query.Id}> Fetch [OK] ({c} results) [{elaps} ms]");
                 }
             }
         }

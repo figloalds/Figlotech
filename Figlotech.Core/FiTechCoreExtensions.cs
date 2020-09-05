@@ -1492,8 +1492,11 @@ namespace Figlotech.Core {
         public static CoroutineChannel<T> FireCoroutine<T>(this Fi _selfie, Func<CoroutineChannel<T>, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             var retv = new CoroutineChannel<T>();
             _ = FireTask(_selfie, "Anonymous_FireTask", async () => {
-                await job(retv);
-                retv.Close();
+                var t = job(retv);
+                await t;
+                if (!retv.IsClosed) {
+                    retv.Close();
+                }
             }, handler, then);
             return retv;
         }
