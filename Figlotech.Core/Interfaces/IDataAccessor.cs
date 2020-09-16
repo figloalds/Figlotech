@@ -2,6 +2,7 @@
 using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading;
@@ -88,9 +89,7 @@ namespace Figlotech.Core.Interfaces {
             return DataAccessor.AggregateLoad(LoadAllArgs);
         }
         public IEnumerable<T> Fetch() {
-            foreach(var ret in DataAccessor.Fetch(LoadAllArgs)) {
-                yield return ret;
-            }
+            return DataAccessor.Fetch(LoadAllArgs);
         }
         public List<T> Load() {
             return DataAccessor.LoadAll(LoadAllArgs);

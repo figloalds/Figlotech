@@ -22,6 +22,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
         public int PoolSize { get; set; } = 10;
         public bool UsePooling { get; set; } = true;
         public int Timeout { get; set; } = 60000;
+        public int ConnectTimeout { get; set; } = 30;
         public int Lifetime { get; set; } = 60000;
         public bool ResetConnection { get; set; } = true;
         public bool ContinuousConnection { get; set; } = false;
@@ -51,7 +52,8 @@ namespace Figlotech.BDados.MySqlDataAccessor
         }
 
         public String GetConnectionString() { 
-            return $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database}" : "")};Min Pool Size=1;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Timeout};DefaultCommandTimeout={Timeout};ConnectionLifetime={Lifetime};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL?"Required":"None")};CharSet=utf8mb4;";
+            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database}" : "")};Min Pool Size=1;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Timeout};Connect Timeout={ConnectTimeout};DefaultCommandTimeout={Timeout};ConnectionLifetime={Lifetime};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL?"Required":"None")};CharSet=utf8mb4;";
+            return connstr;
         }
     }
 }

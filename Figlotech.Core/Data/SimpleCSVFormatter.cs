@@ -24,18 +24,54 @@ namespace Figlotech.Core.Data
             await Fi.Tech.ParallelFlow<T>((ch) => {
                 ch.ReturnRange(li);
             }).Then(Math.Max(Environment.ProcessorCount-1, 1), async (c) => {
-                return FetchObjectData(headers, new ObjectReflector(c));
+                return ObjectToRow(headers, new ObjectReflector(c));
             }).Then(1, async (data) => {
                 WriteDataToStream(data, stream);
             });
         }
+        
+        public string[] LineToData(string line) {
+            return LineToData(line, false).ToArray();
+        }
+        private IEnumerable<string> LineToData(string line, bool isInQuote = false) {
+            var next = line;
+
+            do {
+                if(next.IndexOf(Sep) > -1) {
+                    var fragment = next.Substring(0, next.IndexOf(isInQuote ? '\"' : Sep));
+                    next = next.Substring(fragment.Length + 1);
+                    var idxQuote = fragment.IndexOf('\"');
+                    if (idxQuote <= -1) {
+                        yield return fragment;
+                    } else {
+                        fragment = fragment.Substring(0, idxQuote) + fragment.Substring(idxQuote + 1);
+                        if(fragment.IndexOf('\"') > -1) {
+                            idxQuote = fragment.IndexOf('\"');
+                            fragment = fragment.Substring(0, idxQuote) + fragment.Substring(idxQuote + 1);
+                            yield return fragment;
+                        } else {
+                            var idxQuoteInNext = next.IndexOf('\"');
+                            if(idxQuoteInNext > -1) {
+                                fragment += next.Substring(0, idxQuoteInNext) + next.Substring(idxQuoteInNext + 1, Math.Max(0, next.IndexOf(Sep) - (idxQuoteInNext + 1)));
+                            }
+                            next = next.Substring(next.IndexOf(Sep) + 1);
+                            yield return fragment;
+                        }
+                    }
+                } else {
+                    yield return next;
+                    yield break;
+                    break;
+                }
+            } while (next.Length > 0);
+        }
 
         public void WriteHeadersToStream(string[] headers, Stream stream) {
             var data = Encoding.UTF8.GetBytes(string.Join($"{Sep}", headers) + "\r\n");
-            stream.Write(data, 0, data.Length);
+            WriteDataToStream(data, stream);
         }
 
-        public byte[] FetchObjectData(string[] headers, IReadOnlyDictionary<string, object> obj) {
+        public byte[] ObjectToRow(string[] headers, IReadOnlyDictionary<string, object> obj) {
             var data = Encoding.UTF8.GetBytes(string.Join($"{Sep}", headers.Select(x => {
                 if(obj is ObjectReflector || obj.ContainsKey(x)) {
                     if(obj[x] == null) {

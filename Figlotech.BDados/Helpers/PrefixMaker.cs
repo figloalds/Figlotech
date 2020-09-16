@@ -28,7 +28,7 @@ namespace Figlotech.BDados.Helpers {
             if (parent != "tba" && revDict.ContainsKey(parent)) {
                 var rdparent = revDict[parent];
                 var rdparent2 = revDict[rdparent.parent];
-                if (rdparent.parent != "root" && rdparent2.child == child) {
+                if (rdparent.parent != "root" && rdparent2.child == child && pkey == rdparent.key) {
                     return rdparent.parent;
                 }
             }

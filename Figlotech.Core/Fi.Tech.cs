@@ -52,8 +52,9 @@ namespace Figlotech.Core {
             return new ValueTask<T>(i);
         }
         public static ValueTask Result() {
-            return new ValueTask();
+            return CompletedValueTask;
         }
+        internal static readonly ValueTask CompletedValueTask = new ValueTask();
 
         /// <summary>
         /// This is here because ain't nobody got time to write

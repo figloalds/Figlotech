@@ -140,7 +140,10 @@ namespace Figlotech.Core {
                             }
                         }
                     }
-                    if(peekJob != null) {
+                    if(peekJob != null && ActiveJobs.Count < 1) {
+                        SpawnWorker2();
+                    }
+                    if(peekJob != null && peekJob.status != WorkJobStatus.Finished) {
                         await peekJob;
                     }
                 }
@@ -315,6 +318,9 @@ namespace Figlotech.Core {
                         }
                         lock (Tasks) {
                             Tasks.Remove(job.TaskCompletionSource.Task);
+                        }
+                        lock (ActiveJobs) {
+                            ActiveJobs.Remove(job);
                         }
                         job.TaskCompletionSource.SetResult(0);
                         SpawnWorker2();

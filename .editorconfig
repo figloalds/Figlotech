@@ -1,0 +1,4 @@
+﻿[*.cs]
+
+# CA1012: Abstract types should not have constructors
+dotnet_diagnostic.CA1012.severity = silent

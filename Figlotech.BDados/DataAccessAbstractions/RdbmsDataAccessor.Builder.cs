@@ -136,6 +136,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 addMethod.Invoke(li, new object[] { newObj });
                                 constructionCache[childRidCacheId] = newObj;
                                 isUlNew = true;
+
                             }
 
                             //transaction.Benchmarker.Mark($"Aggregate List Enter Item {myPrefix}::{childRid}");
