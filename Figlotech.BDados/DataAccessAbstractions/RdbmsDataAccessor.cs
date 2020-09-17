@@ -605,7 +605,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (CurrentTransaction != null) {
                 return Fetch(CurrentTransaction, args).ToList();
             }
-            using (var tsn = BeginTransaction(IsolationLevel.ReadCommitted)) {
+            using (var tsn = BeginTransaction(IsolationLevel.ReadUncommitted)) {
                 return Fetch(tsn, args).ToList();
             }
         }
@@ -871,8 +871,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         throw new BDadosException("Error accessing the database", CurrentTransaction?.FrameHistory, null, x);
                     }
                 } finally {
-                    if (!CurrentTransaction.usingExternalBenchmarker) {
-                        b.FinalMark();
+                    if (!(CurrentTransaction?.usingExternalBenchmarker ?? true)) {
+                        b?.FinalMark();
                     }
                     EndTransaction();
                 }
@@ -1192,15 +1192,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Dispose();
         }
         public void Dispose() {
-            foreach(var v in _currentTransaction) {
-                if(v.Value != null) {
-                    v.Value?.Dispose();
+            if(_currentTransaction != null) {
+                foreach(var v in _currentTransaction) {
+                    if(v.Value != null) {
+                        v.Value?.Dispose();
+                    }
                 }
             }
-            foreach(var v in ActiveConnections) {
-                try {
-                    v.Connection?.Dispose();
-                } catch(Exception x) { }
+            if(ActiveConnections != null) {
+                foreach(var v in ActiveConnections) {
+                    try {
+                        v.Connection?.Dispose();
+                    } catch(Exception x) { }
+                }
             }
         }
         #endregion *****************
