@@ -95,7 +95,7 @@ namespace Figlotech.Core {
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
         public RecurrenceMode RecurrenceMode { get; set; }
-        public bool IsActive { get; internal set; }
+        public bool IsActive { get; internal set; } = true;
     }
 
     public enum RecurrenceMode
