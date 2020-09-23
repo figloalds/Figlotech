@@ -33,7 +33,8 @@ namespace Figlotech.Core {
         public DateTime? CompletedTime;
         public String Name { get; set; } = null;
 
-        public TaskCompletionSource<int> TaskCompletionSource { get; set; } = new TaskCompletionSource<int>();
+        TaskCompletionSource<int> _taskCompletionSource = new TaskCompletionSource<int>();
+        public TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
 
         public TaskAwaiter<int> GetAwaiter() {
             return TaskCompletionSource.Task.GetAwaiter();
@@ -313,6 +314,7 @@ namespace Figlotech.Core {
                         job.CompletedTime = DateTime.UtcNow;
                         job.status = WorkJobStatus.Finished;
                         WorkDone++;
+                        job.TaskCompletionSource.SetResult(0);
                         lock (PendingOrExecutingJobs) {
                             PendingOrExecutingJobs.Remove(job);
                         }
@@ -322,7 +324,6 @@ namespace Figlotech.Core {
                         lock (ActiveJobs) {
                             ActiveJobs.Remove(job);
                         }
-                        job.TaskCompletionSource.SetResult(0);
                         SpawnWorker2();
                     }
                 }
