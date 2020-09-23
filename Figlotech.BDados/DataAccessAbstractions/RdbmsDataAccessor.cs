@@ -140,13 +140,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Fi.Tech.WriteLine($"Warning disposing connection from BDadosTransaction: {x.Message}");
                 }
             }
-            DataAccessor.ActiveConnections.RemoveAll(x => x.Connection == Connection);
+            RdbmsDataAccessor.ActiveConnections.RemoveAll(x => x.Connection == Connection);
         }
     }
     
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
 
-        public List<(IDbConnection Connection, string StackData)> ActiveConnections = new List<(IDbConnection Connection, string StackData)>();
+        public static List<(IDbConnection Connection, string StackData, int AccessorId)> ActiveConnections = new List<(IDbConnection Connection, string StackData, int AccessorId)>();
 
         public ILogger Logger { get; set; }
 
@@ -273,7 +273,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             get {
                 if (_currentTransaction.ContainsKey(ThreadId)) {
                     if(_currentTransaction[ThreadId] != null && _currentTransaction[ThreadId]?.ConnectionState == ConnectionState.Closed) {
-                        _currentTransaction[ThreadId] = null;
+                        try {
+                            _currentTransaction[ThreadId].Dispose();
+                        } catch(Exception x) {
+                            Fi.Tech.Throw(x);
+                        }
                         return null;
                     } else {
                         return _currentTransaction[ThreadId];
@@ -322,7 +326,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //}
                     WriteLog("Opening Transaction");
                     var connection = Plugin.GetNewConnection();
-                    OpenConnection(connection);
+                    try {
+                        OpenConnection(connection);
+                    } catch(Exception x) {
+                        try {
+                            connection?.Dispose();
+                        } catch (Exception) {
+
+                        }
+                        throw x;
+                    }
                     CurrentTransaction = new BDadosTransaction(this, connection);
                     CurrentTransaction?.BeginTransaction(ilev);
                     CurrentTransaction.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
@@ -605,9 +618,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (CurrentTransaction != null) {
                 return Fetch(CurrentTransaction, args).ToList();
             }
-            using (var tsn = BeginTransaction(IsolationLevel.ReadUncommitted)) {
+            return Access(tsn => {
                 return Fetch(tsn, args).ToList();
-            }
+            });
         }
 
         public IEnumerable<T> Fetch<T>(IQueryBuilder conditions, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new() {
@@ -769,22 +782,46 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
+        static long ConnectionTracks = 0;
         internal void OpenConnection(IDbConnection connection) {
             int attempts = DefaultMaxOpenAttempts;
             Exception ex = null;
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
                 try {
                     connection.Open();
-                    var stack = Environment.StackTrace;
-                    ActiveConnections.Add((connection, Environment.StackTrace));
-                    //Fi.Tech.ScheduleTask(new RID().AsBase36, DateTime.UtcNow + TimeSpan.FromSeconds(10), new WorkJob(() => {
-                    //    if(connection.State == ConnectionState.Open) {
-                    //        Console.WriteLine(stack);
-                    //        Debugger.Break();
-                    //    }
-                    //    return Fi.Result();
-                    //}, x=> Fi.Result(), s=> Fi.Result())
-                    //);
+                    if(FiTechCoreExtensions.DebugConnectionLifecycle) {
+                        var stack = Environment.StackTrace;
+                        lock (ActiveConnections)
+                            ActiveConnections.Add((connection, Environment.StackTrace, myId));
+                        var trackId = $"TRACK_CONNECTION_{++ConnectionTracks}";
+                        Fi.Tech.ScheduleTask(trackId, DateTime.UtcNow + TimeSpan.FromSeconds(10), new WorkJob(() => {
+                            try {
+                                if (connection.State == ConnectionState.Open) {
+                                    var isActive = false;
+                                    lock (ActiveConnections)
+                                        isActive = ActiveConnections.Any(x => x.Connection == connection);
+                                    if (isActive) {
+
+                                    } else {
+                                        if (!Directory.Exists("CriticalFTHErrors")) {
+                                            Directory.CreateDirectory("CriticalFTHErrors");
+                                        }
+                                        Debugger.Break();
+                                        try {
+                                            connection?.Dispose();
+                                        } catch (Exception x) { }
+                                    }
+                                } else {
+                                    Fi.Tech.Unschedule(trackId);
+                                }
+                            } catch(Exception x) {
+                                Debugger.Break();
+                            }
+                            return Fi.Result();
+                        }, x => Fi.Result(), s => Fi.Result()), TimeSpan.FromSeconds(10)
+                        );
+                    }
+
                     isOnline = true;
                     break;
                 } catch (Exception x) {

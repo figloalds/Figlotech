@@ -95,6 +95,7 @@ namespace Figlotech.Core {
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
         public RecurrenceMode RecurrenceMode { get; set; }
+        public bool IsActive { get; internal set; }
     }
 
     public enum RecurrenceMode
@@ -436,9 +437,11 @@ namespace Figlotech.Core {
         static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
 
         private static void Reschedule(ScheduledWorkJob sched) {
-            sched.Timer.Change(Timeout.Infinite, Timeout.Infinite);
-            sched.Timer.Dispose();
-            sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)sched.RecurrenceInterval.Value.TotalMilliseconds), Timeout.Infinite);
+            if(sched.IsActive) {
+                sched.Timer.Change(Timeout.Infinite, Timeout.Infinite);
+                sched.Timer.Dispose();
+                sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)sched.RecurrenceInterval.Value.TotalMilliseconds), Timeout.Infinite);
+            }
         }
 
         private static void _timerFn(object a) {
@@ -483,6 +486,7 @@ namespace Figlotech.Core {
                 GlobalScheduledJobs.RemoveAll(s => {
                     if (s.Identifier == identifier) {
                         s.Timer.Dispose();
+                        s.IsActive = false;
                         return true;
                     } else {
                         return false;
@@ -1451,6 +1455,8 @@ namespace Figlotech.Core {
             });
         }
         public static bool InlineFireTask { get; set; }
+        public static bool DebugConnectionLifecycle { get; set; }
+
         static WorkQueuer FiTechRAF = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
         public static WorkJob FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             if (InlineFireTask) {
