@@ -16,20 +16,26 @@ namespace Figlotech.BDados.Helpers {
 
         public string GetNewAliasFor(string parent, string child, string pkey) {
             var k = $"{parent}_{child}_{pkey}".ToLower();
+            string retv = null;
             if (dict.ContainsKey(k)) {
-                return dict[k];
+                retv = dict[k];
             } else {
                 dict.Add(k, "tb" + new IntEx(seq++).ToString(IntEx.Base26).ToLower());
                 revDict[dict[k]] = (parent, child, pkey);
-                return dict[k];
+                retv = dict[k];
             }
+
+            //Console.WriteLine($"{k} = {retv}");
+            return retv;
         }
         public string GetAliasFor(string parent, string child, string pkey) {
-            if (parent != "tba" && revDict.ContainsKey(parent)) {
+            if (revDict.ContainsKey(parent)) {
                 var rdparent = revDict[parent];
-                var rdparent2 = revDict[rdparent.parent];
-                if (rdparent.parent != "root" && rdparent2.child == child && pkey == rdparent.key) {
-                    return rdparent.parent;
+                if (revDict.ContainsKey(rdparent.parent)) {
+                    var rdparent2 = revDict[rdparent.parent];
+                    if (rdparent.parent != "root" && rdparent2.child == child && pkey == rdparent.key) {
+                        return rdparent.parent;
+                    }
                 }
             }
             lock (dict) {

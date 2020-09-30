@@ -223,7 +223,11 @@ namespace Figlotech.Core.Helpers {
         public static Object GetMemberValue(MemberInfo member, Object target) {
             if (member is PropertyInfo pi) {
                 if(pi.GetIndexParameters().Length == 0) {
-                    return pi.GetValue(target);
+                    try {
+                        return pi.GetValue(target);
+                    } catch(Exception x) {
+                        return null;
+                    }
                 } else {
                     return null;
                 }

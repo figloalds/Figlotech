@@ -37,7 +37,7 @@ namespace Figlotech.Data
                 if (usableValue is String str) {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
-                    paramRefl.Slot(cmdParam);
+                    //paramRefl.Slot(cmdParam);
                     //paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else {
                     cmdParam.Value = usableValue;

@@ -39,18 +39,19 @@ namespace Figlotech.BDados.Helpers {
             var exp = (expression as MemberExpression).Expression;
             var agT = exp.Type;
             Expression subexp = expression;
-            var thisAlias = prefixer.GetAliasFor("root", agT.Name, String.Empty);
+            var thisAlias = "tba"; // prefixer.GetAliasFor("tba", agT.Name, String.Empty);
             while (subexp.NodeType == ExpressionType.MemberAccess) {
                 if (subexp is MemberExpression smex) {
                     var mt = ReflectionTool.GetTypeOf(smex.Member);
+                    var smexMember = (smex.Expression as MemberExpression)?.Member;
                     var f1 = smex.Member.GetCustomAttribute<AggregateFieldAttribute>();
-                    var f2 = smex.Member.GetCustomAttribute<AggregateObjectAttribute>();
+                    var f2 = smexMember?.GetCustomAttribute<AggregateObjectAttribute>();
                     var f3 = smex.Member.GetCustomAttribute<AggregateFarFieldAttribute>();
-                    var f4 = smex.Member.GetCustomAttribute<AggregateListAttribute>();
+                    var f4 = smexMember?.GetCustomAttribute<AggregateListAttribute>();
                     if(f1 != null) {
                         thisAlias = prefixer.GetAliasFor(thisAlias, f1.RemoteObjectType.Name, f1.ObjectKey);
                     } else if (f2 != null) {
-                        thisAlias = prefixer.GetAliasFor(thisAlias, mt.Name, f2.ObjectKey);
+                        thisAlias = prefixer.GetAliasFor(thisAlias, ReflectionTool.GetTypeOf(smexMember)?.Name, f2.ObjectKey);
                     } else if (f3 != null) {
                         thisAlias = prefixer.GetAliasFor(thisAlias, f3.ImediateType.Name, f3.ImediateKey);
                         thisAlias = prefixer.GetAliasFor(thisAlias, f3.FarType.Name, f3.FarKey);

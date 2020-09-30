@@ -527,7 +527,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = false) where T : IDataObject {
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
 
             var t = inputRecordset.FirstOrDefault()?.GetType();
             if(t == null) {

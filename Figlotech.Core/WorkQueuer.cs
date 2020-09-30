@@ -129,10 +129,10 @@ namespace Figlotech.Core {
                 //workers.Clear();
                 WorkJob peekJob = null;
                 while (true) {
+                    if (ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
+                        SpawnWorker2();
+                    }
                     lock (PendingOrExecutingJobs) {
-                        if (ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
-                            SpawnWorker2();
-                        }
                         if (PendingOrExecutingJobs.Count > 0) {
                             peekJob = PendingOrExecutingJobs[0];
                         } else {
@@ -141,11 +141,18 @@ namespace Figlotech.Core {
                             }
                         }
                     }
-                    if(peekJob != null && ActiveJobs.Count < 1) {
+                    if(peekJob != null && ActiveJobs.Count < Math.Min(this.MaxParallelTasks, WorkQueue.Count)) {
                         SpawnWorker2();
                     }
                     if(peekJob != null && peekJob.status != WorkJobStatus.Finished) {
                         await peekJob;
+                    } else {
+                        lock (PendingOrExecutingJobs) {
+                            PendingOrExecutingJobs.Remove(peekJob);
+                        }
+                        lock (ActiveJobs) {
+                            ActiveJobs.Remove(peekJob);
+                        }
                     }
                 }
             }
@@ -215,12 +222,12 @@ namespace Figlotech.Core {
             isRunning = true;
             lock(HeldJobs) {
                 lock(WorkQueue) {
-                    lock(PendingOrExecutingJobs) {
-                        WorkQueue.EnqueueRange(HeldJobs);
-                        PendingOrExecutingJobs.AddRange(HeldJobs);
-                        HeldJobs.Clear();
-                    }
+                    WorkQueue.EnqueueRange(HeldJobs);
                 }
+                lock (PendingOrExecutingJobs) {
+                    PendingOrExecutingJobs.AddRange(HeldJobs);
+                }
+                HeldJobs.Clear();
             }
 
             SpawnWorker2();
@@ -251,10 +258,10 @@ namespace Figlotech.Core {
             //bool shouldForceSpawnWorker = false;
             if (Active) {
                 lock (WorkQueue) {
-                    lock (PendingOrExecutingJobs) {
-                        WorkQueue.Enqueue(job);
-                        PendingOrExecutingJobs.Add(job);
-                    }
+                    WorkQueue.Enqueue(job);
+                }
+                lock (PendingOrExecutingJobs) {
+                    PendingOrExecutingJobs.Add(job);
                 }
             } else {
                 lock (HeldJobs) {
@@ -282,7 +289,7 @@ namespace Figlotech.Core {
                 lock(selfLockSpawnWorker2) {
                     lock(WorkQueue) {
                         lock(ActiveJobs) {
-                            ActiveJobs.RemoveAll(x => x.CompletedTime != null);
+                            ActiveJobs.RemoveAll(x => x.status == WorkJobStatus.Finished);
                             if(ActiveJobs.Count < this.MaxParallelTasks && WorkQueue.Count > 0) {
                                 job = WorkQueue.Dequeue(); 
                                 lock (Tasks) {
@@ -293,7 +300,12 @@ namespace Figlotech.Core {
                         }
                     }
                 }
+                if(job?.status == WorkJobStatus.Finished) {
+                    Debugger.Break();
+                }
                 if(job != null) {
+                    var thisWorkerId = workerIds++;
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", ()=> $"Worker {thisWorkerId} started");
                     try {
                         job.DequeuedTime = DateTime.UtcNow;
                         job.status = WorkJobStatus.Running;
@@ -301,6 +313,7 @@ namespace Figlotech.Core {
                         if (job.finished != null) {
                             await job.finished(true).ConfigureAwait(false);
                         }
+                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", ()=> $"Worker {thisWorkerId} executed OK");
                     } catch (Exception x) {
                         if (job.handling != null) {
                             await job.handling(x).ConfigureAwait(false);
@@ -310,21 +323,37 @@ namespace Figlotech.Core {
                         if (job.finished != null) {
                             await job.finished(false).ConfigureAwait(false);
                         }
+                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} thrown an Exception: {x.Message}");
                     } finally {
-                        job.CompletedTime = DateTime.UtcNow;
-                        job.status = WorkJobStatus.Finished;
-                        WorkDone++;
-                        job.TaskCompletionSource.SetResult(0);
-                        lock (PendingOrExecutingJobs) {
-                            PendingOrExecutingJobs.Remove(job);
+                        try {
+                            job.CompletedTime = DateTime.UtcNow;
+                            job.status = WorkJobStatus.Finished;
+                            WorkDone++;
+                            job.TaskCompletionSource.SetResult(0);
+                            lock (ActiveJobs) {
+                                if(ActiveJobs.Contains(job)) {
+                                    if(!ActiveJobs.Remove(job)) {
+                                        Debugger.Break();
+                                    }
+                                }
+                            }
+                            lock (PendingOrExecutingJobs) {
+                                if (PendingOrExecutingJobs.Contains(job)) {
+                                    if (!PendingOrExecutingJobs.Remove(job)) {
+                                        Debugger.Break();
+                                    }
+                                }
+                            }
+                            lock (Tasks) {
+                                Tasks.Remove(job.TaskCompletionSource.Task);
+                            }
+                            if(WorkQueue.Count > 0) {
+                                SpawnWorker2();
+                            }
+                        } catch(Exception x) {
+                            Debugger.Break();
                         }
-                        lock (Tasks) {
-                            Tasks.Remove(job.TaskCompletionSource.Task);
-                        }
-                        lock (ActiveJobs) {
-                            ActiveJobs.Remove(job);
-                        }
-                        SpawnWorker2();
+                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} cleanup OK");
                     }
                 }
             }, null);

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
 
     public class SyncTimeStampSource {
-        DateTime BaseTimeStamp { get; set; }
+        DateTime BaseTimeStamp { get; set; } = DateTime.UtcNow;
         Stopwatch Watch { get; set; }
 
         private SyncTimeStampSource() { }
