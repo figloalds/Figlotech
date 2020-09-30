@@ -135,12 +135,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 T obj = new T();
                 refl.Slot(obj);
                 for (int i = 0; i < existingKeys.Length; i++) {
-                    try {
-                        var o = reader.GetValue(i);
-                        refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
-                    } catch(Exception x) {
-                        Debugger.Break();
-                        throw x;
+                    if(existingKeys[i] != null) {
+                        try {
+                            var o = reader.GetValue(i);
+                            refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
+                        } catch(Exception x) {
+                            Debugger.Break();
+                            throw x;
+                        }
                     }
                 }
                 yield return (T) refl.Retrieve();

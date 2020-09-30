@@ -28,7 +28,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor", "Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor\Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor.csproj", "{F7854BCF-364B-48F0-8F54-2189F929BAB7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.DataFlow", "Figlotech.DataFlow\Figlotech.DataFlow.csproj", "{F905E81B-B5DE-400B-B42E-109130C6B275}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.DataFlow", "Figlotech.DataFlow\Figlotech.DataFlow.csproj", "{F905E81B-B5DE-400B-B42E-109130C6B275}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

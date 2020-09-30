@@ -31,6 +31,7 @@ namespace Figlotech.Core {
         public DateTime? EqueuedTime = DateTime.Now;
         public DateTime? DequeuedTime;
         public DateTime? CompletedTime;
+        public TimeSpan? CompletionTime { get; internal set; }
         public String Name { get; set; } = null;
 
         TaskCompletionSource<int> _taskCompletionSource = new TaskCompletionSource<int>();
@@ -44,20 +45,11 @@ namespace Figlotech.Core {
             throw new NotImplementedException();
         }
 
-        //#if DEBUG
-        //        public StackFrame[] ContextStack;
-        //#endif
-
         public WorkJob(Func<ValueTask> method, Func<Exception, ValueTask> errorHandling, Func<bool, ValueTask> actionWhenFinished) {
             action = method;
             finished = actionWhenFinished;
             handling = errorHandling;
             status = WorkJobStatus.Queued;
-
-            //#if DEBUG
-            //            StackTrace stackTrace = new StackTrace();   // get call stack
-            //            ContextStack = stackTrace.GetFrames();      // get method calls (frames)
-            //#endif
         }
     }
 
@@ -72,30 +64,15 @@ namespace Figlotech.Core {
         List<WorkJob> HeldJobs = new List<WorkJob>();
         List<WorkJob> PendingOrExecutingJobs = new List<WorkJob>();
         List<WorkJob> ActiveJobs = new List<WorkJob>();
-        List<Thread> detectedLongWorkThreads = new List<Thread>();
-        decimal avgTaskResolutionTime = 1;
 
-        decimal totTaskResolutionTime = 1;
+        public decimal AverageTaskResolutionTime => TotalTaskResolutionTime / WorkDone;
+        public decimal TotalTaskResolutionTime { get; private set; } = 1;
+        public bool Active { get; private set; } = false;
 
-        decimal totTasksResolved = 0;
-        ManualResetEvent QueueResetEvent { get; set; } = new ManualResetEvent(false);
-
-        public int GcInterval = 5000;
-
-        private bool _active = false;
-        public bool Active {
-            get {
-                return _active;
-            }
-            private set {
-                _active = value;
-            }
-        }
-        private bool isRunning = false;
         public static int DefaultSleepInterval = 50;
 
         public bool IsClosed { get { return closed; } }
-        public bool IsRunning { get { return isRunning; } }
+        public bool IsRunning { get; private set; } = false;
 
         private bool isPaused = false;
 
@@ -116,21 +93,10 @@ namespace Figlotech.Core {
         public async Task Stop(bool wait = true) {
             Active = false;
             if (wait) {
-                //_supervisor.Join();
-                //while (workers.Count > 0) {
-                //    if(workers[workers.Count - 1].ManagedThreadId == Thread.CurrentThread.ManagedThreadId) {
-                //        workers.RemoveAt(workers.Count - 1);
-                //        continue;
-                //    }
-                //    if(workers[workers.Count-1].IsAlive) {
-                //        workers[workers.Count - 1].Join();
-                //    }
-                //}
-                //workers.Clear();
                 WorkJob peekJob = null;
                 while (true) {
                     if (ActiveJobs.Count < this.MaxParallelTasks && peekJob != null) {
-                        SpawnWorker2();
+                        SpawnWorker();
                     }
                     lock (PendingOrExecutingJobs) {
                         if (PendingOrExecutingJobs.Count > 0) {
@@ -142,7 +108,7 @@ namespace Figlotech.Core {
                         }
                     }
                     if(peekJob != null && ActiveJobs.Count < Math.Min(this.MaxParallelTasks, WorkQueue.Count)) {
-                        SpawnWorker2();
+                        SpawnWorker();
                     }
                     if(peekJob != null && peekJob.status != WorkJobStatus.Finished) {
                         await peekJob;
@@ -156,7 +122,7 @@ namespace Figlotech.Core {
                     }
                 }
             }
-            isRunning = false;
+            IsRunning = false;
         }
 
         public TimeSpan TimeIdle {
@@ -169,40 +135,6 @@ namespace Figlotech.Core {
         }
 
         bool closed = false;
-
-        //private void SupervisorJob() {
-        //    int wqc = 0;
-        //    int numWorkers = 0;
-        //    var clearHolds = DateTime.UtcNow;
-        //    var lastSupervisorRun = DateTime.UtcNow;
-        //    while (Active || wqc > 0) {
-        //        lock (workers) {
-        //            numWorkers = workers.Count;
-        //            workers.RemoveAll(t => t.ThreadState == ThreadState.Stopped);
-        //            workers.RemoveAll(t => t.ThreadState == ThreadState.Aborted);
-        //            lock (workQueue) {
-        //                wqc = workQueue.Count;
-        //                if (wqc > 0) {
-        //                    lastSupervisorRun = DateTime.UtcNow;
-        //                }
-        //            }
-        //            if (wqc > workers.Count && workers.Count < parallelSize) {
-        //                SpawnWorker();
-        //            }
-        //            if (DateTime.UtcNow.Subtract(clearHolds) > TimeSpan.FromMilliseconds(GcInterval)) {
-        //                lock (holdJobs) {
-        //                    holdJobs.Clear();
-        //                }
-        //                clearHolds = DateTime.UtcNow;
-        //            }
-        //            if (DateTime.UtcNow.Subtract(lastSupervisorRun) > TimeSpan.FromMilliseconds(ExtraWorkerTimeout)) {
-        //                return;
-        //            }
-        //        }
-        //        Thread.Sleep(DefaultSleepInterval);
-        //    }
-        //}
-
         public int MaxParallelTasks { get; set; } = 0;
         bool inited = false;
 
@@ -213,16 +145,15 @@ namespace Figlotech.Core {
         }
 
         public void Start() {
-            if (Active || isRunning)
+            if (Active || IsRunning)
                 return;
             Active = true;
-            //while(workers.Count < parallelSize) {
-            //    workers.Add(SpawnWorker());
-            //}
-            isRunning = true;
+            IsRunning = true;
             lock(HeldJobs) {
                 lock(WorkQueue) {
-                    WorkQueue.EnqueueRange(HeldJobs);
+                    foreach(var job in HeldJobs) {
+                        WorkQueue.Enqueue(job);
+                    }
                 }
                 lock (PendingOrExecutingJobs) {
                     PendingOrExecutingJobs.AddRange(HeldJobs);
@@ -230,7 +161,7 @@ namespace Figlotech.Core {
                 HeldJobs.Clear();
             }
 
-            SpawnWorker2();
+            SpawnWorker();
         }
 
         public static async Task Live(Action<WorkQueuer> act, int parallelSize = -1) {
@@ -255,7 +186,6 @@ namespace Figlotech.Core {
         private List<Task> Tasks = new List<Task>();
 
         public WorkJob Enqueue(WorkJob job) {
-            //bool shouldForceSpawnWorker = false;
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(job);
@@ -269,12 +199,10 @@ namespace Figlotech.Core {
                 }
             }
 
-            //SpawnWorker(shouldForceSpawnWorker);
             job.EqueuedTime = DateTime.UtcNow;
             job.status = WorkJobStatus.Queued;
 
-            SpawnWorker2();
-            QueueResetEvent.Set();
+            SpawnWorker();
             TotalWork++;
 
             return job;
@@ -282,7 +210,7 @@ namespace Figlotech.Core {
 
         object selfLockSpawnWorker2 = new object();
         int i;
-        private void SpawnWorker2() {
+        private void SpawnWorker() {
             ThreadPool.UnsafeQueueUserWorkItem(async _ =>
             {
                 WorkJob job = null;
@@ -304,6 +232,8 @@ namespace Figlotech.Core {
                     Debugger.Break();
                 }
                 if(job != null) {
+                    Stopwatch sw = new Stopwatch();
+                    sw.Start();
                     var thisWorkerId = workerIds++;
                     Fi.Tech.WriteLineInternal("FTH:WorkQueuer", ()=> $"Worker {thisWorkerId} started");
                     try {
@@ -326,29 +256,34 @@ namespace Figlotech.Core {
                         Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} thrown an Exception: {x.Message}");
                     } finally {
                         try {
-                            job.CompletedTime = DateTime.UtcNow;
-                            job.status = WorkJobStatus.Finished;
-                            WorkDone++;
-                            job.TaskCompletionSource.SetResult(0);
-                            lock (ActiveJobs) {
-                                if(ActiveJobs.Contains(job)) {
-                                    if(!ActiveJobs.Remove(job)) {
-                                        Debugger.Break();
+                            sw.Stop();
+                            lock (this) {
+                                job.CompletedTime = DateTime.UtcNow;
+                                job.status = WorkJobStatus.Finished;
+                                job.TaskCompletionSource.SetResult(0);
+                                WorkDone++;
+                                job.CompletionTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds);
+                                this.TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
+                                lock (ActiveJobs) {
+                                    if (ActiveJobs.Contains(job)) {
+                                        if (!ActiveJobs.Remove(job)) {
+                                            Debugger.Break();
+                                        }
                                     }
                                 }
-                            }
-                            lock (PendingOrExecutingJobs) {
-                                if (PendingOrExecutingJobs.Contains(job)) {
-                                    if (!PendingOrExecutingJobs.Remove(job)) {
-                                        Debugger.Break();
+                                lock (PendingOrExecutingJobs) {
+                                    if (PendingOrExecutingJobs.Contains(job)) {
+                                        if (!PendingOrExecutingJobs.Remove(job)) {
+                                            Debugger.Break();
+                                        }
                                     }
                                 }
-                            }
-                            lock (Tasks) {
-                                Tasks.Remove(job.TaskCompletionSource.Task);
-                            }
-                            if(WorkQueue.Count > 0) {
-                                SpawnWorker2();
+                                lock (Tasks) {
+                                    Tasks.Remove(job.TaskCompletionSource.Task);
+                                }
+                                if (WorkQueue.Count > 0) {
+                                    SpawnWorker();
+                                }
                             }
                         } catch(Exception x) {
                             Debugger.Break();
