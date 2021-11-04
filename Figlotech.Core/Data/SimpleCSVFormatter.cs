@@ -24,7 +24,7 @@ namespace Figlotech.Core.Data
             await Fi.Tech.ParallelFlow<T>((ch) => {
                 ch.ReturnRange(li);
             }).Then(Math.Max(Environment.ProcessorCount-1, 1), async (c) => {
-                return ObjectToRow(headers, new ObjectReflector(c));
+                return ObjectToRow(headers, new ObjectReflector(c).ToReadOnlyDictionaryStringObject());
             }).Then(1, async (data) => {
                 WriteDataToStream(data, stream);
             });

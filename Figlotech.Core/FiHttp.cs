@@ -82,7 +82,7 @@ namespace Figlotech.Core {
                             reqStream.Close();
                         }
                     } catch(Exception x) {
-                        Debugger.Break();
+                        //Debugger.Break();
                         throw x;
                     }
                 }
@@ -94,9 +94,9 @@ namespace Figlotech.Core {
                 retv.Response = wex.Response;
                 retv.Init(retv.Response);
             } catch (Exception x) {
-                if (Debugger.IsAttached) {
-                    Debugger.Break();
-                }
+                //if (Debugger.IsAttached) {
+                //    Debugger.Break();
+                //}
                 throw x;
             }
             return retv;

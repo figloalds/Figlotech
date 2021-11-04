@@ -69,6 +69,16 @@ namespace System
             }
         }
 
+        public static List<T> ToSetAsList<T>(this IEnumerable<T> items) {
+            List<T> retv = new List<T>();
+            foreach(var item in items) {
+                if(!retv.Contains(item)) {
+                    retv.Add(item);
+                }
+            }
+            return retv;
+        }
+
         public static void Shuffle<T>(this IList<T> list) {
             int n = list.Count;
             var rng = new Random();

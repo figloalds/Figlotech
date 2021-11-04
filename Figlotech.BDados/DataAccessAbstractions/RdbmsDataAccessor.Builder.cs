@@ -23,7 +23,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
         }
-        
+        public IEnumerable<T> GetObjectEnumerable<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
+            var refl = new ObjectReflector();
+            transaction?.Benchmarker.Mark("Enter lock command");
+            lock (command) {
+                transaction?.Benchmarker.Mark("- Starting Execute Query");
+                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo)) {
+                    transaction?.Benchmarker.Mark("- Starting build");
+                    foreach(var item in Fi.Tech.MapFromReader<T>(reader)) {
+                        yield return item;
+                    }
+                }
+            }
+        }
+
         public DataSet GetDataSet(IDbCommand command) {
             lock (command) {
                 using (var reader = command.ExecuteReader()) {

@@ -33,12 +33,13 @@ namespace Figlotech.Data
                 }
                 if (usableValue == null) {
                     cmdParam.Value = DBNull.Value;
-                } else
-                if (usableValue is String str) {
+                } else if (usableValue is String str) {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
                     //paramRefl.Slot(cmdParam);
                     //paramRefl["Encoding"] = Fi.StandardEncoding;
+                } else if (usableValue.GetType().IsEnum) {
+                    cmdParam.Value = (int)usableValue;
                 } else {
                     cmdParam.Value = usableValue;
                 }

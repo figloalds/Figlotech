@@ -141,7 +141,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
                         } catch(Exception x) {
                             Debugger.Break();
-                            throw x;
+                            //throw x;
                         }
                     }
                 }

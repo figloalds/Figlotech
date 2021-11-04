@@ -32,7 +32,12 @@ namespace Figlotech.Core
         }
 
         private IExpressionFilter FindFilter(string name) {
-            return Filters.FirstOrDefault(x => x.GetType().Name == name);
+            return Filters.FirstOrDefault(x => {
+                var t = x.GetType();
+                var tn = t.Name;
+                var tnEx = tn.Substring(0, tn.Length - "Filter".Length);
+                return name == tn || name == tnEx;
+            });
         }
 
         private string Parse(object input, string expression) {
@@ -66,11 +71,9 @@ namespace Figlotech.Core
             var match = Regex.Match(expression, RegExp);
             while(match.Success) {
                 var capture = match.Captures[0];
-                Console.WriteLine(capture.Value);
                 var parsed = Parse(input, match.Groups[1].Value);
                 var capEnd = capture.Index + capture.Length;
                 var next = expression.Substring(0, capture.Index) + parsed + expression.Substring(Math.Min(capEnd, expression.Length - 1), Math.Max(0, expression.Length - capEnd));
-                Console.WriteLine(next);
 
                 expression = next;
                 retv = expression;

@@ -63,6 +63,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor
                 Timeout = Timeout,
                 ConnectionIdleLifetime = Lifetime,
                 CommandTimeout = Timeout,
+                SslMode = Npgsql.SslMode.Prefer,
+                TrustServerCertificate = true,
             };
             return config.ToString();
         }

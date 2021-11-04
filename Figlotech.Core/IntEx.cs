@@ -9,13 +9,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public struct IntEx {
-        private List<byte> digits;
+        private byte[] digits;
+        private int digitCursor;
         private bool isNegative;
         public const int BaseSize = 256;
         public const string Binary = "01";
@@ -30,17 +32,34 @@ namespace Figlotech.Core {
 
         public static int rtProgression;
 
+        public void PushNewDigit(byte digit) {
+            if(digitCursor >= digits.Length) {
+                byte[] newDigits = new byte[digits.Length + 32];
+                Array.Copy(digits, newDigits, digitCursor);
+                digits = newDigits;
+            }
+            digits[digitCursor++] = digit;
+        }
+
         public IntEx(byte[] number) {
-            var pre = new byte[number.Length];
-            number.CopyTo(pre, 0);
-            digits = new List<byte>(pre);
+            byte[] newDigits = new byte[number.Length];
+            Array.Copy(number, newDigits, number.Length);
+            digits = newDigits;
+            digitCursor = newDigits.Length - 1;
+            for (int i = newDigits.Length - 1; i >= 0; i--) {
+                if (newDigits[digitCursor] != 0) {
+                    digitCursor++;
+                    break;
+                } else {
+                    digitCursor--;
+                }
+            }
             isNegative = false;
         }
 
         public IntEx(long number) {
-            digits = new List<byte> {
-                (byte)0
-            };
+            digits = new byte[32];
+            digitCursor = 0;
             isNegative = number < 0;
             if (isNegative)
                 number = -number;
@@ -54,9 +73,8 @@ namespace Figlotech.Core {
         }
 
         public IntEx(string number, string Base) {
-            digits = new List<byte> {
-                (byte)0
-            };
+            digits = new byte[32];
+            digitCursor = 0;
             isNegative = number.StartsWith("-");
             if (isNegative)
                 number = new string(number.Skip(1).ToArray());
@@ -72,6 +90,7 @@ namespace Figlotech.Core {
                 multi *= Base.Length;
             }
             digits = retv.digits;
+            this.digitCursor = retv.digitCursor;
         }
         private static int sequentia = 0;
         private static int _runtimeHash = -1;
@@ -129,14 +148,14 @@ namespace Figlotech.Core {
             return a;
         }
         public static bool operator <(IntEx a, IntEx b) {
-            for (int i = Math.Max(a.digits.Count, b.digits.Count) - 1; i >= 0; i--) {
-                if (i > a.digits.Count && b.digits[i] > 0) {
+            for (int i = Math.Max(a.digitCursor, b.digitCursor) - 1; i >= 0; i--) {
+                if (i > a.digitCursor && b.digits[i] > 0) {
                     return false;
                 }
-                if (i > b.digits.Count && a.digits[i] > 0) {
+                if (i > b.digitCursor && a.digits[i] > 0) {
                     return false;
                 }
-                if (i > a.digits.Count || i > b.digits.Count) {
+                if (i > a.digitCursor || i > b.digitCursor) {
                     continue;
                 }
                 return a.digits[i] < b.digits[i];
@@ -144,14 +163,14 @@ namespace Figlotech.Core {
             return false;
         }
         public static bool operator >(IntEx a, IntEx b) {
-            for (int i = Math.Max(a.digits.Count, b.digits.Count) - 1; i >= 0; i--) {
-                if (i > a.digits.Count && b.digits[i] > 0) {
+            for (int i = Math.Max(a.digitCursor, b.digitCursor) - 1; i >= 0; i--) {
+                if (i > a.digitCursor && b.digits[i] > 0) {
                     return false;
                 }
-                if (i > b.digits.Count && a.digits[i] > 0) {
+                if (i > b.digitCursor && a.digits[i] > 0) {
                     return false;
                 }
-                if (i > a.digits.Count || i > b.digits.Count) {
+                if (i > a.digitCursor || i > b.digitCursor) {
                     continue;
                 }
                 return a.digits[i] > b.digits[i];
@@ -197,28 +216,36 @@ namespace Figlotech.Core {
         }
 
         private void Mult(IntEx numero) {
-            IntEx[] MultiParts = new IntEx[digits.Count];
-            for (int i = 0; i < digits.Count; i++) {
+            IntEx[] MultiParts = new IntEx[digitCursor];
+            for (int i = 0; i < digitCursor; i++) {
                 IntEx ThisPart = new IntEx() {
-                    digits = new List<byte>(new byte[i + numero.digits.Count])
+                    digits = new byte[i + numero.digits.Length],
+                    digitCursor = i
                 };
                 int leftovers = 0;
-                for (int j = 0; j < numero.digits.Count; j++) {
+                for (int j = 0; j < numero.digitCursor; j++) {
                     int MultiFragment = (byte)digits[i] * (byte)numero.digits[j] + leftovers;
                     leftovers = MultiFragment / BaseSize;
                     ThisPart.digits[i + j] = (byte)(MultiFragment % BaseSize);
+                    if(ThisPart.digitCursor < i + j + 1) {
+                        ThisPart.digitCursor = i + j + 1;
+                    }
                 }
                 while (leftovers > 0) {
-                    ThisPart.digits.Add((byte)(leftovers % BaseSize));
+                    ThisPart.PushNewDigit((byte)(leftovers % BaseSize));
                     leftovers = leftovers / BaseSize;
                 }
                 MultiParts[i] = ThisPart;
             }
-            IntEx Novo = new IntEx(new byte[MultiParts[MultiParts.Length-1].digits.Count]);
+            IntEx Novo = new IntEx(0);
             for (int i = 0; i < MultiParts.Length; i++) {
                 Novo += MultiParts[i];
             }
             digits = Novo.digits;
+            digitCursor = Novo.digitCursor;
+            while(digits[digitCursor] > 0) {
+                digitCursor++;
+            }
         }
 
         private void Add(long Number) {
@@ -226,15 +253,16 @@ namespace Figlotech.Core {
         }
 
         private void Add(IntEx Number) {
-            IntEx greater = Number.digits.Count > digits.Count ? Number : this;
-            IntEx lesser = Number.digits.Count < digits.Count ? Number : this;
+            IntEx greater = Number.digits.Length > digits.Length ? Number : this;
+            IntEx lesser = Number.digits.Length < digits.Length ? Number : this;
             int leftover = 0;
-            List<byte> result = new List<byte>();
-            for (int i = 0; i < greater.digits.Count || leftover > 0; i++) {
+            Span<byte> result = stackalloc byte[greater.digits.Length + 1];
+            int step = 0;
+            for (int i = 0; i < greater.digits.Length || leftover > 0; i++) {
                 int sum;
-                if (i >= greater.digits.Count)
+                if (i >= greater.digits.Length)
                     sum = leftover;
-                else if (i >= lesser.digits.Count)
+                else if (i >= lesser.digits.Length)
                     sum = leftover + greater.digits[i];
                 else
                     sum = digits[i] + Number.digits[i] + leftover;
@@ -244,14 +272,21 @@ namespace Figlotech.Core {
                         sum -= BaseSize;
                         leftover += 1;
                     }
-                    result.Add((byte)sum);
+                    result[step++] = ((byte)sum);
                 }
                 else {
-                    result.Add((byte)sum);
+                    result[step++] = ((byte)sum);
                     leftover = 0;
                 }
             }
-            digits = result;
+            if(digits.Length < step) {
+                digits = new byte[result.Length];
+            }
+            Array.Copy(result.ToArray(), digits, step);
+            digitCursor = greater.digitCursor;
+            while(digits[digitCursor] > 0) {
+                digitCursor++;
+            }
         }
 
         private int Dif(int a, int b) {
@@ -261,11 +296,11 @@ namespace Figlotech.Core {
         }
 
         public void Set(long Number) {
-            digits = new List<byte>();
+            digits = new byte[32];
             long Backup = Number;
             do {
                 int Indice = (int)(Backup % BaseSize);
-                digits.Add((byte)Indice);
+                PushNewDigit((byte)Indice);
                 Backup = Backup / BaseSize;
             } while ((Backup) > 0);
         }
@@ -274,13 +309,13 @@ namespace Figlotech.Core {
             int position = 0;
             long Multi = 1;
             long retv = 0;
-            if (digits.Count == 0) return 0;
-            if (digits.Count > 16) throw new Exception("The number within IntEx class is too big to fit into an long");
+            if (digitCursor == 0) return 0;
+            if (digitCursor > 16) throw new Exception("The number within IntEx class is too big to fit into an long");
             do {
                 retv += digits.ElementAt(position) * Multi;
                 Multi *= BaseSize;
                 position++;
-            } while (position < digits.Count);
+            } while (position < digitCursor);
             return retv;
         }
 
@@ -303,83 +338,91 @@ namespace Figlotech.Core {
             return Retorno;
         }
 
-        public static string BaseConvert(long number, string baseStr) {
-            List<char> retv = new List<char>();
-            bool negativo = false;
-            long Backup = number;
-            if (negativo = (Backup < 0))
-                Backup = -Backup;
-            char[] CharsBase = baseStr.ToCharArray();
-            do {
-                int Indice = (int)(Backup % baseStr.Length);
-                retv.Add(baseStr[Indice]);
-                Backup = Backup / baseStr.Length;
-            } while ((Backup) > 0);
-            if (negativo)
-                retv.Add('-');
-            retv.Reverse();
-            return new string(retv.ToArray());
+        // convert number to arbitrary base
+        public static string BaseConvert(long number, string digits) {
+            if(number == 0) {
+                return digits.Substring(0, 1);
+            }
+            bool negative = number < 0;
+            number = Math.Abs(number);
+            char[] result = new char[(int) Math.Log(number, digits.Length) + 1];
+            int cursor = 0;
+            while (number > 0) {
+                result[result.Length - ++cursor] = digits[(int)(number % digits.Length)];
+                number /= digits.Length;
+            }
+            if (negative)
+                result[result.Length - ++cursor] = '-';
+            return new String(result);
         }
+
         public static string BaseMult(string a, string b, string baseStr) {
-            List<string> multiParts = new List<string>();
-            a = new string(a.Reverse().ToArray());
-            b = new string(b.Reverse().ToArray());
+            string[] multiParts = new string[a.Length];
+            int multipartIdx = 0;
+            //a = new string(a.Reverse().ToArray());
+            //b = new string(b.Reverse().ToArray());
             for (int i = 0; i < a.Length; i++) {
-                List<char> thisPart = new List<char>();
+                Span<char> thisPart = stackalloc char[i + b.Length + 1];
+                var cursor = 0;
+                //List<char> thisPart = new List<char>();
                 for (int k = 0; k < i; k++)
-                    thisPart.Add(baseStr[0]);
+                    thisPart[thisPart.Length - ++cursor] = baseStr[0];
                 int leftovers = 0;
                 for (int j = 0; j < b.Length; j++) {
-                    int MultiFragment = baseStr.IndexOf(a[i]) * baseStr.IndexOf(b[j]) + leftovers;
+                    int MultiFragment = baseStr.IndexOf(a[a.Length - 1 - i]) * baseStr.IndexOf(b[b.Length - 1 - j]) + leftovers;
                     leftovers = MultiFragment / baseStr.Length;
-                    thisPart.Add(baseStr[MultiFragment % baseStr.Length]);
+                    thisPart[thisPart.Length - ++cursor] = (baseStr[MultiFragment % baseStr.Length]);
                 }
+                int extraCharacters = 0;
                 while (leftovers > 0) {
-                    thisPart.Add(baseStr[leftovers % baseStr.Length]);
+                    thisPart[thisPart.Length - ++cursor] = (baseStr[leftovers % baseStr.Length]);
                     leftovers = leftovers / baseStr.Length;
+                    extraCharacters++;
                 }
-                thisPart.Reverse();
-                multiParts.Add(new string(thisPart.ToArray()));
+                // thisPart.Reverse();
+                int realLength = i + b.Length + extraCharacters;
+                multiParts[multipartIdx++] = new string(thisPart.Slice(thisPart.Length - realLength, realLength).ToArray());
             }
-            string Retorno = baseStr[0] + "";
-            for (int i = 0; i < multiParts.Count; i++) {
+            string Retorno = new String(new[] { baseStr[0] });
+            for (int i = 0; i < multipartIdx; i++) {
                 Retorno = BaseSum(Retorno, multiParts[i], baseStr);
             }
             return Retorno;
         }
 
         public static string BaseSum(string a, string b, string Base) {
-            a = new string(a.Reverse().ToArray());
-            b = new string(b.Reverse().ToArray());
+            //a = new string(a.Reverse().ToArray());
+            //b = new string(b.Reverse().ToArray());
             string Maior = a.Length > b.Length ? a : b;
             string Menor = a.Length < b.Length ? a : b;
             int leftovers = 0;
-            List<char> Resultado = new List<char>();
+            Span<char> Resultado = stackalloc char[Math.Max(a.Length, b.Length) + 1];
+            int cursorResultado = 0;
             for (int i = 0; i < Maior.Length || leftovers > 0; i++) {
                 int Soma;
                 if (i >= Maior.Length)
                     Soma = leftovers;
                 else if (i >= Menor.Length)
-                    Soma = leftovers + Base.IndexOf(Maior[i]);
+                    Soma = leftovers + Base.IndexOf(Maior[Maior.Length - 1 - i]);
                 else
-                    Soma = Base.IndexOf(a[i]) + Base.IndexOf(b[i]) + leftovers;
+                    Soma = Base.IndexOf(a[a.Length - 1 - i]) + Base.IndexOf(b[b.Length - 1 - i]) + leftovers;
                 leftovers = 0;
                 if (Soma > Base.Length - 1) {
                     while (Soma > Base.Length - 1) {
                         Soma -= Base.Length;
                         leftovers += 1;
                     }
-                    Resultado.Add(Base[Soma]);
+                    Resultado[Resultado.Length - cursorResultado++ - 1] = (Base[Soma]);
                 }
                 else {
-                    Resultado.Add(Base[Soma]);
+                    Resultado[Resultado.Length - cursorResultado++ - 1] = (Base[Soma]);
                     leftovers = 0;
                 }
             }
-            Resultado.Reverse();
-            return new string(Resultado.ToArray());
+            //Resultado.Reverse();
+            return new string(Resultado[0] == '\0' ? Resultado.Slice(1).ToArray() : Resultado.ToArray());
         }
-
+        
         public string ToString(string Base = Decimal) {
             if (digits == null) {
                 return null;
@@ -390,13 +433,13 @@ namespace Figlotech.Core {
             string Resultado = Base[0] + "";
             string Multi = Base[1] + "";
             string BaseLength = BaseConvert(BaseSize, Base);
-            for (int i = 0; i < digits.Count; i++) {
+            for (int i = 0; i < digitCursor; i++) {
                 string ThisByte = BaseConvert((long)digits[i], Base);
                 string Next = BaseMult(ThisByte, Multi, Base);
                 Resultado = BaseSum(Resultado, Next, Base);
                 Multi = BaseMult(Multi, BaseLength, Base);
             }
-            if (Base == Base64)
+            while (Base == Base64 && Resultado.Length % 4 != 0)
                 Resultado += "=";
             return Resultado;
         }

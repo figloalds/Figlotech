@@ -6,44 +6,43 @@ using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.Core.Helpers {
-    public class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>>, IReadOnlyDictionary<string, object>
+    public class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>>, IReadOnlyDictionary<MemberInfo, object>
     {
         internal object target;
 
-        string[] keys = new string[0];
-        object[] values = new object[0];
-        public IEnumerable<string> Keys => keys;
+        public IEnumerable<MemberInfo> Keys => ReflectionTool.FieldsAndPropertiesOf(target.GetType()).Select(x => x);
 
-        public IEnumerable<object> Values => values;
+        public IEnumerable<object> Values => ReflectionTool.FieldsAndPropertiesOf(target.GetType()).Select(x => ReflectionTool.GetMemberValue(x, target));
 
         public int Count => throw new NotImplementedException();
 
         public ObjectReflector() {
         }
 
-        private void RefreshKeysAndValues() {
-            keys = ReflectionTool.FieldsAndPropertiesOf(target.GetType()).Select(x => x.Name).ToArray();
-            values = ReflectionTool.FieldsAndPropertiesOf(target.GetType()).Select(x => ReflectionTool.GetMemberValue(x, target)).ToArray();
-        }
-
         public ObjectReflector(object o) {
             target = o;
-            RefreshKeysAndValues();
             if (o == null) {
                 throw new ArgumentNullException("Object reflector cannot work with null value.");
             }
         }
 
+        public IReadOnlyDictionary<string,object> ToReadOnlyDictionaryStringObject() {
+            var dict = new Dictionary<string, object>();
+            foreach(var kvp in this) {
+                dict.Add(kvp.Key.Name, kvp.Value);
+            }
+            return dict;
+        }
+
         public void Slot(object anObject) {
             target = anObject;
-            RefreshKeysAndValues();
         }
         public object Retrieve() {
             return target;
         }
 
-        public bool ContainsKey(String key) {
-            return keys.Contains(key); // ReflectionTool.DoesTypeHaveFieldOrProperty(target?.GetType(), key);
+        public bool ContainsKey(MemberInfo key) {
+            return target != null && key.DeclaringType == target.GetType() || key.DeclaringType.DerivesFrom(target.GetType()); // ReflectionTool.DoesTypeHaveFieldOrProperty(target?.GetType(), key);
         }
 
         public object this[KeyValuePair<MemberInfo, object> key] {
@@ -108,18 +107,18 @@ namespace Figlotech.Core.Helpers {
             return GetEnumerator();
         }
 
-        public bool TryGetValue(string key, out object value) {
+        public bool TryGetValue(MemberInfo key, out object value) {
             if(ContainsKey(key)) {
-                value = ReflectionTool.GetValue(target, key);
+                value = ReflectionTool.GetMemberValue(key, target);
                 return true;
             }
             value = null;
             return false;
         }
 
-        IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator() {
+        IEnumerator<KeyValuePair<MemberInfo, object>> IEnumerable<KeyValuePair<MemberInfo, object>>.GetEnumerator() {
             foreach (var a in ReflectionTool.FieldsAndPropertiesOf(target.GetType())) {
-                yield return new KeyValuePair<string, object>(a.Name, ReflectionTool.GetMemberValue(a, target));
+                yield return new KeyValuePair<MemberInfo, object>(a, ReflectionTool.GetMemberValue(a, target));
             }
         }
     }

@@ -28,10 +28,21 @@ namespace Figlotech.Core {
 
         }
 
-        public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys.ToList();
+        public ICollection<TKey> Keys {
+            get {
+                lock (_dmmy) {
+                    return new List<TKey>(((IDictionary<TKey, TValue>)_dmmy).Keys);
+                }
+            }
+        }
 
-        public ICollection<TValue> Values => ((IDictionary<TKey, TValue>)_dmmy).Values.ToList();
-
+        public ICollection<TValue> Values {
+            get {
+                lock (_dmmy) {
+                    return new List<TValue>(((IDictionary<TKey, TValue>)_dmmy).Values);
+                }
+            }
+        }
         public int Count => ((IDictionary<TKey, TValue>)_dmmy).Count;
 
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;

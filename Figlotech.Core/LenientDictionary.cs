@@ -11,13 +11,15 @@ namespace Figlotech.Core
         AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
-                if(key == null) {
+                lock(_dmmy) {
+                    if(key == null) {
+                        return default(TValue);
+                    }
+                    if (_dmmy.ContainsKey(key)) {
+                        return _dmmy[key];
+                    }
                     return default(TValue);
                 }
-                if (_dmmy.ContainsKey(key)) {
-                    return _dmmy[key];
-                }
-                return default(TValue);
             }
             set {
                 _dmmy[key] = value;
@@ -30,52 +32,74 @@ namespace Figlotech.Core
             return new LenientDictionary<TKey, TValue>() { _dmmy = new AtomicDictionary<TKey, TValue> { _dmmy = a } };
         }
 
-        public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys;
+        public ICollection<TKey> Keys {
+            get {
+                lock(_dmmy) {
+                    return new List<TKey>(((IDictionary<TKey, TValue>)_dmmy).Keys);
+                }
+            }
+        }
 
-        public ICollection<TValue> Values => ((IDictionary<TKey, TValue>)_dmmy).Values;
+        public ICollection<TValue> Values {
+            get {
+                lock(_dmmy) {
+                    return new List<TValue>(((IDictionary<TKey, TValue>)_dmmy).Values);
+                }
+            }
+        }
 
         public int Count => ((IDictionary<TKey, TValue>)_dmmy).Count;
 
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
 
         public void Add(TKey key, TValue value) {
-            ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
+            lock(_dmmy)
+                ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
         }
 
         public void Add(KeyValuePair<TKey, TValue> item) {
-            ((IDictionary<TKey, TValue>)_dmmy).Add(item);
+            lock (_dmmy)
+                ((IDictionary<TKey, TValue>)_dmmy).Add(item);
         }
 
         public void Clear() {
-            ((IDictionary<TKey, TValue>)_dmmy).Clear();
+            lock (_dmmy)
+                ((IDictionary<TKey, TValue>)_dmmy).Clear();
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item) {
-            return ((IDictionary<TKey, TValue>)_dmmy).Contains(item);
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).Contains(item);
         }
 
         public bool ContainsKey(TKey key) {
-            return ((IDictionary<TKey, TValue>)_dmmy).ContainsKey(key);
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).ContainsKey(key);
         }
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
-            ((IDictionary<TKey, TValue>)_dmmy).CopyTo(array, arrayIndex);
+            lock (_dmmy)
+                ((IDictionary<TKey, TValue>)_dmmy).CopyTo(array, arrayIndex);
         }
 
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() {
-            return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
         }
 
         public bool Remove(TKey key) {
-            return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item) {
-            return ((IDictionary<TKey, TValue>)_dmmy).Remove(item);
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).Remove(item);
         }
 
         public bool TryGetValue(TKey key, out TValue value) {
-            return ((IDictionary<TKey, TValue>)_dmmy).TryGetValue(key, out value);
+            lock (_dmmy)
+                return ((IDictionary<TKey, TValue>)_dmmy).TryGetValue(key, out value);
         }
 
         IEnumerator IEnumerable.GetEnumerator() {

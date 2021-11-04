@@ -252,7 +252,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public override string ToString() {
-            return $"Data Purge for key {_table}.fk_{_column}_{_refTable}_{_refColumn}";
+            return $"Data Purge for key {_table}.fk_{_table}_{_column} References ({_refTable}.{_refColumn})";
         }
     }
 
@@ -364,11 +364,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _column.AllowNull = true;
             return Exec(DataAccessor,
                 Qb.Fmt($@"
-                    ALTER TABLE {_table} ALTER COLUMN {_column.Name} DROP NOT NULL
-                ")
-            ) + Exec(DataAccessor,
-                Qb.Fmt($@"
-                    ALTER TABLE {_table} ALTER COLUMN {_column.Name} SET DEFAULT NULL
+                    ALTER TABLE {_table} DROP COLUMN {_column.Name}
                 ")
             );
             //Exec(DataAccessor, Qb.Fmt(
@@ -561,7 +557,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             break;
                         case ScStructuralKeyType.Index:
                             if (a.IsUnique)
-                                yield return new DropUkScAction(DataAccessor, a.Table, a.KeyName, $"Unike Index {a.KeyName} is not in the Model");
+                                yield return new DropUkScAction(DataAccessor, a.Table, a.KeyName, $"Unique Index {a.KeyName} is not in the Model");
                             else
                                 yield return new DropIdxScAction(DataAccessor, a.Table, a.KeyName, $"Index {a.KeyName} is not in the Model"); 
                             break;
@@ -727,8 +723,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var typesToCheckSize = new string[] {
                                 "VARCHAR", "VARBINARY"
                             };
-                            var sizesMatch = !typesToCheckSize.Contains(datatype.ToUpper()) || length == fieldAtt.Size;
                             var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
+                            var sizesMatch = !typesToCheckSize.Contains(dbDefinition.ToUpper()) || length == fieldAtt.Size;
                             //var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                             if (columnIsNullable != fieldAtt.AllowNull) {
                                 yield return new AlterColumnNullabilityScAction(DataAccessor, type.Name, field, fieldAtt, $"Column Nullability mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
@@ -1068,8 +1064,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                             var foreignIndex = new ScStructuralLink {
                                 Type = ScStructuralKeyType.Index,
-                                Table = fk.RefTable,
-                                Column = fk.RefColumn,
+                                Table = fk.Table,
+                                Column = fk.Column,
                             };
                             if(!keys.Any(n=> CheckMatch(foreignIndex, n))) {
                                 yield return new CreateIndexScAction(DataAccessor, foreignIndex, $"Need to create an index for {fk.RefTable}.{fk.RefColumn} for {fk.KeyName}");

@@ -294,7 +294,7 @@ namespace Figlotech.Core {
                 if (shouldRequestNtpTime) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("pool.ntp.org");
+                        _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("0.pool.ntp.org");
                     }, async x => {
                         Fi.Tech.Throw(x);
                     });
@@ -351,7 +351,9 @@ namespace Figlotech.Core {
 
             //**UTC** time
             var networkDateTime = (new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)).AddMilliseconds((long)milliseconds);
-
+            if(milliseconds < 1420070400) {
+                return DateTime.UtcNow;
+            }
             return networkDateTime;
         }
 
@@ -400,7 +402,7 @@ namespace Figlotech.Core {
                 value /= duf;
                 mult++;
             }
-            var plu = value > 1 ? "s" : "";
+            var plu = value > 1 ? "" : "";
             return $"{value} {unitNames[mult]}{plu}";
         }
 
@@ -438,23 +440,38 @@ namespace Figlotech.Core {
 
         private static void Reschedule(ScheduledWorkJob sched) {
             if(sched.IsActive) {
-                sched.Timer.Change(Timeout.Infinite, Timeout.Infinite);
-                sched.Timer.Dispose();
-                sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)sched.RecurrenceInterval.Value.TotalMilliseconds), Timeout.Infinite);
+                sched.Timer?.Change(Timeout.Infinite, Timeout.Infinite);
+                sched.Timer?.Dispose();
+                sched.Timer = new Timer(_timerFn, sched, (int) Math.Max(0.0, sched.RecurrenceInterval?.TotalMilliseconds ?? 0.0), Timeout.Infinite);
             }
         }
 
         private static void _timerFn(object a) {
             var sched = a as ScheduledWorkJob;
-            var newWj = new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished);
-            newWj = sched.Queuer.Enqueue(newWj);
-            if (sched.RecurrenceInterval.HasValue) {
-                if (sched.RecurrenceMode == RecurrenceMode.Regular) {
-                    newWj.GetAwaiter().OnCompleted(() => {
+            var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
+            WorkJob newWj = null;
+            if (millisDiff > 5000) {
+                if(Debugger.IsAttached && DebugSchedules) {
+                    Debugger.Break();
+                }
+            } else {
+                newWj = sched.Queuer.Enqueue(
+                    new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
+                        Description = sched.WorkJob.Description
+                    }
+                );
+            }
+            if(newWj == null) {
+                Fi.Tech.ScheduleTask(sched);
+            } else {
+                if (sched.RecurrenceInterval.HasValue) {
+                    if (sched.RecurrenceMode == RecurrenceMode.Regular) {
+                        newWj.GetAwaiter().OnCompleted(() => {
+                            Reschedule(sched);
+                        });
+                    } else if (sched.RecurrenceMode == RecurrenceMode.Periodic) {
                         Reschedule(sched);
-                    });
-                } else if (sched.RecurrenceMode == RecurrenceMode.Periodic) {
-                    Reschedule(sched);
+                    }
                 }
             }
         }
@@ -462,23 +479,29 @@ namespace Figlotech.Core {
             ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval, recurrence);
         }
         public static bool DebugSchedules { get; set; } = false;
-        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
 
+        public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
             lock (GlobalScheduledJobs) {
-                var sched = new ScheduledWorkJob {
-                    Queuer = queuer,
-                    Identifier = identifier,
-                    WorkJob = job,
-                    ScheduledTime = when,
-                    RecurrenceInterval = RecurrenceInterval,
-                    RecurrenceMode = recurrence,
-                };
-                sched.Timer = new Timer(_timerFn, sched, Math.Max(0, (int)(when - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
+                var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
+                var ms = (long)(sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
+                var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
+                sched.Timer = new Timer(_timerFn, sched, timeToFire, Timeout.Infinite);
                 GlobalScheduledJobs.Add(sched);
-                if(Debugger.IsAttached && DebugSchedules) {
+                if (Debugger.IsAttached && DebugSchedules) {
                     Debugger.Break();
                 }
             }
+        }
+        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
+            var sched = new ScheduledWorkJob {
+                Queuer = queuer,
+                Identifier = identifier,
+                WorkJob = job,
+                ScheduledTime = when,
+                RecurrenceInterval = RecurrenceInterval,
+                RecurrenceMode = recurrence,
+            };
+            ScheduleTask(_selfie, sched);
         }
 
         public static void Unschedule(this Fi _selfie, string identifier) {
@@ -1368,7 +1391,7 @@ namespace Figlotech.Core {
             });
         }
 
-        public static void RunOnlyUntilSync(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
+        public static void RunOnlyUntil(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
             if (DateTime.UtcNow > max)
                 return;
             try {
@@ -1831,8 +1854,8 @@ namespace Figlotech.Core {
             ObjectReflector.Open(origin, (objA) => {
                 ObjectReflector.Open(destination, (objB) => {
                     foreach (var field in objB) {
-                        if (objA.ContainsKey(field.Key.Name)) {
-                            objB[field.Key] = objA[field.Key.Name];
+                        if (objA.ContainsKey(field.Key)) {
+                            objB[field.Key] = objA[field.Key];
                         }
                     }
                     objB["Id"] = 0;
@@ -1854,6 +1877,26 @@ namespace Figlotech.Core {
                 map.AddRange(digits.ToLower().ToCharArray());
             }
             char[] secondMap = map.ToArray();
+            for (int i = 0; i < secondMap.Length; i++) {
+                int next = rng.Next(0, secondMap.Length);
+                char old = secondMap[i];
+                secondMap[i] = secondMap[next];
+                secondMap[next] = old;
+            }
+            for (int i = 0; i < numDigits; i++) {
+                int randomDigit = rng.Next(0, secondMap.Length);
+                vector[i] = secondMap[randomDigit];
+            }
+            return new string(vector);
+        }
+
+        public static string GenerateCode(this Fi _selfie, int numDigits, string charMap) {
+            var list = charMap.ToList();
+            list.Sort((a, b) => {
+                return -1 + rng.Next(3);
+            });
+            char[] vector = new char[numDigits];
+            char[] secondMap = list.ToArray();
             for (int i = 0; i < secondMap.Length; i++) {
                 int next = rng.Next(0, secondMap.Length);
                 char old = secondMap[i];

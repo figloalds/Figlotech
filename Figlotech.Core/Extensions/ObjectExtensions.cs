@@ -68,7 +68,7 @@ namespace System
             ObjectReflector.Open(other, (objA) => {
                 ObjectReflector.Open(me, (objB) => {
                     foreach (var field in objB) {
-                        if (objA.ContainsKey(field.Key.Name)) {
+                        if (objA.ContainsKey(field.Key)) {
                             var valA = objA[field.Key.Name];
                             var valB = objB[field.Key.Name];
                             if (

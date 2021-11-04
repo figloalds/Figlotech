@@ -21,10 +21,10 @@ namespace System
                 return false;
             return Regex.Match(me, pattern).Success;
         }
-        public static string RegExpExtract(this string me, string pattern) {
+        public static string RegExpExtract(this string me, string pattern, int groupNumber = 1) {
             if (me == null)
                 return String.Empty;
-            return Regex.Match(me, pattern).Groups[1].Value;
+            return Regex.Match(me, pattern).Groups[groupNumber].Value;
         }
 
         public static string RegExReplace(this string me, string pattern, string replace) {

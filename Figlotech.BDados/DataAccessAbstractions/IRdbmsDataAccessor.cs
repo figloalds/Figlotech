@@ -48,7 +48,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IRdbmsDataAccessor Fork();
 
-        BDadosTransaction BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
+        BDadosTransaction CreateNewTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
         void EndTransaction();
 
@@ -67,6 +67,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
         List<T> Query<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
+        IEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new();
         int Execute(BDadosTransaction transaction, IQueryBuilder Query);
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
@@ -78,7 +79,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();
 
-        //T ForceExist<T>(ConnectionInfo transaction, Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
+        T ForceExist<T>(BDadosTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
 

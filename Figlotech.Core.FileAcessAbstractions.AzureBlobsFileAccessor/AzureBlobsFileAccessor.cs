@@ -72,7 +72,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             //}
         }
 
-        string BaseDirectory { get; set; }
+        string BaseDirectory { get; set; } = "";
 
         public void SetBaseDirectory(string path) {
             BaseDirectory = path.Replace(Path.DirectorySeparatorChar, '/');
@@ -100,7 +100,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         string FixRelative(ref string relative) {
-            if(relative.StartsWith("/")) {
+            if (relative.StartsWith("/")) {
                 relative = relative.Substring(1);
             }
             relative = BaseDirectory + relative.Replace(Path.DirectorySeparatorChar, '/');
@@ -133,12 +133,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public DateTime? GetLastModified(string relative) {
             FixRelative(ref relative);
-            CloudBlob blob = BlobContainer.GetBlobReference(relative);
-            if (!blob.ExistsAsync().Result) {
+            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
+            if (!blob.ExistsAsync().GetAwaiter().GetResult()) {
                 return DateTime.MinValue;
             }
             if (!blob.Properties.LastModified.HasValue || blob.Properties.LastModified == DateTime.MinValue) {
-                blob.FetchAttributesAsync().Wait();
+                blob.FetchAttributesAsync().GetAwaiter().GetResult();
             }
             var dt = blob.Properties.LastModified ?? DateTime.MinValue;
             return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, DateTimeKind.Utc);
@@ -203,7 +203,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             FixRelative(ref relative);
             var blobs = ListBlobs(relative);
             var list = blobs.Select(
-                (a) => a.Name.Replace(BaseDirectory, ""))
+                (a) => a.Name.Substring(BaseDirectory.Length))
                 //.Where((a) => a.Count((b) => b == '/') == 0)
                 .ToList();
             return list;
@@ -230,18 +230,21 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public List<CloudBlockBlob> ListBlobs(string relative) {
             BlobContinuationToken bucet = new BlobContinuationToken();
             BlobResultSegment result;
+            if(relative.StartsWith("/")) {
+                relative = relative.Substring(1);
+            }
             List<CloudBlockBlob> retv = new List<CloudBlockBlob>();
             int numResults = 0;
             do {
                 var reference = BlobContainer.GetDirectoryReference(relative);
-                result = reference.ListBlobsSegmentedAsync(false, BlobListingDetails.None, 500, bucet, null, null).Result;
+                result = reference.ListBlobsSegmentedAsync(false, BlobListingDetails.Copy, 500, bucet, null, null).GetAwaiter().GetResult();
                 bucet = result.ContinuationToken;
                 var blobResults = result.Results.ToList();
                 retv.AddRange(blobResults.Select(a => new CloudBlockBlob(a.Uri)));
                 numResults = blobResults.Count;
-            } while (numResults >= 500);
+            } while (bucet != null);
 
-            return retv;
+            return retv.Where(x=> x?.Name != null).ToList();
         }
 
         public IEnumerable<string> GetDirectoriesIn(String relative) {

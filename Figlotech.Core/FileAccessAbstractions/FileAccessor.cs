@@ -377,10 +377,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
-                absMkDirs(Path.GetDirectoryName(WorkingDirectory));
-            }
-            if (!File.Exists(WorkingDirectory)) {
                 return false;
+            }
+            if(IsDirectory(relative)) {
+                Directory.Delete(WorkingDirectory);
+            } else {
+                if (!File.Exists(WorkingDirectory)) {
+                    return false;
+                }
             }
             LockRegion(WorkingDirectory, () => {
                 File.Delete(WorkingDirectory);
@@ -449,7 +453,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 absMkDirs(Path.GetDirectoryName(WorkingDirectory));
             }
-            var bufferLength = new FileInfo(WorkingDirectory).Length * .6;
+            var bufferLength = Exists(relative) ? new FileInfo(WorkingDirectory).Length * .6 : 0;
             bufferLength = Math.Max(8 * 1024 * 1024, bufferLength);
             bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 

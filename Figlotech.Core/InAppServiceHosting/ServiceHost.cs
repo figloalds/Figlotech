@@ -24,7 +24,7 @@ namespace Figlotech.Core.InAppServiceHosting
             if (svc != null)
                 return svc;
             if (svcType != null) {
-                IFthService instance = (IFthService)Activator.CreateInstance(svcType);
+                IFthService instance = (IFthService)Activator.CreateInstance(svcType, new object[] { });
                 instance.Init(args);
                 Services.Add(instance);
                 return instance;

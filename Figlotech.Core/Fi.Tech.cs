@@ -101,7 +101,7 @@ namespace Figlotech.Core {
             IECLongBit,
         }
         
-        public static Dictionary<DataUnitGeneralFormat, string[]> DataUnitNames = new Dictionary<DataUnitGeneralFormat, string[]> {
+        public static Dictionary<DataUnitGeneralFormat, string[]> DataUnitNames { get; private set; } = new Dictionary<DataUnitGeneralFormat, string[]> {
             { DataUnitGeneralFormat.SIShortByte, new string[] {
                 "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"
             }},
@@ -128,7 +128,7 @@ namespace Figlotech.Core {
             }},
         };
 
-        public static Dictionary<DataUnitGeneralFormat, int> DataUnitFactors = new Dictionary<DataUnitGeneralFormat, int> {
+        public static Dictionary<DataUnitGeneralFormat, int> DataUnitFactors { get; private set; } = new Dictionary<DataUnitGeneralFormat, int> {
             { DataUnitGeneralFormat.SIShortByte, 1000 },
             { DataUnitGeneralFormat.SIShortBit, 8000 },
             { DataUnitGeneralFormat.SILongByte, 1000},

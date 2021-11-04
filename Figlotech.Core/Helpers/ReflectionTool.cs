@@ -61,23 +61,23 @@ namespace Figlotech.Core.Helpers {
         }
 
         private static IEnumerable<MemberInfo> CollectMembers(Type type) {
-            foreach (var a in type.GetFields(BindingFlags.FlattenHierarchy).Where(m => !m.IsStatic && m.IsPublic)) {
+            foreach (var a in type.GetFields(BindingFlags.Instance).Where(m => !m.IsStatic && m.IsPublic)) {
                 yield return a;
             }
             foreach (var a in type.GetFields().Where(m => !m.IsStatic && m.IsPublic)) {
                 yield return a;
             }
-            foreach (var a in type.GetProperties(BindingFlags.FlattenHierarchy).Where(
+            foreach (var a in type.GetProperties(BindingFlags.Instance).Where(
                 m =>
-                    (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                    (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
+                    (!(m.GetGetMethod()?.IsStatic ?? true) && (m.GetGetMethod()?.IsPublic ?? false)) ||
+                    (!(m.GetSetMethod()?.IsStatic ?? true) && (m.GetSetMethod()?.IsPublic ?? false))
             )) {
                 yield return a;
             }
             foreach (var a in type.GetProperties().Where(
                 m =>
-                    (!m.GetGetMethod()?.IsStatic ?? true && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                    (!m.GetSetMethod()?.IsStatic ?? true && (m.GetSetMethod()?.IsPublic ?? false))
+                    (!(m.GetGetMethod()?.IsStatic ?? true) && (m.GetGetMethod()?.IsPublic ?? false)) ||
+                    (!(m.GetSetMethod()?.IsStatic ?? true) && (m.GetSetMethod()?.IsPublic ?? false))
             )) {
                 yield return a;
             }

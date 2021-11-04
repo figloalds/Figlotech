@@ -59,6 +59,9 @@ namespace Figlotech.ExcelUtil {
         Excelator Excelator;
         ExcelatorRowWriter rowWriter;
 
+        public int LineNumber => row;
+        public int ColStart => ColFrom;
+        public int ColEnd => ColTo;
         //public ExcelatorRowWriter Row => rowWriter ?? new ExcelatorRowWriter(row, Excelator);
 
         /// <summary>
@@ -89,10 +92,11 @@ namespace Figlotech.ExcelUtil {
             Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({cf}{row}:{ct}{row})");
             return this;
         }
+
         public ExcelatorRowRangeWriter ColSum(int rowFrom, int rowTo) {
-            var cf = new IntEx(ColFrom - 1).ToString(IntEx.Base26);
-            var ct = new IntEx(ColTo - 1).ToString(IntEx.Base26);
-            Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({cf}{rowFrom}:{ct}{rowTo})");
+            //var cf = new IntEx(ColFrom - 1).ToString(IntEx.Base26);
+            //var ct = new IntEx(ColTo - 1).ToString(IntEx.Base26);
+            Excelator.SetFormulaR1C1(row, ColFrom, ColTo, $"SUM(R{rowFrom}C{ColFrom}:R{rowTo}C{ColTo})");
             return this;
         }
         public ExcelatorRowRangeWriter Value(object value) {
@@ -102,6 +106,10 @@ namespace Figlotech.ExcelUtil {
         }
         public ExcelatorRowRangeWriter Formula(string formula) {
             Excelator.SetFormula(row, ColFrom, ColTo, formula);
+            return this;
+        }
+        public ExcelatorRowRangeWriter FormulaR1C1(string formula) {
+            Excelator.SetFormulaR1C1(row, ColFrom, ColTo, formula);
             return this;
         }
         public ExcelatorRowRangeWriter Style(Action<ExcelStyle> es) {
@@ -135,6 +143,8 @@ namespace Figlotech.ExcelUtil {
             excelator = parent;
         }
 
+        public int LineNumber => Row;
+
         public ExcelatorRowRangeWriter this[int i] {
             get {
                 return this.Cell(i);
@@ -148,6 +158,10 @@ namespace Figlotech.ExcelUtil {
 
         public ExcelatorRowWriter SetFormula(int column, string formula) {
             excelator.SetFormula(Row, column + offsetCols, column + offsetCols, formula);
+            return this;
+        }
+        public ExcelatorRowWriter SetFormulaR1C1(int column, string formula) {
+            excelator.SetFormulaR1C1(Row, column + offsetCols, column + offsetCols, formula);
             return this;
         }
         public ExcelatorRowWriter Set(int column, object value, Action<ExcelStyle> es = null) {
@@ -451,9 +465,20 @@ namespace Figlotech.ExcelUtil {
                 if (columnFrom != columnTo) {
                     _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
-            }
+            } catch (Exception x) {
 
-            catch (Exception x) {
+                //Console.WriteLine(x.Message);
+            }
+        }
+        public void SetFormulaR1C1(int line, int columnFrom, int columnTo, string value) {
+            EnsureRowRange(line, line);
+            EnsureColumnRange(columnFrom, columnTo);
+            try {
+                _currentWorkSheet.Cells[line, columnFrom, line, columnTo].FormulaR1C1 = value;
+                if (columnFrom != columnTo) {
+                    _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
+                }
+            } catch (Exception x) {
 
                 //Console.WriteLine(x.Message);
             }

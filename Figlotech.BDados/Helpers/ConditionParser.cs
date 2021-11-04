@@ -376,6 +376,30 @@ namespace Figlotech.BDados.Helpers {
                     strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append(")");
                 }
+                if (expr.Method.Name == "Contains") {
+                    var memberEx = expr.Object as MemberExpression;
+                    var pre = GetPrefixOfExpression(memberEx);
+                    var column = memberEx.Member.Name;
+                    strBuilder.Append($"{pre}.{column} LIKE CONCAT('%', ");
+                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                    strBuilder.Append(", '%')");
+                }
+                if (expr.Method.Name == "StartsWith") {
+                    var memberEx = expr.Object as MemberExpression;
+                    var pre = GetPrefixOfExpression(memberEx);
+                    var column = memberEx.Member.Name;
+                    strBuilder.Append($"{pre}.{column} LIKE CONCAT('%', ");
+                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                    strBuilder.Append(")");
+                }
+                if (expr.Method.Name == "EndsWith") {
+                    var memberEx = expr.Object as MemberExpression;
+                    var pre = GetPrefixOfExpression(memberEx);
+                    var column = memberEx.Member.Name;
+                    strBuilder.Append($"{pre}.{column} LIKE CONCAT(");
+                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                    strBuilder.Append(", '%')");
+                }
                 if (expr.Method.Name == "ToUpper") {
                     strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
                 }

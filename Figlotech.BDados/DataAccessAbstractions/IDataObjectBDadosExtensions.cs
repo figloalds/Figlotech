@@ -20,7 +20,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (field.Key.Name == ridCol) {
                             continue;
                         }
-                        if (objA.ContainsKey(field.Key.Name)) {
+                        if (objA.ContainsKey(field.Key)) {
                             objB[field.Key] = objA[field.Key.Name];
                         }
                     }

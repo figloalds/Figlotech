@@ -31,7 +31,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
     public class MySqlQueryGenerator : IQueryGenerator {
 
         public IQueryBuilder CreateDatabase(string schemaName) {
-            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
+            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
         }
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
@@ -204,20 +204,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     }
             if (info == null)
                 return "VARCHAR";
-            var typeOfField = ReflectionTool.GetTypeOf(field);
-            string tipoDados;
-            if (Nullable.GetUnderlyingType(typeOfField) != null)
-                tipoDados = Nullable.GetUnderlyingType(typeOfField).Name;
+            var dotnetRelevantType = ReflectionTool.GetTypeOf(field);
+            string dotnetTypeName;
+            if (Nullable.GetUnderlyingType(dotnetRelevantType) != null) {
+                dotnetRelevantType = Nullable.GetUnderlyingType(dotnetRelevantType);
+                dotnetTypeName = dotnetRelevantType.Name;
+            }
             else
-                tipoDados = typeOfField.Name;
-            if (typeOfField.IsEnum) {
+                dotnetTypeName = dotnetRelevantType.Name;
+            if (dotnetRelevantType.IsEnum) {
                 return "INT";
             }
             String type = "VARCHAR";
             if (info.Type != null && info.Type.Length > 0) {
                 type = info.Type;
             } else {
-                switch (tipoDados.ToLower()) {
+                switch (dotnetTypeName.ToLower()) {
                     case "string":
                         type = $"VARCHAR";
                         break;
@@ -260,6 +262,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                         break;
                     case "datetime":
                         type = $"DATETIME";
+                        break;
+                    default:
+                        type = type; // for breakpoint reasons
                         break;
                 }
             }
@@ -407,7 +412,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     QueryBuilder baseSelect = new QbFmt("SELECT ");
                     baseSelect.Append(GenerateFieldsString(typeof(T), false));
                     baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
-                    AutoSelectCache[typeof(T)] = baseSelect;
+                    AutoSelectCache.Add(typeof(T), baseSelect);
                 }
 
                 Query.Append(AutoSelectCache[typeof(T)]);
@@ -676,7 +681,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (!isNullable) {
                 return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
-                return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+                return new QueryBuilder().Append("SELECT 1");
+                // This is kinda dangerous let's not // return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             }
         }
 
