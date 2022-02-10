@@ -32,6 +32,13 @@ namespace Figlotech.Core {
     /// 
     public class Fi {
 
+        private static int Init() {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return 1;
+        }
+
+        public static readonly int InitValue = Fi.Init();
+
         public static Fi Tech = new Fi();
 
         public static IEnumerable<int> Range(int min, int max, int skip = 1) {

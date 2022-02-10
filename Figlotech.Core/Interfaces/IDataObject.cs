@@ -34,8 +34,10 @@ namespace Figlotech.Core.Interfaces {
             }
             var retv = new T();
             retv.CopyFrom(self);
+            retv.Id = 0;
+            retv.UpdatedTime = DateTime.UtcNow;
+            retv.CreatedTime = DateTime.UtcNow;
             retv.RID = null;
-            retv.RID = retv.RID;
             if(retv.RID == null) {
                 retv.RID = new RID().AsBase36;
             }

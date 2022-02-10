@@ -288,13 +288,13 @@ namespace System
             foreach(var a in t) {
                 li.Add(a);
                 if (li.Count == max) {
-                    yield return li.ToArray();
-                    li.Clear();
+                    yield return li;
+                    li = new List<T>();
                 }
             }
             if (li.Count > 0) {
-                yield return li.ToArray();
-                li.Clear();
+                yield return li;
+                li = null;
             }
         }
 

@@ -7,6 +7,7 @@
 * 
 * Comment on comments, yep they do tend to become a lie over time.
 **/
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -327,7 +328,6 @@ namespace Figlotech.Data {
                 }
                 if (_queryString.Length > 0 && !fragment.StartsWith(" "))
                     _queryString.Append(" ");
-                _queryString.Append(fragment);
                 var matchcol = Regex.Matches(fragment, "@(?<tagname>[a-zA-Z0-9_]*)");
                 int iterator = -1;
 
@@ -340,9 +340,9 @@ namespace Figlotech.Data {
 
                 var args2 = args.Where(a => !a?.GetType()?.Name.Contains("PythonFunction") ?? true).ToArray();
                 if (args2.Length > 0 && args2.Length != matches.Count) {
-                    Debugger.Break();
+
                     throw new Exception($@"Parameter count mismatch on QueryBuilder.Append\r\n
-                        Text Parameters: {string.Join(", ", args2.Select(x=> $"@{x}"))}\r\n
+                        Text Parameters: {string.Join(", ", matches.Select(x=> $"@{x.Groups["tagname"].Value}"))}\r\n
                         Parameters: {string.Join(", ", args)}\r\n
                         Text was: {fragment}\r\n");
                 }
@@ -354,8 +354,17 @@ namespace Figlotech.Data {
                     if (_objParams.ContainsKey(pname)) {
                         continue;
                     }
-                    _objParams.Add(pname, args[iterator]);
+                    var item = args[iterator];
+                    if (item is IQueryBuilder iqb) {
+                        fragment = fragment.Replace($"@{match.Groups["tagname"].Value}", iqb.GetCommandText());
+                        foreach (var param in iqb.GetParameters()) {
+                            _objParams[param.Key] = param.Value;
+                        }
+                    } else {
+                        _objParams.Add(pname, args[iterator]);
+                    }
                 }
+                _queryString.Append(fragment);
             }
             return this;
         }

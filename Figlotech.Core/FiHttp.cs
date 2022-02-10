@@ -415,7 +415,7 @@ namespace Figlotech.Core {
             });
         }
 
-        public string UserAgent { get; set; } = "Figlotech Http Abstraction on NetStandard2.0";
+        public string UserAgent { get; set; } = "Figlotech Http Abstraction on netstandard2.1";
         public int ContentLength {
             get => Int32.Parse(this["Content-Length"]);
             set => this["Content-Length"] = value.ToString();

@@ -1405,17 +1405,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
             DateTime d1 = DateTime.UtcNow;
             List<T> conflicts = new List<T>();
-            QueryReader(transaction, Plugin.QueryGenerator.QueryIds(rs), reader => {
-                while (reader.Read()) {
-                    var vId = (long?) Convert.ChangeType(reader[0], typeof(long));
-                    var vRid = (string) Convert.ChangeType(reader[1], typeof(string));
-                    var rowEquivalentObject = rs.FirstOrDefault(item => item.Id == vId || item.RID == vRid);
-                    if (rowEquivalentObject != null) {
-                        rowEquivalentObject.Id = vId ?? rowEquivalentObject.Id;
-                        rowEquivalentObject.RID = vRid ?? rowEquivalentObject.RID;
-                        rowEquivalentObject.IsPersisted = true;
+
+            rs.Fracture(63999).ForEach(x => {
+                var xlist = x.ToList();
+                QueryReader(transaction, Plugin.QueryGenerator.QueryIds(xlist), reader => {
+                    while (reader.Read()) {
+                        var vId = (long?) Convert.ChangeType(reader[0], typeof(long));
+                        var vRid = (string) Convert.ChangeType(reader[1], typeof(string));
+                        var rowEquivalentObject = xlist.FirstOrDefault(item => item.Id == vId || item.RID == vRid);
+                        if (rowEquivalentObject != null) {
+                            rowEquivalentObject.Id = vId ?? rowEquivalentObject.Id;
+                            rowEquivalentObject.RID = vRid ?? rowEquivalentObject.RID;
+                            rowEquivalentObject.IsPersisted = true;
+                        }
                     }
-                }
+                });
             });
             var elaps = DateTime.UtcNow - d1;
 
@@ -1423,7 +1427,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 .Where(t => t.GetCustomAttribute<FieldAttribute>() != null)
                 .ToList();
             int i2 = 0;
-            int cut = Math.Min(500, (37000 / 2) / (7 * (members.Count + 1)));
+            int cut = Math.Min(500, 63999 / ((members.Count + 1) * 3));
+
             int rst = 0;
             List<T> temp;
 

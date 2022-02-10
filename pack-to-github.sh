@@ -2,7 +2,7 @@
 
 rev=$(git rev-list --count master)
 
-args="-o _nuget -p:PackageVersion=1.0.$rev.0;TargetFrameworks=netstandard2.0"
+args="-o _nuget -p:PackageVersion=1.0.$rev.0;TargetFrameworks=netstandard2.1"
 argsb='--api-key %GITHUB_NUGET_PAT% --source "github"'
 
 dotnet pack Figlotech.Core $args

@@ -216,7 +216,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
-        static Dictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new Dictionary<string, Dictionary<string, (int[], string[])>>();
+        static AtomicDictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new AtomicDictionary<string, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
@@ -242,8 +242,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
                     Benchmarker.Assert(()=> join != null);
-                    var jstr = join.ToString();
-                    lock (String.Intern(jstr)) {
+                    var jstr = String.Intern(join.ToString());
+                    lock (jstr) {
                         if (!_autoAggregateCache.ContainsKey(jstr)) {
                             // This is only ever used in the auto aggregations
                             // So it would be a waste of processing power to reflect these fieldNames and their indexes every time

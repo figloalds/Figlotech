@@ -1,6 +1,6 @@
 @echo off
 
-set dist=netstandard2.0
+set dist=netstandard2.1
 set args=-o _dist\%dist% -f %dist% -c Release
 
 dotnet publish Figlotech.Core %args%
