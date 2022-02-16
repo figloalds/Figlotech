@@ -19,17 +19,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public string Hash { get; set; }
 
         public string EncodeToFileName() {
-            var text = $"{RelativePath};{new IntEx(Date).ToString(IntEx.Base64)};{new IntEx(Length).ToString(IntEx.Base64)};{Hash}";
-            var b = IntEx.Base64 + ".;- ";
-            var iex = new IntEx(text, b);
-            var strAgain = iex.ToString(b);
-            var valid = strAgain == text;
-            if (!valid)
-                throw new Exception("Invalid characters in string to encode");
-            var ancs = iex.ToString(IntEx.AlphanumericCS);
-            return ancs;
+            var json = JsonConvert.SerializeObject(this);
+            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+            return b64.Replace("+", "-").Replace("/", "_").Replace("=", "~");
+        }
+
+        public static FileData DecodeFileName(string name) {
+            var b64 = name.Replace("-", "+").Replace("_", "/").Replace("~", "=");
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+            return JsonConvert.DeserializeObject<FileData>(json);
         }
     }
+
     public class CopyMirrorFileData
     {
         public string RelativePath { get; set; }

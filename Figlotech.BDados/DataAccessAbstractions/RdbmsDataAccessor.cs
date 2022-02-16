@@ -218,17 +218,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Dispose() {
-            if(Transaction?.Connection?.State == ConnectionState.Open) {
-                try {
-                    Transaction?.Dispose();
-                } catch (Exception x) {
-                    Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {x.Message}");
+            try {
+                if(Transaction?.Connection?.State == ConnectionState.Open) {
+                    try {
+                        Transaction?.Dispose();
+                    } catch (Exception x) {
+                        Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {x.Message}");
+                    }
+                    try {
+                        Connection.Dispose();
+                    } catch (Exception x) {
+                        Fi.Tech.WriteLine($"Warning disposing connection from BDadosTransaction: {x.Message}");
+                    }
                 }
-                try {
-                    Connection.Dispose();
-                } catch (Exception x) {
-                    Fi.Tech.WriteLine($"Warning disposing connection from BDadosTransaction: {x.Message}");
-                }
+            } catch(Exception ex) {
+                Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
             }
             if(FiTechCoreExtensions.DebugConnectionLifecycle) {
                 lock(DebugOnlyGlobalTransactions)

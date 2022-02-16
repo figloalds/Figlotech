@@ -313,36 +313,6 @@ namespace System
             yield return other;
         }
 
-        public static T MinBy<T, A>(this IEnumerable<T> me, Func<T, A> fn) where A : IComparable {
-            var min = default(T);
-            var minVal = default(A);
-            var enumerator = me.GetEnumerator();
-            int i = 0;
-            while (enumerator.MoveNext()) {
-                var val = fn(enumerator.Current);
-                if (val.CompareTo(minVal) < 0) {
-                    minVal = val;
-                    min = enumerator.Current;
-                }
-            }
-            return min;
-        }
-
-        public static T MaxBy<T, A>(this IEnumerable<T> me, Func<T, A> fn) where A : IComparable {
-            var max = default(T);
-            var maxVal = default(A);
-            var enumerator = me.GetEnumerator();
-            int i = 0;
-            while (enumerator.MoveNext()) {
-                var val = fn(enumerator.Current);
-                if (val.CompareTo(maxVal) > 0) {
-                    maxVal = val;
-                    max = enumerator.Current;
-                }
-            }
-            return max;
-        }
-
         public static IEnumerable<T> Splice<T>(this List<T> li, Predicate<T> predicate) {
             for(int i = li.Count-1; i >= 0; i--) {
                 if(predicate(li[i])) {
