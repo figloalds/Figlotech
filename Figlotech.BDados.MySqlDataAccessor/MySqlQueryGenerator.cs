@@ -399,14 +399,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        static DynaLocks LocksAutoSelectCache = new DynaLocks();
         static Dictionary<Type, QueryBuilder> AutoSelectCache = new Dictionary<Type, QueryBuilder>();
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             
             var alias = "tba";
             QueryBuilder Query = new QueryBuilder();
-
-            lock(LocksAutoSelectCache[$"MYSQL_SELECTS_{typeof(T).Name}"]) {
+            
+            lock(string.Intern($"MYSQL_SELECTS_{typeof(T).Name}")) {
                 if (!AutoSelectCache.ContainsKey(typeof(T))) {
                     Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
                     QueryBuilder baseSelect = new QbFmt("SELECT ");

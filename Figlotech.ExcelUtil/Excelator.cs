@@ -408,8 +408,8 @@ namespace Figlotech.ExcelUtil {
             return _currentWorkSheet.Cells[line, column].Value;
         }
         public void SetFormat(int line, int column, String value) {
-            EnsureColumnRange(line, line);
-            EnsureRowRange(column, column);
+            EnsureColumnRange(column, column);
+            EnsureRowRange(line, line);
             try {
                 _currentWorkSheet.Cells[line, column].Style.Numberformat.Format = value;
 
@@ -419,8 +419,8 @@ namespace Figlotech.ExcelUtil {
             }
         }
         public void Set(int line, int columnFrom, int columnTo, object value) {
-            EnsureColumnRange(line, line);
-            EnsureRowRange(columnFrom, columnTo);
+            EnsureColumnRange(columnFrom, columnTo);
+            EnsureRowRange(line, line);
             try {
                 _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Value = value;
                 if (columnFrom != columnTo) {

@@ -395,15 +395,16 @@ namespace Figlotech.Core {
         }
 
         public static string BytesToString(this Fi __selfie, Fi.DataUnitGeneralFormat format, long value) {
+            var val = (decimal)value;
             int mult = 0;
             var unitNames = Fi.DataUnitNames[format];
             var duf = Fi.DataUnitFactors[format];
-            while (value > duf && mult < unitNames.Length - 1) {
-                value /= duf;
+            while (val > duf && mult < unitNames.Length - 1) {
+                val /= duf;
                 mult++;
             }
-            var plu = value > 1 ? "" : "";
-            return $"{value} {unitNames[mult]}{plu}";
+            var plu = val > 1 ? "" : "";
+            return $"{val.ToString(mult > 1 ? "0.00" : mult > 0 ? "0.0" : "0")} {unitNames[mult]}{plu}";
         }
 
         //public static T Field<T>(this DataRow dr, int index) {

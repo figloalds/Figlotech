@@ -7,9 +7,19 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public class FiAsyncLock
-    {
-        SemaphoreSlim _semaphore = new SemaphoreSlim(1,1);
+    public class FiAsyncDisposableLock : IDisposable {
+        SemaphoreSlim _semaphore;
+        public FiAsyncDisposableLock(SemaphoreSlim semaphore) {
+            this._semaphore = semaphore;
+        }
+
+        public void Dispose() {
+            _semaphore.Release();
+        }   
+    }
+
+    public class FiAsyncLock {
+        SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
         public async Task<T> Lock<T>(Func<Task<T>> Try, Func<Exception, Task<T>> Catch = null, Func<bool, Task> Finally = null) {
             bool isSuccess = true;
             try {
@@ -32,6 +42,11 @@ namespace Figlotech.Core
                 }
                 _semaphore.Release();
             }
+        }
+
+        public async Task<FiAsyncDisposableLock> Lock() {
+            await _semaphore.WaitAsync();
+            return new FiAsyncDisposableLock(_semaphore);
         }
 
         public Task Lock(Func<Task> Try, Func<Exception, Task> Catch = null, Func<bool, Task> Finally = null) {

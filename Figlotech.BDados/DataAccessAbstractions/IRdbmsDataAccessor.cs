@@ -50,11 +50,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         BDadosTransaction CreateNewTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
-        void EndTransaction();
-
-        void Commit();
-        void Rollback();
-
         void SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);
         void SendLocalUpdates(IEnumerable<Type> types, DateTime dt, Stream stream);

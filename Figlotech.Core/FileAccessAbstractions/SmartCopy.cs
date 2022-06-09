@@ -19,15 +19,38 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public string Hash { get; set; }
 
         public string EncodeToFileName() {
-            var json = JsonConvert.SerializeObject(this);
-            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+            var bytes = new List<byte>();
+            var bytesHash = Encoding.UTF8.GetBytes(Hash ?? "");
+            var bytesRelativePath = Encoding.UTF8.GetBytes(RelativePath ?? "");
+            bytes.AddRange(BitConverter.GetBytes(Date));
+            bytes.AddRange(BitConverter.GetBytes(Length));
+            bytes.AddRange(BitConverter.GetBytes(bytesHash.Length));
+            bytes.AddRange(bytesHash);
+            bytes.AddRange(BitConverter.GetBytes(bytesRelativePath.Length));
+            bytes.AddRange(bytesRelativePath);
+
+            var b64 = Convert.ToBase64String(bytes.ToArray());
+            // var json = JsonConvert.SerializeObject(this);
+            // var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
             return b64.Replace("+", "-").Replace("/", "_").Replace("=", "~");
         }
 
         public static FileData DecodeFileName(string name) {
             var b64 = name.Replace("-", "+").Replace("_", "/").Replace("~", "=");
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
-            return JsonConvert.DeserializeObject<FileData>(json);
+            var bytes = Convert.FromBase64String(b64);
+            var br = new BinaryReader(new MemoryStream(bytes));
+            var date = br.ReadInt64();
+            var length = br.ReadInt64();
+            var hashLength = br.ReadInt32();
+            var hash = Encoding.UTF8.GetString(br.ReadBytes(hashLength));
+            var relativePathLength = br.ReadInt32();
+            var relativePath = Encoding.UTF8.GetString(br.ReadBytes(relativePathLength));
+            return new FileData() {
+                Date = date,
+                Length = length,
+                Hash = hash,
+                RelativePath = relativePath
+            };
         }
     }
 
@@ -149,10 +172,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             foreach (var a in HashList) {
                 string hash = "";
                 if (local.Exists(a.RelativePath)) {
-                    local.Read(a.RelativePath, async (stream) => {
+                    await local.Read(a.RelativePath, async (stream) => {
                         await Task.Yield();
                         hash = await GetHash(stream);
-                    }).Wait();
+                    });
                 }
 
                 var gzSuffix = "";

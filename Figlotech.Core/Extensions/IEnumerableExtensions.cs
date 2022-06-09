@@ -94,7 +94,11 @@ namespace System
         static SelfInitializerDictionary<string, MethodInfo> AccumulatorInitializerMethodsCache = new SelfInitializerDictionary<string, MethodInfo>(type=> typeof(Accumulators).GetMethods().FirstOrDefault(m => m.IsStatic && m.Name == type));
 
         public static IEnumerable<T> IgnoreNulls<T>(this IEnumerable<T> self) {
-            return self.Where(x => x != null);
+            foreach(var item in self) {
+                if(item != null) {
+                    yield return item;
+                }
+            }
         }
 
         public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params (string type, Expression<Func<T, object>> exp)[] accumulators) where T : new() {
