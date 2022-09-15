@@ -19,12 +19,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public sealed class FiHttpResult : IDisposable {
+    public sealed class  FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
         public String ContentType { get; set; }
         public long ContentLength { get; set; }
         public HttpResponseMessage Response { get; set; }
+        private MemoryStream CachedResponseBody { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
 
         internal FiHttpResult() {
@@ -37,8 +38,30 @@ namespace Figlotech.Core {
 
         public static async Task<FiHttpResult> InitFromRequest(HttpRequestMessage httpRequestMessage) {
             var retv = new FiHttpResult();
-            retv.Init(await FiHttp.httpClient.SendAsync(httpRequestMessage));
+            try {
+                var response = await FiHttp.httpClient.SendAsync(httpRequestMessage);
+                retv.Init(response);
+            } catch (WebException ex) {
+                retv.Init(ex.Response as HttpWebResponse);
+            } catch (Exception ex) {
+                retv.Init(null as HttpResponseMessage);
+            }
             return retv;
+        }
+
+        void Init(HttpWebResponse resp) {
+            if (resp == null) {
+                StatusCode = 0;
+                return;
+            }
+            var response = new HttpResponseMessage(resp.StatusCode) {
+                ReasonPhrase = resp.StatusDescription,
+            };
+            foreach (var header in resp.Headers.AllKeys) {
+                response.Headers.Add(header, resp.Headers.GetValues(header));
+            }
+            response.Content = new System.Net.Http.StreamContent(resp.GetResponseStream());
+            Init(response);
         }
 
         void Init(HttpResponseMessage resp) {
@@ -58,8 +81,20 @@ namespace Figlotech.Core {
             }
         }
 
+        private async Task CacheResponseBody() {
+            if(CachedResponseBody == null && Response.Content != null) {
+                CachedResponseBody = new MemoryStream();
+                await Response.Content.CopyToAsync(CachedResponseBody);
+            }
+            CachedResponseBody.Seek(0, SeekOrigin.Begin);
+        }
+
         public async Task<string> AsString() {
-            return await Response.Content.ReadAsStringAsync();
+            await CacheResponseBody();
+            if (CachedResponseBody == null) {
+                return null;
+            }
+            return Encoding.UTF8.GetString(CachedResponseBody.ToArray());
         }
 
         public async Task<string> AsDecodedString(IEncryptionMethod method) {
@@ -68,17 +103,8 @@ namespace Figlotech.Core {
         }
 
         public async Task<Stream> AsStream() {
-            return await Response.Content.ReadAsStreamAsync();
-        }
-
-        public async Task<MemoryStream> AsSeekableStream() {
-            using (var rs = await AsStream()) {
-                var ms = new MemoryStream();
-                rs.CopyTo(ms);
-                rs.Flush();
-                ms.Seek(0, SeekOrigin.Begin);
-                return ms;
-            }
+            await CacheResponseBody();
+            return CachedResponseBody;
         }
 
         //public Stream AsRawStream() {
@@ -98,7 +124,8 @@ namespace Figlotech.Core {
         //}
 
         public async Task<byte[]> AsBuffer() {
-            return (await AsSeekableStream()).ToArray();
+            await CacheResponseBody();
+            return CachedResponseBody.ToArray();
         }
 
         public async Task<byte[]> AsDecodedBuffer(IEncryptionMethod method) {
@@ -127,12 +154,17 @@ namespace Figlotech.Core {
             await fs.Write(fileName, async stream => await (await AsStream()).CopyToAsync(stream));
         }
 
+        bool isDisposed = false;
         public void Dispose() {
+            if (isDisposed) {
+                return;
+            }
             Response?.Dispose();
+            CachedResponseBody?.Dispose();
         }
     }
 
-    public class NonSuccessResponseException : Exception
+    public sealed class NonSuccessResponseException : Exception
     {
         public HttpStatusCode StatusCode { get; set; }
         public HttpResponseMessage Response { get; set; }
@@ -146,9 +178,11 @@ namespace Figlotech.Core {
         }
     }
 
-    public class FiHttp
+    public sealed class FiHttp
     {
-        internal static HttpClient httpClient = new HttpClient();
+        internal static HttpClient httpClient = new HttpClient() {
+            Timeout = TimeSpan.FromMinutes(120),
+        };
         
         public string SyncKeyCodePassword { get; set; } = null;
         IDictionary<string, string> headers = new Dictionary<string, string>();
@@ -211,6 +245,16 @@ namespace Figlotech.Core {
             req.Content.Headers.ContentLength = bytes.Length;
             return await FiHttpResult.InitFromRequest(req);
         }
+        public async Task<FiHttpResult> Put<T>(String url, T postData) {
+            var json = JsonConvert.SerializeObject(postData);
+            var bytes = Fi.StandardEncoding.GetBytes(json);
+            var req = CreateRequest(url);
+            req.Method = HttpMethod.Put;
+            req.Content = new ByteArrayContent(bytes);
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            req.Content.Headers.ContentLength = bytes.Length;
+            return await FiHttpResult.InitFromRequest(req);
+        }
 
         public async Task<FiHttpResult> Post(string url, Func<Stream, Task> streamFunction) {
             var req = CreateRequest(url);
@@ -222,10 +266,14 @@ namespace Figlotech.Core {
                 return await FiHttpResult.InitFromRequest(req);
             }
         }
-        public async Task<FiHttpResult> Post(string url, Stream stream) {
+        public async Task<FiHttpResult> Post(string url, Stream stream, string contentType) {
             var req = CreateRequest(url);
             req.Method = HttpMethod.Post;
-            req.Content = new StreamContent(stream);
+            req.Content = new StreamContent(stream) {
+                Headers = {
+                    ContentType = new MediaTypeHeaderValue(contentType)
+                }
+            };
             return await FiHttpResult.InitFromRequest(req);
         }
         public async Task<FiHttpResult> Post(string url, string body) {
@@ -237,6 +285,28 @@ namespace Figlotech.Core {
         public async Task<FiHttpResult> Post(string url) {
             var req = CreateRequest(url);
             req.Method = HttpMethod.Post;
+            return await FiHttpResult.InitFromRequest(req);
+        }
+
+        public async Task<FiHttpResult> Put(string url, Stream stream, string contentType) {
+            var req = CreateRequest(url);
+            req.Method = HttpMethod.Put;
+            req.Content = new StreamContent(stream) {
+                Headers = {
+                    ContentType = new MediaTypeHeaderValue(contentType)
+                }
+            };
+            return await FiHttpResult.InitFromRequest(req);
+        }
+        public async Task<FiHttpResult> Put(string url, string body) {
+            var req = CreateRequest(url);
+            req.Method = HttpMethod.Post;
+            req.Content = new StringContent(body);
+            return await FiHttpResult.InitFromRequest(req);
+        }
+        public async Task<FiHttpResult> Put(string url) {
+            var req = CreateRequest(url);
+            req.Method = HttpMethod.Put;
             return await FiHttpResult.InitFromRequest(req);
         }
 

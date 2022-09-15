@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex.Legacy {
-    public class LegacyEnigmaEncryptor : IEncryptionMethod {
+    public sealed class LegacyEnigmaEncryptor : IEncryptionMethod {
         private int enigmaPin;
         private static byte[] originalByteMap = new byte[byte.MaxValue + 1];
         private byte[] enigmaStrip;

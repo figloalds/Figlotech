@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex {
-    public class FailOverEncryptor : IEncryptionMethod {
+    public sealed class FailOverEncryptor : IEncryptionMethod {
         public List<IEncryptionMethod> Methods { get; private set; } = new List<IEncryptionMethod>();
         public FailOverEncryptor() {
         }

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Figlotech.Core
 {
-    public class DynaLocks
+    public sealed class DynaLocks
     {
         SelfInitializerDictionary<string, object> DynaLockMutexes = new SelfInitializerDictionary<string, object>(
             s => new object(), true

@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 
 namespace Figlotech.Core.Helpers {
     [Serializable]
-    internal class ReflectionException : Exception {
+    internal sealed class ReflectionException : Exception {
         public ReflectionException() {
         }
 

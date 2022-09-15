@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
-    public class GzipCompressStreamProcessor : IStreamProcessor {
+    public sealed class GzipCompressStreamProcessor : IStreamProcessor {
 
         public GzipCompressStreamProcessor() {
         }

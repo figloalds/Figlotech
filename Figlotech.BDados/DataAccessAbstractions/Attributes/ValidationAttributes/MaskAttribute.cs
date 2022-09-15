@@ -26,7 +26,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This is an example of ValidationAttribute
     /// </summary>
-    public class MaskAttribute : ValidationAttribute
+    public sealed class MaskAttribute : ValidationAttribute
     {
         string Mask;
         public MaskAttribute(string value) {

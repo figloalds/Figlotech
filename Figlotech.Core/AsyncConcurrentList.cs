@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public class AsyncConcurrentList<T> : IEnumerable<T>, IList<T>
+    public sealed class AsyncConcurrentList<T> : IEnumerable<T>, IList<T>
     {
         FiAsyncLock alock = new FiAsyncLock();
         List<T> dmmy { get; set; } = new List<T>();

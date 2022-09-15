@@ -86,7 +86,7 @@ namespace Figlotech.Core {
         }
     }
 
-    public class ScheduledWorkJob
+    public sealed class ScheduledWorkJob
     {
         public WorkQueuer Queuer { get; set; }
         public WorkJob WorkJob { get; set; }
@@ -94,23 +94,7 @@ namespace Figlotech.Core {
         public TimeSpan? RecurrenceInterval { get; set; }
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
-        public RecurrenceMode RecurrenceMode { get; set; }
         public bool IsActive { get; internal set; } = true;
-    }
-
-    public enum RecurrenceMode
-    {
-        /// <summary>
-        /// The task is re-scheduled only after it finished executing, the RecurrenceInterval will refer to how to wait after
-        /// the END of the last execution
-        /// </summary>
-        Regular,
-
-        /// <summary>
-        /// The task is scheduled to run every interval, regardless of how long it takes to execute.
-        /// If the task takes longer than the interval to execute it might be triggered more than once at the same time.
-        /// </summary>
-        Periodic,
     }
 
     public delegate dynamic ComputeField(dynamic o);
@@ -440,10 +424,14 @@ namespace Figlotech.Core {
         static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
 
         private static void Reschedule(ScheduledWorkJob sched) {
-            if(sched.IsActive) {
+            if(sched.IsActive && sched.RecurrenceInterval.HasValue) {
+                var nextRun = sched.ScheduledTime;
+                while (nextRun < DateTime.UtcNow) {
+                    nextRun += sched.RecurrenceInterval.Value;
+                }
                 sched.Timer?.Change(Timeout.Infinite, Timeout.Infinite);
                 sched.Timer?.Dispose();
-                sched.Timer = new Timer(_timerFn, sched, (int) Math.Max(0.0, sched.RecurrenceInterval?.TotalMilliseconds ?? 0.0), Timeout.Infinite);
+                sched.Timer = new Timer(_timerFn, sched, (int) Math.Max(0.0, (nextRun - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
             }
         }
 
@@ -466,18 +454,14 @@ namespace Figlotech.Core {
                 Fi.Tech.ScheduleTask(sched);
             } else {
                 if (sched.RecurrenceInterval.HasValue) {
-                    if (sched.RecurrenceMode == RecurrenceMode.Regular) {
-                        newWj.GetAwaiter().OnCompleted(() => {
-                            Reschedule(sched);
-                        });
-                    } else if (sched.RecurrenceMode == RecurrenceMode.Periodic) {
+                    newWj.GetAwaiter().OnCompleted(() => {
                         Reschedule(sched);
-                    }
+                    });
                 }
             }
         }
-        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
-            ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval, recurrence);
+        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+            ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval);
         }
         public static bool DebugSchedules { get; set; } = false;
 
@@ -493,14 +477,13 @@ namespace Figlotech.Core {
                 }
             }
         }
-        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, RecurrenceMode recurrence = RecurrenceMode.Regular) {
+        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
             var sched = new ScheduledWorkJob {
                 Queuer = queuer,
                 Identifier = identifier,
                 WorkJob = job,
                 ScheduledTime = when,
                 RecurrenceInterval = RecurrenceInterval,
-                RecurrenceMode = recurrence,
             };
             ScheduleTask(_selfie, sched);
         }
@@ -1507,6 +1490,11 @@ namespace Figlotech.Core {
             return wj;
         }
 
+        static FiAsyncMultiLock _globalMultiLock = new FiAsyncMultiLock();
+        public static async Task<FiAsyncDisposableLock> Lock(this Fi _selfie, string key) {
+            return await _globalMultiLock.Lock(key);
+        }
+
         public static WorkJob FireTask(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
@@ -1641,7 +1629,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public class QueueFlowStepIn<T> : IParallelFlowStepIn<T>
+        public sealed class QueueFlowStepIn<T> : IParallelFlowStepIn<T>
         {
             Queue<T> Host { get; set; }
             public QueueFlowStepIn(Queue<T> host) {
@@ -1657,7 +1645,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public class FlowYield<T> {
+        public sealed class FlowYield<T> {
             IParallelFlowStepIn<T> root { get; set; }
             public FlowYield(IParallelFlowStepIn<T> root) {
                 this.root = root;
@@ -1680,7 +1668,7 @@ namespace Figlotech.Core {
             void Put(TIn input);
             Task NotifyDoneQueueing();
         }
-        public class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
+        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
             Func<TIn, ValueTask<TOut>> SimpleAct { get; set; }

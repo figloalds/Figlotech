@@ -12,7 +12,7 @@ using Figlotech.Core;
 namespace Figlotech.BDados.PgSQLDataAccessor
 {
 
-    public class PgSQLPluginConfiguration {
+    public sealed class PgSQLPluginConfiguration {
         public String Host { get; set; }
         public String Database { get; set; }
         public String User { get; set; }

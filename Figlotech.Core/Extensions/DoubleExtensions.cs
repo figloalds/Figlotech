@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Extensions
 {
-    public class DoubleExtensionMapFromRangeHelper {
+    public sealed class DoubleExtensionMapFromRangeHelper {
         double value; double low1; double high1;
         public DoubleExtensionMapFromRangeHelper(double value, double low1, double high1) {
             this.value = value;

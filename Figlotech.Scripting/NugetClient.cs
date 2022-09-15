@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Figlotech.Scripting
 {
-    public class NugetClient
+    public sealed class NugetClient
     {
     }
 }

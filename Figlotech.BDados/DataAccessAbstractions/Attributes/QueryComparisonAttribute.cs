@@ -18,7 +18,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// could use StartsWith for search purposes, this removes a lot of SQL and C# programming 
     /// effort from the programmer's hands and leaves it more declarative
     /// </summary>
-    public class QueryComparisonAttribute : Attribute {
+    public sealed class QueryComparisonAttribute : Attribute {
         public DataStringComparisonType Type;
         public QueryComparisonAttribute(DataStringComparisonType type) {
             Type = type;

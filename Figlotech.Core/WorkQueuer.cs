@@ -14,13 +14,13 @@ namespace Figlotech.Core {
         Finished
     }
 
-    public class JobProgress {
+    public sealed class JobProgress {
         public String Status;
         public int TotalSteps;
         public int CompletedSteps;
     }
 
-    public class WorkJob {
+    public sealed class WorkJob {
         public int id = ++idGen;
         private static int idGen = 0;
         internal Thread AssignedThread = null;
@@ -56,7 +56,7 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class WorkQueuer : IDisposable {
+    public sealed class  WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
         public String Name;
@@ -191,7 +191,7 @@ namespace Figlotech.Core {
 
         private List<Task> Tasks = new List<Task>();
 
-        public class WorkJobExecutionStat
+        public sealed class WorkJobExecutionStat
         {
             public string Description { get; set; }
             public DateTime? EnqueuedAt { get; set; }

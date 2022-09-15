@@ -24,7 +24,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         LEFT, RIGHT, INNER, CROSS, LEFT_OUTER, RIGHT_OUTER, NATURAL, NATURAL_LEFT_OUTER, NATURAL_RIGHT_OUTER
     }
 
-    public class JoinDefinition
+    public sealed class JoinDefinition
     {
 
         private bool Validated = false;
@@ -115,7 +115,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Relations.Add(r1);
                     Relations.Add(r2);
                 } catch (Exception x) {
-                    throw new BDadosException($"This error was not supposed to happen: {x.Message}");
+                    throw new BDadosException($"This error was not supposed to happen: {x.Message}", x);
                 }
             }
 

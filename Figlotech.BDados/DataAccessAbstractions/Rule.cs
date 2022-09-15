@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions
 {
-    public class Rule<T> : IValidationRule<T> where T : IBusinessObject, new()
+    public sealed class Rule<T> : IValidationRule<T> where T : IBusinessObject, new()
     {
         Func<T, IEnumerable<ValidationError>> validationFunction;
 

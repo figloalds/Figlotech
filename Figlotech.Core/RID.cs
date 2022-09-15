@@ -18,7 +18,7 @@ namespace Figlotech.Core {
         public string UUID { get; set; }
     }
 
-    public class RID {
+    public sealed class RID {
         static FiRandom rng = new FiRandom();
 
         byte[] Signature = new byte[32];

@@ -16,7 +16,7 @@ using System.Diagnostics;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.Helpers {
-    public class ConditionParser {
+    public sealed class ConditionParser {
         private Type rootType;
 
         private PrefixMaker prefixer = new PrefixMaker();
@@ -270,7 +270,7 @@ namespace Figlotech.BDados.Helpers {
                 if (subexp is ParameterExpression) {
                     // If this member belongs to an AggregateField, then problems problems...
                     var aList = new List<MemberInfo>();
-                    aList.AddRange(ReflectionTool.FieldsWithAttribute<FieldAttribute>(subexp.Type).Where((t) => t.Name == expr.Member.Name.Replace("_","")));
+                    aList.AddRange(ReflectionTool.GetAttributedMemberValues<FieldAttribute>(subexp.Type).Where((t) => t.Member.Name == expr.Member.Name.Replace("_","")).Select(x=> x.Member));
                     if (!fullConditions && ((subexp as ParameterExpression).Type != typeOfT || !aList.Any())) {
                         return new QbFmt("1");
                     }

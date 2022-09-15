@@ -2,10 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
-    public class IntermediateRdbmsLoadAllArgs<T> where T : IDataObject, new() {
+    public sealed class IntermediateRdbmsLoadAllArgs<T> where T : IDataObject, new() {
 
         public IntermediateRdbmsLoadAllArgs(BDadosTransaction transaction, LoadAllArgs<T> largs) {
             Transaction = transaction;
@@ -18,11 +19,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> Aggregate() {
             return Transaction.DataAccessor.AggregateLoad(Transaction, LoadAllArgs);
         }
+        public async Task<List<T>> AggregateAsync() {
+            return await Transaction.DataAccessor.AggregateLoadAsync(Transaction, LoadAllArgs);
+        }
         public IEnumerable<T> Fetch() {
             return Transaction.DataAccessor.Fetch(Transaction, LoadAllArgs);
         }
         public List<T> Load() {
             return Transaction.DataAccessor.LoadAll(Transaction, LoadAllArgs);
+        }
+        public async Task<List<T>> LoadAsync() {
+            return await Transaction.DataAccessor.LoadAllAsync(Transaction, LoadAllArgs);
         }
     }
 

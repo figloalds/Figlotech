@@ -9,11 +9,11 @@ using System.Linq.Expressions;
 using System.Text;
 
 namespace Figlotech.Core {
-    public class FnVal {
+    public sealed class FnVal {
         public static FnVal<A> From<A>(Func<A> fn) => new FnVal<A>(fn);
     }
 
-    public class FnVal<T> {
+    public sealed class FnVal<T> {
         public Func<T> Accessor { get; private set; }
         public T Value { get; set; } = default(T);
         public FnVal(Func<T> accessor) {

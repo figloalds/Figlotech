@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex
 {
-    public class DecypherStreamProcessor : IStreamProcessor {
+    public sealed class DecypherStreamProcessor : IStreamProcessor {
         public bool Enable { get; set; }
 
         IEncryptionMethod _method;

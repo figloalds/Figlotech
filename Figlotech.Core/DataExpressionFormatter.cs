@@ -16,7 +16,7 @@ namespace Figlotech.Core
         string Format(object input, string expression);
     }
 
-    public class DataExpressionFormatter : IDataExpressionFormatter
+    public sealed class DataExpressionFormatter : IDataExpressionFormatter
     {
         IExpressionFilter[] Filters { get; set; }
         public DataExpressionFormatter(params IExpressionFilter[] filters) {

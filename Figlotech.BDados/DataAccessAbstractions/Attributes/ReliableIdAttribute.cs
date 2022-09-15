@@ -28,7 +28,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// auto-incremental Ids were giving me a PUNK headache.
     /// </para>
     /// </summary>
-    public class ReliableIdAttribute : Attribute
+    public sealed class ReliableIdAttribute : Attribute
     {
         public ReliableIdAttribute()
         {

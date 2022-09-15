@@ -24,7 +24,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// for this data object (in future I might add a functionality for the structurechecker to create and use 
     /// a view, based on the definition of the class.)
     /// </summary>
-    public class ViewOnlyAttribute : Attribute {
+    public sealed class ViewOnlyAttribute : Attribute {
         public ViewOnlyAttribute() {
         }
     }

@@ -3,17 +3,17 @@ using System.Collections.Generic;
 
 namespace Figlotech.BDados.CustomForms {
 
-    public class PossibleOption {
+    public sealed class PossibleOption {
         public int Id;
         public String Description;
     }
 
-    public class UiRole {
+    public sealed class UiRole {
         public bool CanFilterBy;
         public bool AppearsOnTables;
     }
 
-    public class CustomFormField {
+    public sealed class CustomFormField {
         public String Name;
         public String Description;
         public String Type;

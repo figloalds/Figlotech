@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Scripting
 {
-    public class PythonEnvironment
+    public sealed class PythonEnvironment
     {
         ScriptEngine engine;
         ScriptScope scope;

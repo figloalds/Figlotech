@@ -23,7 +23,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// this can be useful for structure checkers to rename columns instead of creating new ones
     /// and transfer data over in the process avoiding data loss and extra management hassle.
     /// </summary>
-    public class OldNameAttribute : Attribute
+    public sealed class OldNameAttribute : Attribute
     {
         public String Name { get; set; }
 

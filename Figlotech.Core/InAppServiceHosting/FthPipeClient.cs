@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using Figlotech.Extensions;
 
 namespace Figlotech.Core.InAppServiceHosting {
-    public class FthPipeClient {
+    public sealed class FthPipeClient {
         string pipeName;
         public FthPipeClient(string pipeName) {
             this.pipeName = pipeName;

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.InAppServiceHosting
 {
-    public class FthServiceInfo
+    public sealed class FthServiceInfo
     {
         DateTime _started = DateTime.UtcNow;
         IFthService service;

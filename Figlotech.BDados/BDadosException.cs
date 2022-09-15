@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Figlotech.BDados
 {
-    public class BDadosException : Exception {
+    public sealed class BDadosException : Exception {
         public List<IDataObject> AffectedObjects { get; private set; }
         public List<string[]> StackData { get; private set; }
 

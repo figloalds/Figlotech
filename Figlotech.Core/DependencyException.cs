@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public class DependencyException : Exception {
+    public sealed class DependencyException : Exception {
         public Type DependedInterface;
         public Type DependantClass;
 

@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods.Legacy {
 
-    public class LegacyAesEncryptor : IEncryptionMethod {
+    public sealed class LegacyAesEncryptor : IEncryptionMethod {
         String instanceSecret;
         int instancePin;
         LegacyCrossRandom cr;

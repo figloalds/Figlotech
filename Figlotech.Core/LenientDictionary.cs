@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
+    public sealed class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
         AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {

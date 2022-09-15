@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
 
-    public class UpdateTimeStampAttribute : Attribute
+    public sealed class UpdateTimeStampAttribute : Attribute
     {
         public UpdateTimeStampAttribute()
         {

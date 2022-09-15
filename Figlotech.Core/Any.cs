@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Figlotech.Core
 {
-    public class Any<T> : Any {
+    public sealed class Any<T> : Any {
         T val;
 
         public T Value { get; }

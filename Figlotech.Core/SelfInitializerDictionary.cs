@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
+    public sealed class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
         AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         Func<TKey, TValue> SelfInitFn { get; set; }
         public bool AllowNullValueCaching { get; set; } = true;

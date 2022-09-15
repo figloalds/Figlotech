@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods
 {
-    public class AggregateEncryptor : List<IEncryptionMethod>, IEncryptionMethod {
+    public sealed class AggregateEncryptor : List<IEncryptionMethod>, IEncryptionMethod {
 
         public byte[] Encrypt(byte[] en) {
             for(int i = 0; i < this.Count; i++) {

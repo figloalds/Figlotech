@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
-    public class PrefixMaker {
+    public sealed class PrefixMaker {
 
         int seq = 0;
         Dictionary<string, string> dict = new Dictionary<string, string>();

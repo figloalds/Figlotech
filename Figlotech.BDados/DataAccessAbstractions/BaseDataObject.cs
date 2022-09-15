@@ -7,7 +7,7 @@ using System;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public abstract class BaseDataObject : IDataObject, ISaveable {
+    public abstract class BaseDataObject : IDataObject {
 
         public BaseDataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) {
             DataAccessor = dataAccessor;
@@ -82,9 +82,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DataAccessor.Delete(this);
         }
 
-        public abstract Task<bool> Save();
-        public abstract Task<bool> Load();
-
         // Optional stuff, override it or don't.
         // The save method will attempt to use them though.
 
@@ -94,13 +91,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public virtual ValidationErrors ValidateBusiness() { return new ValidationErrors(); }
 
-        public virtual void SelfCompute(object Previous = null) { }
+        public virtual Task OnBeforePersistAsync() { return Task.CompletedTask;  }
 
-        public virtual void OnBeforePersist() { }
-
-        public virtual void OnAfterPersist() { }
+        public virtual Task OnAfterPersistAsync() { return Task.CompletedTask; }
 
         public virtual void OnAfterLoad(DataLoadContext context) { }
+
+        public virtual void SelfCompute(object Previous = null) { }
 
         public virtual void Init() { }
     }

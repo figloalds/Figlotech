@@ -8,7 +8,7 @@ using System.Text;
 
 namespace Figlotech.Core.Autokryptex.EncryptionMethods
 {
-    public class TwoWayRsaPair {
+    public sealed class TwoWayRsaPair {
         private TwoWayRsaPair() {
 
         }
@@ -60,7 +60,7 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
         }
     }
 
-    public class TwoWayRsaEncryptor : IEncryptionMethod {
+    public sealed class TwoWayRsaEncryptor : IEncryptionMethod {
         private TwoWayRsaPair KeyPair { get;set; }
         public TwoWayRsaEncryptor(TwoWayRsaPair keypair) {
             KeyPair = keypair;

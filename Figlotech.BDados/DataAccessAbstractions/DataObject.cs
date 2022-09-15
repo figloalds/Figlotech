@@ -48,10 +48,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ValidationErrors ve = new ValidationErrors();
             var myType = this.GetType();
 
-            var myValues = new List<MemberInfo>();
-            myValues.AddRange(this.GetType().GetFields());
-            myValues.AddRange(this.GetType().GetProperties());
-
             T obj = obj = (T)(IBusinessObject)this;
 
             foreach (var a in ValidationRules()) {
@@ -61,8 +57,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             // Validations
-            foreach (var field in myValues.Where((f) => f.GetCustomAttribute<ValidationAttribute>() != null)) {
-                var vAttribute = field.GetCustomAttribute<ValidationAttribute>();
+            var validations = ReflectionTool.GetAttributedMemberValues<ValidationAttribute>(myType);
+            for(int i = 0; i < validations.Length; i++) {
+                var field = validations[i].Member;
+                var vAttribute = validations[i].Attribute;
                 if (vAttribute != null) {
                     foreach (var a in vAttribute.Validate(field, ReflectionTool.GetMemberValue(field, this)))
                         ve.Add(a);
@@ -71,24 +69,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return ve;
         }
-
-        public override async Task<bool> Save() {
-            return await Fi.Tech.Promisify(() => DataAccessor.SaveItem(this));
-        }
-
-        public override async Task<bool> Load() {
-
-            return await Fi.Tech.Promisify(() => {
-                if (this.Id > 0) {
-                    Fi.Tech.MemberwiseCopy(
-                        DataAccessor.LoadByRid<T>(this.RID), this);
-                    return true;
-                } else {
-                    return false;
-                }
-            });
-        }
-
 
         void CascadingDoForFields<T>(Action<T> process, List<Type> prevList = null) {
 
@@ -142,21 +122,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ia.GenerateAuthorization();
         }
 
-        public virtual bool ValidateAndPersist(String iaToken) {
+        public virtual async Task<bool> ValidateAndPersistAsync(String iaToken) {
             if (!ia.CheckAuthorization(iaToken)) {
-                ValidateAndPersist(RunValidations());
+                await ValidateAndPersistAsync(RunValidations());
             }
 
             if (null == DataAccessor) {
                 throw new BDadosException($"Data Accessor is undefined in this instance of {this.GetType().Name}");
             }
-            this.OnBeforePersist();
+            await this.OnBeforePersistAsync();
 
             var retv = true;
 
             retv &= DataAccessor.SaveItem(this);
 
-            this.OnAfterPersist();
+            await this.OnAfterPersistAsync();
 
             return retv;
         }

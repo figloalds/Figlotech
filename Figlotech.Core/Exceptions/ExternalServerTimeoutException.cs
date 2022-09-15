@@ -8,7 +8,7 @@ namespace System {
     /// <para>ObjectNotFoundException means that the user is trying to access something that doesn't exist.</para>
     /// </summary>
     [Serializable]
-    public class ExternalServerTimeoutException : EndUserGeneratedException {
+    public sealed class ExternalServerTimeoutException : EndUserGeneratedException {
 
         public ExternalServerTimeoutException(string message) : base(504, message) {
         }

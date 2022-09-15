@@ -9,14 +9,14 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
 
-    public class ScheduledDomainEvent {
+    public sealed class ScheduledDomainEvent {
         public IDomainEvent Event;
         public DateTime ScheduledTime;
         public string Identifier;
         internal Timer timer;
     }
 
-    public class CustomDomainValidation  {
+    public sealed class CustomDomainValidation  {
         public CustomDomainValidation(IValidationRule validator, int? phase) {
             this.Validator = validator;
             this.ValidationPhase = phase;
@@ -25,7 +25,7 @@ namespace Figlotech.Core.DomainEvents {
         public int? ValidationPhase { get; set; } = null;
     }
 
-    public class CustomFlushOrderToken {
+    public sealed class CustomFlushOrderToken {
         public bool IsFlushIssued { get; set; } = false;
         public bool IsReleased { get; set; } = false;
     }
@@ -36,7 +36,7 @@ namespace Figlotech.Core.DomainEvents {
         }
     }
 
-    public class DomainEventsHub {
+    public sealed class DomainEventsHub {
 
         public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
         private readonly DomainEventsHub parentHub;

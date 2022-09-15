@@ -45,7 +45,7 @@ namespace Figlotech.Core.Interfaces {
         }
     }
 
-    public interface IDataObject : ISaveable
+    public interface IDataObject 
     {
         //void ForceId(long novoId);
         //void ForceRID(String novoRid);

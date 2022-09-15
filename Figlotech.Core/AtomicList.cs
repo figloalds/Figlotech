@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public class AtomicList<T> : IList<T> {
+    public sealed class AtomicList<T> : IList<T> {
         internal List<T> _dmmy = new List<T>();
 
         public int Count => ((IList<T>)_dmmy).Count;

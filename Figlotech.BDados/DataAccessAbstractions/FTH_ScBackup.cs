@@ -5,7 +5,7 @@ using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core.BusinessModel;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class _ResidualScData : DataObject<_ResidualScData> {
+    public sealed class _ResidualScData : DataObject<_ResidualScData> {
         [Field(Size = 128)]
         public string Type { get; set; }
         [Field(Size = 128)]

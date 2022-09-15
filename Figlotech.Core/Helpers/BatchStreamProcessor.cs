@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
-    public class BatchStreamProcessor : IStreamProcessor {
+    public sealed class BatchStreamProcessor : IStreamProcessor {
         List<IStreamProcessor> processors = new List<IStreamProcessor>();
         public BatchStreamProcessor() { }
 

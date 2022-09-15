@@ -4,7 +4,7 @@ using System.Runtime.Serialization;
 namespace Figlotech.BDados
 {
     [Serializable]
-    internal class BDadosThrowableReturn : Exception
+    internal sealed class BDadosThrowableReturn : Exception
     {
         public object o;
         

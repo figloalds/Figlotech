@@ -11,7 +11,7 @@ namespace Figlotech.Core.Autokryptex
     /// Calling this class with the same parameters will output
     /// the exact same numbers every time.
     /// </summary>
-    public sealed class FiRandom {
+    public sealed class  FiRandom {
         
         private long Seed;
 

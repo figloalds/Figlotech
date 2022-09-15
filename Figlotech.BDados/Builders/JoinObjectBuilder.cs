@@ -27,7 +27,7 @@ using System.Diagnostics;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.Builders {
-    public class JoinObjectBuilder : IJoinBuilder {
+    public sealed class JoinObjectBuilder : IJoinBuilder {
         private JoinDefinition _join = new JoinDefinition();
 
         private BuildParametersHelper _buildParameters;

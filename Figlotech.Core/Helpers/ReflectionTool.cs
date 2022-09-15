@@ -41,7 +41,7 @@ namespace Figlotech.Core.Helpers {
         }
     }
 
-    public class ReflectionTool {
+    public sealed class ReflectionTool {
 
         private static LenientDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new LenientDictionary<Type, MemberInfo[]>();
 
@@ -58,6 +58,37 @@ namespace Figlotech.Core.Helpers {
                 // It could be good to cache this, but I'm not sure yet.
                 return MembersCache[type];
             }
+        }
+
+        static Dictionary<(Type, Type), object> AttributedMembersCache = new Dictionary<(Type, Type), object>();
+        public static (MemberInfo Member, TAttribute Attribute)[] GetAttributedMemberValues<TAttribute>(Type t) where TAttribute : Attribute {
+            lock(AttributedMembersCache) {
+                if(!AttributedMembersCache.ContainsKey((t, typeof(TAttribute)))) {
+                    AttributedMembersCache[(t, typeof(TAttribute))] = InitAttributedMembersCache<TAttribute>(t);
+                }
+
+                return ((MemberInfo, TAttribute)[])AttributedMembersCache[(t, typeof(TAttribute))];
+            }
+        }
+
+        private static (MemberInfo, TAttribute)[] InitAttributedMembersCache<TAttribute>(Type t) where TAttribute : Attribute{
+            var fields = t.GetFields();
+            var properties = t.GetProperties();
+            var retv = new List<(MemberInfo, TAttribute)>();
+            for (int i = 0; i < fields.Length; i++) {
+                var att = fields[i].GetCustomAttribute<TAttribute>();
+                if (att != null) {
+                    retv.Add((fields[i], att));
+                }
+            }
+            for (int i = 0; i < properties.Length; i++) {
+                var att = properties[i].GetCustomAttribute<TAttribute>();
+                if (att != null) {
+                    retv.Add((properties[i], att));
+                }
+            }
+
+            return retv.ToArray();
         }
 
         private static IEnumerable<MemberInfo> CollectMembers(Type type) {
@@ -195,11 +226,9 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static List<MemberInfo> FieldsWithAttribute<T>(Type type) where T : Attribute {
-            var members = FieldsAndPropertiesOf(type);
-            var retv = members.Where((p) => p.GetCustomAttributes<T>().Count() > 0).ToList();
-            
-            return retv;
+            return GetAttributedMemberValues<T>(type).Select(x => x.Member).ToList();
         }
+
         public static void ForAttributedMembers<T>(Type type, Action<MemberInfo, T> act) where T : Attribute {
             var members = FieldsAndPropertiesOf(type);
             members.ForEach(m => {
@@ -250,9 +279,11 @@ namespace Figlotech.Core.Helpers {
             }
             return val;
         }
-        static Type ToUnderlying(Type t) {
-            if (t == null) return null;
-            return Nullable.GetUnderlyingType(t) ?? t;
+        static (bool IsNullable, Type UnderlyingType) ToUnderlying(Type t) {
+            if (t == null) return (true, null);
+            var underlyingFromNullable = Nullable.GetUnderlyingType(t);
+            
+            return (underlyingFromNullable != null, underlyingFromNullable ?? t);
         }
 
         public static object DbEvalValue(object value, Type t) {
@@ -260,7 +291,7 @@ namespace Figlotech.Core.Helpers {
                 return null;
             if (value == null)
                 return null;
-            t = ToUnderlying(t);
+            (_, t) = ToUnderlying(t);
             value = ResolveEnum(t, value);
 
             return value;
@@ -277,7 +308,7 @@ namespace Figlotech.Core.Helpers {
         public static object TryCast(object value, Type t) {
             try {
                 value = DbEvalValue(value, t);
-                t = ToUnderlying(t);
+                (var typeIsNullable, t) = ToUnderlying(t);
                 if (t == null)
                     return null;
 
@@ -396,11 +427,11 @@ namespace Figlotech.Core.Helpers {
                     return;
                 }
                 value = DbEvalValue(value, t);
-                t = ToUnderlying(t);
+                (var isNullable, t) = ToUnderlying(t);
                 if (t == null) return;
 
                 if (value == null) {
-                    if (t.IsValueType) {
+                    if (t.IsValueType || !isNullable) {
                         return;
                     } else {
                         if (pi != null) {
@@ -415,7 +446,6 @@ namespace Figlotech.Core.Helpers {
                     }
                     return;
                 }
-
 
                 if (t.IsGenericType) {
                     if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {

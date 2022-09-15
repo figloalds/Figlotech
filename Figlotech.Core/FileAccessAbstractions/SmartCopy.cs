@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public class FileData {
+    public sealed class FileData {
         public string RelativePath { get; set; }
         public long Date { get; set; }
         public long Length { get; set; }
@@ -54,7 +54,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
     }
 
-    public class CopyMirrorFileData
+    public sealed class CopyMirrorFileData
     {
         public string RelativePath { get; set; }
         public bool Changed { get; set; }
@@ -65,7 +65,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
     /// <summary>
     /// This is meant to provide easy in-program "robocopy" utility.
     /// </summary>
-    public class SmartCopy {
+    public sealed class SmartCopy {
 
         IFileSystem local;
         IFileSystem remote;

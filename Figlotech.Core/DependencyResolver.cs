@@ -6,7 +6,7 @@ namespace Figlotech.Core {
     /// <summary>
     /// This class is a Syntax suggar for Figlotech.Core.DependencySolver
     /// </summary>
-    public class DS : DependencyResolver {
+    public sealed class DS : DependencyResolver {
         
     }
     /// <summary>

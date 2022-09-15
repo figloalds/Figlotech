@@ -10,7 +10,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// FarKey = The key that relates your immediate type with the far one
     /// FarField = The far field from which to load information.
     /// </summary>
-    public class OverrideColumnNameOnWhere : Attribute {
+    public sealed class OverrideColumnNameOnWhere : Attribute {
         public string Name { get; set; }
         public OverrideColumnNameOnWhere(string name){
             this.Name = name;

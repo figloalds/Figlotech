@@ -27,14 +27,14 @@ namespace Figlotech.ECSEngine {
         List<IComponent> Components { get; }
     }
 
-    public class Component : IComponent {
+    public sealed class Component : IComponent {
         public String Name { get; private set; }
         public Component(String name) {
             this.Name = name;
         }
     }
 
-    public class FthEntity : IEntity {
+    public sealed class FthEntity : IEntity {
         public List<IComponent> Components { get; private set; } = new List<IComponent>();
         public IComponent this[string s] {
             get {

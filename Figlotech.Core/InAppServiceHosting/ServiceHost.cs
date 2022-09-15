@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.InAppServiceHosting
 {
-    public class ServiceHost
+    public sealed class ServiceHost
     {
         public static ServiceHost Default { get; set; } = new ServiceHost();
         

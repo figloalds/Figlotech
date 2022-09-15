@@ -8,7 +8,7 @@ namespace System {
     /// <para>ObjectNotFoundException means that the user is trying to access something that doesn't exist.</para>
     /// </summary>
     [Serializable]
-    public class FailedExpectationException : EndUserGeneratedException {
+    public sealed class FailedExpectationException : EndUserGeneratedException {
 
         public FailedExpectationException(string message) : base(417, message) {
         }

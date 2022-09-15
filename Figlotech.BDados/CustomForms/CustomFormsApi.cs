@@ -11,7 +11,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.CustomForms {
-    public class CustomFormsApi
+    public sealed class CustomFormsApi
     {
         public static String Prefix = "ibcf";
         public static void CheckStructure(IRdbmsDataAccessor da, CustomForm form) {

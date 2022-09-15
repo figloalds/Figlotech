@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Figlotech.BDados.Builders
 {
-    public class Qh
+    public sealed class Qh
     {
         public Qh() {
             

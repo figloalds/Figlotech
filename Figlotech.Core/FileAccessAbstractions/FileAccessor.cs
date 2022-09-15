@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public class FileAccessor : IFileSystem {
+    public sealed class FileAccessor : IFileSystem {
 
         private static int gid = 0;
         private static int myid = ++gid;
@@ -473,6 +473,46 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (File.Exists(WorkingDirectory)) {
                 File.SetAttributes(WorkingDirectory, File.GetAttributes(WorkingDirectory) & ~FileAttributes.Hidden);
+            }
+        }
+
+        public async Task<string> ReadAllTextAsync(string relative) {
+            if(!Exists(relative)) {
+                return string.Empty;
+            }
+            using (var fstream = Open(relative, FileMode.Open, FileAccess.Read)) {
+                using (var reader = new StreamReader(fstream)) {
+                    return await reader.ReadToEndAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        public async Task<byte[]> ReadAllBytesAsync(string relative) {
+            if (!Exists(relative)) {
+                return new byte[0];
+            }
+            using (var fstream = Open(relative, FileMode.Open, FileAccess.Read)) {
+                using (var ms = new MemoryStream()) {
+                    await fstream.CopyToAsync(ms).ConfigureAwait(false);
+                    ms.Seek(0, SeekOrigin.Begin);
+                    return ms.ToArray();
+                }
+            }
+        }
+
+        public async Task WriteAllTextAsync(string relative, string content) {
+            using (var fstream = Open(relative, FileMode.Create, FileAccess.Write)) {
+                using (var writer = new StreamWriter(fstream)) {
+                    await writer.WriteAsync(content).ConfigureAwait(false);
+                }
+            }
+        }
+
+        public async Task WriteAllBytesAsync(string relative, byte[] content) {
+            using (var fstream = Open(relative, FileMode.Create, FileAccess.Write)) {
+                using (var ms = new MemoryStream(content)) {
+                    await ms.CopyToAsync(fstream).ConfigureAwait(false);
+                }
             }
         }
     }

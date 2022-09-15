@@ -9,7 +9,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
     /// Calling this class with the same parameters will output
     /// the exact same numbers every time.
     /// </summary>
-    public sealed class LegacyCrossRandom {
+    public sealed class  LegacyCrossRandom {
         private static long[] Primes = new long[] {
             32416187567, 32416188223, 32416188809, 32416189391,
             32416187627, 32416188227, 32416188839, 32416189459,

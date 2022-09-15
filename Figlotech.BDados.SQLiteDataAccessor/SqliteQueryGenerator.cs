@@ -27,7 +27,7 @@ using Figlotech.Core;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
-    public class SqliteQueryGenerator : IQueryGenerator {
+    public sealed class SqliteQueryGenerator : IQueryGenerator {
 
         public IQueryBuilder CreateDatabase(string schemaName) {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");

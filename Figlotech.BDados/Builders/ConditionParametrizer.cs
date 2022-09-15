@@ -20,7 +20,7 @@ using Figlotech.Core;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.Builders {
-    public class ConditionParametrizer : QueryBuilder {
+    public sealed class ConditionParametrizer : QueryBuilder {
         int i;
         String RandomId {
             get {

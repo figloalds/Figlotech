@@ -2,9 +2,10 @@
 
 using Figlotech.Core.Interfaces;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.BusinessModel {
-    public class DataLoadContext {
+    public sealed class DataLoadContext {
         public IDataAccessor DataAccessor { get; set; }
         public bool IsAggregateLoad { get; set; }
         public object ContextTransferObject { get; set; }
@@ -21,11 +22,11 @@ namespace Figlotech.Core.BusinessModel {
 
         string RunValidations();
 
-        bool ValidateAndPersist(string iaToken);
+        Task<bool> ValidateAndPersistAsync(string iaToken);
 
-        void OnBeforePersist();
+        Task OnBeforePersistAsync();
 
-        void OnAfterPersist();
+        Task OnAfterPersistAsync();
 
         void OnAfterLoad(DataLoadContext ctx);
         

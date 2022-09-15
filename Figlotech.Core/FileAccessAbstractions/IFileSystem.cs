@@ -51,6 +51,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         void WriteAllBytes(string relative, byte[] content);
 
+        Task<string> ReadAllTextAsync(string relative);
+
+        Task<byte[]> ReadAllBytesAsync(string relative);
+
+        Task WriteAllTextAsync(string relative, string content);
+
+        Task WriteAllBytesAsync(string relative, byte[] content);
+
         Stream Open(String relative, FileMode fileMode, FileAccess fileAccess);
 
         DateTime? GetLastModified(string relative);

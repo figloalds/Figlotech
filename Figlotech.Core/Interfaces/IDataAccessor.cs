@@ -6,6 +6,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.Interfaces {
     public enum OrderingType {
@@ -13,7 +14,7 @@ namespace Figlotech.Core.Interfaces {
         Desc
     }
 
-    public class LoadAllArgs<T> where T : IDataObject, new() {
+    public sealed class LoadAllArgs<T> where T : IDataObject, new() {
         public Expression<Func<T, bool>> Conditions { get; private set; } = null;
         public int? RowSkip { get; private set; } = null;
         public int? RowLimit { get; private set; } = null;
@@ -76,7 +77,7 @@ namespace Figlotech.Core.Interfaces {
         }
     }
 
-    public class IntermediateLoadAllArgs<T> where T : IDataObject, new() {
+    public sealed class IntermediateLoadAllArgs<T> where T : IDataObject, new() {
         public IntermediateLoadAllArgs(IDataAccessor dataAccessor, LoadAllArgs<T> largs) {
             DataAccessor = dataAccessor;
             LoadAllArgs = largs;
@@ -96,7 +97,7 @@ namespace Figlotech.Core.Interfaces {
         }
     }
 
-    public class LoadAll {
+    public sealed class LoadAll {
 
         public static LoadAllArgs<T> From<T>() where T : IDataObject, new() {
             return new LoadAllArgs<T>();

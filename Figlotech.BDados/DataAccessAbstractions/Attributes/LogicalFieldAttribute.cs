@@ -21,7 +21,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This attribute won't ever work until C# allows compiled functions in Attributes :\ 
     /// </summary>
-    public class LogicalFieldAttribute : Attribute
+    public sealed class LogicalFieldAttribute : Attribute
     {
         public Func<Object> LogicalFunction;
         public LogicalFieldAttribute(Func<Object> logicalFunction)

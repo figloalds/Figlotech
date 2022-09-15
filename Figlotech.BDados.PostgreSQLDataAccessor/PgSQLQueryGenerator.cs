@@ -23,7 +23,7 @@ using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
-    public class PgSQLQueryGenerator : IQueryGenerator {
+    public sealed class PgSQLQueryGenerator : IQueryGenerator {
 
         public IQueryBuilder CreateDatabase(string schemaName) {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");

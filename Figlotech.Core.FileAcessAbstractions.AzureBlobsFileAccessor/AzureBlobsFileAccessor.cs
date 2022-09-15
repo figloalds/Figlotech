@@ -11,13 +11,13 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public class BlobMetaData {
+    public sealed class BlobMetaData {
         public string Relative;
         public long Length;
         public DateTime LastWrite;
     }
 
-    public class BlobsCredentials {
+    public sealed class BlobsCredentials {
         public string AccountName { get; set; }
         public string AccountKey { get; set; }
 
@@ -26,7 +26,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
     }
 
-    public class AzureBlobsFileAccessor : IFileSystem {
+    public sealed class AzureBlobsFileAccessor : IFileSystem {
 
         private static int gid = 0;
         private static int myid = ++gid;
@@ -281,43 +281,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return true;
         }
         public String ReadAllText(String relative) {
-            FixRelative(ref relative);
-            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-            return blob.DownloadTextAsync().Result;
+            return ReadAllTextAsync(relative).GetAwaiter().GetResult();
         }
 
         public void WriteAllText(String relative, String content) {
-            FixRelative(ref relative);
-            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-            blob.UploadTextAsync(content).Wait();
-            blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
-            blob.SetPropertiesAsync().Wait();
+            WriteAllTextAsync(relative,content).GetAwaiter().GetResult();
         }
 
         public byte[] ReadAllBytes(String relative) {
-            FixRelative(ref relative);
-            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-            byte[] bytes = new byte[4096];
-            using (MemoryStream ms = new MemoryStream()) {
-                using (var stream = blob.OpenReadAsync().Result) {
-                    int bytesRead = 0;
-                    do {
-                        bytesRead = stream.Read(bytes, 0, bytes.Length);
-                        ms.Write(bytes, 0, bytesRead);
-                    } while (bytesRead > 0);
-
-                    return ms.ToArray();
-                }
-            }
+            return ReadAllBytesAsync(relative).GetAwaiter().GetResult();
         }
 
         public void WriteAllBytes(String relative, byte[] content) {
-            FixRelative(ref relative);
-            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-
-            blob.UploadFromByteArrayAsync(content, 0, content.Length).Wait();
-            blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
-            blob.SetPropertiesAsync().Wait();
+            WriteAllBytesAsync(relative, content).GetAwaiter().GetResult();
         }
 
         public bool Delete(String relative) {
@@ -380,6 +356,46 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void Show(string relative) {
             // Blob accessor doesn't do that
+        }
+
+        public async Task<string> ReadAllTextAsync(string relative) {
+            FixRelative(ref relative);
+            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
+            return await blob.DownloadTextAsync();
+        }
+
+        public async Task<byte[]> ReadAllBytesAsync(string relative) {
+            FixRelative(ref relative);
+            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
+            byte[] bytes = new byte[4096];
+            using (MemoryStream ms = new MemoryStream()) {
+                using (var stream = await blob.OpenReadAsync()) {
+                    int bytesRead = 0;
+                    do {
+                        bytesRead = await stream.ReadAsync(bytes, 0, bytes.Length);
+                        ms.Write(bytes, 0, bytesRead);
+                    } while (bytesRead > 0);
+
+                    return ms.ToArray();
+                }
+            }
+        }
+
+        public async Task WriteAllTextAsync(string relative, string content) {
+            FixRelative(ref relative);
+            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
+            await blob.UploadTextAsync(content).ConfigureAwait(false);
+            blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
+            await blob.SetPropertiesAsync().ConfigureAwait(false);
+        }
+
+        public async Task WriteAllBytesAsync(string relative, byte[] content) {
+            FixRelative(ref relative);
+            CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
+
+            await blob.UploadFromByteArrayAsync(content, 0, content.Length).ConfigureAwait(false);
+            blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
+            await blob.SetPropertiesAsync().ConfigureAwait(false);
         }
     }
 }

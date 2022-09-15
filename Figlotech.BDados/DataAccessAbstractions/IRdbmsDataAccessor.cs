@@ -13,6 +13,7 @@ using System.IO;
 using Figlotech.Core;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Data;
+using System.Threading;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     
@@ -27,6 +28,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int DefaultQueryLimit { get; set; }
         void Access(Action<BDadosTransaction> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
         T Access<T>(Func<BDadosTransaction, T> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        Task AccessAsync(Func<BDadosTransaction, Task> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
 
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         
@@ -48,7 +51,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IRdbmsDataAccessor Fork();
 
-        BDadosTransaction CreateNewTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
+        BDadosTransaction CreateNewTransaction(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null);
 
         void SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);
@@ -57,14 +60,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IEnumerable<IDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream);
 
-
         List<IDataObject> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
 
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
+        Task<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
         List<T> Query<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
         IEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new();
         int Execute(BDadosTransaction transaction, IQueryBuilder Query);
+        IAsyncEnumerable<T> FetchAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
+        Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
         bool SaveItem(BDadosTransaction transaction, IDataObject objeto);
@@ -75,7 +80,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();
 
         T ForceExist<T>(BDadosTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
+        Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
+        IAsyncEnumerable<T> FetchAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
 
         bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new();
@@ -84,6 +91,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new();
         bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new();
 
+        Task<List<T>> AggregateLoadAsync<T>(
+            BDadosTransaction transaction,
+            LoadAllArgs<T> args = null) where T : IDataObject, new();
         List<T> AggregateLoad<T>(
             BDadosTransaction transaction, 
             LoadAllArgs<T> args = null) where T : IDataObject, new();

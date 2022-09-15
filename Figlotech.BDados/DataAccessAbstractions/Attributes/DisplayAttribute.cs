@@ -44,7 +44,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// Tells tools how to display this field on a screen.
     /// can be used to generate forms or tables from dataobject metadata
     /// </summary>
-    public class DisplayAttribute : Attribute
+    public sealed class DisplayAttribute : Attribute
     {
         public String Name;
         public bool CanFilterBy;

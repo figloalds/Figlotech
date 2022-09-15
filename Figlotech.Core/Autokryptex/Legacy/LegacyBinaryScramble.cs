@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex.Legacy {
-    public class LegacyBinaryScramble : IEncryptionMethod {
+    public sealed class LegacyBinaryScramble : IEncryptionMethod {
         LegacyCrossRandom cr;
         int instancePin;
         public LegacyBinaryScramble(int pin) {

@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
-    public class Conditions<T> {
+    public sealed class Conditions<T> {
         public Expression expression { get; private set; }
         public Conditions(Expression<Func<T, bool>> expr) {
             expression = expr.Body;

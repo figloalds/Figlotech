@@ -13,7 +13,7 @@ using Figlotech.Core.Autokryptex.Legacy;
 namespace Figlotech.BDados.MySqlDataAccessor
 {
 
-    public class MySqlPluginConfiguration {
+    public sealed class MySqlPluginConfiguration {
         public String Host { get; set; }
         public String Database { get; set; }
         public String User { get; set; }

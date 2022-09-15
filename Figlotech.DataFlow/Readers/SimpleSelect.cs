@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.DataFlow.Readers
 {
-    public sealed class SimpleSelect : DataTransform {
+    public sealed class  SimpleSelect : DataTransform {
 
         Selector[] Selectors;
 

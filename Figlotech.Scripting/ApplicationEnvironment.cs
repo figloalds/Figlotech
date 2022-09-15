@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Figlotech.Scripting
 {
-    public class ApplicationEnvironment
+    public sealed class ApplicationEnvironment
     {
     }
 }

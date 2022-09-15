@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex {
-    public class BinaryNegativation : IEncryptionMethod {
+    public sealed class BinaryNegativation : IEncryptionMethod {
         public BinaryNegativation() {
         }
 

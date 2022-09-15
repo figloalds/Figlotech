@@ -8,7 +8,7 @@ using System.Linq.Expressions;
 using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class CacheableDataAccessor : IDataAccessor {
+    public sealed class CacheableDataAccessor : IDataAccessor {
         private IDataAccessor DataAccessor { get; set; }
         bool CacheEverything { get; set; }
         private SelfInitializerDictionary<Type, LenientDictionary<String, IDataObject>> Cache { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, IDataObject>>((type)=> new LenientDictionary<string, IDataObject>());

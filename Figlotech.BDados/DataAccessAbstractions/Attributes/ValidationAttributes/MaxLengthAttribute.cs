@@ -25,7 +25,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This is an example of ValidationAttribute
     /// </summary>
-    public class MaxLengthAttribute : ValidationAttribute
+    public sealed class MaxLengthAttribute : ValidationAttribute
     {
         int MaxLength;
         public MaxLengthAttribute(int value) {

@@ -5,7 +5,7 @@ using System;
 using System.Linq;
 
 namespace Figlotech.Core {
-    public class HourlySyncCode {
+    public sealed class HourlySyncCode {
         public static HourlySyncCode Generate(String Password = null, DateTime? KeyMoment = null) {
             return Generate(KeyMoment??Fi.Tech.GetUtcTime(), Password);
         }

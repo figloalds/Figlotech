@@ -14,7 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Builders {
-    public class DynamicList : List<dynamic> {
+    public sealed class DynamicList : List<dynamic> {
         public List<T> Qualify<T>() {
             try {
                 var json = JsonConvert.SerializeObject(this);

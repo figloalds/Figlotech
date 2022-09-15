@@ -16,7 +16,7 @@ namespace System
     public interface IAccumulator<T> {
         void Apply(T element, IEnumerable<T> elements);
     }
-    public class Accumulators {
+    public sealed class Accumulators {
         public static SumAccumulator<T> Sum<T>(MemberInfo field) {
             return new SumAccumulator<T>(field);
         }
@@ -27,7 +27,7 @@ namespace System
             return new MaxAccumulator<T, TResult>(field);
         }
 
-        public class SumAccumulator<T> : IAccumulator<T> {
+        public sealed class SumAccumulator<T> : IAccumulator<T> {
             MemberInfo member { get; set; }
             public SumAccumulator(MemberInfo field) {
                 member = field;
@@ -38,7 +38,7 @@ namespace System
                 ReflectionTool.SetMemberValue(member, element, Convert.ChangeType(value, ReflectionTool.GetTypeOf(member)));
             }
         }
-        public class MinAccumulator<T, TResult> : IAccumulator<T> {
+        public sealed class MinAccumulator<T, TResult> : IAccumulator<T> {
             MemberInfo member { get; set; }
             public MinAccumulator(MemberInfo field) {
                 member = field;
@@ -49,7 +49,7 @@ namespace System
                 ReflectionTool.SetMemberValue(member, element, Convert.ChangeType(value, typeof(TResult)));
             }
         }
-        public class MaxAccumulator<T, TResult> : IAccumulator<T> {
+        public sealed class MaxAccumulator<T, TResult> : IAccumulator<T> {
             MemberInfo member { get; set; }
             public MaxAccumulator(MemberInfo field) {
                 member = field;
@@ -99,6 +99,14 @@ namespace System
                     yield return item;
                 }
             }
+        }
+
+        public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> self) {
+            List<T> retv = new List<T>();
+            await foreach (var item in self) {
+                retv.Add(item);
+            }
+            return retv;
         }
 
         public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params (string type, Expression<Func<T, object>> exp)[] accumulators) where T : new() {

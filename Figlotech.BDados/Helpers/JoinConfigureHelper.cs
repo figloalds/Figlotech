@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers
 {
-    public class JoinConfigureHelper
+    public sealed class JoinConfigureHelper
     {
         internal JoinDefinition _join;
         internal int _index;

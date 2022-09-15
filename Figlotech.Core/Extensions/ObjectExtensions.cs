@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace System
 {
-    public class ProgressEvent {
+    public sealed class ProgressEvent {
         public long Current { get; set; }
         public long Total { get; set; }
 

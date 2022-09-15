@@ -2,7 +2,7 @@
 using Figlotech.Core.I18n;
 
 namespace Figlotech.Core {
-    public class BDadosEnglishStringsProvider : IBDadosStringsProvider {
+    public sealed class BDadosEnglishStringsProvider : IBDadosStringsProvider {
         public string AUTH_USER_MAX_ATTEMPTS_EXCEEDED => "User login attempt exceeded, please wait {0} minute(s).";
         public string AUTH_USER_NOT_FOUND => "User is not registered.";
         public string AUTH_PASSWORD_INCORRECT => "Password provided is incorrect";

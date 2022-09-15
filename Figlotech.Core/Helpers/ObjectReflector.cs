@@ -6,7 +6,7 @@ using System.Linq;
 using System.Reflection;
 
 namespace Figlotech.Core.Helpers {
-    public class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>>, IReadOnlyDictionary<MemberInfo, object>
+    public sealed class ObjectReflector : IEnumerable<KeyValuePair<MemberInfo, object>>, IReadOnlyDictionary<MemberInfo, object>
     {
         internal object target;
 

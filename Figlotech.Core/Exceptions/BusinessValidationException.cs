@@ -10,7 +10,7 @@ namespace System {
     /// <para>BusinessValidationException means that the user request failed business validation.</para>
     /// </summary>
     [Serializable]
-    public class BusinessValidationException : EndUserGeneratedException {
+    public sealed class BusinessValidationException : EndUserGeneratedException {
         public ValidationErrors Errors;
 
         public static string ErrsToStr(ValidationErrors errors) {

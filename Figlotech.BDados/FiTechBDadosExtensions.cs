@@ -8,13 +8,16 @@ using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class Settings : Dictionary<String, Object> { }
+    public sealed class Settings : Dictionary<String, Object> { }
 
     /// <summary>
     /// This is an utilitarian class, it provides quick static logic 
@@ -146,6 +149,36 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
                 yield return (T) refl.Retrieve();
+            }
+            yield break;
+        }
+
+        public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
+            var refl = new ObjectReflector();
+            var existingKeys = new string[reader.FieldCount];
+            for (int i = 0; i < reader.FieldCount; i++) {
+                var name = reader.GetName(i);
+                if (name != null) {
+                    if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
+                        existingKeys[i] = name;
+                    }
+                }
+            }
+            while (await reader.ReadAsync(cancellationToken)) {
+                T obj = new T();
+                refl.Slot(obj);
+                for (int i = 0; i < existingKeys.Length; i++) {
+                    if (existingKeys[i] != null) {
+                        try {
+                            var o = reader.GetValue(i);
+                            refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
+                        } catch (Exception x) {
+                            Debugger.Break();
+                            //throw x;
+                        }
+                    }
+                }
+                yield return (T)refl.Retrieve();
             }
             yield break;
         }
@@ -284,7 +317,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Fi.Tech.WriteLine("Error in SaveRecordSet" + x.Message);
             }
         }
-        //        public class CopyProgressReport {
+        //        public sealed class CopyProgressReport {
         //            int min = 0;
         //            int max = 1;
         //            int current = 0;

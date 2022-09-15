@@ -4,7 +4,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Aggregates a field from a directly related dataobject
     /// </summary>
-    public class AggregateFieldAttribute : AbstractAggregationAttribute {
+    public sealed class AggregateFieldAttribute : AbstractAggregationAttribute {
         public string RemoteField;
         public string ObjectKey;
         public Type RemoteObjectType;

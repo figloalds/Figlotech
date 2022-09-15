@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using Figlotech.Core;
 
 namespace Figlotech.BDados.CustomForms {
-    public class CustomObject
+    public sealed class CustomObject
     {
 
         IRdbmsDataAccessor DataAccessor;

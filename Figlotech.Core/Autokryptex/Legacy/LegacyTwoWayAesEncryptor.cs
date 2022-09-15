@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods.Legacy {
 
-    public class TwoWayAesEncryptor : IEncryptionMethod {
+    public sealed class TwoWayAesEncryptor : IEncryptionMethod {
         string instanceEncodeSecret;
         string instanceDecodeSecret;
         int instancePin;

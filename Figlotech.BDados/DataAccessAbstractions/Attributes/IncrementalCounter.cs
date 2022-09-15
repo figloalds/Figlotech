@@ -22,7 +22,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Tells IRdbmsDataAccessors that the decorated field should be a primary key in the database.
     /// </summary>
-    public class IncrementalCounter : Attribute
+    public sealed class IncrementalCounter : Attribute
     {
         public IncrementalCounter()
         {

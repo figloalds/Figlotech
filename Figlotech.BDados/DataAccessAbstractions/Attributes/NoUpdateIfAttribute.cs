@@ -19,7 +19,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This attribute could be AMAZING if C# allowed functions in attributes.
     /// </summary>
-    public class NoUpdateIfAttribute : Attribute
+    public sealed class NoUpdateIfAttribute : Attribute
     {
         public Func<bool> Condition;
         public NoUpdateIfAttribute(Func<bool> condition) {

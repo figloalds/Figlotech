@@ -7,7 +7,7 @@
 //using System.IO;
 
 //namespace Figlotech.Core.FileAcessAbstractions {
-//    public class MixedFileAccessor : IFileSystem {
+//    public sealed class MixedFileAccessor : IFileSystem {
 
 //        List<FileAccessor> accessors = new List<FileAccessor>();
 //        public MixedFileAccessor(params FileAccessor[] inputAccessors) {

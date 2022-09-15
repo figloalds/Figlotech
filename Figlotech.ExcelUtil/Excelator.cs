@@ -11,10 +11,10 @@ using System.IO;
 using System.Threading.Tasks;
 
 namespace Figlotech.ExcelUtil {
-    public class ReadingStoppedException : Exception {
+    public sealed class ReadingStoppedException : Exception {
         
     }
-    public class ExcelatorLineReader {
+    public sealed class ExcelatorLineReader {
         int line;
         internal bool stopReadingIssued;
         Excelator excelator;
@@ -51,7 +51,7 @@ namespace Figlotech.ExcelUtil {
         }
     }
     
-    public class ExcelatorRowRangeWriter {
+    public sealed class ExcelatorRowRangeWriter {
         int row;
         int ColFrom;
         int ColTo;
@@ -134,7 +134,7 @@ namespace Figlotech.ExcelUtil {
 
     }
 
-    public class ExcelatorRowWriter {
+    public sealed class ExcelatorRowWriter {
         internal int Row;
         internal Excelator excelator;
         internal int offsetCols = 0;
@@ -274,7 +274,7 @@ namespace Figlotech.ExcelUtil {
 
     }
 
-    public class Excelator {
+    public sealed class Excelator {
         ExcelPackage _pack { get; set; }
         ExcelWorksheet _currentWorkSheet { get; set; }
         String _filePath { get; set; }
@@ -504,6 +504,9 @@ namespace Figlotech.ExcelUtil {
 
         public void Write(Action<ExcelatorRowWriter> lineFun, int skipLines = 0) {
             lineFun(new ExcelatorRowWriter(1 + skipLines, this));
+        }
+        public async Task Write(Func<ExcelatorRowWriter, Task> lineFun, int skipLines = 0) {
+            await lineFun(new ExcelatorRowWriter(1 + skipLines, this));
         }
 
         public ExcelatorRowWriter Row(int r) {

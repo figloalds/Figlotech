@@ -15,7 +15,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.Core {
-    public class With<T> {
+    public sealed class With<T> {
         T value;
         public With(T value) {
             this.value = value;
@@ -30,7 +30,7 @@ namespace Figlotech.Core {
     /// for the rest of Figlotech Tools to operate
     /// </summary>
     /// 
-    public class Fi {
+    public sealed class Fi {
 
         private static int Init() {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -86,6 +86,11 @@ namespace Figlotech.Core {
 
         public FnVal<T> V<T>(Func<T> fn) {
             return new FnVal<T>(fn);
+        }
+
+        public static void NullCheck(object obj, string msg) {
+            if (obj == null)
+                throw new BusinessValidationException(msg);
         }
 
         public enum DataUnitType {

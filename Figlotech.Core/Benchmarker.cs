@@ -160,7 +160,7 @@ namespace System {
         }
     }
 
-    internal class TimeMark {
+    internal sealed class TimeMark {
         public DateTime Timestamp { get; set; }
         public TimeSpan Duration { get; set; }
         public String Name { get; set; }
@@ -175,7 +175,7 @@ namespace System {
         }
     }
 
-    public class Benchmarker {
+    public sealed class Benchmarker {
         internal String myName;
         internal List<TimeMark> marks = new List<TimeMark>();
         public bool EnabledInProduction { get; private set; }

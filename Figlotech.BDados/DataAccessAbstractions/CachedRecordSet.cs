@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class CachedRecordSet<T> : RecordSet<T> where T: IDataObject, new() {
+    public sealed class CachedRecordSet<T> : RecordSet<T> where T: IDataObject, new() {
 
         public CachedRecordSet() {
 

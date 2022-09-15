@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Figlotech.Core
 {
-    public class BasicMemoryCache
+    public sealed class BasicMemoryCache
     {
         static int idGen = 0;
         int myId = ++idGen;

@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex {
-    public class TheAutoEncryptorV1 : IEncryptionMethod {
+    public sealed class TheAutoEncryptorV1 : IEncryptionMethod {
         FiRandom[] rands = new FiRandom[16];
         byte[,] map = new byte[16, 256];
 

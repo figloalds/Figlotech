@@ -25,7 +25,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This is an example of ValidationAttribute
     /// </summary>
-    public class MinLengthAttribute : ValidationAttribute
+    public sealed class MinLengthAttribute : ValidationAttribute
     {
         int MinLength;
         public MinLengthAttribute(int value) {

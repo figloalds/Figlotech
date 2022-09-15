@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Data
 {
-    public class SimpleDatabaseAccessorQueryHelper<TConnection, TCommand, TReader>
+    public sealed class SimpleDatabaseAccessorQueryHelper<TConnection, TCommand, TReader>
         where TCommand : IDbCommand
         where TReader : IDataReader
         where TConnection : IDbConnection
@@ -199,7 +199,7 @@ namespace Figlotech.Data
         }
     }
 
-    public class SimpleDatabaseAccessor : SimpleDatabaseAccessorBase<DbConnection, DbCommand, DbDataReader>
+    public sealed class SimpleDatabaseAccessor : SimpleDatabaseAccessorBase<DbConnection, DbCommand, DbDataReader>
     {
         public SimpleDatabaseAccessor(Func<DbConnection> howToGetAConnection) : base(howToGetAConnection) {
         }

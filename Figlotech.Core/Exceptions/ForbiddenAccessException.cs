@@ -8,7 +8,7 @@ namespace System {
     /// <para>ObjectNotFoundException means that the user is trying to access something that doesn't exist.</para>
     /// </summary>
     [Serializable]
-    public class ForbiddenAccessException : EndUserGeneratedException {
+    public sealed class ForbiddenAccessException : EndUserGeneratedException {
 
         public ForbiddenAccessException(string message) : base(403, message) {
         }

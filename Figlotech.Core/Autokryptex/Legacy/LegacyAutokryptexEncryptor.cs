@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.Legacy
 {
-    public class LegacyAutokryptexEncryptor : IEncryptionMethod
+    public sealed class LegacyAutokryptexEncryptor : IEncryptionMethod
     {
         AggregateEncryptor encryptor = new AggregateEncryptor();
 

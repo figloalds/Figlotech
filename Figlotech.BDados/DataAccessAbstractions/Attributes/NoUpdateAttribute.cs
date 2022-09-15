@@ -19,7 +19,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Tells BDados DataAccessors to ignore this field when persisting updates
     /// </summary>
-    public class NoUpdateAttribute : Attribute
+    public sealed class NoUpdateAttribute : Attribute
     {
         public NoUpdateAttribute() { }
     }

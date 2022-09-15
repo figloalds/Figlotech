@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions
 {
-    public class ProcedureResult
+    public sealed class ProcedureResult
     {
 
     }

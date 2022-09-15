@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Figlotech.Core.InAppServiceHosting.LiteWebHost
 {
-    public class LiteWebRequest
+    public sealed class LiteWebRequest
     {
         public string RequestUri { get; set; }
         public Dictionary<string,string> Query { get; set; }

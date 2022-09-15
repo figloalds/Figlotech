@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents
 {
-    public class DataCreatedEvent<T> : DomainEvent
+    public sealed class DataCreatedEvent<T> : DomainEvent
     {
         public T Value;
         public DataCreatedEvent(T data) {

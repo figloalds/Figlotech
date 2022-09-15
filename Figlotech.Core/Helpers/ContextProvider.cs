@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers
 {
-    public class ContextProvider : IContextProvider {
+    public sealed class ContextProvider : IContextProvider {
         Dictionary<String, object> obj = new Dictionary<string, object>();
 
         public object Get(string name) {

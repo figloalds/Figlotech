@@ -10,7 +10,7 @@ using System.Reflection;
 using Figlotech.Core;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
-    public class SqlitePlugin : IRdbmsPluginAdapter {
+    public sealed class SqlitePlugin : IRdbmsPluginAdapter {
         public SqlitePlugin(SqlitePluginConfiguration cfg) {
             Config = cfg;
         }

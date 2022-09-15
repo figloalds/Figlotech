@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex
 {
-    public class SafeDataPayload
+    public sealed class SafeDataPayload
     {
         public string Type { get; set; }
         public byte[] Hash { get; set; }
@@ -24,7 +24,7 @@ namespace Figlotech.Core.Autokryptex
         [JsonIgnore]
         internal string RID { get; set; }
     }
-    public class SafeObjectStorage
+    public sealed class SafeObjectStorage
     {
         IFileSystem fileSystem { get; set; }
         IEncryptionMethod dataEncryptor { get; set; }

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class Relation
+    public sealed class Relation
     {
         public int ChildIndex;
         public int ParentIndex;

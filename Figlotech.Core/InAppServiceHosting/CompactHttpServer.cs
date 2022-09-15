@@ -33,7 +33,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
     }
 
-    public class GenericInlineHandler : ApiHandler
+    public sealed class GenericInlineHandler : ApiHandler
     {
         Func<string, string, bool> CanHandle { get; set; }
         Action<string, Dictionary<string, string> , Dictionary<string, string>, byte[], Stream> DoHandle { get; set; }
@@ -77,7 +77,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
     }
 
-    public class SelfHost
+    public sealed class SelfHost
     {
 
         public static void SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {

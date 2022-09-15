@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public class CoroutineEnumerator<T> : IEnumerator<T>
+    public sealed class CoroutineEnumerator<T> : IEnumerator<T>
     {
         CoroutineChannel<T> _channel;
         public CoroutineEnumerator(CoroutineChannel<T> channel) {
@@ -41,7 +41,7 @@ namespace Figlotech.Core
         }
     }
 
-    public class CoroutineChannel<T> : IEnumerable<T>
+    public sealed class CoroutineChannel<T> : IEnumerable<T>
     {
         private Queue<T> AwaitingOutput = new Queue<T>();
         private Queue<TaskCompletionSource<T>> Next = new Queue<TaskCompletionSource<T>>();

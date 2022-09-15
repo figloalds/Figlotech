@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 */
 
 namespace Figlotech.Core.Autokryptex.Legacy {
-    public class BinaryBlur : IEncryptionMethod {
+    public sealed class BinaryBlur : IEncryptionMethod {
         public BinaryBlur() {
         }
 

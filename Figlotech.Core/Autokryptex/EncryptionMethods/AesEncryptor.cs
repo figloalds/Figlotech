@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods {
 
-    public class AesEncryptor : IEncryptionMethod {
+    public sealed class AesEncryptor : IEncryptionMethod {
         String instanceSecret;
         int instancePin;
         FiRandom cr;

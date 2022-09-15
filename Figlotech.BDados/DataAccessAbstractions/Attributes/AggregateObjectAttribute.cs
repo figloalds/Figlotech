@@ -5,7 +5,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// Uses the specified relation to load an entire other dataobject into 
     /// the annotated field/property
     /// </summary>
-    public class AggregateObjectAttribute : AbstractAggregationAttribute {
+    public sealed class AggregateObjectAttribute : AbstractAggregationAttribute {
         public String ObjectKey;
 
         public AggregateObjectAttribute(string keyField) {

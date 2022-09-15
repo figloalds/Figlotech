@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public sealed class JoiningTable
+    public sealed class  JoiningTable
     {
         public JoiningTable() { }
         public Type ValueObject = null;

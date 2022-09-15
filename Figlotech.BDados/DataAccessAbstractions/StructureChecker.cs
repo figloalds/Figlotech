@@ -20,7 +20,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         ForeignKey
     }
 
-    public class ScStructuralLink {
+    public sealed class ScStructuralLink {
         private String _linkName;
 
         public string TABLE_NAME { get => Table; set => Table = value; }
@@ -68,7 +68,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class DropFkScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class DropFkScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
 
         public DropFkScAction(
@@ -87,7 +87,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class DropPkScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class DropPkScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _constraint;
 
@@ -107,7 +107,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return $"Drop primary {_table}.{_constraint}";
         }
     }
-    public class DropIdxScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class DropIdxScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _constraint;
 
@@ -128,7 +128,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
     }
-    public class DropUkScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class DropUkScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _constraint;
 
@@ -150,7 +150,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     }
 
-    public class CreateIndexScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class CreateIndexScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
 
         bool _unique;
@@ -180,7 +180,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class CreatePrimaryKeyScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class CreatePrimaryKeyScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
 
         int _length;
@@ -201,7 +201,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class CreateForeignKeyScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class CreateForeignKeyScAction : AbstractIStructureCheckNecessaryAction {
         ScStructuralLink keyInfo;
 
         public CreateForeignKeyScAction(
@@ -226,7 +226,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class ExecutePugeForFkScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class ExecutePugeForFkScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
         String _refTable;
@@ -256,7 +256,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class CreateColumnScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class CreateColumnScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
         MemberInfo _columnMember;
@@ -279,7 +279,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class RenameTableScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class RenameTableScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _newName;
 
@@ -300,7 +300,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class RenameColumnScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class RenameColumnScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
         MemberInfo _columnMember;
@@ -325,7 +325,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class UpdateExNullableColumnScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class UpdateExNullableColumnScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         String _column;
         object _defaultValue;
@@ -347,7 +347,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class DropColumnScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class DropColumnScAction : AbstractIStructureCheckNecessaryAction {
         String _table;
         FieldAttribute _column;
         Type _type;
@@ -383,7 +383,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class AlterColumnDataTypeScAction : AbstractIStructureCheckNecessaryAction
+    public sealed class AlterColumnDataTypeScAction : AbstractIStructureCheckNecessaryAction
     {
         String _table;
         MemberInfo _member;
@@ -406,7 +406,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class AlterColumnNullabilityScAction : AbstractIStructureCheckNecessaryAction
+    public sealed class AlterColumnNullabilityScAction : AbstractIStructureCheckNecessaryAction
     {
         String _table;
         MemberInfo _member;
@@ -429,7 +429,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
     }
 
-    public class CreateTableScAction : AbstractIStructureCheckNecessaryAction {
+    public sealed class CreateTableScAction : AbstractIStructureCheckNecessaryAction {
         private Type _tableType;
         public CreateTableScAction(IRdbmsDataAccessor dataAccessor, Type tableType, string reason) : base(dataAccessor, reason) {
             _tableType = tableType;
@@ -470,7 +470,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor);
     }
 
-    public class StructureChecker {
+    public sealed class StructureChecker {
         List<Type> workingTypes;
         IRdbmsDataAccessor DataAccessor;
 
@@ -903,9 +903,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var agf = f.GetCustomAttribute<AggregateFieldAttribute>();
                     if (agf != null) {
-                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agf.RemoteObjectType)
-                            .FirstOrDefault(a => a.Name == agf.ObjectKey);
-                        if (classField != null) {
+                        var classField = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(agf.RemoteObjectType)
+                            .FirstOrDefault(a => a.Member.Name == agf.ObjectKey);
+                        if (classField.Attribute != null) {
                             constraint.Table = agf.RemoteObjectType.Name;
                             constraint.Column = agf.ObjectKey;
                             constraint.RefTable = t.Name;
@@ -925,9 +925,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var agff = f.GetCustomAttribute<AggregateFarFieldAttribute>();
                     if (agff != null) {
-                        var cf = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.ImediateType)
-                            .FirstOrDefault(a => a.Name == agff.ImediateKey);
-                        if (cf != null) {
+                        var cf = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(agff.ImediateType)
+                            .FirstOrDefault(a => a.Member.Name == agff.ImediateKey);
+                        if (cf.Attribute != null) {
                             constraint.Table = agff.ImediateType.Name;
                             constraint.Column = agff.ImediateKey;
                             constraint.RefTable = t.Name;
@@ -944,9 +944,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         yield return constraint;
                         constraint = new ScStructuralLink();
 
-                        var cf2 = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agff.FarType)
-                            .FirstOrDefault(a => a.Name == agff.FarKey);
-                        if (cf2 != null) {
+                        var cf2 = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(agff.FarType)
+                            .FirstOrDefault(a => a.Member.Name == agff.FarKey);
+                        if (cf2.Attribute != null) {
                             constraint.Table = agff.FarType.Name;
                             constraint.Column = agff.FarKey;
                             constraint.RefTable = t.Name;
@@ -967,9 +967,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var ago = f.GetCustomAttribute<AggregateObjectAttribute>();
                     if (ago != null) {
                         var type = ReflectionTool.GetTypeOf(f);
-                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(type)
-                            .FirstOrDefault(a => a.Name == ago.ObjectKey);
-                        if (classField != null) {
+                        var classField = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
+                            .FirstOrDefault(a => a.Member.Name == ago.ObjectKey);
+                        if (classField.Attribute != null) {
                             constraint.Table = type.Name;
                             constraint.Column = ago.ObjectKey;
                             constraint.RefTable = t.Name;
@@ -988,9 +988,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     var agl = f.GetCustomAttribute<AggregateListAttribute>();
                     if (agl != null) {
-                        var classField = ReflectionTool.FieldsWithAttribute<FieldAttribute>(agl.RemoteObjectType)
-                            .FirstOrDefault(a => a.Name == agl.RemoteField);
-                        if (classField != null) {
+                        var classField = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(agl.RemoteObjectType)
+                            .FirstOrDefault(a => a.Member.Name == agl.RemoteField);
+                        if (classField.Attribute != null) {
                             constraint.Table = agl.RemoteObjectType.Name;
                             constraint.Column = agl.RemoteField;
                             constraint.RefTable = t.Name;
@@ -1032,9 +1032,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     yield return x;
                 }
             }
-            var mem = ReflectionTool.FieldsWithAttribute<FieldAttribute>(workingTypes.FirstOrDefault(t => t.Name == fk.Table)).FirstOrDefault();
-            if (mem != null)
-                yield return new ExecutePugeForFkScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, mem, $"Needs to purge inconsistent data from {fk.Table} to apply constraint {fk.KeyName}.");
+            var mem = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(workingTypes.FirstOrDefault(t => t.Name == fk.Table)).FirstOrDefault();
+            if (mem.Attribute != null)
+                yield return new ExecutePugeForFkScAction(DataAccessor, fk.Table, fk.Column, fk.RefTable, fk.RefColumn, mem.Member, $"Needs to purge inconsistent data from {fk.Table} to apply constraint {fk.KeyName}.");
         }
 
 

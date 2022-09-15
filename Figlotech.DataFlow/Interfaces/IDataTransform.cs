@@ -48,7 +48,7 @@ namespace Figlotech.DataFlow.Interfaces
         }
     }
 
-    public sealed class DataTransformEnumerator : IEnumerator<object[]> {
+    public sealed class  DataTransformEnumerator : IEnumerator<object[]> {
         IDataTransform Source { get; set; }
         public DataTransformEnumerator(IDataTransform source) {
             Source = source;

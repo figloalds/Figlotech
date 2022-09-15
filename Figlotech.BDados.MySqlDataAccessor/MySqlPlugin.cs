@@ -12,7 +12,7 @@ using Figlotech.BDados;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlPlugin : IRdbmsPluginAdapter {
+    public sealed class MySqlPlugin : IRdbmsPluginAdapter {
         public MySqlPlugin(MySqlPluginConfiguration cfg) {
             Config = cfg;
         }

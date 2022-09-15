@@ -1,7 +1,7 @@
 ﻿using System;
 
 namespace Figlotech.ECSEngine {
-    public class Program {
+    public sealed class Program {
         public static class V {
             public static IValueExpression<T> val<T>(T t) {
                 return new ConstantValueExpression<T>(t);
@@ -11,7 +11,7 @@ namespace Figlotech.ECSEngine {
             }
         }
 
-        public class V<T> : IValueExpression<T> {
+        public sealed class V<T> : IValueExpression<T> {
             public T Value => throw new NotImplementedException();
 
             IValueExpression<T> wrappedExpression;
@@ -29,14 +29,14 @@ namespace Figlotech.ECSEngine {
             T Value { get; }
         }
 
-        public class ComputedValueExpression<T> : IValueExpression<T> {
+        public sealed class ComputedValueExpression<T> : IValueExpression<T> {
             public T Value => Expression != null ? Expression.Invoke() : default(T);
             public Func<T> Expression { get; private set; }
             public ComputedValueExpression(Func<T> expression) {
                 Expression = expression;
             }
         }
-        public class ConstantValueExpression<T> : IValueExpression<T> {
+        public sealed class ConstantValueExpression<T> : IValueExpression<T> {
             public T Value { get; private set; }
             public ConstantValueExpression(T value) {
                 Value = value;

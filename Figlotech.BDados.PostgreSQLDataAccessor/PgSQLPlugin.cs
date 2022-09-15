@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 using Npgsql;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
-    public class PgSQLPlugin : IRdbmsPluginAdapter {
+    public sealed class PgSQLPlugin : IRdbmsPluginAdapter {
         public PgSQLPlugin(PgSQLPluginConfiguration cfg) {
             Config = cfg;
         }

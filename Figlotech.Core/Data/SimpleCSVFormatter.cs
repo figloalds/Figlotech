@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Data
 {
-    public class SimpleCSVFormatter
+    public sealed class SimpleCSVFormatter
     {
         char Sep { get; set; }
         public SimpleCSVFormatter(char sep = ';') {

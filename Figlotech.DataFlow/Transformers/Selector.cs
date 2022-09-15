@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Figlotech.DataFlow.Transformers
 {
-    public class Selector : IDataSelector {
+    public sealed class Selector : IDataSelector {
         public string OutputColumnName { get; private set; }
         private int DataIndex { get; set; } = -1;
         private string InputColumnName { get; set; }

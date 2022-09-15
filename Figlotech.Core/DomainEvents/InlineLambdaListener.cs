@@ -11,7 +11,7 @@ namespace Figlotech.Core.DomainEvents {
         }
     }
 
-    public class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
+    public sealed class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
         public Func<T, Task> OnRaise;
         public Func<T, Exception, Task> OnHandle;
         public DomainEventsHub EventsHub { get; set; }

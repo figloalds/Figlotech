@@ -12,7 +12,7 @@ using Figlotech.Core;
 namespace Figlotech.BDados.SqliteDataAccessor
 {
 
-    public class SqlitePluginConfiguration {
+    public sealed class SqlitePluginConfiguration {
         public String DataSource { get; set; }
         public String Schema { get; set; }
         public int PoolSize { get; set; } = 100;

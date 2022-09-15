@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public class InstanceAuthorizer
+    public sealed class InstanceAuthorizer
     {
         List<string> auths = new List<string>();
         public String GenerateAuthorization() {

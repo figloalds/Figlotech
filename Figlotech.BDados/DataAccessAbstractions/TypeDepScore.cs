@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public class TypeDepScore {
+    public sealed class TypeDepScore {
         public Type Type { get; set; }
         public int DepScore { get; set; } = 0;
         bool IsMeasured = false;

@@ -21,7 +21,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// have a foreign key attached to it referencing a field (column) of other
     /// valueobject (table)
     /// </summary>
-    public class ForeignKeyAttribute : Attribute {
+    public sealed class ForeignKeyAttribute : Attribute {
 
         public String Table { get; set; }
         public String Column { get; set; }

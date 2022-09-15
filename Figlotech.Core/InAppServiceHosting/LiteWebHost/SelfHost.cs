@@ -28,7 +28,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
 
     }
 
-    public class SelfHost {
+    public sealed class SelfHost {
 
         public static async Task SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {
             foreach(var header in headers) {

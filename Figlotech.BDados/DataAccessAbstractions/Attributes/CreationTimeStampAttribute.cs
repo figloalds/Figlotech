@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
 
-    public class CreationTimeStampAttribute : Attribute
+    public sealed class CreationTimeStampAttribute : Attribute
     {
         public CreationTimeStampAttribute()
         {

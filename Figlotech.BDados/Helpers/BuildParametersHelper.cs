@@ -6,7 +6,7 @@ using System.Data;
 using System.Linq;
 
 namespace Figlotech.BDados.Helpers {
-    public class ObjectHoningOption {
+    public sealed class ObjectHoningOption {
         public String Alias;
         public String OldField;
         public String NewField;
@@ -21,7 +21,7 @@ namespace Figlotech.BDados.Helpers {
         public ComputeField Function { get => function; set => function = value; }
     }
 
-    public class BuildParametersHelper {
+    public sealed class BuildParametersHelper {
         internal JoinDefinition _join;
         internal List<ObjectHoningOption> _honingParameters = new List<ObjectHoningOption>();
 

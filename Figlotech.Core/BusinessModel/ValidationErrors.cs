@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace Figlotech.Core.BusinessModel {
-    public class ValidationError {
+    public sealed class ValidationError {
         public string Key;
         public string Message;
     }
@@ -22,7 +22,7 @@ namespace Figlotech.Core.BusinessModel {
         }
     }
 
-    public class ValidationErrors : List<ValidationError> {
+    public sealed class ValidationErrors : List<ValidationError> {
         public void Add(string key, string value) {
             Add(new ValidationError { Key = key, Message = value });
         }

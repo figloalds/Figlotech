@@ -21,7 +21,7 @@
 //        List<IDataObject> GenericCache { get; }
 //    }
 
-//    internal class DataCache<T> : IDataCache where T : IDataObject, new() {
+//    internal sealed class DataCache<T> : IDataCache where T : IDataObject, new() {
 //        public Type Type { get; set; }
 //        public DateTime LastUpdate { get; set; } = DateTime.MinValue;
 //        public List<IDataObject> GenericCache {
@@ -43,7 +43,7 @@
 //    / I don't recommend using this.
 //    / Seriously, dont.
 //    / </summary>
-//    public class MemoryDataAccessor : IDataAccessor {
+//    public sealed class MemoryDataAccessor : IDataAccessor {
 
 //        private IDataCache GetCacheOf(Type t) {
 //            foreach (var a in CachesList) {

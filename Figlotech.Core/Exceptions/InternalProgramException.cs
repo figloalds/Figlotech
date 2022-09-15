@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace System {
-    public class InternalProgramException : MainLogicGeneratedException {
+    public sealed class InternalProgramException : MainLogicGeneratedException {
 
         public InternalProgramException(string message) : base(500, message) {
         }

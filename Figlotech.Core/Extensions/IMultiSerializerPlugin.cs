@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Extensions {
-    public class FTHSerializableOptions {
+    public sealed class FTHSerializableOptions {
         public bool UseGzip { get; set; }
         public bool Formatted { get; set; }
         public IEncryptionMethod UseEncryption { get; set; }

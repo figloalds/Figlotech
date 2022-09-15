@@ -17,12 +17,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.Data {
-    public class QbParam : QueryParameter {
+    public sealed class QbParam : QueryParameter {
         public QbParam(object value) : base(value) {
         }
 
     }
-    public class QbIfParam : QueryParameter {
+    public sealed class QbIfParam : QueryParameter {
         public bool Condition { get; private set; }
         public object ElseValue { get; private set; }
         public QbIfParam(bool condition, object value, object elseVal) : base(value) {
@@ -36,7 +36,7 @@ namespace Figlotech.Data {
             this.Value = value;
         }
     }
-    public class QbIf : QueryBuilder {
+    public sealed class QbIf : QueryBuilder {
         bool Condition;
         public QbIf(bool condition) {
             this.Condition = condition;
@@ -73,7 +73,7 @@ namespace Figlotech.Data {
         }
 
     }
-    public class Qb : QueryBuilder {
+    public sealed class Qb : QueryBuilder {
         public Qb(params object[] args) {
             AppendQuery(args);
         }
@@ -190,7 +190,7 @@ namespace Figlotech.Data {
         }
     }
     
-    public class QbFmt : QueryBuilder {
+    public sealed class QbFmt : QueryBuilder {
         public QbFmt(String str, params object[] args) {
             Append(str, args);
         }
@@ -199,7 +199,7 @@ namespace Figlotech.Data {
             return new QbFmt(s.Key, s.Value);
         }
     }
-    public class QbListOf<T> : QueryBuilder {
+    public sealed class QbListOf<T> : QueryBuilder {
         public List<T> List { get; private set; }
         public Func<T, object> Selector { get; private set; }
         public QbListOf(List<T> list, Func<T, object> fn) {

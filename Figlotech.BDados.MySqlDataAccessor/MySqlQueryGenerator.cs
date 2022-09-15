@@ -28,7 +28,7 @@ using System.Diagnostics;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
-    public class MySqlQueryGenerator : IQueryGenerator {
+    public sealed class MySqlQueryGenerator : IQueryGenerator {
 
         public IQueryBuilder CreateDatabase(string schemaName) {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
@@ -41,9 +41,17 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             query.Append(")");
             query.Append("VALUES (");
             var members = GetMembers(inputObject.GetType());
-            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
-            for (int i = 0; i < members.Count; i++) {
+            bool isFirst = true;
+            for (int i = 0; i < members.Length; i++) {
+                if (members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null) {
+                    continue;
+                }
                 var val = ReflectionTool.GetMemberValue(members[i], inputObject);
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    query.Append(",\r\n");
+                }
                 if (val == null) {
                     var pc = members[i].GetCustomAttribute<PreemptiveCounter>();
                     var ic = members[i].GetCustomAttribute<IncrementalCounter>();
@@ -58,10 +66,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     }
                 } else {
                     query.Append($"@{members[i].Name}_{i + 1}", val);
-                }
-
-                if (i < members.Count - 1) {
-                    query.Append(",");
                 }
             }
             query.Append(")");
@@ -445,15 +449,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             QueryBuilder Query = new QueryBuilder();
             var lifi = GetMembers(tabelaInput.GetType());
             int k = 0;
-            for (int i = 0; i < lifi.Count; i++) {
+            bool isFirst = true;
+            for (int i = 0; i < lifi.Length; i++) {
                 if (OmmitPk && lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
                         Object val = ReflectionTool.GetMemberValue(lifi[i], tabelaInput);
+                        if (isFirst) {
+                            isFirst = false;
+                        } else {
+                            Query.Append(",\r\n");
+                        }
                         Query.Append($"{lifi[i].Name} = @{(++k)}", val);
-                        if (i < lifi.Count - 1)
-                            Query.Append(", ");
                     }
                 }
             }
@@ -463,10 +471,10 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
-            if (OmmitPK) {
-                fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
-            }
-            for (int i = 0; i < fields.Count; i++) {
+            for (int i = 0; i < fields.Length; i++) {
+                if (OmmitPK && fields[i].GetCustomAttribute<PrimaryKeyAttribute>() != null) {
+                    continue;
+                }
                 Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
                 if (!Query.IsEmpty)
                     Query.Append(", ");
@@ -499,17 +507,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             // -- 
             var members = GetMembers(t);
-            members.RemoveAll(
-                m => 
-                    m.GetCustomAttribute<PrimaryKeyAttribute>() != null ||
-                    m.GetCustomAttribute<ReliableIdAttribute>() != null
-                    );
 
             int x = 0;
             int ggid = ++gid;
             Query.PrepareForQueryLength(inputRecordset.Count * 512);
-            for (var i = 0; i < members.Count; i++) {
+            bool isFirst = true;
+            for (var i = 0; i < members.Length; i++) {
+                if(members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null ||
+                    members[i].GetCustomAttribute<ReliableIdAttribute>() != null) {
+                    continue;
+                }
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    Query.Append(",\r\n");
+                }
                 Query.Append($"\t{members[i].Name}=(CASE ");
                 for(int ridx = 0; ridx < inputRecordset.Count; ridx++) {
                     Query.Append($"WHEN {rid}=@r_{ridx}", inputRecordset[ridx].RID);
@@ -519,9 +532,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     Query.Append($"THEN @{ggid}_{++x}", ReflectionTool.GetMemberValue(members[i], inputRecordset[ridx]));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
-                if (i < members.Count - 1) {
-                    Query.Append(",\r\n");
-                }
             }
             
             Query.Append($"WHERE {rid} IN (")
@@ -574,7 +584,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder GenerateFieldsString(Type type, bool ommitPk = false) {
             QueryBuilder sb = new QueryBuilder();
             var fields = GetMembers(type);
-            for (int i = 0; i < fields.Count; i++) {
+            for (int i = 0; i < fields.Length; i++) {
                 if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
                 if (!sb.IsEmpty)
@@ -685,8 +695,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
         }
 
-        private List<MemberInfo> GetMembers(Type t) {
-            return ReflectionTool.FieldsWithAttribute<FieldAttribute>(t);
+        static Dictionary<Type, MemberInfo[]> MemberFields = new Dictionary<Type, MemberInfo[]>();
+        private MemberInfo[] GetMembers(Type t) {
+            lock(MemberFields) {
+                if(!MemberFields.ContainsKey(t)) {
+                    MemberFields[t] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(t).Select(x => x.Member).ToArray();
+                }
+                return MemberFields[t];
+            }
             //List<MemberInfo> lifi = new List<MemberInfo>();
             //var members = ReflectionTool.FieldsAndPropertiesOf(t);
             //foreach (var fi in members
