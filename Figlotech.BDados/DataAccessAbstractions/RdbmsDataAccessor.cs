@@ -151,7 +151,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public bool IsCommited { get; set; }
         public bool IsRolledBack { get; set; }
-        internal CancellationToken CancellationToken { get; set; }
+        internal CancellationToken CancellationToken { get; set; } = CancellationToken.None;
 
         private void ApplySuccessActions() {
             lock(ActionsToExecuteAfterSuccess) {

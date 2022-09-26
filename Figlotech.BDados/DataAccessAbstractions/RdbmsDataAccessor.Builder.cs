@@ -34,7 +34,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker.Mark("- Starting Execute Query");
                 using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
                     transaction?.Benchmarker.Mark("- Starting build");
-                    return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync();
+                    if(!transaction.CancellationToken.IsCancellationRequested) {
+                        return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync();
+                    } else {
+                        return new List<T>();
+                    }
                 }
             }
         }

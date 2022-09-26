@@ -250,6 +250,9 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static Object GetMemberValue(MemberInfo member, Object target) {
+            if(member == null) {
+                return null;
+            }
             if (member is PropertyInfo pi) {
                 if(pi.GetIndexParameters().Length == 0) {
                     try {
@@ -524,8 +527,11 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static Object GetValue(Object target, string fieldName) {
+            if (target == null) {
+                return null;
+            }
             try {
-                var retv = GetMemberValue(GetMember(target?.GetType(), fieldName), target);
+                var retv = GetMemberValue(GetMember(target.GetType(), fieldName), target);
                 return retv;
             } catch (Exception) {
 

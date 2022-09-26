@@ -7,8 +7,8 @@ set /p rev=<rev
 set /A rev=rev+1
 echo %rev% > rev
 
-set args=-o .\_nuget -p:PackageVersion=1.0.%revision%.%rev%;TargetFrameworks=netstandard2.1
-set argsb=--api-key %GITHUB_NUGET_PAT% --source "github"
+set args=-o .\_nuget -p:PackageVersion=1.0.%revision%.%rev%
+set argsb=--api-key %GITHUB_NUGET_PAT% --source "fth-github-admin"
 
 dotnet pack Figlotech.Core %args%
 dotnet pack Figlotech.BDados %args%
