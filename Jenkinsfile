@@ -10,7 +10,7 @@ pipeline {
                 withCredentials([string(
                     credentialsId: 'github-pat', 
                     variable: 'GITHUB_PAT')]) {
-                    sh 'export PUSH_ARGS="--api-key $GITHUB_PAT --source fth-github-admin'
+                    sh 'export PUSH_ARGS="--api-key $GITHUB_PAT --source fth-github-admin"'
                 }
             }
         }
