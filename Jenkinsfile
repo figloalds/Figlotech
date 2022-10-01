@@ -3,13 +3,15 @@ pipeline {
 
     stages {
         stage('Prepare') {
-            sh 'export REV=$(git rev-list --count $BRANCH_NAME)'
-            sh 'export BUILD_ARGS="-o ./_nuget -p:PackageVersion=1.0.$REV.$BUILD_NUMBER"'
-            
-            withCredentials([string(
-                credentialsId: 'github-pat', 
-                variable: 'GITHUB_PAT')]) {
-                sh 'export PUSH_ARGS="--api-key $GITHUB_PAT --source fth-github-admin'
+            steps {
+                sh 'export REV=$(git rev-list --count $BRANCH_NAME)'
+                sh 'export BUILD_ARGS="-o ./_nuget -p:PackageVersion=1.0.$REV.$BUILD_NUMBER"'
+                
+                withCredentials([string(
+                    credentialsId: 'github-pat', 
+                    variable: 'GITHUB_PAT')]) {
+                    sh 'export PUSH_ARGS="--api-key $GITHUB_PAT --source fth-github-admin'
+                }
             }
         }
         stage('Build') {
@@ -30,14 +32,16 @@ pipeline {
             }
         }
         stage('Deploy') {
-            echo 'Deploying...'
-            sh 'dotnet nuget push "./_nuget/Figlotech.Core.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.BDados.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.BDados.MySqlDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.BDados.PostgreSQLDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.BDados.SQLiteDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
-            sh 'dotnet nuget push "./_nuget/Figlotech.ExcelUtil.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+            steps {
+                echo 'Deploying...'
+                sh 'dotnet nuget push "./_nuget/Figlotech.Core.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.BDados.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.BDados.MySqlDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.BDados.PostgreSQLDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.BDados.SQLiteDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+                sh 'dotnet nuget push "./_nuget/Figlotech.ExcelUtil.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
+            }
         }
     }
 }
