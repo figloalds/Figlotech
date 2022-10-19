@@ -13,6 +13,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,7 +83,7 @@ namespace Figlotech.Core {
         }
 
         private async Task CacheResponseBody() {
-            if(CachedResponseBody == null && Response.Content != null) {
+            if(CachedResponseBody == null && Response?.Content != null) {
                 CachedResponseBody = new MemoryStream();
                 await Response.Content.CopyToAsync(CachedResponseBody);
             }
@@ -235,13 +236,44 @@ namespace Figlotech.Core {
                 throw new NonSuccessResponseException(result.Response);
             }
         }
-        public async Task<FiHttpResult> Post<T>(String url, T postData) {
-            var json = JsonConvert.SerializeObject(postData);
-            var bytes = Fi.StandardEncoding.GetBytes(json);
+
+        private byte[] GetObjectBytes<T>(T postData, string contentType) {
+            switch(contentType) {
+                case ContentTypeFormUrlEncoded:
+                    StringBuilder retv = new StringBuilder();
+                    bool isFirst = true;
+                    foreach(var item in ReflectionTool.FieldsAndPropertiesOf(typeof(T))) {
+                        if(item.GetCustomAttribute<JsonIgnoreAttribute>() != null) {
+                            continue;
+                        }
+                        if(isFirst) {
+                            isFirst = false;
+                        } else {
+                            retv.Append("&");
+                        }
+                        var value = ReflectionTool.GetMemberValue(item, postData);
+                        if(value != null) {
+                            retv.Append($"{item.Name}={System.Net.WebUtility.UrlEncode(value.ToString())}");
+                        }
+                    }
+                    var retvStr = retv.ToString();
+                    return Fi.StandardEncoding.GetBytes(retvStr);
+                case ContentTypeJson:
+                default:
+                    return Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(postData));
+            }
+        }
+
+        public const string ContentTypeJson = "application/json";
+        public const string ContentTypeFormUrlEncoded = "application/x-www-form-urlencoded";
+
+        public async Task<FiHttpResult> Post<T>(String url, T postData, string contentType = null) {
+            contentType = contentType ?? ContentTypeJson;
+            var bytes = GetObjectBytes(postData, contentType);
             var req = CreateRequest(url);
             req.Method = HttpMethod.Post;
             req.Content = new ByteArrayContent(bytes);
-            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             req.Content.Headers.ContentLength = bytes.Length;
             return await FiHttpResult.InitFromRequest(req);
         }
