@@ -24,4 +24,4 @@ if errorlevel 1 (
 	echo BUILD PROCESS SUCCEDED!
 )
 
-copy /d /v /n /y .\_nuget\* ..\NugetLocal
+copy /d /v /n /y .\_nuget\*.1.0.%revision%.%rev%.nupkg ..\NugetLocal
