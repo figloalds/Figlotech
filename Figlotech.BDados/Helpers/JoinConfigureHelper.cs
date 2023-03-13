@@ -25,7 +25,10 @@ namespace Figlotech.BDados.Helpers
             return this;
         }
 
-        public JoinConfigureHelper OnlyFields(IEnumerable<string> fields) {
+        public JoinConfigureHelper OnlyFields(params string[] fields) {
+            return __onlyFields(fields);
+        }
+        private JoinConfigureHelper __onlyFields(IEnumerable<string> fields) {
             _join.Joins[_index].Columns.AddRange(
                 fields.Where(a => !_join.Joins[_index].Columns.Contains(a))
             );

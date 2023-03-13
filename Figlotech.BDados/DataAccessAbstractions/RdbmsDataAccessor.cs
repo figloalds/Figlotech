@@ -2243,6 +2243,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         jh.OnlyFields(
                             ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
                             .Select(a => a.Member.Name)
+                            .ToArray()
                         );
                         MakeQueryAggregations(ref query, type, "root", type.Name, String.Empty, prefixer, false);
                     });
@@ -2258,6 +2259,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         jh.OnlyFields(
                             ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
                             .Select(a => a.Member.Name)
+                            .ToArray()
                         );
                         MakeQueryAggregations(ref query, type, "root", type.Name, String.Empty, prefixer, true);
                     });

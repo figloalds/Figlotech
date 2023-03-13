@@ -516,14 +516,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if(a.Type == ScStructuralKeyType.Index && a.Column == null) {
                 a.Column = a.CONSTRAINT_NAME.Substring(a.CONSTRAINT_NAME.LastIndexOf("_") + 1);
             }
+            var cmp = StringComparison.OrdinalIgnoreCase;
             try {
                 switch(a.Type) {
                     case ScStructuralKeyType.Index:
-                        return
-                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
-                                a.Table.ToLower() == n.Table.ToLower() &&
-                                a.Column.ToLower() == n.Column.ToLower()
-                            );
+                        return (a.Table.Equals(n.Table, cmp) && a.KeyName.Equals(n.KeyName, cmp)) && (
+                            a.Table.ToLower() == n.Table.ToLower() &&
+                            a.Column.ToLower() == n.Column.ToLower()
+                        );
                     case ScStructuralKeyType.ForeignKey:
                         return
                             (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
@@ -546,11 +546,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             throw new Exception("Something supposedly impossible happened within StructureChecker internal logic.");
         }
 
-        public IEnumerable<IStructureCheckNecessaryAction> EvaluateLegacyKeys(List<ScStructuralLink> keys) {
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateLegacyKeys(List<ScStructuralLink> neededKeys, List<ScStructuralLink> actualkeys) {
 
-            var needFk = GetNecessaryLinks().ToList();
-            foreach (var a in keys) {
-                if (!needFk.Any(n=> CheckMatch(a,n) )) {
+            foreach (var a in actualkeys) {
+                if (!neededKeys.Any(n=> CheckMatch(a,n) )) {
                     switch(a.Type) {
                         case ScStructuralKeyType.ForeignKey:
                             yield return new DropFkScAction(DataAccessor, a, $"Foreign Key {a.KeyName} is not in the Model");
@@ -585,9 +584,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private IEnumerable<IStructureCheckNecessaryAction> EvaluateForColumnDekeyal(string tableName, string columnName, List<ScStructuralLink> keys) {
-            for (int i = 0; i < keys.Count; i++) {
+            for (int i = keys.Count - 1; i >= 0; i--) {
                 var refTableName = keys[i].RefTable;
                 if (refTableName == tableName.ToLower() && columnName.ToLower() == keys[i].RefColumn.ToLower()) {
+                    keys.RemoveAt(i);
                     yield return new DropFkScAction(DataAccessor, keys[i], $"Key {keys[i].KeyName} needs to be removed to alter column {tableName}::{columnName}");
                 }
             }
@@ -725,6 +725,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             };
                             var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
                             var sizesMatch = !typesToCheckSize.Contains(dbDefinition.ToUpper()) || length == fieldAtt.Size;
+                            if (Debugger.IsAttached && dbDefinition == "VARCHAR" && fieldAtt.Size == 0) {
+                                Console.WriteLine($"Invalid size for VARCHAR: {type.Name}::{col.Name}");
+                                Debugger.Break();
+                            }
                             //var dbDefinition = dbdef.Substring(0, dbdef.IndexOf('(') > -1 ? dbdef.IndexOf('(') : dbdef.Length);
                             if (columnIsNullable != fieldAtt.AllowNull) {
                                 yield return new AlterColumnNullabilityScAction(DataAccessor, type.Name, field, fieldAtt, $"Column Nullability mismatch: {datatype.ToUpper()}->{dbDefinition.ToUpper()}; {length}->{fieldAtt.Size}; {columnIsNullable}->{fieldAtt.AllowNull};  ");
@@ -827,17 +831,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
             var columns = DataAccessor.GetInfoSchemaColumns();
+            var neededKeys = GetNecessaryLinks().ToList();
             Console.WriteLine("Evaluating Necessary Actions:");
             Console.WriteLine($"{tables.Count} tables, {columns.Count} columns, {keys.Count} keys");
 
             TablesToCreate.Clear();
-            foreach (var a in EvaluateLegacyKeys(keys))
+            foreach (var a in EvaluateLegacyKeys(neededKeys, keys))
                 yield return a;
             foreach (var a in EvaluateTableChanges(tables, keys))
                 yield return a;
             foreach (var a in EvaluateColumnChanges(columns, keys))
                 yield return a;
-            foreach (var a in EvaluateMissingKeysCreation(columns, keys))
+            foreach (var a in EvaluateMissingKeysCreation(columns, neededKeys, keys))
                 yield return a;
             foreach (var a in EvaluateRemovedColumns(columns, keys))
                 yield return a;
@@ -1040,13 +1045,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
 
         private List<string> _purgedKeys = new List<string>();
-        public IEnumerable<IStructureCheckNecessaryAction> EvaluateMissingKeysCreation(List<FieldAttribute> columns, List<ScStructuralLink> keys) {
+        public IEnumerable<IStructureCheckNecessaryAction> EvaluateMissingKeysCreation(List<FieldAttribute> columns, List<ScStructuralLink> neededKeys, List<ScStructuralLink> keys) {
 
             _purgedKeys.Clear();
-            var needFK = GetNecessaryLinks().ToList();
 
-            needFK.RemoveAll(a => keys.Any(b => CheckMatch(a, b)));
-            needFK.Sort((a, b) => {
+            neededKeys.RemoveAll(a => keys.Any(b => CheckMatch(a, b)));
+            neededKeys.Sort((a, b) => {
                 if (a.Type == ScStructuralKeyType.PrimaryKey && b.Type != ScStructuralKeyType.PrimaryKey) {
                     return -1;
                 }
@@ -1057,11 +1061,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return 0;
             });
 
-            foreach (var fk in needFK) {
+            foreach (var fk in neededKeys) {
                 if (!keys.Any(n => CheckMatch(fk, n))) {
                     switch(fk.Type) {
                         case ScStructuralKeyType.ForeignKey:
-                            foreach (var x in EnumeratePurgesFor(fk, needFK)) {
+                            foreach (var x in EnumeratePurgesFor(fk, neededKeys)) {
                                 yield return x;
                             }
                             var foreignIndex = new ScStructuralLink {
