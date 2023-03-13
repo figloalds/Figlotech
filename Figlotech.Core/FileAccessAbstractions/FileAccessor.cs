@@ -340,9 +340,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return act.Invoke();
             }
         }
-        DynaLocks FileLocks = new DynaLocks();
+        static FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
         private void LockRegion(String wd, Action act) {
-            lock (FileLocks[wd]) {
+            using (FileLocks.Lock(wd).GetAwaiter().GetResult()) {
                 act?.Invoke();
             }
         }
