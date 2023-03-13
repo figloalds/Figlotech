@@ -70,6 +70,17 @@ namespace Figlotech.Core {
             lock (this)
                 return ((IList<T>)_dmmy).Remove(item);
         }
+        public int RemoveAll(Predicate<T> predicate) {
+            var retv = 0;
+            lock (this)
+                for(int i = _dmmy.Count - 1; i >= 0; i++) {
+                    if(predicate(_dmmy[i])) {
+                        _dmmy.RemoveAt(i);
+                        retv++;
+                    }
+                }
+            return retv;
+        }
 
         public IEnumerator<T> GetEnumerator() {
             lock (this)

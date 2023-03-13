@@ -37,29 +37,21 @@ namespace Figlotech.Core
             }
         }
 
-        public Task AddAsync(T item) {
-            return alock.Lock(async () => {
-                await Task.Yield();
-                dmmy.Add(item);
-            });
+        public async Task AddAsync(T item) {
+            using var _ = await alock.Lock();
+            dmmy.Add(item);
         }
-        public Task RemoveAsync(T item) {
-            return alock.Lock(async () => {
-                await Task.Yield();
-                dmmy.Remove(item);
-            });
+        public async Task RemoveAsync(T item) {
+            using var _ = await alock.Lock();
+            dmmy.Remove(item);
         }
-        public Task RemoveAllAsync(Predicate<T> match) {
-            return alock.Lock(async () => {
-                await Task.Yield();
-                dmmy.RemoveAll(match);
-            });
+        public async Task RemoveAllAsync(Predicate<T> match) {
+            using var _ = await alock.Lock();
+            dmmy.RemoveAll(match);
         }
-        public Task<List<T>> ToList(Predicate<T> match) {
-            return alock.Lock(async () => {
-                await Task.Yield();
-                return dmmy.ToList();
-            });
+        public async Task<List<T>> ToList(Predicate<T> match) {
+            using var _ = await alock.Lock();
+            return dmmy.ToList();
         }
 
         public IEnumerator<T> GetEnumerator() {
