@@ -22,6 +22,7 @@ using System.Drawing;
 using System.Text.RegularExpressions;
 using Figlotech.Core.Autokryptex;
 using System.Runtime.CompilerServices;
+using System.IO.Compression;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -424,14 +425,24 @@ namespace Figlotech.Core {
         static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
 
         private static void Reschedule(ScheduledWorkJob sched) {
-            if(sched.IsActive && sched.RecurrenceInterval.HasValue) {
-                var nextRun = sched.ScheduledTime;
-                while (nextRun < DateTime.UtcNow) {
-                    nextRun += sched.RecurrenceInterval.Value;
+            lock(sched) {
+                if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
+                    var nextRun = sched.ScheduledTime;
+                    while (nextRun < DateTime.UtcNow) {
+                        nextRun += sched.RecurrenceInterval.Value;
+                    }
+                    try {
+                        sched.Timer?.Change(Timeout.Infinite, Timeout.Infinite);
+                    } catch(Exception x) {
+
+                    }
+                    try {
+                        sched.Timer?.Dispose();
+                    } catch(Exception x) {
+
+                    }
+                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
                 }
-                sched.Timer?.Change(Timeout.Infinite, Timeout.Infinite);
-                sched.Timer?.Dispose();
-                sched.Timer = new Timer(_timerFn, sched, (int) Math.Max(0.0, (nextRun - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
             }
         }
 
@@ -1319,6 +1330,44 @@ namespace Figlotech.Core {
 
         public static IEnumerable<Exception> ToExceptionArray(this Exception ex) {
             return Fi.Tech.ExceptionTreeToArray(ex);
+        }
+
+        public static async Task<byte[]> GzipDeflateAsync(this Fi _selfie, byte[] bytes) {
+            using var ms = new MemoryStream(bytes);
+            using var msout = new MemoryStream();
+            using (var gzs = new GZipStream(msout, CompressionLevel.Optimal, true)) {
+                await ms.CopyToAsync(gzs);
+            }
+            msout.Seek(0, SeekOrigin.Begin);
+            return msout.ToArray();
+        }
+
+        public static async Task<byte[]> GzipInflateAsync(this Fi _selfie, byte[] bytes) {
+            using var ms = new MemoryStream(bytes);
+            using var msout = new MemoryStream();
+            using (var gzs = new GZipStream(ms, CompressionMode.Decompress, true)) {
+                await gzs.CopyToAsync(msout);
+            }
+            return msout.ToArray();
+        }
+
+        public static byte[] GzipDeflate(this Fi _selfie, byte[] bytes) {
+            using var ms = new MemoryStream(bytes);
+            using var msout = new MemoryStream();
+            using (var gzs = new GZipStream(msout, CompressionLevel.Optimal, true)) {
+                ms.CopyTo(gzs);
+            }
+            msout.Seek(0, SeekOrigin.Begin);
+            return msout.ToArray();
+        }
+
+        public static byte[] GzipInflate(this Fi _selfie, byte[] bytes) {
+            using var ms = new MemoryStream(bytes);
+            using var msout = new MemoryStream();
+            using (var gzs = new GZipStream(ms, CompressionMode.Decompress, true)) {
+                gzs.CopyTo(msout);
+            }
+            return msout.ToArray();
         }
 
         public static IEnumerable<Exception> ExceptionTreeToArray(this Fi _selfie, Exception x, int maxRecursionDepth = 12) {
