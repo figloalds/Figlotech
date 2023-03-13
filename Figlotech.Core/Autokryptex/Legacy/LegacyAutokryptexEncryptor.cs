@@ -8,8 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex.Legacy
-{
+namespace Figlotech.Core.Autokryptex.Legacy {
     public sealed class LegacyAutokryptexEncryptor : IEncryptionMethod
     {
         AggregateEncryptor encryptor = new AggregateEncryptor();
@@ -48,7 +47,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
                 typeof(BinaryBlur),
                 typeof(BinaryNegativation),
                 typeof(LegacyBinaryScramble),
-                typeof(LegacyEnigmaEncryptor),
+                typeof(EnigmaEncryptor),
             };
             var pickedKeys = new Queue<int>();
             for(int i = 0; i < maxEncryptors; i++) {
@@ -78,7 +77,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
 
                     passBytes = inst.Encrypt(passBytes);
 
-                    if(MultiPassRandomEncoder && inst.GetType() != typeof(LegacyEnigmaEncryptor)) {
+                    if(MultiPassRandomEncoder && inst.GetType() != typeof(EnigmaEncryptor)) {
                         encryptor.Add(
                             inst
                         );

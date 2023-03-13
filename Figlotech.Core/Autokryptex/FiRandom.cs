@@ -83,7 +83,7 @@ namespace Figlotech.Core.Autokryptex
         }
 
         public int Next(int Minimum, int Maximum) {
-            return Minimum + this.Gen() % Maximum;
+            return (Minimum + this.Gen()) % Maximum;
         }
     }
 }
