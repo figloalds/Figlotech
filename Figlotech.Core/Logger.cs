@@ -36,10 +36,12 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             try {
-                FileAccessor.AppendAllLines(
-                    Filename, new String[] {
-                        DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss - ") + log
-                    });
+                lock (String.Intern(Filename)) {
+                    FileAccessor.AppendAllLines(
+                        Filename, new String[] {
+                            DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss - ") + log
+                        });
+                }
             } catch (Exception) { }
 
         }
@@ -63,9 +65,19 @@ namespace Figlotech.Core {
                     Lines.Add(line);
                     logLinesCache.Clear();
                 }
-                FileAccessor.AppendAllLines(
-                    Filename.Value, Lines
-                );
+                var errTreshold = 10;
+                while(errTreshold --> 0) {
+                    try {
+                        lock (String.Intern(Filename.Value)) {
+                            FileAccessor.AppendAllLines(
+                                Filename.Value, Lines
+                            );
+                        }
+                        break;
+                    } catch (Exception x) {
+                        await Task.Delay(1000);
+                    }
+                }
             });
         }
 
@@ -73,11 +85,13 @@ namespace Figlotech.Core {
             if (!Enabled)
                 return;
             try {
-                FileAccessor.AppendAllLines(
-                    Filename, 
-                    new String[] {
-                        "","",""
-                    });
+                lock (String.Intern(Filename)) {
+                    FileAccessor.AppendAllLines(
+                        Filename,
+                        new String[] {
+                            "","",""
+                        });
+                }
             } catch (Exception) { }
         }
 

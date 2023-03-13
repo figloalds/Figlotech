@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core
 {
-    public sealed class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
+    public sealed class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> {
         AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
@@ -15,8 +15,8 @@ namespace Figlotech.Core
                     if(key == null) {
                         return default(TValue);
                     }
-                    if (_dmmy.ContainsKey(key)) {
-                        return _dmmy[key];
+                    if (_dmmy.TryGetValue(key, out var retv)) {
+                        return retv;
                     }
                     return default(TValue);
                 }
@@ -51,6 +51,10 @@ namespace Figlotech.Core
         public int Count => ((IDictionary<TKey, TValue>)_dmmy).Count;
 
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
+
+        IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys => Keys;
+
+        IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Values;
 
         public void Add(TKey key, TValue value) {
             lock(_dmmy)

@@ -12,9 +12,9 @@ namespace Figlotech.Core.InAppServiceHosting
         public static ServiceHost Default { get; set; } = new ServiceHost();
         
         private List<IFthService> Services { get; set; } = new List<IFthService>();
-        Dictionary<IFthService, Thread> ServiceThreads = new Dictionary<IFthService, Thread>();
-        Dictionary<IFthService, FthServiceInfo> ServiceInfos = new Dictionary<IFthService, FthServiceInfo>();
-        Dictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new Dictionary<IFthService, CancellationTokenSource>();
+        AtomicDictionary<IFthService, Thread> ServiceThreads = new AtomicDictionary<IFthService, Thread>();
+        AtomicDictionary<IFthService, FthServiceInfo> ServiceInfos = new AtomicDictionary<IFthService, FthServiceInfo>();
+        AtomicDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new AtomicDictionary<IFthService, CancellationTokenSource>();
 
         public IFthService InitService<T>(params object[] args) {
             return InitService(typeof(T), args);
