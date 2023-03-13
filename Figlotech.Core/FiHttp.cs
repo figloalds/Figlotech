@@ -13,7 +13,9 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +31,10 @@ namespace Figlotech.Core {
         private MemoryStream CachedResponseBody { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
 
-        internal FiHttpResult() {
+        FiHttp Caller;
+
+        internal FiHttpResult(FiHttp caller) {
+            this.Caller = caller;
         }
         ~FiHttpResult() {
             Dispose();
@@ -37,10 +42,11 @@ namespace Figlotech.Core {
 
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
-        public static async Task<FiHttpResult> InitFromRequest(HttpRequestMessage httpRequestMessage) {
-            var retv = new FiHttpResult();
+        public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage) {
+            var retv = new FiHttpResult(caller);
             try {
-                var response = await FiHttp.httpClient.SendAsync(httpRequestMessage);
+                var client = caller.HttpClient;
+                var response = await client.SendAsync(httpRequestMessage);
                 retv.Init(response);
             } catch (WebException ex) {
                 retv.Init(ex.Response as HttpWebResponse);
@@ -83,9 +89,11 @@ namespace Figlotech.Core {
         }
 
         private async Task CacheResponseBody() {
-            if(CachedResponseBody == null && Response?.Content != null) {
+            if(CachedResponseBody == null) {
                 CachedResponseBody = new MemoryStream();
-                await Response.Content.CopyToAsync(CachedResponseBody);
+                if (Response?.Content != null) {
+                    await Response.Content.CopyToAsync(CachedResponseBody);
+                }
             }
             CachedResponseBody.Seek(0, SeekOrigin.Begin);
         }
@@ -134,10 +142,13 @@ namespace Figlotech.Core {
         }
 
         public async Task<T> As<T>() {
+            if(typeof(T) == typeof(String)) {
+                return (T) (object) await AsString();
+            }
             T retv = default(T);
             var json = await this.AsString();
             try {
-                T obj = JsonConvert.DeserializeObject<T>(json);
+                T obj = JsonConvert.DeserializeObject<T>(json, Caller.JsonSettings);
                 retv = obj;
             } catch (Exception x) {
                 return default(T);
@@ -179,12 +190,52 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class FiHttp
-    {
-        internal static HttpClient httpClient = new HttpClient() {
+    public sealed class FiHttp {
+        internal static HttpClient DefaultClient = new HttpClient() {
             Timeout = TimeSpan.FromMinutes(120),
         };
-        
+
+        internal static Dictionary<string, HttpClient> clientCache = new Dictionary<string, HttpClient>();
+
+        public JsonSerializerSettings JsonSettings { get; set; } = new JsonSerializerSettings();
+
+        HttpClient client;
+        internal HttpClient HttpClient {
+            get {
+                lock(Certificates) {
+                    return client ?? 
+                        (client = GetClientForCertificates(Certificates));
+                }
+            }
+        }
+
+        internal static HttpClient GetClientForCertificates(List<X509Certificate2> certs) {
+            if(certs.Count == 0) {
+                return DefaultClient;
+            }
+
+            var id = string.Join("|", certs.OrderBy(x=> x.Thumbprint).Select(
+                x => Convert.ToBase64String(
+                    BigInteger.Parse(
+                        x.Thumbprint,
+                        System.Globalization.NumberStyles.HexNumber)
+                        .ToByteArray()
+                        .Reverse()
+                        .ToArray()
+                    )
+                ));
+
+            if (!clientCache.ContainsKey(id)) {
+                var handler = new HttpClientHandler();
+                foreach(var item in certs) {
+                    handler.ClientCertificates.Add(item);
+                }
+                var client = new HttpClient(handler);
+                clientCache[id] = client;
+            }
+            return clientCache[id];
+        }
+
         public string SyncKeyCodePassword { get; set; } = null;
         IDictionary<string, string> headers = new Dictionary<string, string>();
         public IWebProxy Proxy { get; set; } = null;
@@ -209,6 +260,17 @@ namespace Figlotech.Core {
             "Content-Type",
         };
 
+        private List<X509Certificate2> Certificates { get; set; } = new List<X509Certificate2>();
+
+        public void AddCertificate(X509Certificate2 certificate) {
+            lock(Certificates) {
+                if(!Certificates.Contains(certificate)) {
+                    Certificates.Add(certificate);
+                    client = null;
+                }
+            }
+        }
+
         private string UrlPrefix { get; set; }
 
         private string MapUrl(string Url) {
@@ -226,15 +288,6 @@ namespace Figlotech.Core {
         public async Task<bool> Check(string Url) {
             var st = (int) (await (Get(Url))).StatusCode;
             return st >= 200 && st < 300;
-        }
-
-        public async Task<T> Get<T>(string Url) {
-            var result = await Get(Url);
-            if(result.IsSuccess) {
-                return await result.As<T>();
-            } else {
-                throw new NonSuccessResponseException(result.Response);
-            }
         }
 
         private byte[] GetObjectBytes<T>(T postData, string contentType) {
@@ -260,86 +313,167 @@ namespace Figlotech.Core {
                     return Fi.StandardEncoding.GetBytes(retvStr);
                 case ContentTypeJson:
                 default:
-                    return Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(postData));
+                    return Fi.StandardEncoding.GetBytes(JsonConvert.SerializeObject(postData, JsonSettings));
             }
         }
 
         public const string ContentTypeJson = "application/json";
         public const string ContentTypeFormUrlEncoded = "application/x-www-form-urlencoded";
-
-        public async Task<FiHttpResult> Post<T>(String url, T postData, string contentType = null) {
-            contentType = contentType ?? ContentTypeJson;
-            var bytes = GetObjectBytes(postData, contentType);
-            var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
-            req.Content = new ByteArrayContent(bytes);
-            req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-            req.Content.Headers.ContentLength = bytes.Length;
-            return await FiHttpResult.InitFromRequest(req);
+        // GET
+        public async Task<FiHttpResult> Get(string Url) {
+            return await SendRequest(HttpMethod.Get, Url);
         }
-        public async Task<FiHttpResult> Put<T>(String url, T postData) {
-            var json = JsonConvert.SerializeObject(postData);
-            var bytes = Fi.StandardEncoding.GetBytes(json);
-            var req = CreateRequest(url);
-            req.Method = HttpMethod.Put;
-            req.Content = new ByteArrayContent(bytes);
-            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            req.Content.Headers.ContentLength = bytes.Length;
-            return await FiHttpResult.InitFromRequest(req);
+        public async Task<T> Get<T>(string Url) {
+            return await SendRequest<T>(HttpMethod.Get, Url);
+        }
+
+        // DELETE
+        public async Task<FiHttpResult> Delete(string Url) {
+            return await SendRequest(HttpMethod.Get, Url);
+        }
+        public async Task<T> Delete<T>(string Url) {
+            return await SendRequest<T>(HttpMethod.Delete, Url);
+        }
+
+        // POST
+        public async Task<FiHttpResult> Post(String url, MultipartFormDataContent form) {
+            return await SendRequest(HttpMethod.Post, url, form);
         }
 
         public async Task<FiHttpResult> Post(string url, Func<Stream, Task> streamFunction) {
+            return await SendRequest(HttpMethod.Post, url, streamFunction);
+        }
+        public async Task<FiHttpResult> Post(string url, Stream stream, string contentType) {
+            return await SendRequest(HttpMethod.Post, url, stream, contentType);
+        }
+        public async Task<FiHttpResult> Post(string url, string body) {
+            return await SendRequest(HttpMethod.Post, url, body);
+        }
+        public async Task<FiHttpResult> Post(string url) {
+            return await SendRequest(HttpMethod.Post, url);
+        }
+        public async Task<T> Post<T>(string url) {
+            return await SendRequest<T>(HttpMethod.Post, url);
+        }
+        public async Task<FiHttpResult> Post<T>(String url, T bodyData, string contentType = null) {
+            return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType);
+        }
+
+        // Put
+        public async Task<FiHttpResult> Put(String url, MultipartFormDataContent form) {
+            return await SendRequest(HttpMethod.Put, url, form);
+        }
+
+        public async Task<FiHttpResult> Put(string url, Func<Stream, Task> streamFunction) {
+            return await SendRequest(HttpMethod.Put, url, streamFunction);
+        }
+        public async Task<FiHttpResult> Put(string url, Stream stream, string contentType) {
+            return await SendRequest(HttpMethod.Put, url, stream, contentType);
+        }
+        public async Task<FiHttpResult> Put(string url, string body) {
+            return await SendRequest(HttpMethod.Put, url, body);
+        }
+        public async Task<FiHttpResult> Put(string url) {
+            return await SendRequest(HttpMethod.Put, url);
+        }
+        public async Task<T> Put<T>(string url) {
+            return await SendRequest<T>(HttpMethod.Put, url);
+        }
+        public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = null) {
+            return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType);
+        }
+
+        // Patch
+        public async Task<FiHttpResult> Patch(String url, MultipartFormDataContent form) {
+            return await SendRequest(HttpMethod.Patch, url, form);
+        }
+
+        public async Task<FiHttpResult> Patch(string url, Func<Stream, Task> streamFunction) {
+            return await SendRequest(HttpMethod.Patch, url, streamFunction);
+        }
+        public async Task<FiHttpResult> Patch(string url, Stream stream, string contentType) {
+            return await SendRequest(HttpMethod.Patch, url, stream, contentType);
+        }
+        public async Task<FiHttpResult> Patch(string url, string body) {
+            return await SendRequest(HttpMethod.Patch, url, body);
+        }
+        public async Task<FiHttpResult> Patch(string url) {
+            return await SendRequest(HttpMethod.Patch, url);
+        }
+        public async Task<T> Patch<T>(string url) {
+            return await SendRequest<T>(HttpMethod.Patch, url);
+        }
+        public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = null) {
+            return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType);
+        }
+
+        //**
+
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, MultipartFormDataContent form) {
             var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
+            req.Method = method;
+            req.Content = form;
+            return await FiHttpResult.InitFromRequest(this, req);
+        }
+
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction) {
+            var req = CreateRequest(url);
+            req.Method = method;
             using (var ms = new MemoryStream()) {
                 await streamFunction(ms);
                 ms.Seek(0, SeekOrigin.Begin);
                 req.Content = new StreamContent(ms);
-                return await FiHttpResult.InitFromRequest(req);
+                return await FiHttpResult.InitFromRequest(this, req);
             }
         }
-        public async Task<FiHttpResult> Post(string url, Stream stream, string contentType) {
+
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Stream stream, string contentType) {
             var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
+            req.Method = method;
             req.Content = new StreamContent(stream) {
                 Headers = {
                     ContentType = new MediaTypeHeaderValue(contentType)
                 }
             };
-            return await FiHttpResult.InitFromRequest(req);
-        }
-        public async Task<FiHttpResult> Post(string url, string body) {
-            var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
-            req.Content = new StringContent(body);
-            return await FiHttpResult.InitFromRequest(req);
-        }
-        public async Task<FiHttpResult> Post(string url) {
-            var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
-            return await FiHttpResult.InitFromRequest(req);
+            return await FiHttpResult.InitFromRequest(this, req);
         }
 
-        public async Task<FiHttpResult> Put(string url, Stream stream, string contentType) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, string body) {
             var req = CreateRequest(url);
-            req.Method = HttpMethod.Put;
-            req.Content = new StreamContent(stream) {
-                Headers = {
-                    ContentType = new MediaTypeHeaderValue(contentType)
-                }
-            };
-            return await FiHttpResult.InitFromRequest(req);
-        }
-        public async Task<FiHttpResult> Put(string url, string body) {
-            var req = CreateRequest(url);
-            req.Method = HttpMethod.Post;
+            req.Method = method;
             req.Content = new StringContent(body);
-            return await FiHttpResult.InitFromRequest(req);
+            return await FiHttpResult.InitFromRequest(this, req);
         }
-        public async Task<FiHttpResult> Put(string url) {
+
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url) {
             var req = CreateRequest(url);
-            req.Method = HttpMethod.Put;
-            return await FiHttpResult.InitFromRequest(req);
+            req.Method = method;
+            return await FiHttpResult.InitFromRequest(this, req);
+        }
+
+        public async Task<T> SendRequest<T>(HttpMethod method, string url) {
+
+            var result = await SendRequest(method, url);
+
+            if (result.IsSuccess) {
+                return await result.As<T>();
+            } else {
+                throw new NonSuccessResponseException(result.Response);
+            }
+        }
+
+        public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = null) {
+            if (postData is Stream s) {
+                return await SendRequest(method, url, s, contentType);
+            }
+            contentType = contentType ?? ContentTypeJson;
+            var bytes = GetObjectBytes(postData, contentType);
+            var req = CreateRequest(url);
+            req.Method = method;
+            req.Content = new ByteArrayContent(bytes);
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            req.Content.Headers.ContentLength = bytes.Length;
+            return await FiHttpResult.InitFromRequest(this, req);
         }
 
         private void UpdateSyncCode() {
@@ -355,12 +489,6 @@ namespace Figlotech.Core {
             UpdateSyncCode();
             AddHeaders(request);
             return request;
-        }
-
-        public async Task<FiHttpResult> Get(string Url) {
-            var req = CreateRequest(Url);
-            req.Method = HttpMethod.Get;
-            return await FiHttpResult.InitFromRequest(req);
         }
 
         private void AddHeaders(HttpRequestMessage req) {
