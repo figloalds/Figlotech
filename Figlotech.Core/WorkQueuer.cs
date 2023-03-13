@@ -20,6 +20,14 @@ namespace Figlotech.Core {
         public int CompletedSteps;
     }
 
+    public sealed class WorkJobException : Exception {
+        public string[] EnqueuingContextStackTrace { get; private set; }
+        public WorkJobExecutionStat WorkJobDetails { get; private set; }
+        public WorkJobException(string message, WorkJob job, Exception inner) : base(message, inner) {
+            this.EnqueuingContextStackTrace = job.StackTrace.ToString().Split('\n').Select(x => x?.Trim()).ToArray();
+        }
+    }
+
     public sealed class WorkJob {
         public int id = ++idGen;
         private static int idGen = 0;
@@ -58,6 +66,29 @@ namespace Figlotech.Core {
         }
     }
 
+    public sealed class WorkJobExecutionStat {
+        public string Description { get; set; }
+        public DateTime? EnqueuedAt { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public decimal TimeWaiting { get; set; }
+        public string[] EnqueuingContextStackTrace { get; set; }
+        public decimal TimeInExecution { get; set; }
+
+        public WorkJobExecutionStat(WorkJob x) {
+            Description = x.Description;
+            EnqueuedAt = x.EnqueuedTime;
+            StartedAt = x.DequeuedTime;
+            EnqueuingContextStackTrace = x.StackTrace.ToString()
+                .Split('\n')
+                .SkipWhile(x=> x.Contains("iglotech.Core.WorkQueuer"))
+                .Select(x => x?.Trim())
+                .Where(x=> !string.IsNullOrEmpty(x))
+                .ToArray();
+            TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
+            TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
+        }
+    }
+    
     public sealed class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
@@ -195,24 +226,10 @@ namespace Figlotech.Core {
 
 
         private List<Task> Tasks = new List<Task>();
-
-        public sealed class WorkJobExecutionStat {
-            public string Description { get; set; }
-            public DateTime? EnqueuedAt { get; set; }
-            public DateTime? StartedAt { get; set; }
-            public decimal TimeWaiting { get; set; }
-            public decimal TimeInExecution { get; set; }
-        }
-
+                
         public WorkJobExecutionStat[] ActiveTaskStat() {
             lock (WorkQueue) {
-                return ActiveJobs.Select(x => new WorkJobExecutionStat {
-                    Description = x.Description,
-                    EnqueuedAt = x.EnqueuedTime,
-                    StartedAt = x.DequeuedTime,
-                    TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds,
-                    TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds,
-                })
+                return ActiveJobs.Select(x => new WorkJobExecutionStat(x))
                 .ToArray();
             }
         }
@@ -283,14 +300,17 @@ namespace Figlotech.Core {
                         }
                         Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} executed OK");
                     } catch (Exception x) {
+                        var wrappedException = new WorkJobException("Error Executing WorkJob", job, x);
                         if (job.handling != null) {
                             try {
-                                await job.handling(x).ConfigureAwait(false);
+                                await job.handling(
+                                    wrappedException
+                                ).ConfigureAwait(false);
                             } catch (Exception ex) {
                                 exception = ex;
                             }
                         } else {
-                            Fi.Tech.Throw(x);
+                            Fi.Tech.Throw(wrappedException);
                         }
                         if (job.finished != null) {
                             await job.finished(false).ConfigureAwait(false);
