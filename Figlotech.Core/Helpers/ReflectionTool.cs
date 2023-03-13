@@ -330,17 +330,18 @@ namespace Figlotech.Core.Helpers {
 
                 if (t.IsEnum && value as int? != null) {
                     return Enum.ToObject(t, (int)value);
-                }
+                } else {
+                    if (value is string str && t == typeof(bool)) {
+                        return str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                    }
 
-                if (value is string str && t == typeof(bool)) {
-                    return str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
-                }
-
-                if (!t.IsAssignableFrom(value.GetType())) {
-                    if (value.GetType().Implements(typeof(IConvertible))) {
-                        return Convert.ChangeType(value, t);
+                    if (!t.IsAssignableFrom(value.GetType())) {
+                        if (value.GetType().Implements(typeof(IConvertible))) {
+                            return Convert.ChangeType(value, t);
+                        }
                     }
                 }
+
 
                 if (value.GetType() == typeof(byte[])) {
                     var vbarr = value as byte[];
@@ -424,11 +425,15 @@ namespace Figlotech.Core.Helpers {
                 }
 
                 var t = GetTypeOf(member);
-                if(value != null && t == value.GetType()) {
+                if(
+                    value == null && !t.IsValueType || 
+                    (value != null && t == value.GetType())
+                ) {
                     pi?.SetValue(target, value);
                     fi?.SetValue(target, value);
                     return;
                 }
+
                 value = DbEvalValue(value, t);
                 (var isNullable, t) = ToUnderlying(t);
                 if (t == null) return;
@@ -457,22 +462,24 @@ namespace Figlotech.Core.Helpers {
                         t = t.GetGenericArguments()[0];
                     }
                 }
+                if (t.IsEnum && value is long lval) {
+                    value = Enum.ToObject(t, (int) lval);
+                } else if (t.IsEnum && value is int nval) {
+                    value = Enum.ToObject(t, nval);
+                } else {
+                    if (value is string str && t == typeof(bool)) {
+                        value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                    }
 
-                if (t.IsEnum && value as int? != null) {
-                    value = Enum.ToObject(t, (int)value);
-                }
-
-                if (value is string str && t == typeof(bool)) {
-                    value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
-                }
-
-                if (!t.IsAssignableFrom(value.GetType())) {
-                    if (value.GetType().Implements(typeof(IConvertible))) {
-                        value = Convert.ChangeType(value, t);
-                    } else {
-                        return;
+                    if (!t.IsAssignableFrom(value.GetType())) {
+                        if (value.GetType().Implements(typeof(IConvertible))) {
+                            value = Convert.ChangeType(value, t);
+                        } else {
+                            return;
+                        }
                     }
                 }
+
 
                 if (pi != null) {
                     pi.SetValue(target, value);
