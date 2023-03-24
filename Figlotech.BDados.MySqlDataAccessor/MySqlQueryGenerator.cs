@@ -191,6 +191,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             String retv = GetDatabaseType(field, info);
             if (info.Type != null && info.Type.Length > 0)
                 retv = info.Type;
+            if(ReflectionTool.GetTypeOf(field) == typeof(TimeSpan)) {
+                info.Size = 28;
+            }
             if (retv == "VARCHAR" || retv == "VARBINARY") {
                 retv += $"({(info.Size > 0 ? info.Size : 100)})";
             }

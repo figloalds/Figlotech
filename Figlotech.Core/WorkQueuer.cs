@@ -49,6 +49,7 @@ namespace Figlotech.Core {
         public TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
 
         public StackTrace StackTrace { get; internal set; }
+        public ValueTask ActionTask { get; internal set; }
 
         public TaskAwaiter<int> GetAwaiter() {
             return TaskCompletionSource.Task.GetAwaiter();
@@ -58,7 +59,7 @@ namespace Figlotech.Core {
             throw new NotImplementedException();
         }
 
-        public WorkJob(Func<ValueTask> method, Func<Exception, ValueTask> errorHandling, Func<bool, ValueTask> actionWhenFinished) {
+        public WorkJob(Func<ValueTask> method, Func<Exception, ValueTask> errorHandling = null, Func<bool, ValueTask> actionWhenFinished = null) {
             action = method;
             finished = actionWhenFinished;
             handling = errorHandling;
@@ -80,25 +81,26 @@ namespace Figlotech.Core {
             StartedAt = x.DequeuedTime;
             EnqueuingContextStackTrace = x.StackTrace.ToString()
                 .Split('\n')
-                .SkipWhile(x=> x.Contains("iglotech.Core.WorkQueuer"))
+                .SkipWhile(x => x.Contains("iglotech.Core.WorkQueuer"))
                 .Select(x => x?.Trim())
-                .Where(x=> !string.IsNullOrEmpty(x))
+                .Where(x => !string.IsNullOrEmpty(x))
                 .ToArray();
             TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
         }
     }
-    
+
     public sealed class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int QID = ++qid_increment;
         public String Name;
 
-        private Thread _supervisor;
+        public event Func<WorkJob, Task> OnWorkEnqueued;
+        public event Func<WorkJob, Task> OnWorkDequeued;
+        public event Func<WorkJob, Task> OnWorkComplete;
+        public event Func<WorkJob, Exception, Exception, Task> OnExceptionInHandler;
 
-        public event Action<WorkJob> OnWorkEnqueued;
-        public event Action<WorkJob> OnWorkDequeued;
-        public event Action<WorkJob> OnWorkComplete;
+        Timer KeepAliveTimer;
 
         Queue<WorkJob> WorkQueue = new Queue<WorkJob>();
         List<WorkJob> HeldJobs = new List<WorkJob>();
@@ -138,6 +140,10 @@ namespace Figlotech.Core {
 
         public async Task Stop(bool wait = true) {
             Active = false;
+
+            if (KeepAliveTimer != null) {
+                KeepAliveTimer.Dispose();
+            }
             if (wait) {
                 await Fi.Tech.FireTask(async () => {
                     WorkJob peekJob = null;
@@ -200,6 +206,10 @@ namespace Figlotech.Core {
                 HeldJobs.Clear();
             }
 
+            if (KeepAliveTimer != null) {
+                KeepAliveTimer.Dispose();
+            }
+            KeepAliveTimer = new Timer(_keepAlive, null, 6000, 6000);
             SpawnWorker();
         }
 
@@ -226,7 +236,7 @@ namespace Figlotech.Core {
 
 
         private List<Task> Tasks = new List<Task>();
-                
+
         public WorkJobExecutionStat[] ActiveTaskStat() {
             lock (WorkQueue) {
                 return ActiveJobs.Select(x => new WorkJobExecutionStat(x))
@@ -235,14 +245,14 @@ namespace Figlotech.Core {
         }
 
         public WorkJob Enqueue(WorkJob job) {
+            job.EnqueuedTime = DateTime.UtcNow;
+            job.status = WorkJobStatus.Queued;
+            job.StackTrace = new System.Diagnostics.StackTrace();
+            job.TimeInQueueCounter = new Stopwatch();
+            job.TimeInQueueCounter.Start();
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(job);
-                    job.EnqueuedTime = DateTime.UtcNow;
-                    job.status = WorkJobStatus.Queued;
-                    job.StackTrace = new System.Diagnostics.StackTrace();
-                    job.TimeInQueueCounter = new Stopwatch();
-                    job.TimeInQueueCounter.Start();
                 }
             } else {
                 lock (HeldJobs) {
@@ -259,6 +269,19 @@ namespace Figlotech.Core {
         object selfLockSpawnWorker2 = new object();
         int i;
 
+        private void _keepAlive(object ctx) {
+            lock (ActiveJobs) {
+                for (int i = ActiveJobs.Count - 1; i >= 0; i--) {
+                    if (ActiveJobs[i].ActionTask != null && (
+                        ActiveJobs[i].ActionTask.IsFaulted || ActiveJobs[i].ActionTask.IsCanceled)
+                    ) {
+                        ActiveJobs.RemoveAt(i);
+                    }
+                }
+            }
+            SpawnWorker();
+        }
+
         private bool SpawnWorker() {
             WorkJob job = null;
             lock (selfLockSpawnWorker2) {
@@ -269,87 +292,108 @@ namespace Figlotech.Core {
                         lock (Tasks) {
                             Tasks.Add(job.TaskCompletionSource.Task);
                         }
+                        lock (ActiveJobs) {
+                            ActiveJobs.Add(job);
+                        }
                     }
                 }
-            }
-            if (job?.status == WorkJobStatus.Finished) {
-                Debugger.Break();
-            }
-            if (job != null) {
-                return ThreadPool.UnsafeQueueUserWorkItem(async _ => {
-                    lock (ActiveJobs) {
+                if (job?.status == WorkJobStatus.Finished) {
+                    Debugger.Break();
+                }
+                if (job != null) {
+                    return ThreadPool.UnsafeQueueUserWorkItem(async _ => {
+                        job.TimeInQueueCounter.Stop();
+                        job.TimeInQueue = TimeSpan.FromMilliseconds(job.TimeInQueueCounter.ElapsedMilliseconds);
+                        this.OnWorkDequeued?.Invoke(job);
+                        Stopwatch sw = new Stopwatch();
+                        sw.Start();
+                        var thisWorkerId = workerIds++;
+                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} started");
+                        Exception exception = null;
                         Executing++;
-                        ActiveJobs.Add(job);
-                    }
-                    job.TimeInQueueCounter.Stop();
-                    job.TimeInQueue = TimeSpan.FromMilliseconds(job.TimeInQueueCounter.ElapsedMilliseconds);
-                    this.OnWorkDequeued?.Invoke(job);
-                    Stopwatch sw = new Stopwatch();
-                    sw.Start();
-                    var thisWorkerId = workerIds++;
-                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} started");
-                    Exception exception = null;
-                    try {
-                        job.DequeuedTime = DateTime.UtcNow;
-                        job.status = WorkJobStatus.Running;
-                        if (job.action != null) {
-                            await job.action().ConfigureAwait(false);
-                        }
-                        if (job.finished != null) {
-                            await job.finished(true).ConfigureAwait(false);
-                        }
-                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} executed OK");
-                    } catch (Exception x) {
-                        var wrappedException = new WorkJobException("Error Executing WorkJob", job, x);
-                        if (job.handling != null) {
-                            try {
-                                await job.handling(
-                                    wrappedException
-                                ).ConfigureAwait(false);
-                            } catch (Exception ex) {
-                                exception = ex;
-                            }
-                        } else {
-                            Fi.Tech.Throw(wrappedException);
-                        }
-                        if (job.finished != null) {
-                            await job.finished(false).ConfigureAwait(false);
-                        }
-                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} thrown an Exception: {x.Message}");
-                    } finally {
                         try {
-                            sw.Stop();
-                            lock (this) {
-                                job.CompletedTime = DateTime.UtcNow;
-                                job.status = WorkJobStatus.Finished;
-                                WorkDone++;
-                                Executing--;
-                                job.CompletionTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds);
-                                this.OnWorkComplete?.Invoke(job);
-                                if (exception != null) {
-                                    job.TaskCompletionSource.SetException(exception);
-                                    _ = job.TaskCompletionSource.Task.Exception;
-                                } else {
-                                    job.TaskCompletionSource.SetResult(0);
-                                }
-                                this.TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
-
-                                lock (ActiveJobs) {
-                                    ActiveJobs.Remove(job);
-                                }
-                                lock (Tasks) {
-                                    Tasks.Remove(job.TaskCompletionSource.Task);
-                                }
-                                SpawnWorker();
+                            job.DequeuedTime = DateTime.UtcNow;
+                            job.status = WorkJobStatus.Running;
+                            if (job.action != null) {
+                                job.ActionTask = job.action();
+                                await job.ActionTask.ConfigureAwait(false);
                             }
+                            if (job.finished != null) {
+                                try {
+                                    await job.finished(true).ConfigureAwait(false);
+                                } catch (Exception ex) {
+                                    var wrappedException = new WorkJobException("Error Executing WorkJob", job, ex);
+                                    Fi.Tech.Throw(wrappedException);
+                                }
+                            }
+                            Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} executed OK");
                         } catch (Exception x) {
-                            Debugger.Break();
+                            var wrappedException = new WorkJobException("Error Executing WorkJob", job, x);
+                            if (job.handling != null) {
+                                try {
+                                    await job.handling(
+                                        wrappedException
+                                    ).ConfigureAwait(false);
+                                } catch (Exception ex) {
+                                    exception = ex;
+                                    try {
+                                        var handlerTask = this.OnExceptionInHandler?.Invoke(job, x, ex);
+                                        if(handlerTask is Task) {
+                                            await handlerTask;
+                                        }
+                                    } catch(Exception exx) {
+                                        Fi.Tech.Throw(new AggregateException("User code gernerated exception in the hander AND in the handler of the handler.", x, ex, exx));
+                                    }
+                                }
+                            } else {
+                                Fi.Tech.Throw(wrappedException);
+                            }
+                            if (job.finished != null) {
+                                try {
+                                    await job.finished(false).ConfigureAwait(false);
+                                } catch (Exception ex) {
+                                    var wrappedException2 = new WorkJobException("Error Executing WorkJob", job,
+                                        new AggregateException(x, ex)
+                                    );
+                                    Fi.Tech.Throw(wrappedException2);
+                                }
+                            }
+                            Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} thrown an Exception: {x.Message}");
+                        } finally {
+                            try {
+                                sw.Stop();
+                                this.OnWorkComplete?.Invoke(job);
+                                lock (this) {
+                                    job.CompletedTime = DateTime.UtcNow;
+                                    job.status = WorkJobStatus.Finished;
+                                    WorkDone++;
+                                    Executing--;
+                                    job.CompletionTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds);
+                                    if (exception != null) {
+                                        job.TaskCompletionSource.SetException(exception);
+                                        _ = job.TaskCompletionSource.Task.Exception;
+                                    } else {
+                                        job.TaskCompletionSource.SetResult(0);
+                                    }
+                                    this.TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
+
+                                    lock (ActiveJobs) {
+                                        ActiveJobs.Remove(job);
+                                    }
+                                    lock (Tasks) {
+                                        Tasks.Remove(job.TaskCompletionSource.Task);
+                                    }
+                                    SpawnWorker();
+                                }
+                            } catch (Exception x) {
+                                Debugger.Break();
+                            }
+                            Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} cleanup OK");
                         }
-                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} cleanup OK");
-                    }
-                }, null);
-            } else {
-                return false;
+                    }, null);
+                } else {
+                    return false;
+                }
             }
         }
 

@@ -278,14 +278,11 @@ namespace Figlotech.Core {
 
         public ulong AsULong {
             get {
-                return new byte[][] {
-                    Signature.Slice(0, 8).ToArray(),
-                    Signature.Slice(7, 8).ToArray(),
-                    Signature.Slice(15, 8).ToArray(),
-                    Signature.Slice(23, 8).ToArray(),
+                ulong retv = 0;
+                for(var i = 0; i < 4; i++) {
+                    retv ^= BitConverter.ToUInt64(Signature, 8 * i);
                 }
-                .Select(a => BitConverter.ToUInt64(a, 0))
-                .Aggregate((a, b) => a ^ b);
+                return retv;
             }
         }
 

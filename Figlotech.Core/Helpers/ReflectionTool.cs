@@ -23,8 +23,8 @@ namespace Figlotech.Core.Helpers {
         }
         public static IEnumerable<Type> BaseTypeTree(this Type t) {
             yield return t;
-            if(t != typeof(Object) && t.BaseType != null) {
-                foreach(var a in BaseTypeTree(t.BaseType)) {
+            if (t != typeof(Object) && t.BaseType != null) {
+                foreach (var a in BaseTypeTree(t.BaseType)) {
                     yield return a;
                 }
             }
@@ -49,7 +49,7 @@ namespace Figlotech.Core.Helpers {
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
             if (type == null)
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
-            lock(String.Intern($"ACCESS_MEMBER_CACHE_{type.Name}")) {
+            lock (String.Intern($"ACCESS_MEMBER_CACHE_{type.Name}")) {
                 if (!MembersCache.ContainsKey(type)) {
                     MembersCache[type] = CollectMembers(type).ToArray();
                 }
@@ -62,8 +62,8 @@ namespace Figlotech.Core.Helpers {
 
         static Dictionary<(Type, Type), object> AttributedMembersCache = new Dictionary<(Type, Type), object>();
         public static (MemberInfo Member, TAttribute Attribute)[] GetAttributedMemberValues<TAttribute>(Type t) where TAttribute : Attribute {
-            lock(AttributedMembersCache) {
-                if(!AttributedMembersCache.ContainsKey((t, typeof(TAttribute)))) {
+            lock (AttributedMembersCache) {
+                if (!AttributedMembersCache.ContainsKey((t, typeof(TAttribute)))) {
                     AttributedMembersCache[(t, typeof(TAttribute))] = InitAttributedMembersCache<TAttribute>(t);
                 }
 
@@ -71,7 +71,7 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
-        private static (MemberInfo, TAttribute)[] InitAttributedMembersCache<TAttribute>(Type t) where TAttribute : Attribute{
+        private static (MemberInfo, TAttribute)[] InitAttributedMembersCache<TAttribute>(Type t) where TAttribute : Attribute {
             var fields = t.GetFields();
             var properties = t.GetProperties();
             var retv = new List<(MemberInfo, TAttribute)>();
@@ -119,7 +119,7 @@ namespace Figlotech.Core.Helpers {
                 (t != null && interfaceType.IsInterface) &&
                 t != typeof(Object) &&
                 (
-                    t.GetInterfaces().Any(i => i == interfaceType || (i.IsGenericType && i.GetGenericTypeDefinition() == interfaceType) ) ||
+                    t.GetInterfaces().Any(i => i == interfaceType || (i.IsGenericType && i.GetGenericTypeDefinition() == interfaceType)) ||
                     TypeImplements(t.BaseType, interfaceType)
                 );
         }
@@ -157,7 +157,7 @@ namespace Figlotech.Core.Helpers {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
                 } catch (Exception x) {
-                    if(Debugger.IsAttached) {
+                    if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
                 }
@@ -206,7 +206,7 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {
-            try { 
+            try {
                 MemberInfo member = GetMember(target?.GetType(), fieldName);
                 if (member == null) {
                     //Debugger.Break();
@@ -250,14 +250,14 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static Object GetMemberValue(MemberInfo member, Object target) {
-            if(member == null) {
+            if (member == null) {
                 return null;
             }
             if (member is PropertyInfo pi) {
-                if(pi.GetIndexParameters().Length == 0) {
+                if (pi.GetIndexParameters().Length == 0) {
                     try {
                         return pi.GetValue(target);
-                    } catch(Exception x) {
+                    } catch (Exception x) {
                         return null;
                     }
                 } else {
@@ -285,7 +285,7 @@ namespace Figlotech.Core.Helpers {
         static (bool IsNullable, Type UnderlyingType) ToUnderlying(Type t) {
             if (t == null) return (true, null);
             var underlyingFromNullable = Nullable.GetUnderlyingType(t);
-            
+
             return (underlyingFromNullable != null, underlyingFromNullable ?? t);
         }
 
@@ -369,12 +369,12 @@ namespace Figlotech.Core.Helpers {
 
                     if (t == typeof(DateTime)) {
                         var vbarrStr = new UTF8Encoding(false).GetString(vbarr);
-                        if(vbarr.Length <= sizeof(Int64)) {
+                        if (vbarr.Length <= sizeof(Int64)) {
                             var v64 = BitConverter.ToInt64(Fi.Tech.BinaryPad(vbarr, sizeof(Int64)), 0);
                             DateTime dt2;
-                            if(v64 > DateTime.MinValue.Ticks && v64 < DateTime.MaxValue.Ticks) {
+                            if (v64 > DateTime.MinValue.Ticks && v64 < DateTime.MaxValue.Ticks) {
                                 dt2 = new DateTime(v64);
-                            } else  {
+                            } else {
                                 dt2 = new DateTime(v64 * TimeSpan.TicksPerMillisecond);
                             }
                             return dt2;
@@ -413,6 +413,35 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
+        private static void _setMemberValueInternal(PropertyInfo pi, FieldInfo fi, MemberInfo member, object target, Object value) {
+            if (pi != null) {
+                pi.SetValue(target, value);
+                return;
+            }
+
+            if (fi != null) {
+                fi.SetValue(target, value);
+            }
+        }
+
+        static SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>> CastMethods = new SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>>(
+            fieldType => {
+                var retv = new LenientDictionary<Type, MethodInfo>();
+
+                var src = fieldType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .Where(mi => (mi.Name == "op_Implicit" || mi.Name == "op_Explicit") && mi.ReturnType == fieldType);
+
+                foreach (var mi in src) {
+                    ParameterInfo pi = mi.GetParameters().FirstOrDefault();
+                    if (pi?.ParameterType != null) {
+                        retv[pi.ParameterType] = (MethodInfo)mi;
+                    }
+                }
+
+                return retv;
+            }
+        );
+
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
             try {
                 var pi = member as PropertyInfo;
@@ -425,12 +454,11 @@ namespace Figlotech.Core.Helpers {
                 }
 
                 var t = GetTypeOf(member);
-                if(
-                    value == null && !t.IsValueType || 
+                if (
+                    value == null && !t.IsValueType ||
                     (value != null && t == value.GetType())
                 ) {
-                    pi?.SetValue(target, value);
-                    fi?.SetValue(target, value);
+                    _setMemberValueInternal(pi, fi, member, target, value);
                     return;
                 }
 
@@ -438,57 +466,54 @@ namespace Figlotech.Core.Helpers {
                 (var isNullable, t) = ToUnderlying(t);
                 if (t == null) return;
 
+
                 if (value == null) {
                     if (t.IsValueType || !isNullable) {
                         return;
                     } else {
-                        if (pi != null) {
-                            pi.SetValue(target, null);
-                            return;
-                        }
-
-                        if (fi != null) {
-                            fi.SetValue(target, null);
-                            return;
-                        }
+                        _setMemberValueInternal(pi, fi, member, target, null);
                     }
                     return;
                 }
 
-                if (t.IsGenericType) {
-                    if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
-                        target = GetMemberValue(member, target);
-                        member = t.GetProperty("Value");
-                        t = t.GetGenericArguments()[0];
-                    }
-                }
-                if (t.IsEnum && value is long lval) {
-                    value = Enum.ToObject(t, (int) lval);
-                } else if (t.IsEnum && value is int nval) {
-                    value = Enum.ToObject(t, nval);
-                } else {
-                    if (value is string str && t == typeof(bool)) {
-                        value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
-                    }
-
-                    if (!t.IsAssignableFrom(value.GetType())) {
-                        if (value.GetType().Implements(typeof(IConvertible))) {
-                            value = Convert.ChangeType(value, t);
-                        } else {
-                            return;
+                if (value.GetType() != t) {
+                    if (t.IsGenericType) {
+                        if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+                            target = GetMemberValue(member, target);
+                            member = t.GetProperty("Value");
+                            t = t.GetGenericArguments()[0];
                         }
                     }
+                    if (t.IsEnum && value is long lval) {
+                        value = Enum.ToObject(t, (int)lval);
+                    } else if (t.IsEnum && value is int nval) {
+                        value = Enum.ToObject(t, nval);
+                    } else {
+                        if (value is string str && t == typeof(bool)) {
+                            value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                        }
+
+                        var castMethod = CastMethods[t][value.GetType()];
+                        if (castMethod != null) {
+                            value = castMethod.Invoke(target, new object[] { value });
+                        }
+
+                        if (!t.IsAssignableFrom(value.GetType())) {
+                            if (value.GetType().Implements(typeof(IConvertible))) {
+                                value = Convert.ChangeType(value, t);
+                            } else {
+                                return;
+                            }
+                        }
+
+                    }
+
+                    if (t.FullName == "System.TimeSpan" && value is string strTs) {
+                        value = TimeSpan.Parse(strTs);
+                    }
                 }
 
-
-                if (pi != null) {
-                    pi.SetValue(target, value);
-                    return;
-                }
-
-                if (fi != null) {
-                    fi.SetValue(target, value);
-                }
+                _setMemberValueInternal(pi, fi, member, target, value);
 
             } catch (Exception x) {
                 //if (Debugger.IsAttached) {
@@ -580,7 +605,7 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool DoesTypeHaveFieldOrProperty(Type type, string key) {
-            if(key == null || type == null || MemberCacheFromString[type] == null) {
+            if (key == null || type == null || MemberCacheFromString[type] == null) {
                 Debugger.Break();
                 return false;
             }

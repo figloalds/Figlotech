@@ -86,7 +86,7 @@ namespace Figlotech.Data {
         public static string paramId => $"_qb{++pids}";
 
         private static QbFmt ListQueryFunction<T>(string column, List<T> o, Func<T, object> fn, bool isIn) {
-            if (!o.Any()) {
+            if (o == null || !o.Any()) {
                 return Qb.Fmt(isIn ? "FALSE" : "TRUE");
             }
             var retv = Qb.Fmt($"{column} {(isIn ? "IN" : "NOT IN")} (");

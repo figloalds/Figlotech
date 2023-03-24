@@ -13,23 +13,22 @@ namespace Figlotech.Core {
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {
-                lock (this) {
-                    TValue retv;
-                    if (!_dmmy.ContainsKey(key)) {
-                        if(FullDictionaryLockOnInit) {
-                            lock (_dmmy) retv = Initialize(key);
-                        } else {
-                            retv = Initialize(key);
+                if (!_dmmy.TryGetValue(key, out var retv)) {
+                    lock (this) {
+                        if (!_dmmy.TryGetValue(key, out retv)) {
+                            if (FullDictionaryLockOnInit) {
+                                lock (_dmmy) retv = Initialize(key);
+                            } else {
+                                retv = Initialize(key);
+                            }
                         }
-                    } else {
-                        retv = _dmmy[key];
                     }
-                    return retv;
                 }
+                return retv;
             }
             set {
                 lock (this) {
-                    if(!AllowNullValueCaching && value ==  null) {
+                    if (!AllowNullValueCaching && value == null) {
                         return;
                     }
                     _dmmy[key] = value;
@@ -38,7 +37,7 @@ namespace Figlotech.Core {
         }
 
         private TValue Initialize(TKey key) {
-            lock(this) {
+            lock (this) {
                 var init = SelfInitFn(key);
                 if (AllowNullValueCaching || init != null) {
                     _dmmy.Add(key, init);
@@ -64,8 +63,8 @@ namespace Figlotech.Core {
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
 
         public void Add(TKey key, TValue value) {
-            lock(this) {
-                if(key == null) {
+            lock (this) {
+                if (key == null) {
                     Debugger.Break();
                 }
                 ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
