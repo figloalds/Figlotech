@@ -20,7 +20,7 @@ namespace Figlotech.BDados.Helpers {
             if (dict.ContainsKey(k)) {
                 retv = dict[k];
             } else {
-                dict.Add(k, "tb" + new IntEx(seq++).ToString(IntEx.Base26).ToLower());
+                dict.Add(k, "tb" + IntEx.Int64ToString(seq++, IntEx.Base26).ToLower());
                 revDict[dict[k]] = (parent, child, pkey);
                 retv = dict[k];
             }

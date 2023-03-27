@@ -87,8 +87,8 @@ namespace Figlotech.ExcelUtil {
         }
 
         public ExcelatorRowRangeWriter RowSum(int columnFrom, int columnTo) {
-            var cf = new IntEx(columnFrom-1).ToString(IntEx.Base26);
-            var ct = new IntEx(columnTo-1).ToString(IntEx.Base26);
+            var cf = IntEx.Int64ToString(columnFrom-1, IntEx.Base26);
+            var ct = IntEx.Int64ToString(columnTo-1, IntEx.Base26);
             Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({cf}{row}:{ct}{row})");
             return this;
         }

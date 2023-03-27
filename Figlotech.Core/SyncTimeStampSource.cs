@@ -49,7 +49,7 @@ namespace Figlotech.Core {
                 var localTimeSaved = new DateTime(BitConverter.ToInt64(bytes, 0));
                 var remoteTimeSaved = new DateTime(BitConverter.ToInt64(bytes, sizeof(Int64)));
                 if (
-                    localTimeSaved.Ticks != new FileInfo(cacheFile).CreationTimeUtc.Ticks ||
+                    Math.Abs(localTimeSaved.Ticks - new FileInfo(cacheFile).CreationTimeUtc.Ticks) > 5 ||
                     localTimeSaved > DateTime.UtcNow ||
                     remoteTimeSaved > DateTime.UtcNow ||
                     DateTime.UtcNow - localTimeSaved > TimeSpan.FromHours(24)
@@ -72,7 +72,7 @@ namespace Figlotech.Core {
                 Array.Copy(BitConverter.GetBytes(localTime.Ticks), 0, bytes, 0, sizeof(Int64));
                 Array.Copy(BitConverter.GetBytes(remoteTime.Ticks), 0, bytes, sizeof(Int64), sizeof(Int64));
                 File.WriteAllBytes(cacheFile, bytes);
-                File.SetCreationTime(cacheFile, localTime);
+                File.SetLastWriteTimeUtc(cacheFile, localTime);
 #if DEBUG
                 Console.WriteLine($"FromNTP Cached (live): {DateTime.UtcNow} -> {retv.GetUtc()}");
 #endif

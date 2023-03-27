@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net.NetworkInformation;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -333,7 +334,7 @@ namespace Figlotech.Core {
         }
 
         public string ToBase36() {
-            return new IntEx(Signature).ToString(IntEx.Base36);
+            return IntEx.BigIntegerToString(new BigInteger(Signature, true), IntEx.Base36);
         }
 
         public string ToHex() {
