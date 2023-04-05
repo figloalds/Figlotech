@@ -262,29 +262,41 @@ namespace Figlotech.Core {
         }
 
         static bool isNtpTimeRequestedAlready = false;
-        static SyncTimeStampSource _globalTimeStampSource = null;
+        static SyncTimeStampSource _globalTimeStampSource = SyncTimeStampSource.FromLocalTime();
         public static SyncTimeStampSource GlobalTimeStampSource {
             get {
-                if (_globalTimeStampSource != null) {
-                    return _globalTimeStampSource;
+                return _globalTimeStampSource;
+            }
+        }
+
+        private static bool NtpTimeHasBeenInitialized = false;
+        private static bool _allowNTPTimeRequest;
+        public static bool AllowNTPTimeRequest {
+            get {
+                return _allowNTPTimeRequest;
+            }
+            set {
+                if(value && !NtpTimeHasBeenInitialized) {
+                    _initGlobalNtpRequest();
                 }
-                _globalTimeStampSource = SyncTimeStampSource.FromLocalTime();
-                bool shouldRequestNtpTime = false;
-                lock ("NTP_TIME_REQUESTAL") {
-                    if (!isNtpTimeRequestedAlready) {
-                        shouldRequestNtpTime = true;
-                        isNtpTimeRequestedAlready = true;
-                    }
-                }
-                if (shouldRequestNtpTime) {
-                    Fi.Tech.FireAndForget(async () => {
+                _allowNTPTimeRequest = value;
+            }
+        }
+
+        private static void _initGlobalNtpRequest() {
+            var taskid = string.Intern("GLOBAL_TIMESTAMP_NTP_INIT");
+            lock (taskid) {
+                if (!NtpTimeHasBeenInitialized) {
+                    NtpTimeHasBeenInitialized = true;
+                    Fi.Tech.ScheduleTask(taskid, Fi.Tech.GetUtcTime(), new WorkJob(async () => {
                         await Task.Yield();
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("0.pool.ntp.org");
+                        Fi.Tech.Unschedule(taskid);
+                        Fi.Tech.WriteLineInternal("SyncTime", () => "NTP time initialized");
                     }, async x => {
-                        Fi.Tech.Throw(x);
-                    });
+                        Fi.Tech.WriteLineInternal("SyncTime", () => "Error updating time with NTP server");
+                    }), TimeSpan.FromSeconds(5));
                 }
-                return _globalTimeStampSource;
             }
         }
 
@@ -337,7 +349,7 @@ namespace Figlotech.Core {
             //**UTC** time
             var networkDateTime = (new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)).AddMilliseconds((long)milliseconds);
             if(milliseconds < 1420070400) {
-                return DateTime.UtcNow;
+                return Fi.Tech.GetUtcTime();
             }
             return networkDateTime;
         }
@@ -345,9 +357,9 @@ namespace Figlotech.Core {
         // stackoverflow.com/a/3294698/162671
         static uint SwapEndianness(ulong x) {
             return (uint)(((x & 0x000000ff) << 24) +
-                           ((x & 0x0000ff00) << 8) +
-                           ((x & 0x00ff0000) >> 8) +
-                           ((x & 0xff000000) >> 24));
+                ((x & 0x0000ff00) << 8) +
+                ((x & 0x00ff0000) >> 8) +
+                ((x & 0xff000000) >> 24));
         }
 
         public static void WriteLine(this Fi _selfie, string s = "") {
@@ -428,7 +440,7 @@ namespace Figlotech.Core {
             lock(sched) {
                 if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
                     var nextRun = sched.ScheduledTime;
-                    while (nextRun < DateTime.UtcNow) {
+                    while (nextRun < Fi.Tech.GetUtcTime()) {
                         nextRun += sched.RecurrenceInterval.Value;
                     }
                     try {
@@ -441,14 +453,14 @@ namespace Figlotech.Core {
                     } catch(Exception x) {
 
                     }
-                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - DateTime.UtcNow).TotalMilliseconds), Timeout.Infinite);
+                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - Fi.Tech.GetUtcTime()).TotalMilliseconds), Timeout.Infinite);
                 }
             }
         }
 
         private static void _timerFn(object a) {
             var sched = a as ScheduledWorkJob;
-            var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
+            var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
             WorkJob newWj = null;
             if (millisDiff > 5000) {
                 if(Debugger.IsAttached && DebugSchedules) {
@@ -479,7 +491,7 @@ namespace Figlotech.Core {
         public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
             lock (GlobalScheduledJobs) {
                 var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
-                var ms = (long)(sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
+                var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
                 var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
                 sched.Timer = new Timer(_timerFn, sched, timeToFire, Timeout.Infinite);
                 GlobalScheduledJobs.Add(sched);
@@ -638,10 +650,10 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        private static DateTime _startupstamp = DateTime.UtcNow;
+        private static DateTime _startupstamp = Fi.Tech.GetUtcTime();
         public static DateTime ProgramStartupTimestamp => _startupstamp;
         public static bool DidTimeElapseFromProgramStart(this Fi _selfie, TimeSpan ts) {
-            return DateTime.UtcNow.Subtract(_startupstamp) > ts;
+            return Fi.Tech.GetUtcTime().Subtract(_startupstamp) > ts;
         }
 
         public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
@@ -649,7 +661,7 @@ namespace Figlotech.Core {
                 throw new NullReferenceException("Input DataTable to Map<T> cannot be null");
             }
             if (dt.Rows.Count < 1) return new List<T>();
-            var init = DateTime.UtcNow;
+            var init = Fi.Tech.GetUtcTime();
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
@@ -660,7 +672,7 @@ namespace Figlotech.Core {
                 lock (retv)
                     retv.Add(val);
             });
-            Fi.Tech.WriteLine($"MAP<T> took {DateTime.UtcNow.Subtract(init).TotalMilliseconds}ms");
+            Fi.Tech.WriteLine($"MAP<T> took {Fi.Tech.GetUtcTime().Subtract(init).TotalMilliseconds}ms");
             return retv;
         }
 
@@ -1425,7 +1437,7 @@ namespace Figlotech.Core {
         }
 
         public static void RunOnlyUntil(this Fi __selfie, DateTime max, Action a, Action<Exception> h = null, Action t = null) {
-            if (DateTime.UtcNow > max)
+            if (Fi.Tech.GetUtcTime() > max)
                 return;
             try {
                 try {
@@ -1440,7 +1452,7 @@ namespace Figlotech.Core {
             }
         }
         public static void RunOnlyUntil(this Fi __selfie, DateTime max, Func<ValueTask> a, Func<Exception, ValueTask> h = null, Func<bool, ValueTask> t = null) {
-            if (DateTime.UtcNow > max)
+            if (Fi.Tech.GetUtcTime() > max)
                 return;
             FireTask(__selfie, a, h, t);
         }

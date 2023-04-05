@@ -343,6 +343,12 @@ namespace Figlotech.BDados.Helpers {
             if (foofun is MethodCallExpression) {
                 var expr = foofun as MethodCallExpression;
 
+                if(expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
+                    if(expr.Method.GetParameters().Length == 1) {
+                        return Qb.Fmt($"@{GenerateParameterId}", expr.Method.Invoke(null, new object[] { Fi.Tech }));
+                    }
+                }
+
                 if(expr.Method.DeclaringType == typeof(Qh)) {
                     var tq = typeof(Qb);
                     var equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == expr.Method.GetParameters().Length - 1);
