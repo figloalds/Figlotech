@@ -8,9 +8,9 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public sealed class SelfInitializedCache<TKey, T> : IDictionary<TKey, T> {
-        private SelfInitializerDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
-        private Func<TKey, T> GenerationLogic;
+
+    public sealed class TimedCache<TKey, T> : IDictionary<TKey, T> {
+        private LenientDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
 
         public ICollection<TKey> Keys => Dictionary.Keys;
@@ -21,12 +21,9 @@ namespace Figlotech.Core {
 
         public bool IsReadOnly => Dictionary.IsReadOnly;
 
-        public SelfInitializedCache(Func<TKey, T> generationLogic, TimeSpan duration) {
-            this.GenerationLogic = generationLogic;
+        public TimedCache(TimeSpan duration) {
             this.CacheDuration = duration;
-            Dictionary = new SelfInitializerDictionary<TKey, TimerCachedObject<TKey, T>>(key => {
-                return new TimerCachedObject<TKey, T>(Dictionary!, key, generationLogic(key), duration);
-            });
+            Dictionary = new LenientDictionary<TKey, TimerCachedObject<TKey, T>>();
         }
 
         public T this[TKey key] {
