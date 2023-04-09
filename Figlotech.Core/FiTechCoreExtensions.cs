@@ -444,7 +444,7 @@ namespace Figlotech.Core {
                         nextRun += sched.RecurrenceInterval.Value;
                     }
                     try {
-                        sched.Timer?.Change(Timeout.Infinite, Timeout.Infinite);
+                        sched.Timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
                     } catch(Exception x) {
 
                     }
@@ -453,7 +453,7 @@ namespace Figlotech.Core {
                     } catch(Exception x) {
 
                     }
-                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - Fi.Tech.GetUtcTime()).TotalMilliseconds), Timeout.Infinite);
+                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - Fi.Tech.GetUtcTime()).TotalMilliseconds), System.Threading.Timeout.Infinite);
                 }
             }
         }
@@ -484,7 +484,7 @@ namespace Figlotech.Core {
             }
         }
         public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
-            ScheduleTask(_selfie, identifier, FiTechRAF, when, job, RecurrenceInterval);
+            ScheduleTask(_selfie, identifier, FiTechFireTaskWorker, when, job, RecurrenceInterval);
         }
         public static bool DebugSchedules { get; set; } = false;
 
@@ -493,7 +493,7 @@ namespace Figlotech.Core {
                 var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
                 var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
                 var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
-                sched.Timer = new Timer(_timerFn, sched, timeToFire, Timeout.Infinite);
+                sched.Timer = new Timer(_timerFn, sched, timeToFire, System.Threading.Timeout.Infinite);
                 GlobalScheduledJobs.Add(sched);
                 if (Debugger.IsAttached && DebugSchedules) {
                     Debugger.Break();
@@ -1525,7 +1525,43 @@ namespace Figlotech.Core {
         public static bool InlineFireTask { get; set; }
         public static bool DebugConnectionLifecycle { get; set; }
 
-        static WorkQueuer FiTechRAF = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
+        public static async Task<bool> WaitForCondition(this Fi __selfie, Func<bool> condition, TimeSpan checkInterval, Func<TimeSpan> timeout) {
+            Stopwatch sw = Stopwatch.StartNew();
+            while(!condition()) {
+                await Task.Delay(checkInterval);
+                if(sw.Elapsed > timeout()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static async Task<bool> Timeout(this Fi __selfie, WorkJob job, TimeSpan to) {
+            return await Task.WhenAny(job.TaskCompletionSource.Task, Task.Delay(to)) == job.TaskCompletionSource.Task;
+        }
+        public static async Task ThrowIfTimeout(this Fi __selfie, WorkJob job, TimeSpan to, string message) {
+            if (!await Timeout(
+                __selfie,
+                job,
+                to
+            )) {
+                throw new InternalProgramException(message);
+            }
+        }
+        public static async Task<bool> Timeout(this Fi __selfie, Task task, TimeSpan to) {
+            return await Task.WhenAny(task, Task.Delay(to)) == task;
+        }
+        public static async Task ThrowIfTimeout(this Fi __selfie, Task task, TimeSpan to, string message) {
+            if (!await Timeout(
+                __selfie,
+                task,
+                to
+            )) {
+                throw new InternalProgramException(message);
+            }
+        }
+
+        static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
         public static WorkJob FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             if (InlineFireTask) {
                 try {
@@ -1545,9 +1581,9 @@ namespace Figlotech.Core {
                 return null;
             }
 
-            var wj = FiTechRAF.EnqueueTask(job, handler, then);
+            var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
             wj.Name = name;
-            FiTechRAF.Start();
+            FiTechFireTaskWorker.Start();
             return wj;
         }
 

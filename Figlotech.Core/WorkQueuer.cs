@@ -37,23 +37,56 @@ namespace Figlotech.Core {
         public Func<bool, ValueTask> finished;
         public Func<Exception, ValueTask> handling;
         public WorkJobStatus status;
-        public DateTime? EnqueuedTime = DateTime.Now;
-        public DateTime? DequeuedTime;
-        public DateTime? CompletedTime;
-        public TimeSpan? CompletionTime { get; internal set; }
+        public DateTime? EnqueuedTime { get; internal set; }
+        public DateTime? DequeuedTime { get; internal set; }
+        public DateTime? CompletedTime { get; internal set; }
+        public TimeSpan? TimeToComplete { get; internal set; }
         public TimeSpan? TimeInQueue { get; internal set; }
         internal Stopwatch TimeInQueueCounter { get; set; }
+        internal WorkQueuer WorkQueuer { get; set; }
         public String Name { get; set; } = null;
 
         TaskCompletionSource<int> _taskCompletionSource = new TaskCompletionSource<int>();
-        public TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
+        internal TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
 
         public StackTrace StackTrace { get; internal set; }
         public ValueTask ActionTask { get; internal set; }
 
-        public TaskAwaiter<int> GetAwaiter() {
-            return TaskCompletionSource.Task.GetAwaiter();
+        public ConfiguredTaskAwaitable<int>.ConfiguredTaskAwaiter GetAwaiter() {
+            return GetAwaiterInternal().ConfigureAwait(false).GetAwaiter();
         }
+
+        public async Task<int> GetAwaiterInternal() {
+            if(this.EnqueuedTime == null) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                throw new InternalProgramException($"Trying to wait for a job that was not enqueued: \"{Description}\"");
+            }
+            var timeout = TimeSpan.FromSeconds(10);
+            var sw = Stopwatch.StartNew();
+            var queuerWorkDone = this.WorkQueuer.WorkDone;
+            if(!await Fi.Tech.WaitForCondition(
+                () => this.DequeuedTime != null, TimeSpan.FromMilliseconds(200), ()=> {
+                    if(this.WorkQueuer.WorkDone > queuerWorkDone) {
+                        timeout += sw.Elapsed;
+                        sw.Restart();
+                    }
+                    return timeout;
+                })
+            ) {
+                if(Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                throw new InternalProgramException($"Timeout reached awaiting for job \"{Description}\" to dequeue");
+            }
+
+            return await TaskCompletionSource.Task;
+        }
+
+        public async Task ContinueWith(Action<Task<int>> action) {
+            await TaskCompletionSource.Task.ContinueWith(action);
+        } 
 
         public void OnCompleted(Action continuation) {
             throw new NotImplementedException();
@@ -245,11 +278,18 @@ namespace Figlotech.Core {
         }
 
         public WorkJob Enqueue(WorkJob job) {
+            if (job.WorkQueuer != null && job.WorkQueuer != this) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                job = new WorkJob(job.action, job.handling, job.finished);
+            }
             job.EnqueuedTime = DateTime.UtcNow;
             job.status = WorkJobStatus.Queued;
             job.StackTrace = new System.Diagnostics.StackTrace();
             job.TimeInQueueCounter = new Stopwatch();
             job.TimeInQueueCounter.Start();
+            job.WorkQueuer = this;
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(job);
@@ -368,7 +408,7 @@ namespace Figlotech.Core {
                                     job.status = WorkJobStatus.Finished;
                                     WorkDone++;
                                     Executing--;
-                                    job.CompletionTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds);
+                                    job.TimeToComplete = sw.Elapsed;
                                     if (exception != null) {
                                         job.TaskCompletionSource.SetException(exception);
                                         _ = job.TaskCompletionSource.Task.Exception;
