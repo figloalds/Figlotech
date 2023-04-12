@@ -2,6 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -51,8 +53,8 @@ namespace Figlotech.Core {
             return this._dmmy.GetEnumerator();
         }
 
-        public async Task<FiAsyncDisposableLock> Lock(string key) {
-            var retv = await this[key].Lock();
+        public async Task<FiAsyncDisposableLock> Lock(string key, TimeSpan? timeout = null) {
+            var retv = await this[key].LockWithTimeout(timeout ?? TimeSpan.FromSeconds(30));
             retv._lock = this;
             retv._key = key;
             return retv;
@@ -99,7 +101,11 @@ namespace Figlotech.Core {
         SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public async Task<FiAsyncDisposableLock> Lock() {
-            await _semaphore.WaitAsync();
+            return await LockWithTimeout(TimeSpan.FromSeconds(30));
+        }
+
+        public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
+            await Fi.Tech.ThrowIfTimesout(_semaphore.WaitAsync(), timeout, "Awaiting for lock timed out");
             return new FiAsyncDisposableLock(_semaphore);
         }
     }

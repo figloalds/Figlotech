@@ -461,28 +461,29 @@ namespace Figlotech.Core {
         private static void _timerFn(object a) {
             var sched = a as ScheduledWorkJob;
             var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
-            WorkJob newWj = null;
+            WorkJobExecutionRequest request = null;
             if (millisDiff > 5000) {
                 if(Debugger.IsAttached && DebugSchedules) {
                     Debugger.Break();
                 }
             } else {
-                newWj = sched.Queuer.Enqueue(
+                request = sched.Queuer.Enqueue(
                     new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
                         Description = sched.WorkJob.Description
                     }
                 );
             }
-            if(newWj == null) {
+            if(request == null) {
                 Fi.Tech.ScheduleTask(sched);
             } else {
                 if (sched.RecurrenceInterval.HasValue) {
-                    newWj.GetAwaiter().OnCompleted(() => {
+                    request.GetAwaiter().OnCompleted(() => {
                         Reschedule(sched);
                     });
                 }
             }
         }
+
         public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
             ScheduleTask(_selfie, identifier, FiTechFireTaskWorker, when, job, RecurrenceInterval);
         }
@@ -1536,23 +1537,29 @@ namespace Figlotech.Core {
             return true;
         }
 
-        public static async Task<bool> Timeout(this Fi __selfie, WorkJob job, TimeSpan to) {
-            return await Task.WhenAny(job.TaskCompletionSource.Task, Task.Delay(to)) == job.TaskCompletionSource.Task;
+        public static async Task<bool> Timesout(this Fi __selfie, WorkJob job, TimeSpan to) {
+            return await Timesout(__selfie, job.TaskCompletionSource.Task, to);
         }
-        public static async Task ThrowIfTimeout(this Fi __selfie, WorkJob job, TimeSpan to, string message) {
-            if (!await Timeout(
-                __selfie,
-                job,
-                to
-            )) {
-                throw new InternalProgramException(message);
+        public static async Task ThrowIfTimesout(this Fi __selfie, WorkJob job, TimeSpan to, string message) {
+            await ThrowIfTimesout(__selfie, job.TaskCompletionSource.Task, to, message);
+        }
+        public static async Task<bool> Timesout(this Fi __selfie, Task task, TimeSpan to) {
+            Task timeoutTask = Task.Delay(to);
+            Task completedTask = await Task.WhenAny(task, timeoutTask);
+
+            // Check if the completed task is the original task or the timeout task
+            if (completedTask == task) {
+                // Original task completed before timeout
+                await task; // Ensure the original task completes before returning
+                return false;
+            } else {
+                // Timeout occurred
+                return true;
             }
         }
-        public static async Task<bool> Timeout(this Fi __selfie, Task task, TimeSpan to) {
-            return await Task.WhenAny(task, Task.Delay(to)) == task;
-        }
-        public static async Task ThrowIfTimeout(this Fi __selfie, Task task, TimeSpan to, string message) {
-            if (!await Timeout(
+
+        public static async Task ThrowIfTimesout(this Fi __selfie, Task task, TimeSpan to, string message) {
+            if (await Timesout(
                 __selfie,
                 task,
                 to
@@ -1562,7 +1569,7 @@ namespace Figlotech.Core {
         }
 
         static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
-        public static WorkJob FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+        public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             if (InlineFireTask) {
                 try {
                     job?.Invoke();
@@ -1582,7 +1589,7 @@ namespace Figlotech.Core {
             }
 
             var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
-            wj.Name = name;
+            wj.WorkJob.Name = name;
             FiTechFireTaskWorker.Start();
             return wj;
         }
@@ -1592,7 +1599,7 @@ namespace Figlotech.Core {
             return await _globalMultiLock.Lock(key);
         }
 
-        public static WorkJob FireTask(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+        public static WorkJobExecutionRequest FireTask(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
 
