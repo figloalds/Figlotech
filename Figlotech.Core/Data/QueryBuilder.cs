@@ -290,15 +290,15 @@ namespace Figlotech.Data {
         }
 
         public static QueryBuilder operator +(QueryBuilder a, QueryBuilder b) {
-            return (QueryBuilder)a.Append(b);
+            return (QueryBuilder) new QueryBuilder().Append(a).Append(b);
         }
 
         public static QueryBuilder operator +(String a, QueryBuilder b) {
-            return (QueryBuilder)new QbFmt(a).Append(b);
+            return (QueryBuilder)new QueryBuilder(a).Append(b);
         }
 
         public static QueryBuilder operator +(QueryBuilder a, String b) {
-            return (QueryBuilder)a.Append(b);
+            return (QueryBuilder)new QueryBuilder(a).Append(b);
         }
 
         static long _l = 0;

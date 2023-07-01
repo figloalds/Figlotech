@@ -101,7 +101,8 @@ namespace Figlotech.Core {
         SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public async Task<FiAsyncDisposableLock> Lock() {
-            return await LockWithTimeout(TimeSpan.FromSeconds(30));
+            await _semaphore.WaitAsync();
+            return new FiAsyncDisposableLock(_semaphore);
         }
 
         public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {

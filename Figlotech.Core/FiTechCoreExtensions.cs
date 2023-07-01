@@ -469,7 +469,7 @@ namespace Figlotech.Core {
             } else {
                 request = sched.Queuer.Enqueue(
                     new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
-                        Description = sched.WorkJob.Description
+                        Name = sched.WorkJob.Name
                     }
                 );
             }
@@ -635,7 +635,11 @@ namespace Figlotech.Core {
         }
 
         public static T[] CombineArrays<T>(this Fi __selfie, params T[][] arrays) {
-            var final = new T[arrays.Sum(a => a.Length)];
+            var finalLength = 0;
+            for(int i = 0; i < arrays.Length; i++) {
+                finalLength += arrays[i].Length;
+            }
+            var final = new T[finalLength];
             int offset = 0;
             foreach (var a in arrays) {
                 Buffer.BlockCopy(a, 0, final, offset, a.Length);
@@ -1537,10 +1541,10 @@ namespace Figlotech.Core {
             return true;
         }
 
-        public static async Task<bool> Timesout(this Fi __selfie, WorkJob job, TimeSpan to) {
+        public static async Task<bool> Timesout(this Fi __selfie, WorkJobExecutionRequest job, TimeSpan to) {
             return await Timesout(__selfie, job.TaskCompletionSource.Task, to);
         }
-        public static async Task ThrowIfTimesout(this Fi __selfie, WorkJob job, TimeSpan to, string message) {
+        public static async Task ThrowIfTimesout(this Fi __selfie, WorkJobExecutionRequest job, TimeSpan to, string message) {
             await ThrowIfTimesout(__selfie, job.TaskCompletionSource.Task, to, message);
         }
         public static async Task<bool> Timesout(this Fi __selfie, Task task, TimeSpan to) {
@@ -1569,25 +1573,15 @@ namespace Figlotech.Core {
         }
 
         static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
+
+        public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+            var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
+            wj.WorkJob.Name = name;
+            FiTechFireTaskWorker.Start();
+            return wj;
+        }
+
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            if (InlineFireTask) {
-                try {
-                    job?.Invoke();
-                    then?.Invoke(true);
-                } catch (Exception x) {
-                    try {
-                        handler?.Invoke(x);
-                    } catch (Exception y) {
-                        throw y;
-                        //Throw(_selfie, y);
-                    }
-                    then?.Invoke(false);
-                } finally {
-
-                }
-                return null;
-            }
-
             var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
             wj.WorkJob.Name = name;
             FiTechFireTaskWorker.Start();
@@ -1599,14 +1593,23 @@ namespace Figlotech.Core {
             return await _globalMultiLock.Lock(key);
         }
 
+        public static WorkJobExecutionRequest FireTask(this Fi _selfie, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+            return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
+        }
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             return FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }
 
+        public static void FireAndForget(this Fi _selfie, string name, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+            _ = FireTask(_selfie, name, job, handler, then);
+        }
         public static void FireAndForget(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            var ignoreWarnings = FireTask(_selfie, name, job, handler, then);
+            _ = FireTask(_selfie, name, job, handler, then);
         }
 
+        public static void FireAndForget(this Fi _selfie, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+            _ = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
+        }
         public static void FireAndForget(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             _ = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
         }

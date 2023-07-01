@@ -395,6 +395,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return new RdbmsDataAccessor(Plugin);
         }
 
+        public async Task<BDadosTransaction> CreateNewTransactionAsync(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null) {
+            BDadosTransaction retv;
+            //if (FiTechCoreExtensions.EnableDebug) {
+            //    WriteLog(Environment.StackTrace);
+            //}
+            WriteLog("Opening Transaction");
+            var connection = (DbConnection) Plugin.GetNewConnection();
+            try {
+                await OpenConnectionAsync(connection);
+            } catch (Exception x) {
+                try {
+                    connection?.Dispose();
+                } catch (Exception) {
+
+                }
+                throw x;
+            }
+            retv = new BDadosTransaction(this, connection);
+            retv?.BeginTransaction(ilev);
+            retv.CancellationToken = cancellationToken;
+            retv.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
+            retv.usingExternalBenchmarker = bmark != null;
+            WriteLog("Transaction Open");
+            return retv;
+        }
+
         public BDadosTransaction CreateNewTransaction(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null) {
             lock (this) {
                 BDadosTransaction retv;
@@ -808,6 +834,61 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         static long ConnectionTracks = 0;
+        internal async Task OpenConnectionAsync(DbConnection connection) {
+            int attempts = DefaultMaxOpenAttempts;
+            Exception ex = null;
+            while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
+                try {
+                    await connection.OpenAsync();
+                    if (FiTechCoreExtensions.DebugConnectionLifecycle) {
+                        var stack = Environment.StackTrace;
+                        lock (ActiveConnections)
+                            ActiveConnections.Add((connection, Environment.StackTrace, myId));
+                        var trackId = $"TRACK_CONNECTION_{++ConnectionTracks}";
+                        Fi.Tech.ScheduleTask(trackId, DateTime.UtcNow + TimeSpan.FromSeconds(10), new WorkJob(() => {
+                            try {
+                                if (connection.State == ConnectionState.Open) {
+                                    var isActive = false;
+                                    lock (ActiveConnections)
+                                        isActive = ActiveConnections.Any(x => x.Connection == connection);
+                                    if (isActive) {
+
+                                    } else {
+                                        if (!Directory.Exists("CriticalFTHErrors")) {
+                                            Directory.CreateDirectory("CriticalFTHErrors");
+                                        }
+                                        Debugger.Break();
+                                        try {
+                                            connection?.Dispose();
+                                        } catch (Exception x) { }
+                                    }
+                                } else {
+                                    Fi.Tech.Unschedule(trackId);
+                                }
+                            } catch (Exception x) {
+                                Debugger.Break();
+                            }
+                            return Fi.Result();
+                        }, x => Fi.Result(), s => Fi.Result()), TimeSpan.FromSeconds(10)
+                        );
+                    }
+
+                    isOnline = true;
+                    break;
+                } catch (Exception x) {
+                    isOnline = false;
+                    ex = x;
+                    if (x.Message.Contains("Unable to connect")) {
+                        break;
+                    }
+                    Thread.Sleep(DefaultOpenAttemptInterval);
+                }
+            }
+            if (connection?.State != ConnectionState.Open) {
+                throw new BDadosException($"Cannot open connection to the RDBMS database service (Using {Plugin.GetType().Name}).", ex);
+            }
+        }
+
         internal void OpenConnection(IDbConnection connection) {
             int attempts = DefaultMaxOpenAttempts;
             Exception ex = null;
@@ -868,7 +949,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             if (func == null) return default(T);
 
-            using (var transaction = CreateNewTransaction(ilev, cancellationToken)) {
+            using (var transaction = await CreateNewTransactionAsync(ilev, cancellationToken)) {
                 var b = transaction.Benchmarker;
                 if (FiTechCoreExtensions.EnableDebug) {
                     try {
