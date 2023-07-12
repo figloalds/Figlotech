@@ -15,7 +15,12 @@ namespace Figlotech.Core {
             this._dmmy = new SelfInitializerDictionary<string, FiAsyncLock>(s => new FiAsyncLock(), true);
         }
 
-        public FiAsyncLock this[string key] { get => ((IDictionary<string, FiAsyncLock>)this._dmmy)[key]; set => ((IDictionary<string, FiAsyncLock>)this._dmmy)[key] = value; }
+        public bool AutoRemoveLocks { get; set; } = false;
+
+        public FiAsyncLock this[string key] { 
+            get => this._dmmy[key]; 
+            set => this._dmmy[key] = value; 
+        }
 
         public ICollection<string> Keys => this._dmmy.Keys;
 
@@ -85,13 +90,17 @@ namespace Figlotech.Core {
             this._semaphore = semaphore;
         }
 
+        ~FiAsyncDisposableLock() {
+            Dispose();
+        }
+
         public void Dispose() {
             if(_semaphore.CurrentCount == 0) {
-                _semaphore.Release();
+                _semaphore.Release(1);
             } else {
                 Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
             }
-            if(_lock != null) {
+            if(_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
                 _lock.Remove(_key);
             }
         }   

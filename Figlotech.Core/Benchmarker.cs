@@ -146,12 +146,13 @@ namespace System {
                 var initMark = self.marks[0];
                 if (self.marks.Count < 2)
                     self.marks.Add(new TimeMark(initMark.Timestamp, self.myName));
-                var lastMark = self.marks[self.marks.Count - 1];
-                lastMark.SetDuration(DateTime.UtcNow);
+                self.marks.Add(new TimeMark(DateTime.UtcNow, "--- end"));
                 var retv = (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
                 if (self.WriteToStdout) {
                     lock ("BENCHMARKER BM_WRITE") {
-                        self.VerboseLog().ForEach(Console.WriteLine);
+                        foreach(var item in self.VerboseLog()) {
+                            Console.WriteLine(item);
+                        }
                     }
                 }
                 return retv;

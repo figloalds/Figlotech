@@ -1147,7 +1147,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var neededActions = EvaluateNecessaryActions().ToList();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
             try {
-                DataAccessor.EnsureDatabaseExists();
+                await DataAccessor.EnsureDatabaseExistsAsync();
             } catch(Exception x) {
                 // DRAGONS
 

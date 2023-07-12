@@ -8,9 +8,9 @@ using System.Reflection;
 namespace Figlotech.Core.Interfaces {
 
     public static class IDataObjectExtensions {
-        public static ulong localInstanceId { get; private set; } = new RID().AsULong;
+        public static ulong localInstanceId { get; private set; } = RID.MachineRID2.AsULong;
 
-        public static bool WasCreatedLocally (this IDataObject o) => o.CreatedBy == RID.MachineRID.AsULong;
+        public static bool WasCreatedLocally (this IDataObject o) => o.CreatedBy == localInstanceId;
         public static bool WasAlteredLocally (this IDataObject o) => o.AlteredBy == localInstanceId;
 
         static SelfInitializerDictionary<Type, MemberInfo[]> membersList = new SelfInitializerDictionary<Type, MemberInfo[]>(

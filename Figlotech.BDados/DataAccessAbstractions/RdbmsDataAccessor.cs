@@ -16,6 +16,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
@@ -23,13 +24,12 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
-    public sealed class QueryIdsReturnValueModel
-    {
+    public sealed class QueryIdsReturnValueModel {
         public string Id { get; set; }
         public string RID { get; set; }
     }
 
-    public sealed class  BDadosTransaction : IDisposable {
+    public sealed class BDadosTransaction : IDisposable {
         public IDbConnection Connection { get; private set; }
         private IDbTransaction Transaction { get; set; }
         public Benchmarker Benchmarker { get; set; }
@@ -39,6 +39,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Object ContextTransferObject { get; set; }
 
         static int _idGen = 0;
+
+        int WriteOperationsCount { get; set; }
+
         public int Id { get; private set; } = ++_idGen;
 
         internal bool usingExternalBenchmarker { get; set; }
@@ -70,21 +73,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IDbCommand[] Commands {
             get {
-                lock(_commands)
+                lock (_commands)
                     return _commands.ToArray();
             }
         }
 
         public void ExecuteWhenSuccess(Action fn, Action<Exception> handler = null) {
             lock (ActionsToExecuteAfterSuccess)
-                ActionsToExecuteAfterSuccess.Add((() => { 
-                    fn(); 
-                    return Task.CompletedTask; 
-                }, (x) => { 
-                    handler(x); 
-                    return Task.CompletedTask; 
+                ActionsToExecuteAfterSuccess.Add((() => {
+                    fn();
+                    return Task.CompletedTask;
+                }, (x) => {
+                    handler(x);
+                    return Task.CompletedTask;
                 }
-            ));
+                ));
         }
         public void ExecuteWhenSuccess(Func<Task> fn, Func<Exception, Task> handler = null) {
             lock (ActionsToExecuteAfterSuccess)
@@ -118,7 +121,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     return $"{(type?.Name ?? "")} -> " + frame.ToString();
                 }).ToArray());
             } catch (Exception x) {
-                if(Debugger.IsAttached) {
+                if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
             }
@@ -136,6 +139,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
+        public void NotifyWriteOperation() {
+            WriteOperationsCount++;
+        }
+
         public IDbCommand CreateCommand() {
             Step();
             var retv = Connection?.CreateCommand();
@@ -146,7 +153,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         public void BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
-            Transaction = Connection?.BeginTransaction(ilev);
+            BeginTransactionAsync(ilev)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+        public async Task BeginTransactionAsync(IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
+            if(Connection is DbConnection acon) {
+                Transaction = await acon.BeginTransactionAsync(ilev, this.CancellationToken);
+            } else {
+                Transaction = Connection?.BeginTransaction(ilev);
+            }
         }
 
         public bool IsCommited { get; set; }
@@ -154,12 +171,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal CancellationToken CancellationToken { get; set; } = CancellationToken.None;
 
         private void ApplySuccessActions() {
-            lock(ActionsToExecuteAfterSuccess) {
+            lock (ActionsToExecuteAfterSuccess) {
                 for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
                     var fn = ActionsToExecuteAfterSuccess[i];
                     try {
                         var task = fn.Action?.Invoke();
-                        if(task != null) {
+                        if (task != null) {
                             task.GetAwaiter().GetResult();
                         }
                     } catch (Exception x) {
@@ -178,10 +195,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        private async Task ApplySuccessActionsAsync() {
+            for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
+                var fn = ActionsToExecuteAfterSuccess[i];
+                try {
+                    var task = fn.Action?.Invoke();
+                    if (task != null) {
+                        await task;
+                    }
+                } catch (Exception x) {
+                    Debugger.Break();
+                    try {
+                        var task = fn.Handler?.Invoke(x);
+                        if (task != null) {
+                            await task;
+                        }
+                    } catch (Exception ex) {
+                        Fi.Tech.Throw(ex);
+                    }
+                }
+            }
+            ActionsToExecuteAfterSuccess.Clear();
+        }
+
         public void Commit() {
-            if(Transaction?.Connection?.State == ConnectionState.Open) {
-                lock(_commands) {
-                    if(_commands.Count == 0) {
+            if (Transaction?.Connection?.State == ConnectionState.Open) {
+                lock (_commands) {
+                    if (_commands.Count == 0) {
                         // Nothing to commit 
                         // Weird
                         return;
@@ -189,10 +229,47 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 if (IsCommited || IsRolledBack) {
                     Debugger.Break();
+                    return;
                     // This transaction has already been committed or rolled back
                 }
-                Transaction?.Commit();
-                ApplySuccessActions();
+                if (WriteOperationsCount > 0) {
+                    Transaction?.Commit();
+                }
+                if (ActionsToExecuteAfterSuccess.Count > 0) {
+                    ApplySuccessActions();
+                }
+                IsCommited = true;
+                lock (ObjectsToNotify) {
+                    DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
+                    ObjectsToNotify.Clear();
+                }
+            }
+        }
+
+        public async Task CommitAsync() {
+            if (Transaction?.Connection?.State == ConnectionState.Open) {
+                lock (_commands) {
+                    if (_commands.Count == 0) {
+                        // Nothing to commit 
+                        // Weird
+                        return;
+                    }
+                }
+                if (IsCommited || IsRolledBack) {
+                    Debugger.Break();
+                    return;
+                    // This transaction has already been committed or rolled back
+                }
+                if (WriteOperationsCount > 0) {
+                    if (Transaction is DbTransaction tsn) {
+                        await tsn.CommitAsync(this.CancellationToken);
+                    } else {
+                        Transaction?.Commit();
+                    }
+                }
+                if (ActionsToExecuteAfterSuccess.Count > 0) {
+                    await ApplySuccessActionsAsync();
+                }
                 IsCommited = true;
                 lock (ObjectsToNotify) {
                     DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
@@ -202,8 +279,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Rollback() {
-            if(Transaction?.Connection?.State == ConnectionState.Open) {
+            if (Transaction?.Connection?.State == ConnectionState.Open) {
                 Transaction?.Rollback();
+                IsRolledBack = true;
+            }
+            lock (ObjectsToNotify)
+                ObjectsToNotify.Clear();
+        }
+        public async Task RollbackAsync() {
+            if (Transaction?.Connection?.State == ConnectionState.Open) {
+                if (Transaction is DbTransaction tsn) {
+                    await tsn.RollbackAsync(this.CancellationToken);
+                } else {
+                    Transaction?.Rollback();
+                }
                 IsRolledBack = true;
             }
             lock (ObjectsToNotify)
@@ -211,20 +300,31 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void EndTransaction() {
+            EndTransactionAsync()
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+        public async Task EndTransactionAsync() {
             var conn = Connection;
             if (OnTransactionEnding != null) {
                 this.OnTransactionEnding.Invoke();
             }
-            if(IsCommited && !IsRolledBack) {
-                ApplySuccessActions();
+            if (Transaction is DbTransaction tsn) {
+                await tsn.DisposeAsync();
+            } else {
+                Transaction?.Dispose();
             }
-            Transaction?.Dispose();
-            conn?.Dispose();
+            if (conn is DbConnection aconn) {
+                await aconn.DisposeAsync();
+            } else {
+                conn?.Dispose();
+            }
         }
 
         public void Dispose() {
             try {
-                if(Transaction?.Connection?.State == ConnectionState.Open) {
+                if (Transaction?.Connection?.State == ConnectionState.Open) {
                     try {
                         Transaction?.Dispose();
                     } catch (Exception x) {
@@ -236,11 +336,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         Fi.Tech.WriteLine($"Warning disposing connection from BDadosTransaction: {x.Message}");
                     }
                 }
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
             }
-            if(FiTechCoreExtensions.DebugConnectionLifecycle) {
-                lock(DebugOnlyGlobalTransactions)
+            if (FiTechCoreExtensions.DebugConnectionLifecycle) {
+                lock (DebugOnlyGlobalTransactions)
                     DebugOnlyGlobalTransactions.Remove(this);
             }
             lock (RdbmsDataAccessor.ActiveConnections)
@@ -251,7 +351,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return await _lock.Lock();
         }
     }
-    
+
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
 
         public static List<(IDbConnection Connection, string StackData, int AccessorId)> ActiveConnections = new List<(IDbConnection Connection, string StackData, int AccessorId)>();
@@ -313,13 +413,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Plugin = extension;
         }
 
-        public void EnsureDatabaseExists() {
-            lock (Plugin) {
-                using (var conn = Plugin.GetNewSchemalessConnection()) {
-                    OpenConnection(conn);
-                    var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
-                    using (var command = conn.CreateCommand()) {
-                        query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+        public async Task EnsureDatabaseExistsAsync() {
+            await using (var conn = (DbConnection) Plugin.GetNewSchemalessConnection()) {
+                await OpenConnectionAsync(conn);
+                var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
+                using (var command = conn.CreateCommand()) {
+                    query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+                    
+                    if(command is DbCommand acom) {
+                        await acom.PrepareAsync();
+                        await acom.ExecuteNonQueryAsync();
+                    } else {
                         command.Prepare();
                         command.ExecuteNonQuery();
                     }
@@ -385,10 +489,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         return Fi.Tech.ReaderToObjectListUsingMap<FieldAttribute>(reader, map);
                     }
                 }
-            }, x=> {
-                throw x;
             });
-
         }
 
         public IRdbmsDataAccessor Fork() {
@@ -401,12 +502,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //    WriteLog(Environment.StackTrace);
             //}
             WriteLog("Opening Transaction");
-            var connection = (DbConnection) Plugin.GetNewConnection();
+            var connection = Plugin.GetNewConnection();
             try {
                 await OpenConnectionAsync(connection);
             } catch (Exception x) {
                 try {
-                    connection?.Dispose();
+                    if(connection is DbConnection acon) {
+                        await acon.DisposeAsync();
+                    } else {
+                        connection?.Dispose();
+                    }
                 } catch (Exception) {
 
                 }
@@ -422,31 +527,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public BDadosTransaction CreateNewTransaction(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null) {
-            lock (this) {
-                BDadosTransaction retv;
-                //if (FiTechCoreExtensions.EnableDebug) {
-                //    WriteLog(Environment.StackTrace);
-                //}
-                WriteLog("Opening Transaction");
-                var connection = Plugin.GetNewConnection();
-                try {
-                    OpenConnection(connection);
-                } catch(Exception x) {
-                    try {
-                        connection?.Dispose();
-                    } catch (Exception) {
-
-                    }
-                    throw x;
-                }
-                retv = new BDadosTransaction(this, connection);
-                retv?.BeginTransaction(ilev);
-                retv.CancellationToken = cancellationToken;
-                retv.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
-                retv.usingExternalBenchmarker = bmark != null;
-                WriteLog("Transaction Open");
-                return retv;
-            }
+            return CreateNewTransactionAsync(ilev, cancellationToken, bmark)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         private static String GetDatabaseType(FieldInfo field, FieldAttribute info = null) {
@@ -615,15 +699,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public bool SaveItem(IDataObject input) {
-            return Access((transaction) => {
-                return SaveItem(transaction, input);
-            }, (x) => {
-                //this.WriteLog(x.Message);
-                //this.WriteLog(x.StackTrace);
-                throw new BDadosException("Error saving item", x);
-            });
+            try {
+                return Access((transaction) => {
+                    return SaveItem(transaction, input);
+                });
+            } catch(Exception x) { 
+                throw new BusinessValidationException("Error saving item", x);
+            }
         }
-        
+
         public List<T> Query<T>(IQueryBuilder query) where T : new() {
             return Access((transaction) => Query<T>(transaction, query));
         }
@@ -675,10 +759,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public IEnumerable<T> Fetch<T>(IQueryBuilder conditions, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new() {
             return Access((transaction) => {
                 return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering, contextObject);
-            }, (x) => {
-                WriteLog(x.Message);
-                WriteLog(x.StackTrace);
-                throw x;
             });
         }
 
@@ -741,11 +821,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public event Action<Type, IDataObject[]> OnDataObjectAltered;
         public event Action<Type, IDataObject[]> OnObjectsDeleted;
 
-        public void Access(Action<BDadosTransaction> functions, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
+        public void Access(Action<BDadosTransaction> functions, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             var i = Access<int>((transaction) => {
                 functions?.Invoke(transaction);
                 return 0;
-            }, handler, ilev);
+            }, ilev);
         }
 
         public async Task AccessAsync(Func<BDadosTransaction, Task> functions, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
@@ -781,7 +861,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }, cancellationToken, ilev);
         }
 
-        public T Access<T>(Func<BDadosTransaction, T> functions, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
+        public T Access<T>(Func<BDadosTransaction, T> functions, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             if (functions == null) return default(T);
 
             //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
@@ -798,7 +878,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
 
                 var retv = functions.Invoke(transaction);
-                if(retv is Task t) {
+                if (retv is Task t) {
                     t.GetAwaiter().GetResult();
                 }
                 if (!transaction?.usingExternalBenchmarker ?? false) {
@@ -808,7 +888,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog(String.Format("---- Access [{0}] Finished", aid));
                 }
                 return retv;
-            }, handler, ilev);
+            }, ilev);
         }
 
         public DataTable Query(IQueryBuilder query) {
@@ -819,6 +899,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private const string RDB_SYSTEM_LOGID = "FTH:RDB";
         public void WriteLog(String s) {
+            if(FiTechCoreExtensions.EnableBenchMarkers) {
+                return;
+            }
             Logger?.WriteLog(s);
             Fi.Tech.WriteLine(RDB_SYSTEM_LOGID, s);
         }
@@ -834,12 +917,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         static long ConnectionTracks = 0;
-        internal async Task OpenConnectionAsync(DbConnection connection) {
+        internal async Task OpenConnectionAsync(IDbConnection connection) {
             int attempts = DefaultMaxOpenAttempts;
             Exception ex = null;
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
                 try {
-                    await connection.OpenAsync();
+                    await ExclusiveOpenConnectionAsync(connection);
                     if (FiTechCoreExtensions.DebugConnectionLifecycle) {
                         var stack = Environment.StackTrace;
                         lock (ActiveConnections)
@@ -889,13 +972,54 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        // This hack is necessary, because concurrency is a bitch
+        static SelfInitializerDictionary<string, SemaphoreSlim> OpenConnectionSemaphore = new SelfInitializerDictionary<string, SemaphoreSlim>(x => new SemaphoreSlim(1, 1));
+        private void ExclusiveOpenConnection(IDbConnection connection) {
+            var key = connection.ConnectionString;
+            var lockHandle = OpenConnectionSemaphore[key];
+            if (!lockHandle.Wait(TimeSpan.FromSeconds(10))) {
+                throw new InternalProgramException("Timeout waiting for open connection");
+            }
+            try {
+                if (connection is DbConnection idbconn) {
+                    using CancellationTokenSource cts = new CancellationTokenSource();
+                    cts.CancelAfter(TimeSpan.FromSeconds(8));
+                    idbconn.OpenAsync(cts.Token).ConfigureAwait(false).GetAwaiter().GetResult();
+                } else {
+                    connection.Open();
+                }
+            } finally {
+                lockHandle.Release(1);
+            }
+        }
+
+        private async Task ExclusiveOpenConnectionAsync(IDbConnection connection) {
+            var key = connection.ConnectionString;
+            var lockHandle = OpenConnectionSemaphore[key];
+
+            if (!await lockHandle.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false)) {
+                throw new InternalProgramException("Timeout waiting for open connection");
+            }
+            try {
+                if (connection is DbConnection idbconn) {
+                    using CancellationTokenSource cts = new CancellationTokenSource();
+                    cts.CancelAfter(TimeSpan.FromSeconds(8));
+                    await idbconn.OpenAsync(cts.Token).ConfigureAwait(false);
+                } else {
+                    connection.Open();
+                }
+            } finally {
+                lockHandle.Release(1);
+            }
+        }
+
         internal void OpenConnection(IDbConnection connection) {
             int attempts = DefaultMaxOpenAttempts;
             Exception ex = null;
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
                 try {
-                    connection.Open();
-                    if(FiTechCoreExtensions.DebugConnectionLifecycle) {
+                    ExclusiveOpenConnection(connection);
+                    if (FiTechCoreExtensions.DebugConnectionLifecycle) {
                         var stack = Environment.StackTrace;
                         lock (ActiveConnections)
                             ActiveConnections.Add((connection, Environment.StackTrace, myId));
@@ -920,7 +1044,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 } else {
                                     Fi.Tech.Unschedule(trackId);
                                 }
-                            } catch(Exception x) {
+                            } catch (Exception x) {
                                 Debugger.Break();
                             }
                             return Fi.Result();
@@ -985,22 +1109,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var retv = await func.Invoke(transaction);
 
                     if (retv is Task awaitable) {
-                        awaitable.GetAwaiter().GetResult();
+                        await awaitable;
                     }
 
                     WriteLog($"[{accessId}] Committing");
                     b.Mark($"[{accessId}] Begin Commit");
-                    transaction.Commit();
+                    await transaction.CommitAsync();
                     b.Mark($"[{accessId}] End Commit");
                     WriteLog($"[{accessId}] Commited OK ");
                     return retv;
-                } catch(TaskCanceledException x) {
+                } catch (TaskCanceledException x) {
                     throw x;
                 } catch (Exception x) {
                     WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
                     b.Mark($"[{accessId}] Begin Rollback");
                     try {
-                        transaction.Rollback();
+                        await transaction.RollbackAsync();
                     } catch (Exception rbex) {
                         Debugger.Break();
                     }
@@ -1012,7 +1136,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (!(transaction?.usingExternalBenchmarker ?? true)) {
                         b?.FinalMark();
                     }
-                    transaction.EndTransaction();
+                    await transaction.EndTransactionAsync();
                     transaction.Dispose();
                 }
 
@@ -1020,79 +1144,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        private T UseTransaction<T>(Func<BDadosTransaction, T> func, Action<Exception> handler = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
-
-            if (func == null) return default(T);
-
-            using (var transaction = CreateNewTransaction(ilev, CancellationToken.None)) {
-                var b = transaction.Benchmarker;
-                if (FiTechCoreExtensions.EnableDebug) {
-                    try {
-                        int maxFrames = 6;
-                        var stack = new StackTrace();
-                        foreach (var f in stack.GetFrames()) {
-                            var m = f.GetMethod();
-                            if(m != null) {
-                                var mName = m.Name;
-                                var t = m.DeclaringType;
-                                if(t != null) {
-                                    if (t.IsNested) {
-                                        t = t.DeclaringType;
-                                    }
-                                    var tName = t.Name;
-                                    if (m.DeclaringType.Assembly != GetType().Assembly) {
-                                        b.Mark($" at {tName}->{mName}");
-                                        if (maxFrames-- <= 0) {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception) {
-                        if (Debugger.IsAttached) {
-                            Debugger.Break();
-                        }
-                    }
-                }
-                try {
-                    b.Mark("Run User Code");
-                    var retv = func.Invoke(transaction);
-
-                    if(retv is Task awaitable) {
-                        awaitable.GetAwaiter().GetResult();
-                    }
-
-                    WriteLog($"[{accessId}] Committing");
-                    b.Mark($"[{accessId}] Begin Commit");
-                    transaction.Commit();
-                    b.Mark($"[{accessId}] End Commit");
-                    WriteLog($"[{accessId}] Commited OK ");
-                    return retv;
-                } catch (Exception x) {
-                    WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
-                    b.Mark($"[{accessId}] Begin Rollback");
-                    try {
-                        transaction.Rollback();
-                    } catch(Exception rbex) {
-                        Debugger.Break();
-                    }
-                    b.Mark($"[{accessId}] End Rollback");
-                    WriteLog($"[{accessId}] Transaction rolled back ");
-                    if (handler != null) {
-                        handler?.Invoke(x);
-                    } else {
-                        throw new BDadosException("Error accessing the database", transaction?.FrameHistory, null, x);
-                    }
-                } finally {
-                    if (!(transaction?.usingExternalBenchmarker ?? true)) {
-                        b?.FinalMark();
-                    }
-                    transaction.EndTransaction();
-                    transaction.Dispose();
-                }
-
-                return default(T);
+        private T UseTransaction<T>(Func<BDadosTransaction, T> func, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
+            try {
+                return UseTransactionAsync<T>(
+                    async (tsn) => func(tsn),
+                    CancellationToken.None,
+                    ilev
+                ).ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+            } catch(Exception x) {
+                throw new BDadosException("Error accessing the database", x);
             }
         }
 
@@ -1105,14 +1167,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
          * it took a lot of coffee to achieve.
          */
         private static void MakeQueryAggregations(ref JoinDefinition query, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
-            
+
             //var reflectedJoinMethod = query.GetType().GetMethod("Join");
 
             String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
 
             // Iterating through AggregateFields
             var aggregateFieldAttributes = ReflectionTool.GetAttributedMemberValues<AggregateFieldAttribute>(theType);
-            for(int i = 0; i < aggregateFieldAttributes.Length; i++) {
+            for (int i = 0; i < aggregateFieldAttributes.Length; i++) {
                 var refl = aggregateFieldAttributes[i];
                 var field = refl.Member;
                 var info = refl.Attribute;
@@ -1403,9 +1465,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         bool _isDisposed = false;
         public void Dispose() {
-            if(!_isDisposed) {
+            if (!_isDisposed) {
                 try {
-                    lock(ActiveConnections) {
+                    lock (ActiveConnections) {
                         if (ActiveConnections != null) {
                             foreach (var v in ActiveConnections) {
                                 try {
@@ -1437,7 +1499,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public async Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
             transaction.Step();
             bool retv = true;
 
@@ -1461,16 +1523,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DateTime d1 = DateTime.UtcNow;
             List<T> conflicts = new List<T>();
 
-            var chunks = rs.Fracture(63999);
-            foreach(var x in chunks) {
-                var xlist = x.ToList();
-                QueryReader(transaction, Plugin.QueryGenerator.QueryIds(xlist), reader => {
-                    while (reader.Read()) {
-                        var vId = (long?) Convert.ChangeType(reader[0], typeof(long));
-                        var vRid = (string) Convert.ChangeType(reader[1], typeof(string));
+            var chunkSz = 5000;
+            var chunks = rs.Fracture(chunkSz);
+            foreach (var x in chunks) {
+                var xlist = new List<T>(Math.Min(rs.Count, chunkSz));
+                xlist.AddRange(x);
+                await QueryReaderAsync(transaction, Plugin.QueryGenerator.QueryIds(xlist), async reader => {
+                    var areader = reader as DbDataReader;
+                    while (await areader.ReadAsync()) {
+                        var vId = (long?)Convert.ChangeType(reader[0], typeof(long));
+                        var vRid = (string)Convert.ChangeType(reader[1], typeof(string));
                         for (int i = 0; i < xlist.Count; i++) {
                             var item = xlist[i];
-                            if(item.Id == vId || item.RID == vRid) {
+                            if (item.Id == vId || item.RID == vRid) {
                                 item.Id = vId ?? item.Id;
                                 item.RID = vRid ?? item.RID;
                                 item.IsPersisted = true;
@@ -1478,6 +1543,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
                     }
+                    return 0;
                 });
             }
             var elaps = DateTime.UtcNow - d1;
@@ -1490,8 +1556,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<T> temp;
 
             if (rs.Count > cut) {
-                temp = new List<T>();
-                temp.AddRange(rs.OrderBy(it => it.IsPersisted));
+                temp = new List<T>(rs.Count);
+                temp.AddRange(rs);
             } else {
                 temp = rs;
             }
@@ -1503,71 +1569,60 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             while (i2 * cut < rs.Count) {
                 int i = i2;
-                Action WorkFn = () => {
-                    List<T> sub;
-                    lock (temp)
-                        sub = temp.Skip(i * cut).Take(Math.Min(rs.Count - (i * cut), cut)).ToList();
-                    var inserts = sub.Where(it => !it.IsPersisted).ToList();
-                    var updates = sub.Where(it => it.IsPersisted).ToList();
-                    if (inserts.Count > 0) {
-                        try {
-                            transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} {typeof(T).Name}");
-                            var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
-                            transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count} {typeof(T).Name}");
-                            lock (transaction)
-                                rst += Execute(transaction, query);
-                            lock (successfulSaves)
-                                successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
-                        } catch (Exception x) {
-                            if(OnFailedSave != null) {
-                                Fi.Tech.FireAndForget(async () => {
-                                    await Task.Yield();
-                                    OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
-                                });
-                            }
-
-                            lock (failedSaves)
-                                failedSaves.Add(x);
+                List<T> sub;
+                lock (temp)
+                    sub = temp.Skip(i * cut).Take(Math.Min(rs.Count - (i * cut), cut)).ToList();
+                var inserts = sub.Where(it => !it.IsPersisted).ToList();
+                var updates = sub.Where(it => it.IsPersisted).ToList();
+                if (inserts.Count > 0) {
+                    try {
+                        transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} {typeof(T).Name}");
+                        var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
+                        transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count} {typeof(T).Name}");
+                        rst += await ExecuteAsync(transaction, query);
+                        lock (successfulSaves)
+                            successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
+                    } catch (Exception x) {
+                        if (OnFailedSave != null) {
+                            Fi.Tech.FireAndForget(async () => {
+                                await Task.Yield();
+                                OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
+                            });
                         }
-                        if (recoverIds) {
-                            var queryIds = Query<QueryIdsReturnValueModel>(transaction, QueryGenerator.QueryIds(inserts));
-                            foreach (var dr in queryIds) {
-                                var psave = inserts.FirstOrDefault(it => it.RID == dr.RID);
-                                if (psave != null) {
-                                    psave.Id = Int64.Parse(dr.Id as String);
-                                }
+
+                        lock (failedSaves)
+                            failedSaves.Add(x);
+                    }
+                    if (recoverIds) {
+                        var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, QueryGenerator.QueryIds(inserts));
+                        foreach (var dr in queryIds) {
+                            var psave = inserts.FirstOrDefault(it => it.RID == dr.RID);
+                            if (psave != null) {
+                                psave.Id = Int64.Parse(dr.Id as String);
                             }
                         }
                     }
+                }
 
-                    if (updates.Count > 0) {
-                        try {
-                            transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Count} {typeof(T).Name}");
-                            var query = Plugin.QueryGenerator.GenerateMultiUpdate(updates);
-                            transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} {typeof(T).Name}");
-                            lock (transaction)
-                                rst += Execute(transaction, query);
-                            lock (successfulSaves)
-                                successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
-                        } catch (Exception x) {
-                            if(OnFailedSave != null) {
-                                Fi.Tech.FireAndForget(async () => {
-                                    await Task.Yield();
-                                    OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
-                                });
-                            }
-                            lock (failedSaves)
-                                failedSaves.Add(x);
+                if (updates.Count > 0) {
+                    try {
+                        transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Count} {typeof(T).Name}");
+                        var query = Plugin.QueryGenerator.GenerateMultiUpdate(updates);
+                        transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} {typeof(T).Name}");
+                        rst += await ExecuteAsync(transaction, query);
+                        lock (successfulSaves)
+                            successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
+                    } catch (Exception x) {
+                        if (OnFailedSave != null) {
+                            Fi.Tech.FireAndForget(async () => {
+                                await Task.Yield();
+                                OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
+                            });
                         }
+                        lock (failedSaves)
+                            failedSaves.Add(x);
                     }
-                };
-
-                //if (rs.Count > cut) {
-                //    wq.Enqueue(WorkFn);
-                //} else {
-                WorkFn.Invoke();
-                //}
-
+                }
                 i2++;
             }
             //wq?.Stop(true);
@@ -1592,7 +1647,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 });
                 transaction.NotifyChange(successfulSaves.ToArray());
-                if(OnSuccessfulSave!=null) {
+                if (OnSuccessfulSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
@@ -1608,7 +1663,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (failedObjects.Any()) {
                 var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);
-                if(OnFailedSave!=null) {
+                if (OnFailedSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
@@ -1617,6 +1672,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             return retv;
+        }
+
+        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
+            return SaveListAsync<T>(transaction, rs, recoverIds)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         public Object ScalarQuery(BDadosTransaction transaction, IQueryBuilder qb) {
@@ -1703,7 +1765,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var fields = new Dictionary<Type, MemberInfo[]>();
             foreach (var type in workingTypes) {
                 fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                    .Select(x=> x.Member)
+                    .Select(x => x.Member)
                     .ToArray();
             }
 
@@ -1713,7 +1775,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 transaction?.Benchmarker?.Mark($"Execute Query <{query.Id}>");
-                lock(transaction) {
+                lock (transaction) {
                     command.Prepare();
                     using (var reader = command.ExecuteReader()) {
                         return BuildStateUpdateQueryResult(transaction, reader, workingTypes, fields);
@@ -1774,7 +1836,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var fields = new Dictionary<Type, MemberInfo[]>();
             foreach (var type in workingTypes) {
                 fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                    .Select(x=> x.Member)
+                    .Select(x => x.Member)
                     .ToArray();
             }
             var memberTypeOf = new Dictionary<MemberInfo, Type>();
@@ -1793,7 +1855,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 transaction?.Benchmarker?.Mark($"@SendLocalUpdates Execute Query <{query.Id}>");
-                lock(transaction) {
+                lock (transaction) {
                     command.Prepare();
                     using (var reader = command.ExecuteReader()) {
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024 * 64, true)) {
@@ -1844,7 +1906,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var fields = new Dictionary<Type, MemberInfo[]>();
             foreach (var type in workingTypes) {
                 fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                    .Select(x=> x.Member)
+                    .Select(x => x.Member)
                     .ToArray();
             }
             var memberTypeOf = new Dictionary<MemberInfo, Type>();
@@ -1967,7 +2029,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private void VerboseLogQueryParameterization(BDadosTransaction transaction, IQueryBuilder query) {
-            if(!FiTechCoreExtensions.EnabledSystemLogs[RDB_SYSTEM_LOGID]) {
+            if (!FiTechCoreExtensions.EnabledSystemLogs[RDB_SYSTEM_LOGID]) {
                 return;
             }
             String QueryText = query.GetCommandText();
@@ -2004,7 +2066,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var c = 0;
                 lock (transaction) {
                     transaction?.Benchmarker?.Mark($"[{accessId}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
-                    foreach(var item in GetObjectEnumerable<T>(transaction, command)) {
+                    foreach (var item in GetObjectEnumerable<T>(transaction, command)) {
                         c++;
                         yield return item;
                     }
@@ -2039,7 +2101,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
-            using (var command = (DbCommand) transaction.CreateCommand()) {
+            using (var command = (DbCommand)transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
@@ -2072,45 +2134,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public List<T> Query<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new() {
-            transaction.Step();
-
-            if (query == null || query.GetCommandText() == null) {
-                return new List<T>();
-            }
-            var tName = typeof(T).Name;
-            DateTime Inicio = DateTime.Now;
-            using (var command = transaction.CreateCommand()) {
-                command.CommandTimeout = Plugin.CommandTimeout;
-                query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                VerboseLogQueryParameterization(transaction, query);
-                // --
-                List<T> retv;
-                transaction?.Benchmarker?.Mark($"[{accessId}] Enter lock region");
-                lock (transaction) {
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query<{tName}> <{query.Id}>");
-                    retv = GetObjectList<T>(transaction, command);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
-                }
-                if (retv == null) {
-                    throw new Exception("Null list generated");
-                }
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List <{query.Id}> Size: {retv.Count}");
-                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
-
-                try {
-                    int nResults = 0;
-                    nResults = retv.Count;
-                    WriteLog($"[{accessId}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
-                    return retv;
-                } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
-                    WriteLog(x.Message);
-                    WriteLog(x.StackTrace);
-                    throw x;
-                } finally {
-                    WriteLog("------------------------------------");
-                }
-            }
+            return QueryAsync<T>(transaction, query).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         public T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new() {
@@ -2183,29 +2207,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public bool SaveItem(BDadosTransaction transaction, IDataObject input) {
+        public async Task<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input) {
             transaction.Step();
 
             if (input == null) {
                 throw new BDadosException("Error saving item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
             }
 
+            var t = input.GetType();
             bool retv = false;
 
             int rs = -33;
 
-            var id = GetIdColumn(input.GetType());
-            var rid = GetRidColumn(input.GetType());
+            var id = GetIdColumn(t);
+            var rid = GetRidColumn(t);
 
             if (!input.IsReceivedFromSync) {
                 input.UpdatedTime = Fi.Tech.GetUtcTime();
             }
 
-            transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> check persistence");
+            transaction?.Benchmarker.Mark($"SaveItem<{t.Name}> check persistence");
             input.IsPersisted = false;
-            var persistedMap = Query<QueryIdsReturnValueModel>(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList()));
+            var persistedMap = await QueryAsync<QueryIdsReturnValueModel>(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList()));
             foreach (var a in persistedMap) {
-                if (input.RID == (string) Convert.ChangeType(a.RID, typeof(String))) {
+                if (input.RID == (string)Convert.ChangeType(a.RID, typeof(String))) {
                     input.IsPersisted = true;
                     input.Id = Int64.Parse(a.Id);
                 }
@@ -2217,7 +2242,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> generating UPDATE query");
                     var query = Plugin.QueryGenerator.GenerateUpdateQuery(input);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> executing query");
-                    rs = Execute(transaction, query);
+                    rs = await ExecuteAsync(transaction, query);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
                     retv = true;
                     transaction.NotifyChange(input.ToSingleElementList().ToArray());
@@ -2227,11 +2252,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var query = Plugin.QueryGenerator.GenerateInsertQuery(input);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> executing query");
                     retv = true;
-                    rs = Execute(transaction, query);
+                    rs = await ExecuteAsync(transaction, query);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
                 }
             } catch (Exception x) {
-                if(OnFailedSave!=null) {
+                if (OnFailedSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
@@ -2242,19 +2267,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 throw x;
             }
-            if (rs == 0) {
-                WriteLog("** Something went SERIOUSLY NUTS in SaveItem<T> **");
-            }
 
             if (input.Id <= 0) {
                 long retvId = 0;
-                var method = typeof(IQueryGenerator).GetMethods().FirstOrDefault(x => x.Name == "QueryIds");
-                var genericMethod = method.MakeGenericMethod(input.GetType());
-                var queryIds = Query<QueryIdsReturnValueModel>(transaction, (IQueryBuilder)genericMethod.Invoke(this.QueryGenerator, new object[] { input.ToSingleElementListRefl() }));
+                var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList()));
                 foreach (var dr in queryIds) {
-                    var psave = input;
-                    if (psave != null) {
-                        psave.Id = Int64.Parse(dr.Id as String);
+                    if (input != null && dr.RID == input.RID) {
+                        input.Id = Int64.Parse(dr.Id as String);
                     }
                 }
             }
@@ -2266,7 +2285,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         input.PersistedHash = newHash;
                         input.AlteredBy = IDataObjectExtensions.localInstanceId;
                     }
-                    transaction.NotifyChange(input.ToSingleElementList().ToArray());
+                    transaction.NotifyChange(new[] { input });
 
                     if (OnSuccessfulSave != null) {
                         Fi.Tech.FireAndForget(async () => {
@@ -2282,6 +2301,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             };
 
             return rs > 0;
+        }
+
+        public bool SaveItem(BDadosTransaction transaction, IDataObject input) {
+            return SaveItemAsync(transaction, input).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         static SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixer = new SelfInitializerDictionary<Type, PrefixMaker>(
@@ -2381,7 +2404,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var om = GetOrderingMember(args.OrderingMember);
                 transaction?.Benchmarker?.Mark("--");
 
-                using (var command = (DbCommand) transaction?.CreateCommand()) {
+                using (var command = (DbCommand)transaction?.CreateCommand()) {
                     var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
 
                     var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
@@ -2412,63 +2435,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> AggregateLoad<T>
             (BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new() {
-            transaction.Step();
-            args = args ?? new LoadAllArgs<T>();
-            var limit = args.RowLimit;
-            if (limit < 0) {
-                limit = DefaultQueryLimit;
-            }
-            transaction?.Benchmarker?.Mark($"Begin AggregateLoad<{typeof(T).Name}>");
-            var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            var prefixer = args.Linear ? CacheAutoPrefixerLinear[typeof(T)] : CacheAutoPrefixer[typeof(T)];
-            bool hasAnyAggregations = false;
-            transaction?.Benchmarker?.Mark("Check if model is Aggregate");
-            foreach (var a in Members) {
-                hasAnyAggregations =
-                    a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (hasAnyAggregations)
-                    break;
-            }
-
-            WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {args.Linear}");
-            // CLUMSY
-            if (hasAnyAggregations) {
-
-                transaction?.Benchmarker?.Mark("Construct Join Definition");
-
-                transaction?.Benchmarker?.Mark("Resolve ordering Member");
-                var om = GetOrderingMember(args.OrderingMember);
-                transaction?.Benchmarker?.Mark("--");
-
-                using (var command = transaction?.CreateCommand()) {
-                    var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
-
-                    var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
-                    var builtConditionsRoot = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions, false));
-
-                    transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
-
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
-                    try {
-                        transaction?.Benchmarker?.Mark($"Generate Join Query");
-                        //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
-                        query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                        transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
-                        var retv = BuildAggregateListDirect<T>(transaction, command, join, 0, args.ContextObject);
-                        transaction?.Benchmarker?.Mark($"Finished building the resultAggregateListDirect<{typeof(T).Name}> ({query.Id})");
-                        return retv;
-                    } catch(Exception x) {
-                        throw new BDadosException($"Error executing AggregateLoad query; Linear? {args.Linear}; Query Text: {query.GetCommandText()}", x);
-                    }
-                }
-
-            } else {
-                WriteLog(args.Conditions?.ToString());
-                return Fetch<T>(transaction, args).ToList();
-            }
+            return AggregateLoadAsync(transaction, args)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         public T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new() {
@@ -2486,7 +2456,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Step();
             var cndParse = new ConditionParser();
             var cnd = cndParse.ParseExpression(args?.Conditions);
-            return Fetch<T>(transaction, cnd, args?.RowSkip, args?.RowLimit, args?.OrderingMember, args?.OrderingType??OrderingType.Asc, args?.ContextObject);
+            return Fetch<T>(transaction, cnd, args?.RowSkip, args?.RowLimit, args?.OrderingMember, args?.OrderingType ?? OrderingType.Asc, args?.ContextObject);
         }
 
         public int DefaultQueryLimit { get; set; } = 50;
@@ -2501,7 +2471,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             if (transaction == null) {
-                throw new BDadosException("Fatal inconsistency error: Fetch<T> Expects a functional initialized ConnectionInfo object.");
+                throw new BDadosException("Fatal inconsistency error: FetchAsync<T> Expects a functional initialized ConnectionInfo object.");
             }
 
             transaction.Benchmarker?.Mark("--");
@@ -2515,24 +2485,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (query == null || query.GetCommandText() == null) {
                 yield break;
             }
-            DateTime start = DateTime.UtcNow;
-            using (var command = (DbCommand) transaction.CreateCommand()) {
+            Stopwatch sw = Stopwatch.StartNew();
+            await using (var command = (DbCommand)transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 DbDataReader reader;
                 try {
-
                     transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
                     using (await transaction.Lock()) {
                         transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query <{query.Id}>");
-                        command.Prepare();
-                        reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken);
+                        await command.PrepareAsync().ConfigureAwait(false);
+                        reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken).ConfigureAwait(false);
                     }
                     transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
 
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.UtcNow.Subtract(start).TotalMilliseconds} ms]");
+                    sw.Stop();
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     throw x;
@@ -2540,8 +2510,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog("------------------------------------");
                 }
                 transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
-                WorkQueuer wq = new WorkQueuer("Fetch Builder", Math.Max(1, Environment.ProcessorCount - 2), true);
-                using (reader) {
+                await using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
@@ -2549,7 +2518,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var existingKeys = new MemberInfo[reader.FieldCount];
                     for (int i = 0; i < reader.FieldCount; i++) {
-                        var name = reader.GetName(i);
+                        var name = cols[i];
                         if (name != null) {
                             var m = ReflectionTool.GetMember(typeof(T), name);
                             if (m != null) {
@@ -2558,8 +2527,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                     }
                     int c = 0;
-                    while (await reader.ReadAsync(transaction.CancellationToken)) {
-
+                    var swBuild = Stopwatch.StartNew();
+                    while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                         object[] values = new object[reader.FieldCount];
                         for (int i = 0; i < reader.FieldCount; i++) {
                             values[i] = reader.GetValue(i);
@@ -2578,112 +2547,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         yield return (obj);
                         c++;
                     }
-                    double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                    WriteLog($"[{accessId}] -------- <{query.Id}> Fetch [OK] ({c} results) [{elaps} ms]");
+                    sw.Stop();
+                    swBuild.Stop();
+                    double elaps = sw.ElapsedMilliseconds;
+                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id}) completed");
+
+                    WriteLog($"[{accessId}] -------- <{query.Id}> FetchAsync [OK] ({c} results) [{elaps} ms] [{swBuild.ElapsedMilliseconds}ms build]");
                 }
             }
         }
         public IEnumerable<T> Fetch<T>(BDadosTransaction transaction, IQueryBuilder conditions, int? skip, int? limit, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object transferObject = null) where T : IDataObject, new() {
-            transaction.Step();
-            if (limit < 0) {
-                limit = DefaultQueryLimit;
-            }
-            if (conditions == null) {
-                conditions = Qb.Fmt("TRUE");
-            }
-
-            if (transaction == null) {
-                throw new BDadosException("Fatal inconsistency error: Fetch<T> Expects a functional initialized ConnectionInfo object.");
-            }
-
-            transaction.Benchmarker?.Mark("--");
-
-            transaction.Benchmarker?.Mark("Data Load ---");
-            MemberInfo ordMember = GetOrderingMember<T>(orderingMember);
-            transaction.Benchmarker?.Mark($"Generate SELECT<{typeof(T).Name}>");
-            var query = Plugin.QueryGenerator.GenerateSelect<T>(conditions, skip, limit, ordMember, ordering);
-            transaction.Benchmarker?.Mark($"Execute SELECT<{typeof(T).Name}>");
-            transaction.Step();
-            if (query == null || query.GetCommandText() == null) {
-                return Array.Empty<T>();
-            }
-            DateTime start = DateTime.UtcNow;
-            using (var command = transaction.CreateCommand()) {
-                command.CommandTimeout = Plugin.CommandTimeout;
-                VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                IDataReader reader;
-                try {
-
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
-                    lock (transaction) {
-                        lock (command) {
-                            transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query <{query.Id}>");
-                            command.Prepare();
-                            reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
-                        }
-                    }
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
-
-                } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{DateTime.UtcNow.Subtract(start).TotalMilliseconds} ms]");
-                    WriteLog(x.Message);
-                    WriteLog(x.StackTrace);
-                    throw x;
-                } finally {
-                    WriteLog("------------------------------------");
-                }
-                transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
-                WorkQueuer wq = new WorkQueuer("Fetch Builder", Math.Max(1, Environment.ProcessorCount - 2), true);
-                using (reader) {
-                    var cols = new string[reader.FieldCount];
-                    for (int i = 0; i < cols.Length; i++)
-                        cols[i] = reader.GetName(i);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id})");
-
-                    var existingKeys = new MemberInfo[reader.FieldCount];
-                    for (int i = 0; i < reader.FieldCount; i++) {
-                        var name = reader.GetName(i);
-                        if (name != null) {
-                            var m = ReflectionTool.GetMember(typeof(T), name);
-                            if(m != null) {
-                                existingKeys[i] = m;
-                            }
-                        }
-                    }
-                    int c = 0;
-                    var retv = new List<T>();
-                    while (reader.Read()) {
-
-                        object[] values = new object[reader.FieldCount];
-                        for (int i = 0; i < reader.FieldCount; i++) {
-                            values[i] = reader.GetValue(i);
-                        }
-                        T obj = new T();
-                        for (int i = 0; i < existingKeys.Length; i++) {
-                            try {
-                                if(existingKeys[i] != null) {
-                                    ReflectionTool.SetMemberValue(existingKeys[i], obj, Fi.Tech.ProperMapValue(values[i]));
-                                }
-                            } catch (Exception x) {
-                                throw x;
-                            }
-                        }
-                        RunAfterLoad(obj, false, transferObject ?? transaction?.ContextTransferObject);
-                        retv.Add(obj);
-                        c++;
-                    }
-                    double elaps = (DateTime.UtcNow - start).TotalMilliseconds;
-                    WriteLog($"[{accessId}] -------- <{query.Id}> Fetch [OK] ({c} results) [{elaps} ms]");
-                    return retv;
-                }
-            }
+            return FetchAsync(transaction, conditions, skip, limit, orderingMember, ordering, transferObject)
+                .ToListAsync()
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         public void QueryReader(BDadosTransaction transaction, IQueryBuilder query, Action<IDataReader> actionRead) {
             QueryReader<int>(transaction, query, (reader) => { actionRead(reader); return 0; });
         }
-        public T QueryReader<T>(BDadosTransaction transaction, IQueryBuilder query, Func<IDataReader, T> actionRead) {
+        public async Task<T> QueryReaderAsync<T>(BDadosTransaction transaction, IQueryBuilder query, Func<IDataReader, Task<T>> actionRead) {
             transaction.Step();
             if (query == null || query.GetCommandText() == null) {
                 return default(T);
@@ -2695,13 +2579,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
-                lock (transaction) {
-                    command.Prepare();
-                    using (var reader = command.ExecuteReader()) {
-                        return actionRead(reader);
+                using (await transaction.Lock()) {
+                    IDataReader dataReader = null;
+                    if(command is DbCommand acom) {
+                        await acom.PrepareAsync();
+                        dataReader = await acom.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken);
+                    } else {
+                        command.Prepare();
+                        dataReader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                    }
+
+                    using (dataReader) {
+                        return await actionRead(dataReader);
                     }
                 }
             }
+        }
+
+        public T QueryReader<T>(BDadosTransaction transaction, IQueryBuilder query, Func<IDataReader, T> actionRead) {
+            return QueryReaderAsync<T>(transaction, query, async (dr) => actionRead(dr))
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         public DataTable Query(BDadosTransaction transaction, IQueryBuilder query) {
@@ -2743,7 +2642,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public int Execute(BDadosTransaction transaction, IQueryBuilder query) {
+        public async Task<int> ExecuteAsync(BDadosTransaction transaction, IQueryBuilder query) {
             transaction.Step();
             if (query == null)
                 return 0;
@@ -2756,11 +2655,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     VerboseLogQueryParameterization(transaction, query);
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                     transaction.Benchmarker?.Mark($"[{accessId}] Execute");
-                    lock (transaction) {
-                        command.Prepare();
-                        result = command.ExecuteNonQuery();
+                    using (await transaction.Lock()) {
+                        if (command is DbCommand acom) {
+                            await acom.PrepareAsync();
+                            result = await acom.ExecuteNonQueryAsync(transaction.CancellationToken);
+                        } else {
+                            command.Prepare();
+                            result = command.ExecuteNonQuery();
+                        }
                     }
                     var elaps = transaction.Benchmarker?.Mark("--");
+                    if (result > 0) {
+                        transaction.NotifyWriteOperation();
+                    }
                     WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                 } catch (Exception x) {
                     WriteLog($"[{accessId}] -------- Error: {x.Message} ([{transaction.Benchmarker?.Mark("Error")} ms]");
@@ -2773,6 +2680,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             return result;
+        }
+
+
+        public int Execute(BDadosTransaction transaction, IQueryBuilder query) {
+            return ExecuteAsync(transaction, query).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         #endregion

@@ -23,11 +23,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         event Action<Type, IDataObject[], Exception> OnFailedSave;
         event Action<Type, IDataObject[]> OnDataObjectAltered;
 
-        void EnsureDatabaseExists();
+        Task EnsureDatabaseExistsAsync();
 
         int DefaultQueryLimit { get; set; }
-        void Access(Action<BDadosTransaction> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        T Access<T>(Func<BDadosTransaction, T> tryFun, Action<Exception> catchFun = null, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        void Access(Action<BDadosTransaction> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        T Access<T>(Func<BDadosTransaction, T> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
         Task AccessAsync(Func<BDadosTransaction, Task> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
         Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
 
@@ -48,6 +48,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryGenerator QueryGenerator { get; }
 
         int Execute(IQueryBuilder Query);
+        Task<int> ExecuteAsync(BDadosTransaction transaction, IQueryBuilder query);
 
         IRdbmsDataAccessor Fork();
 
@@ -72,7 +73,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
-        bool SaveItem(BDadosTransaction transaction, IDataObject objeto);
+        bool SaveItem(BDadosTransaction transaction, IDataObject input);
+        Task<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input);
         bool SaveList<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
 
         T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();

@@ -73,26 +73,8 @@ namespace Figlotech.Core {
                 }
                 throw new InternalProgramException($"Trying to wait for a job that was not enqueued: \"{WorkJob.Name}\"");
             }
-            var timeout = TimeSpan.FromSeconds(30);
-            var sw = Stopwatch.StartNew();
-            var queuerWorkDone = this.WorkQueuer.WorkDone;
 
-            while (this.DequeuedTime == null) {
-                if (await Fi.Tech.Timesout(this._tcsNotifyDequeued.Task, timeout)) {
-                    if (this.WorkQueuer.WorkDone > queuerWorkDone) {
-                        timeout = TimeSpan.FromSeconds(15);
-                    } else {
-                        if (Debugger.IsAttached) {
-                            Debugger.Break();
-                        }
-                        throw new InternalProgramException($"Timeout reached awaiting for job \"{WorkJob.Name}\" to dequeue");
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            return await TaskCompletionSource.Task;
+            return await TaskCompletionSource.Task.ConfigureAwait(false);
         }
 
         public async Task ContinueWith(Action<Task<int>> action) {
