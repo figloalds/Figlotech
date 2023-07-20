@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
@@ -344,27 +345,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
                 ibo2.OnAfterListAggregateLoad(dlc, retv);
-            }
-            bool hasAggregateLoadCallback = typeof(T).GetMethod("OnAfterAggregateLoad", BindingFlags.DeclaredOnly) != null;
-            bool hasNormalLoadCallback = typeof(T).GetMethod("OnAfterLoad", BindingFlags.DeclaredOnly) != null;
 
-            if (
-                hasAggregateLoadCallback
-                || hasNormalLoadCallback
-            ) {
-                Parallel.For(0, retv.Count, i => {
-                    if (hasNormalLoadCallback && retv[i] is IBusinessObject) {
-                        ((IBusinessObject)retv[i]).OnAfterLoad(dlc);
-                    }
-                    if (hasAggregateLoadCallback && retv[i] is IBusinessObject<T>) {
-                        ((IBusinessObject<T>)retv[i]).OnAfterAggregateLoad(dlc);
-                    }
-                });
+                var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+                var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+
+                if(implementsAfterLoad || implementsAfterAggregateLoad) {
+                    Parallel.For(0, retv.Count, i => {
+                        ibo2.OnAfterLoad(dlc);
+                        ibo2.OnAfterAggregateLoad(dlc);
+                    });
+                }
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
+        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
+            t => t.GetMethod(nameof(IBusinessObject.OnAfterLoad)).DeclaringType == t
+        );
+        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterAggregateLoad = new SelfInitializerDictionary<Type, bool>(
+            t => t.GetMethod("OnAfterAggregateLoad").DeclaringType == t
+        );
 
         public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
             List<T> retv = new List<T>();

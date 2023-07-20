@@ -23,13 +23,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         event Action<Type, IDataObject[], Exception> OnFailedSave;
         event Action<Type, IDataObject[]> OnDataObjectAltered;
 
-        Task EnsureDatabaseExistsAsync();
+        ValueTask EnsureDatabaseExistsAsync();
 
         int DefaultQueryLimit { get; set; }
         void Access(Action<BDadosTransaction> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
         T Access<T>(Func<BDadosTransaction, T> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        Task AccessAsync(Func<BDadosTransaction, Task> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        ValueTask<T> AccessAsync<T>(Func<BDadosTransaction, ValueTask<T>> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
 
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         
@@ -48,7 +48,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryGenerator QueryGenerator { get; }
 
         int Execute(IQueryBuilder Query);
-        Task<int> ExecuteAsync(BDadosTransaction transaction, IQueryBuilder query);
+        ValueTask<int> ExecuteAsync(BDadosTransaction transaction, IQueryBuilder query);
 
         IRdbmsDataAccessor Fork();
 
@@ -64,25 +64,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         List<IDataObject> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
 
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
-        Task<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
+        ValueTask<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
         List<T> Query<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
         IEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new();
         int Execute(BDadosTransaction transaction, IQueryBuilder Query);
         IAsyncEnumerable<T> FetchAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
-        Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
+        ValueTask<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
         bool SaveItem(BDadosTransaction transaction, IDataObject input);
-        Task<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input);
+        ValueTask<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input);
         bool SaveList<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
+        ValueTask<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
 
         T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();
 
         T ForceExist<T>(BDadosTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
-        Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
+        ValueTask<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         List<T> LoadAll<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         IAsyncEnumerable<T> FetchAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
@@ -93,7 +94,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new();
         bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new();
 
-        Task<List<T>> AggregateLoadAsync<T>(
+        ValueTask<List<T>> AggregateLoadAsync<T>(
             BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new();
         List<T> AggregateLoad<T>(

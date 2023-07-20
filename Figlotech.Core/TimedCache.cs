@@ -21,21 +21,63 @@ namespace Figlotech.Core {
 
         public bool IsReadOnly => Dictionary.IsReadOnly;
 
+        public Func<TKey, ValueTask<T>> OnFailOver { get; set; }
+        public Func<TKey,ValueTask> OnFree { get; set; }
+        public Func<TKey, T, ValueTask> OnSet { get; set; }
+
+        Timer timer { get; set; }
+
         public TimedCache(TimeSpan duration) {
             this.CacheDuration = duration;
             Dictionary = new LenientDictionary<TKey, TimerCachedObject<TKey, T>>();
+
+            var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, CacheDuration.Seconds / 10));
+            timer = new Timer((state) => {
+                var keys = Dictionary.Keys.ToList();
+                var freed = OnFree != null ? new List<TKey>(Dictionary.Count) : null;
+                foreach (var key in keys) {
+                    if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
+                        Dictionary.Remove(key);
+                        freed.Add(key);
+                    }
+                }
+                if(OnFree != null && freed.Count > 0) {
+                    Fi.Tech.FireAndForget(async () => {
+                        foreach(var key in freed) {
+                            await OnFree(key);
+                        }
+                    });
+                }
+            }, null, CacheDuration, CacheDuration);
+        }
+
+        ~TimedCache() {
+            timer.Change(Timeout.Infinite, Timeout.Infinite);
+            timer.DisposeAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         public T this[TKey key] {
             get {
-                var item = Dictionary[key];
-                item.RefreshTimer();
-                return item.Object;
+                if(!Dictionary.ContainsKey(key) && OnFailOver != null) {
+                    var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
+                    this[key] = ret;
+                }
+                if(Dictionary.ContainsKey(key)) {
+                    var item = Dictionary[key];
+                    item.KeepAlive();
+                    return item.Object;
+                }
+                return default(T);
             }
             set {
                 if(Dictionary.ContainsKey(key)) {
                     Dictionary[key].Object = value;
-                    Dictionary[key].RefreshTimer();
+                    Dictionary[key].KeepAlive();
+                    if (OnSet != null) {
+                        Fi.Tech.FireAndForget(async () => {
+                            await OnSet(key, value);
+                        });
+                    }
                 } else {
                     Dictionary[key] = new TimerCachedObject<TKey, T>(Dictionary, key, value, CacheDuration);
                 }
@@ -51,7 +93,6 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(TKey key) {
-            Dictionary[key].Dispose();
             return Dictionary.Remove(key);
         }
 

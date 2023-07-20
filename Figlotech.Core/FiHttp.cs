@@ -327,12 +327,29 @@ namespace Figlotech.Core {
             return await SendRequest<T>(HttpMethod.Get, Url);
         }
 
-        // DELETE
-        public async Task<FiHttpResult> Delete(string Url) {
-            return await SendRequest(HttpMethod.Get, Url);
+
+        // DELETEdp1
+        public async Task<FiHttpResult> Delete(String url, MultipartFormDataContent form) {
+            return await SendRequest(HttpMethod.Delete, url, form);
         }
-        public async Task<T> Delete<T>(string Url) {
-            return await SendRequest<T>(HttpMethod.Delete, Url);
+
+        public async Task<FiHttpResult> Delete(string url, Func<Stream, Task> streamFunction) {
+            return await SendRequest(HttpMethod.Delete, url, streamFunction);
+        }
+        public async Task<FiHttpResult> Delete(string url, Stream stream, string contentType) {
+            return await SendRequest(HttpMethod.Delete, url, stream, contentType);
+        }
+        public async Task<FiHttpResult> Delete(string url, string body) {
+            return await SendRequest(HttpMethod.Delete, url, body);
+        }
+        public async Task<FiHttpResult> Delete(string url) {
+            return await SendRequest(HttpMethod.Delete, url);
+        }
+        public async Task<T> Delete<T>(string url) {
+            return await SendRequest<T>(HttpMethod.Delete, url);
+        }
+        public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = null) {
+            return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType);
         }
 
         // POST

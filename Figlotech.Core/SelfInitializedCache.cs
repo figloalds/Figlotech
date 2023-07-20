@@ -32,13 +32,13 @@ namespace Figlotech.Core {
         public T this[TKey key] {
             get {
                 var item = Dictionary[key];
-                item.RefreshTimer();
+                item.KeepAlive();
                 return item.Object;
             }
             set {
                 if(Dictionary.ContainsKey(key)) {
                     Dictionary[key].Object = value;
-                    Dictionary[key].RefreshTimer();
+                    Dictionary[key].KeepAlive();
                 } else {
                     Dictionary[key] = new TimerCachedObject<TKey, T>(Dictionary, key, value, CacheDuration);
                 }
@@ -54,7 +54,6 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(TKey key) {
-            Dictionary[key].Dispose();
             return Dictionary.Remove(key);
         }
 

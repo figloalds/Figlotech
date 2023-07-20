@@ -11,6 +11,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -77,9 +78,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropForeignKey(
-                    keyInfo.Table, keyInfo.KeyName));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropForeignKey(
+                    keyInfo.Table, keyInfo.KeyName)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -98,9 +99,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropPrimary(
-                    _table, _constraint));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropPrimary(_table, _constraint)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -118,9 +118,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropIndex(
-                    _table, _constraint));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropIndex(_table, _constraint)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -139,9 +138,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _constraint = constraint;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropUnique(
-                    _table, _constraint));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropUnique(_table, _constraint)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -162,16 +160,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
 
             int v = 0;
 
             if(keyInfo.IsUnique) {
-                return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddUniqueKey(
-                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+                return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddUniqueKey(keyInfo.Table, keyInfo.Column, keyInfo.KeyName)).ConfigureAwait(false);
             } else {
-                return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddIndex(
-                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+                return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddIndex(keyInfo.Table, keyInfo.Column, keyInfo.KeyName)).ConfigureAwait(false);
             }
         }
 
@@ -191,9 +187,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddPrimaryKey(
-                    keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddPrimaryKey(keyInfo.Table, keyInfo.Column, keyInfo.KeyName)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -210,14 +205,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.keyInfo = keyInfo;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
             int v = 0;
             //try {
             //    v += Exec(tsn, DataAccessor.QueryGenerator.AddIndex(
             //        keyInfo.Table, keyInfo.Column, keyInfo.KeyName));
             //} catch (Exception x) { }
-            v += Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddForeignKey(
-                    keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName));
+            v += await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddForeignKey(
+                    keyInfo.Table, keyInfo.Column, keyInfo.RefTable, keyInfo.RefColumn, keyInfo.KeyName)).ConfigureAwait(false);
             return v;
         }
 
@@ -243,9 +238,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _isNullable = columnMember.GetCustomAttribute<FieldAttribute>()?.AllowNull ?? true;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.Purge(
-                _table, _column, _refTable, _refColumn, _isNullable));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.Purge(_table, _column, _refTable, _refColumn, _isNullable)).ConfigureAwait(false);
 
             return 0;
 
@@ -269,9 +263,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _columnMember = columnMember;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddColumn(
-                _table, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember)));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AddColumn(
+                _table, DataAccessor.QueryGenerator.GetColumnDefinition(_columnMember))).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -290,9 +284,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _newName = newName;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.RenameTable(
-                _table, _newName));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.RenameTable(_table, _newName)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -315,9 +308,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _info = info;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.RenameColumn(
-                _table, _column, _columnMember, _info));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.RenameColumn(_table, _column, _columnMember, _info)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -338,8 +330,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _defaultValue = defaultValue;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.UpdateColumn(_table, _column, _defaultValue, Qb.Fmt($"{_column} IS NULL")));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.UpdateColumn(_table, _column, _defaultValue, Qb.Fmt($"{_column} IS NULL"))).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -360,13 +352,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _type = type;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
             _column.AllowNull = true;
-            return Exec(tsn, DataAccessor,
+            return await Exec(tsn, DataAccessor,
                 Qb.Fmt($@"
                     ALTER TABLE {_table} DROP COLUMN {_column.Name}
                 ")
-            );
+            ).ConfigureAwait(false);
             //Exec(tsn, DataAccessor, Qb.Fmt(
             //    $@"
             //        SET @a=1;
@@ -374,7 +366,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //        SELECT CONCAT({FiTechBDadosExtensions.RidColumnOf[_type]}, '-', @a:=@a+1), '{_table}', '{_column}', CAST({_column} as BINARY), {FiTechBDadosExtensions.RidColumnOf[_type]}, '{RID.MachineRID.AsULong}','{RID.MachineRID.AsULong}' FROM {_table} WHERE {_column} IS NOT NULL;
             //    "
             //));
-            //return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropColumn(
+            //return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.DropColumn(
             //    _table, _column.Name));
         }
 
@@ -397,8 +389,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _fieldAttribute = fieldAttribute;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AlterColumnDataType(_table, _member, _fieldAttribute));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AlterColumnDataType(_table, _member, _fieldAttribute)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -420,8 +412,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _fieldAttribute = fieldAttribute;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AlterColumnNullability(_table, _member, _fieldAttribute));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.AlterColumnNullability(_table, _member, _fieldAttribute)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -435,8 +427,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _tableType = tableType;
         }
 
-        public override int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
-            return Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.GetCreationCommand(_tableType));
+        public override async Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor) {
+            return await Exec(tsn, DataAccessor, DataAccessor.QueryGenerator.GetCreationCommand(_tableType)).ConfigureAwait(false);
         }
 
         public override string ToString() {
@@ -453,11 +445,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             this.Reason = reason;
         }
 
-        public abstract int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor);
+        public abstract Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor);
 
-        protected int Exec(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor, IQueryBuilder query) {
+        protected async Task<int> Exec(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor, IQueryBuilder query) {
             try {
-                return DataAccessor.Execute(tsn, query);
+                return await DataAccessor.ExecuteAsync(tsn, query).ConfigureAwait(false);
             } catch (Exception x) {
                 throw new BDadosException($"Error executing [{this.ToString()}]: [{x.Message}]", x);
             }
@@ -467,7 +459,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IStructureCheckNecessaryAction {
         string Description { get;  }
         string Reason { get;  }
-        int Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor);
+        Task<int> Execute(BDadosTransaction tsn, IRdbmsDataAccessor DataAccessor);
     }
 
     public sealed class StructureChecker {
@@ -792,35 +784,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task<int> ExecuteNecessaryActions(IEnumerable<IStructureCheckNecessaryAction> actions, Action<IStructureCheckNecessaryAction, int> onActionExecuted, Action<Exception> handleException = null) {
-
             var enny = actions.GetEnumerator();
             int retv = 0;
             int went = 0;
-            WorkQueuer wq = new WorkQueuer("Strucheck Queuer");
-            var cliQ = new WorkQueuer("cli_q", 1);
             List<Exception> exces = new List<Exception>();
             while (enny.MoveNext()) {
                 var thisAction = enny.Current;
-                wq.Enqueue(async () => {
+                try {
                     await Task.Yield();
-                    DataAccessor.Access(tsn => {
-                        retv += thisAction.Execute(tsn, DataAccessor);
-                    });
+                    await DataAccessor.AccessAsync(async tsn => {
+                        retv += await thisAction.Execute(tsn, DataAccessor).ConfigureAwait(false);
+                    }, CancellationToken.None).ConfigureAwait(false);
                     //lock(wq) {
                     int myWent = went++;
                     onActionExecuted?.Invoke(thisAction, myWent);
                     //}
-                }, async (x) => {
+                } catch(Exception x) {
                     await Task.Yield();
                     if (handleException == null)
                         lock (exces)
                             exces.Add(x);
                     else
                         handleException.Invoke(x);
-                });
+                }
             }
-            await wq.Stop(true);
-            await cliQ.Stop();
             if (exces.Any()) {
                 throw new AggregateException("There were errors executing actions", exces);
             }
