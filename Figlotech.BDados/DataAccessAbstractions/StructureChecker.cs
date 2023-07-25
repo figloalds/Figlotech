@@ -814,7 +814,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public IEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
+        public async IAsyncEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
             var columns = DataAccessor.GetInfoSchemaColumns();
@@ -1131,15 +1131,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null,
             Func<int, Task> onReportTotalTasks = null
         ) {
-            var neededActions = EvaluateNecessaryActions().ToList();
+            var neededActions = await EvaluateNecessaryActions().ToListAsync();
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
             try {
-                await DataAccessor.EnsureDatabaseExistsAsync();
+                await DataAccessor.EnsureDatabaseExistsAsync().ConfigureAwait(false);
             } catch(Exception x) {
                 // DRAGONS
 
             }
-            DataAccessor.Execute(DataAccessor.QueryGenerator.DisableForeignKeys());
+            await DataAccessor.AccessAsync(async tsn => {
+                await DataAccessor.ExecuteAsync(tsn, DataAccessor.QueryGenerator.DisableForeignKeys()).ConfigureAwait(false);
+            }, CancellationToken.None).ConfigureAwait(false);
             //DataAccessor.BeginTransaction();
             try {
 
@@ -1151,9 +1153,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             continue;
 
                     try {
-                        DataAccessor.Access(tsn => {
-                            action.Execute(tsn, DataAccessor);
-                        });
+                        await DataAccessor.AccessAsync(async tsn => {
+                            await action.Execute(tsn, DataAccessor).ConfigureAwait(false);
+                        }, CancellationToken.None).ConfigureAwait(false);
                         var t = onActionProcessed?.Invoke(action);
                         if(t != null && t is Task tk) {
                             await tk;
@@ -1167,7 +1169,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             } catch (Exception) {
 
             } finally {
-                DataAccessor.Execute(DataAccessor.QueryGenerator.EnableForeignKeys());
+                await DataAccessor.AccessAsync(async tsn => {
+                    await DataAccessor.ExecuteAsync(tsn, DataAccessor.QueryGenerator.EnableForeignKeys());
+                }, CancellationToken.None).ConfigureAwait(false);
                 //DataAccessor.EndTransaction();
             }
         }

@@ -63,7 +63,7 @@ namespace Figlotech.Core {
         }
 
         public async Task WaitForDequeue() {
-            await _tcsNotifyDequeued.Task;
+            await _tcsNotifyDequeued.Task.ConfigureAwait(false);
         }
 
         public async Task<int> GetAwaiterInternal() {
@@ -78,7 +78,7 @@ namespace Figlotech.Core {
         }
 
         public async Task ContinueWith(Action<Task<int>> action) {
-            await TaskCompletionSource.Task.ContinueWith(action);
+            await TaskCompletionSource.Task.ContinueWith(action).ConfigureAwait(false);
         }
 
         public StackTrace StackTrace { get; internal set; }
@@ -100,7 +100,7 @@ namespace Figlotech.Core {
         public Func<Exception, ValueTask> handling;
 
         static readonly Func<Func<ValueTask>, Func<CancellationToken, ValueTask>> ConvertActionFromAbsentOptionalParameter 
-            = fn => async (ignore) => await fn();
+            = fn => async (ignore) => await fn().ConfigureAwait(false);
 
         public String Name { get; set; } = null;
         public String Description { get; set; } = null;
@@ -270,7 +270,7 @@ namespace Figlotech.Core {
             using (var queuer = new WorkQueuer($"AnnonymousLiveQueuer", parallelSize)) {
                 queuer.Start();
                 act(queuer);
-                await queuer.Stop(true);
+                await queuer.Stop(true).ConfigureAwait(false);
             }
         }
         public async Task AccompanyJob(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
@@ -403,7 +403,7 @@ namespace Figlotech.Core {
                                     try {
                                         var handlerTask = this.OnExceptionInHandler?.Invoke(job, x, ex);
                                         if(handlerTask is Task) {
-                                            await handlerTask;
+                                            await handlerTask.ConfigureAwait(false);
                                         }
                                     } catch(Exception exx) {
                                         Fi.Tech.Throw(new AggregateException("User code gernerated exception in the hander AND in the handler of the handler.", x, ex, exx));

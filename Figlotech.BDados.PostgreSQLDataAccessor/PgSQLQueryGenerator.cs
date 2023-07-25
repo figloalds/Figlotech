@@ -20,6 +20,7 @@ using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
@@ -356,6 +357,26 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, false));
             Query.Append($" WHERE {rid} = @rid;", Convert.ChangeType(tabelaInput.RID, ridType));
+            return Query;
+        }
+
+        public IQueryBuilder GenerateUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
+            QueryBuilder Query = new QueryBuilder($"UPDATE {typeof(T).Name} SET");
+            var addComma = false;
+            var prefix = IntEx.GenerateShortRid();
+            int c = 0;
+            for (int i = 0; i < updates.Length; i++) {
+                if (updates[i].parameterExpression.Body is MemberExpression mex) {
+                    if (addComma) {
+                        Query.Append(",");
+                    } else {
+                        addComma = true;
+                    }
+                    Query.Append($"{mex.Member.Name}=@{prefix}_{++c}", updates[i].Value);
+                }
+            }
+            Query.Append("WHERE RID=@rid", input.RID);
+
             return Query;
         }
 

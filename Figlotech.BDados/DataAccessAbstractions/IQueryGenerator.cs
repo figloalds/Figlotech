@@ -18,6 +18,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder CreateDatabase(string schemaName);
         IQueryBuilder GenerateInsertQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput);
+        IQueryBuilder GenerateUpdateQuery<T>(T input, params (Expression<Func<T,object>> parameterExpression, object Value)[] updates) where T : IDataObject;
         IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
         IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, int? skip, int? limit, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();

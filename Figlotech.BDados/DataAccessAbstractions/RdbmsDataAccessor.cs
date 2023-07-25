@@ -50,6 +50,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private static List<BDadosTransaction> DebugOnlyGlobalTransactions = new List<BDadosTransaction>();
 
+        private List<(MemberInfo Member, object Target, object Value)> AutoMutateTargets = new List<(MemberInfo Member, object Target, object Value)>();
+
+        public void AddMutateTarget(MemberInfo Member, object Target, object Value) {
+            AutoMutateTargets.Add((Member, Target, Value));
+        }
+
         public BDadosTransaction(RdbmsDataAccessor rda, IDbConnection connection) {
             DataAccessor = rda;
             Connection = connection;
@@ -171,6 +177,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal CancellationToken CancellationToken { get; set; } = CancellationToken.None;
 
         private void ApplySuccessActions() {
+            for (int i = 0; i < AutoMutateTargets.Count; i++) {
+                ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
+            }
+            AutoMutateTargets.Clear();
             lock (ActionsToExecuteAfterSuccess) {
                 for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
                     var fn = ActionsToExecuteAfterSuccess[i];
@@ -193,9 +203,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 ActionsToExecuteAfterSuccess.Clear();
             }
+
         }
 
         private async ValueTask ApplySuccessActionsAsync() {
+            for (int i = 0; i < AutoMutateTargets.Count; i++) {
+                ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
+            }
+            AutoMutateTargets.Clear();
+
             for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
                 var fn = ActionsToExecuteAfterSuccess[i];
                 try {
@@ -216,6 +232,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             ActionsToExecuteAfterSuccess.Clear();
+
         }
 
         public void Commit() {
@@ -235,7 +252,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (WriteOperationsCount > 0) {
                     Transaction?.Commit();
                 }
-                if (ActionsToExecuteAfterSuccess.Count > 0) {
+                if (ActionsToExecuteAfterSuccess.Count > 0 || AutoMutateTargets.Count > 0) {
                     ApplySuccessActions();
                 }
                 IsCommited = true;
@@ -267,7 +284,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         Transaction?.Commit();
                     }
                 }
-                if (ActionsToExecuteAfterSuccess.Count > 0) {
+                if (ActionsToExecuteAfterSuccess.Count > 0 || AutoMutateTargets.Count > 0) {
                     await ApplySuccessActionsAsync().ConfigureAwait(false);
                 }
                 IsCommited = true;
@@ -2094,6 +2111,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
 
         public async ValueTask<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new() {
+            await Task.Yield();
             transaction.Step();
 
             if (query == null || query.GetCommandText() == null) {
@@ -2205,6 +2223,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, obj.ToList(), o => o.RID);
             retv = Execute(transaction, query) > 0;
             return retv;
+        }
+
+        public async ValueTask UpdateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
+            transaction.Step();
+
+            if (input == null) {
+                throw new BDadosException("Error updating item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
+            }
+
+            var query = QueryGenerator.GenerateUpdateQuery(input, updates);
+            await ExecuteAsync(transaction, query);
+        }
+        public async ValueTask UpdateAndMutateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
+            await UpdateAsync(transaction, input, updates);
+            for (int i = 0; i < updates.Length; i++) {
+                if (updates[i].parameterExpression.Body is MemberExpression mex) {
+                    transaction.AddMutateTarget(mex.Member, input, updates[i].Value);
+                }
+            }
         }
 
         public async ValueTask<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input) {
