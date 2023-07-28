@@ -26,6 +26,7 @@ using Figlotech.BDados.Builders;
 using Figlotech.Core.Helpers;
 using System.Diagnostics;
 using Figlotech.Data;
+using Org.BouncyCastle.Asn1.Crmf;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
@@ -454,13 +455,23 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var prefix = IntEx.GenerateShortRid();
             int c = 0;
             for(int i = 0; i < updates.Length; i++) {
-                if (updates[i].parameterExpression.Body is MemberExpression mex) {
+                var check = updates[i].parameterExpression.Body;
+                if(check is UnaryExpression unaex) {
+                    check = unaex.Operand;
+                }
+
+                if (check is MemberExpression mex) {
                     if(addComma) {
                         Query.Append(",");
                     } else {
                         addComma = true;
                     }
                     Query.Append($"{mex.Member.Name}=@{prefix}_{++c}", updates[i].Value);
+                } else {
+                    if(Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
+                    throw new BDadosException("Parameter Expression must be a valid member-access expression. eg: x=> x.Price");
                 }
             }
             Query.Append("WHERE RID=@rid", input.RID);

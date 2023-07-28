@@ -2238,7 +2238,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async ValueTask UpdateAndMutateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
             await UpdateAsync(transaction, input, updates);
             for (int i = 0; i < updates.Length; i++) {
-                if (updates[i].parameterExpression.Body is MemberExpression mex) {
+                var check = updates[i].parameterExpression.Body;
+                if(check is UnaryExpression unaex) {
+                    check = unaex.Operand;
+                }
+                if (check is MemberExpression mex) {
                     transaction.AddMutateTarget(mex.Member, input, updates[i].Value);
                 }
             }
@@ -2539,6 +2543,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 } catch (Exception x) {
                     sw.Stop();
+                    transaction?.Benchmarker?.Mark($"Error executing query: {x.Message}\r\n\tQuery: {query.GetCommandText()}");
                     WriteLog($"[{accessId}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
@@ -2705,7 +2710,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction.NotifyWriteOperation();
                     WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{transaction.Benchmarker?.Mark("Error")} ms]");
+                    var elapsed = transaction?.Benchmarker?.Mark($"Error executing query: {x.Message}\r\n\tQuery: {query.GetCommandText()}");
+                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{elapsed} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     WriteLog($"BDados Execute: {x.Message}");

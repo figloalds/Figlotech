@@ -38,7 +38,7 @@ namespace Figlotech.Core {
                 foreach (var key in keys) {
                     if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
                         Dictionary.Remove(key);
-                        freed.Add(key);
+                        freed?.Add(key);
                     }
                 }
                 if(OnFree != null && freed.Count > 0) {
@@ -53,7 +53,9 @@ namespace Figlotech.Core {
 
         ~TimedCache() {
             timer.Change(Timeout.Infinite, Timeout.Infinite);
-            timer.DisposeAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            Fi.Tech.FireAndForget(async () => {
+                await timer.DisposeAsync().ConfigureAwait(false);
+            });
         }
 
         public T this[TKey key] {
