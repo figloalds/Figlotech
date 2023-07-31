@@ -340,6 +340,10 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                     Query.Append($"{mex.Member.Name}=@{prefix}_{++c}", updates[i].Value);
                 }
             }
+            if (addComma) {
+                Query.Append(",");
+            }
+            Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
             Query.Append("WHERE RID=@rid", input.RID);
 
             return Query;

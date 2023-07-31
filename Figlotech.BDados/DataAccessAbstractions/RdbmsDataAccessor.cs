@@ -50,9 +50,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private static List<BDadosTransaction> DebugOnlyGlobalTransactions = new List<BDadosTransaction>();
 
-        private List<(MemberInfo Member, object Target, object Value)> AutoMutateTargets = new List<(MemberInfo Member, object Target, object Value)>();
+        private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateTargets = new List<(MemberInfo Member, IDataObject Target, object Value)>();
 
-        public void AddMutateTarget(MemberInfo Member, object Target, object Value) {
+        public void AddMutateTarget(MemberInfo Member, IDataObject Target, object Value) {
             AutoMutateTargets.Add((Member, Target, Value));
         }
 
@@ -177,8 +177,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal CancellationToken CancellationToken { get; set; } = CancellationToken.None;
 
         private void ApplySuccessActions() {
+            Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
             for (int i = 0; i < AutoMutateTargets.Count; i++) {
                 ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
+                if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
+                    MutatedObjects.Add(AutoMutateTargets[i].Target, true);
+                    AutoMutateTargets[i].Target.UpdatedTime = DateTime.UtcNow;
+                }
             }
             AutoMutateTargets.Clear();
             lock (ActionsToExecuteAfterSuccess) {
@@ -207,8 +212,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private async ValueTask ApplySuccessActionsAsync() {
+            Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
             for (int i = 0; i < AutoMutateTargets.Count; i++) {
                 ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
+                if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
+                    MutatedObjects.Add(AutoMutateTargets[i].Target, true);
+                    AutoMutateTargets[i].Target.UpdatedTime = DateTime.UtcNow;
+                }
             }
             AutoMutateTargets.Clear();
 

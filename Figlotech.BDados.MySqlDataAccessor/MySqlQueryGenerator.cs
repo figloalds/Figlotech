@@ -474,7 +474,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     throw new BDadosException("Parameter Expression must be a valid member-access expression. eg: x=> x.Price");
                 }
             }
-            Query.Append("WHERE RID=@rid", input.RID);
+            if(addComma) {
+                Query.Append(",");
+            }
+            Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
+            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnOf[typeof(T)]}=@rid", input.RID);
 
             return Query;
         }
