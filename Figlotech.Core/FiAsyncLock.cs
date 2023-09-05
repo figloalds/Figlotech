@@ -95,13 +95,20 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
-            if(_semaphore.CurrentCount == 0) {
-                _semaphore.Release(1);
-            } else {
-                Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
-            }
-            if(_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
-                _lock.Remove(_key);
+            try {
+                if(_semaphore.CurrentCount == 0) {
+                    _semaphore.Release(1);
+                } else {
+                    Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
+                }
+                if(_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
+                    _lock.Remove(_key);
+                }
+            } catch(Exception x) {
+                if(Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                Fi.Tech.Error(x);
             }
         }   
     }

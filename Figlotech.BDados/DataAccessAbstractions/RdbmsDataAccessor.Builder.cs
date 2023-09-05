@@ -344,27 +344,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark("Run afterloads");
 
             if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
-                ibo2.OnAfterListAggregateLoad(dlc, retv);
+                await ibo2.OnAfterListAggregateLoadAsync(dlc, retv);
 
                 var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                 var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
 
                 if(implementsAfterLoad || implementsAfterAggregateLoad) {
-                    Parallel.For(0, retv.Count, i => {
-                        ibo2.OnAfterLoad(dlc);
-                        ibo2.OnAfterAggregateLoad(dlc);
-                    });
+                    foreach(var item in retv) {
+                        if(item is IBusinessObject<T> ibo3) {
+                            ibo3.OnAfterLoad(dlc);
+                            await ibo3.OnAfterAggregateLoadAsync(dlc);
+                        }
+                    }
                 }
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
+
         private SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
             t => t.GetMethod(nameof(IBusinessObject.OnAfterLoad)).DeclaringType == t
         );
         private SelfInitializerDictionary<Type, bool> CacheImplementsAfterAggregateLoad = new SelfInitializerDictionary<Type, bool>(
-            t => t.GetMethod("OnAfterAggregateLoad").DeclaringType == t
+            t => t.GetMethod("OnAfterAggregateLoadAsync").DeclaringType == t
         );
 
         public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
@@ -453,11 +456,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark("Run afterloads");
 
             if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
-                ibo2.OnAfterListAggregateLoad(dlc, retv);
+                ibo2.OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false).GetAwaiter().GetResult();
             }
             foreach (var a in retv) {
                 if (a is IBusinessObject<T> ibo) {
-                    ibo.OnAfterAggregateLoad(dlc);
+                    ibo.OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
             }
 

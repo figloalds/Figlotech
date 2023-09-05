@@ -110,6 +110,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Step() {
+            if (CancellationToken.IsCancellationRequested) {
+                throw new OperationCanceledException("The transaction was cancelled");
+            }
             if (Connection.State != ConnectionState.Open) {
                 DataAccessor.OpenConnection(Connection);
             }
@@ -242,7 +245,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             ActionsToExecuteAfterSuccess.Clear();
-
         }
 
         public void Commit() {
@@ -1139,15 +1141,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         await awaitable.ConfigureAwait(false);
                     }
 
-                    WriteLog($"[{accessId}] Committing");
-                    b.Mark($"[{accessId}] Begin Commit");
-                    await transaction.CommitAsync().ConfigureAwait(false);
-                    b.Mark($"[{accessId}] End Commit");
-                    WriteLog($"[{accessId}] Commited OK ");
+                    if(transaction.CancellationToken.IsCancellationRequested) {
+                        WriteLog($"[{accessId}] Transaction was cancelled via token");
+                        b.Mark($"[{accessId}] Begin Rollback");
+                        await transaction.RollbackAsync().ConfigureAwait(false);
+                        b.Mark($"[{accessId}] End Rollback");
+                        WriteLog($"[{accessId}] Rollback OK ");
+                    } else {
+                        WriteLog($"[{accessId}] Committing");
+                        b.Mark($"[{accessId}] Begin Commit");
+                        await transaction.CommitAsync().ConfigureAwait(false);
+                        b.Mark($"[{accessId}] End Commit");
+                        WriteLog($"[{accessId}] Commited OK ");
+                    }
                     return retv;
                 } catch (TaskCanceledException x) {
                     throw x;
                 } catch (Exception x) {
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
                     WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
                     b.Mark($"[{accessId}] Begin Rollback");
                     try {
@@ -1717,8 +1730,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             return retv;
         }
-
         public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+            return DeleteWhereRidNotInAsync(transaction, cnd, list)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+        public async Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
             int retv = 0;
             if (list == null)
                 return true;
@@ -1744,35 +1762,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 //query.Append(")");
             }
 
-            var results = Query<T>(transaction, query);
+            var results = await QueryAsync<T>(transaction, query);
             if (results.Any()) {
                 OnObjectsDeleted?.Invoke(typeof(T), results.Select(t => t as IDataObject).ToArray());
                 var query2 = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(rid, results, r => r.RID);
-                retv = Execute(transaction, query2);
+                retv = await ExecuteAsync(transaction, query2);
                 return retv > 0;
             }
             return true;
-
-            //var id = GetIdColumn<T>();
-            //var rid = GetRidColumn<T>();
-            //var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ");
-            //if (cnd != null) {
-            //    PrefixMaker pm = new PrefixMaker();
-            //    query.Append($"{rid} IN (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} AS {pm.GetAliasFor("root", typeof(T).Name, String.Empty)} WHERE ");
-            //    query.Append(new ConditionParser(pm).ParseExpression<T>(cnd));
-            //    query.Append(") sub)");
-            //}
-            //if (list.Count > 0) {
-            //    query.Append($"AND {rid} NOT IN (");
-            //    for (var i = 0; i < list.Count; i++) {
-            //        query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
-            //        if (i < list.Count - 1)
-            //            query.Append(",");
-            //    }
-            //    query.Append(")");
-            //}
-            //retv = Execute(transaction, query);
-            //return retv > 0;
         }
 
         public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
@@ -2044,6 +2041,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public bool Delete<T>(BDadosTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
+            return DeleteAsync(transaction, conditions)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
             transaction.Step();
             bool retv = false;
             var prefixMaker = new PrefixMaker();
@@ -2051,7 +2055,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var rid = GetRidColumn<T>();
 
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE {rid} in (SELECT {rid} FROM (SELECT {rid} FROM {typeof(T).Name} tba WHERE ") + cnd + Qb.Fmt(") a);");
-            retv = Execute(transaction, query) > 0;
+            retv = (await ExecuteAsync(transaction, query)) > 0;
             return retv;
         }
 
@@ -2200,8 +2204,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering, contextObject).ToList();
         }
-
         public bool Delete(BDadosTransaction transaction, IDataObject obj) {
+            return DeleteAsync(transaction, obj)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+        public async Task<bool> DeleteAsync(BDadosTransaction transaction, IDataObject obj) {
             transaction.Step();
 
             bool retv = false;
@@ -2215,11 +2224,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             OnObjectsDeleted?.Invoke(obj.GetType(), obj.ToSingleElementList().ToArray());
             var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
-            retv = Execute(transaction, query) > 0;
+            retv = (await ExecuteAsync(transaction, query)) > 0;
             return retv;
         }
 
         public bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
+            return DeleteAsync(transaction, obj)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
             transaction.Step();
 
             bool retv = false;
@@ -2231,7 +2247,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             OnObjectsDeleted?.Invoke(typeof(T), obj.Select(t => t as IDataObject).ToArray());
             var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, obj.ToList(), o => o.RID);
-            retv = Execute(transaction, query) > 0;
+            retv = (await ExecuteAsync(transaction, query)) > 0;
             return retv;
         }
 
@@ -2517,6 +2533,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (limit < 0) {
                 limit = DefaultQueryLimit;
             }
+            if (transaction.CancellationToken.IsCancellationRequested) {
+                throw new OperationCanceledException("The transaction was cancelled");
+            }
             if (conditions == null) {
                 conditions = Qb.Fmt("TRUE");
             }
@@ -2541,7 +2560,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                DbDataReader reader;
+                DbDataReader reader = null;
                 try {
                     transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
                     using (await transaction.Lock().ConfigureAwait(false)) {
@@ -2557,6 +2576,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog($"[{accessId}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
+                    try {
+                        var ret = reader?.DisposeAsync();
+                        if(ret is ValueTask t) {
+                            await t;
+                        }
+                    } catch(Exception) {
+                        // empty catch
+                    }
                     throw x;
                 } finally {
                     WriteLog("------------------------------------");
@@ -2632,18 +2659,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
                 using (await transaction.Lock().ConfigureAwait(false)) {
-                    IDataReader dataReader = null;
                     if(command is DbCommand acom) {
                         await acom.PrepareAsync().ConfigureAwait(false);
-                        dataReader = await acom.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken).ConfigureAwait(false);
+                        var dataReader = await acom.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken).ConfigureAwait(false);
+
+                        await using (dataReader) {
+                            return await actionRead(dataReader).ConfigureAwait(false);
+                        }
                     } else {
                         command.Prepare();
-                        dataReader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                        var dataReader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                        using (dataReader) {
+                            return await actionRead(dataReader).ConfigureAwait(false);
+                        }
                     }
 
-                    using (dataReader) {
-                        return await actionRead(dataReader).ConfigureAwait(false);
-                    }
                 }
             }
         }
@@ -2698,6 +2728,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Step();
             if (query == null)
                 return 0;
+            if(transaction.CancellationToken.IsCancellationRequested) {
+                throw new OperationCanceledException("The transaction was cancelled");
+            }
             int result = -1;
             transaction.Benchmarker?.Mark($"[{accessId}] Prepare statement");
             transaction.Benchmarker?.Mark("--");

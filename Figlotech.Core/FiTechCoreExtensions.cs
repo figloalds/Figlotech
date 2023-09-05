@@ -96,6 +96,13 @@ namespace Figlotech.Core {
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
         public bool IsActive { get; internal set; } = true;
+        public CancellationTokenSource Cancellation { get; internal set; }
+
+        ~ScheduledWorkJob() {
+            try {
+                Cancellation.Dispose();
+            } catch (Exception) { }
+        }
     }
 
     public delegate dynamic ComputeField(dynamic o);
@@ -377,7 +384,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static T[,] DoubleGroupingToMatrix<T>(List<IGrouping<string, T>> groupingA, List<IGrouping<string, T>> groupingB, Func<T, T, bool> JoiningClause, Func<IEnumerable<T>, T> aggregator) {
+        public static T[,] decimalGroupingToMatrix<T>(List<IGrouping<string, T>> groupingA, List<IGrouping<string, T>> groupingB, Func<T, T, bool> JoiningClause, Func<IEnumerable<T>, T> aggregator) {
 
             var tbl = new T[groupingA.Count, groupingB.Count];
             for (int i = 0; i < groupingA.Count; i++) {
@@ -458,6 +465,9 @@ namespace Figlotech.Core {
 
         private static void _timerFn(object a) {
             var sched = a as ScheduledWorkJob;
+            if(sched.Cancellation.IsCancellationRequested) {
+                return;
+            }
             var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
             if (millisDiff > 5000) {
@@ -468,7 +478,7 @@ namespace Figlotech.Core {
                 request = sched.Queuer.Enqueue(
                     new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
                         Name = sched.WorkJob.Name
-                    }
+                    }, sched.Cancellation.Token
                 );
             }
             if(request == null) {
@@ -489,6 +499,9 @@ namespace Figlotech.Core {
 
         public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
             lock (GlobalScheduledJobs) {
+                if(sched.Cancellation.IsCancellationRequested) {
+                    return;
+                }
                 var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
                 var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
                 var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
@@ -499,15 +512,43 @@ namespace Figlotech.Core {
                 }
             }
         }
-        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+        public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, CancellationToken? cancellation = null) {
             var sched = new ScheduledWorkJob {
                 Queuer = queuer,
                 Identifier = identifier,
                 WorkJob = job,
                 ScheduledTime = when,
                 RecurrenceInterval = RecurrenceInterval,
+                Cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation ?? CancellationToken.None)
             };
             ScheduleTask(_selfie, sched);
+        }
+        public static void ClearSchedulesByWorker(this Fi _selfie, WorkQueuer instance, bool cancelRunning) {
+            lock (GlobalScheduledJobs) {
+                GlobalScheduledJobs.RemoveAll(s => {
+                    if(s.Queuer != instance) {
+                        return false;
+                    }
+                    s.Timer.Dispose();
+                    if(cancelRunning) {
+                        s.Cancellation.Cancel();
+                    }
+                    s.IsActive = false;
+                    return true;
+                });
+            }
+        }
+        public static void ClearSchedules(this Fi _selfie, bool cancelRunning = false) {
+            lock (GlobalScheduledJobs) {
+                GlobalScheduledJobs.RemoveAll(s => {
+                    s.Timer.Dispose();
+                    if(cancelRunning) {
+                        s.Cancellation.Cancel();
+                    }
+                    s.IsActive = false;
+                    return true;
+                });
+            }
         }
 
         public static void Unschedule(this Fi _selfie, string identifier) {

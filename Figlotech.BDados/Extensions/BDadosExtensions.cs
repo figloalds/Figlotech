@@ -13,6 +13,8 @@ using System.Text;
 using Figlotech.Core.Interfaces;
 using System.Threading.Tasks;
 using Figlotech.Data;
+using Figlotech.BDados.Helpers;
+using System.Threading;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     

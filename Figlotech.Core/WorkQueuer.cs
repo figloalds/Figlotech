@@ -36,11 +36,13 @@ namespace Figlotech.Core {
 
         public WorkJob WorkJob { get; internal set; }
         public CancellationTokenSource Cancellation { get; internal set; }
+        public CancellationToken RequestCancellation { get; internal set; }
 
         private bool _disposed;
-        public WorkJobExecutionRequest(WorkJob job) {
+        public WorkJobExecutionRequest(WorkJob job, CancellationToken? requestCancellation = null) {
             WorkJob = job;
             Cancellation = new CancellationTokenSource();
+            RequestCancellation = requestCancellation ?? CancellationToken.None;
             Status = WorkJobRequestStatus.Queued;
         }
 
@@ -296,8 +298,8 @@ namespace Figlotech.Core {
             }
         }
 
-        public WorkJobExecutionRequest Enqueue(WorkJob job) {
-            var request = new WorkJobExecutionRequest(job);
+        public WorkJobExecutionRequest Enqueue(WorkJob job, CancellationToken? requestCancellation = null) {
+            var request = new WorkJobExecutionRequest(job, requestCancellation);
 
             request.EnqueuedTime = DateTime.UtcNow;
             request.Status = WorkJobRequestStatus.Queued;
@@ -377,7 +379,9 @@ namespace Figlotech.Core {
                             job._tcsNotifyDequeued.TrySetResult(0);
                             job.Status = WorkJobRequestStatus.Running;
                             if (job.WorkJob.action != null) {
-                                job.WorkJob.ActionTask = job.WorkJob.action(job.Cancellation.Token);
+                                using(var womboCombo = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
+                                    job.WorkJob.ActionTask = job.WorkJob.action(job.Cancellation.Token);
+                                }
                                 await job.WorkJob.ActionTask.ConfigureAwait(false);
                                 job.Status = WorkJobRequestStatus.Finished;
                             }

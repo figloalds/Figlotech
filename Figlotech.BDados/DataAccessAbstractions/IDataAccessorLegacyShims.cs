@@ -8,6 +8,8 @@ using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public static class ILegacyLoadAllOptionsShimExtensions {
@@ -132,6 +134,34 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .OrderBy(orderingMember, ordering)
             );
         }
+        public static async Task<List<T>> LoadAllAsync<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
+            where T : IDataObject, new() {
+            return await Core.Interfaces.LoadAll.Where<T>(conditions)
+                    .Skip(skip)
+                    .Limit(limit)
+                    .OrderBy(orderingMember, ordering)
+                    .Using(transaction)
+                    .LoadAsync();
+        }
+
+        public static async Task<List<T>> QueryAsync<T>(this IRdbmsDataAccessor self, IQueryBuilder query)
+            where T : new() {
+            return await self.AccessAsync(async tsn=> {
+                return await self.QueryAsync<T>(tsn, query);
+            }, CancellationToken.None);
+        }
+
+        public static async Task<List<T>> LoadAllAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
+            where T : IDataObject, new() {
+            return await self.AccessAsync(async transaction => {
+                return await Core.Interfaces.LoadAll.Where<T>(conditions)
+                    .Skip(skip)
+                    .Limit(limit)
+                    .OrderBy(orderingMember, ordering)
+                    .Using(transaction)
+                    .LoadAsync();
+            }, CancellationToken.None);
+        }
 
         public static T LoadFirstOrDefault<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
            where T : IDataObject, new() {
@@ -166,6 +196,32 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .GroupBy(GroupingMember)
                     .LinearIf(Linear)
             );
+        }
+        public static async Task<List<T>> AggregateLoadAsync<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
+           where T : IDataObject, new() {
+            return await self.AggregateLoadAsync<T>(
+                transaction,
+                Core.Interfaces.LoadAll.Where<T>(conditions)
+                    .Skip(skip)
+                    .Limit(limit)
+                    .OrderBy(orderingMember, ordering)
+                    .GroupBy(GroupingMember)
+                    .LinearIf(Linear)
+            );
+        }
+        public static async Task<List<T>> AggregateLoadAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
+           where T : IDataObject, new() {
+            return await self.AccessAsync(async transaction=> {
+                return await self.AggregateLoadAsync<T>(
+                    transaction,
+                    Core.Interfaces.LoadAll.Where<T>(conditions)
+                        .Skip(skip)
+                        .Limit(limit)
+                        .OrderBy(orderingMember, ordering)
+                        .GroupBy(GroupingMember)
+                        .LinearIf(Linear)
+                );
+            }, CancellationToken.None);
         }
     }
 }

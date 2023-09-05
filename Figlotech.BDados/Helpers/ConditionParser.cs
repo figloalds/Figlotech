@@ -343,7 +343,32 @@ namespace Figlotech.BDados.Helpers {
             if (foofun is MethodCallExpression) {
                 var expr = foofun as MethodCallExpression;
 
-                if(expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
+                if (expr.Method.DeclaringType == typeof(StringExtensions)) {
+                    if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
+                        var retv = Qb.Fmt("REGEXP_REPLACE(")
+                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(",")
+                            + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(",")
+                            + ParseExpression(expr.Arguments[2], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(")");
+                        return retv;
+                    }
+                }
+                if (expr.Method.DeclaringType == typeof(String)) {
+                    if (expr.Method.Name == nameof(String.Replace)) {
+                        var retv = Qb.Fmt("REPLACE(")
+                            + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(",")
+                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(",")
+                            + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt(")");
+                        return retv;
+                    }
+                }
+
+                if (expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
                     if(expr.Method.GetParameters().Length == 1) {
                         return Qb.Fmt($"@{GenerateParameterId}", expr.Method.Invoke(null, new object[] { Fi.Tech }));
                     }

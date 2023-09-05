@@ -129,14 +129,14 @@ namespace Figlotech.Core.DomainEvents {
             RegisterExtension(Extension);
         }
 
-        public void ExecuteExtensions<TOpCode, T>(TOpCode opcode, T input) {
+        public async Task ExecuteExtensionsAsync<TOpCode, T>(TOpCode opcode, T input) {
 
             foreach(var Extension in Extensions) {
                 if(Extension is Extension<TOpCode, T> ext) {
                     try {
-                        ext.Execute(opcode, input);
+                        await ext.Execute(opcode, input);
                     } catch (Exception x) {
-                        ext.OnError(opcode, input, x);
+                        await ext.OnError(opcode, input, x);
                     }
                 }
             }

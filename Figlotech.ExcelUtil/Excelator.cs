@@ -538,6 +538,24 @@ namespace Figlotech.ExcelUtil {
                 }
             }
         }
+        public async Task ReadAllAsync(Func<ExcelatorLineReader, Task> lineFun, int skipLines = 0, Func<Exception, Task> handler = null) {
+            ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
+            for (var i = 1 + skipLines; i < _currentWorkSheet.Dimension.Rows + 1; i++) {
+                try {
+                    xcl.CurrentRow = i;
+                    await lineFun(xcl);
+                    if(xcl.stopReadingIssued) {
+                        break;
+                    }
+                } catch (Exception x) {
+                    Console.WriteLine($"Err reading Excel Row {x.Message}");
+                    if(x is ReadingStoppedException) {
+                        break;
+                    }
+                    await handler(x);
+                }
+            }
+        }
     }
 
 }

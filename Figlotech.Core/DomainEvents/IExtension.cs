@@ -10,22 +10,22 @@ namespace Figlotech.Core.DomainEvents
     public interface IExtension {
     }
     public interface IExtension<TOpCode, TObject> : IExtension {
-        void Execute(TOpCode opcode, TObject obj);
-        void OnError(TOpCode opcode, TObject obj, Exception x);
+        Task Execute(TOpCode opcode, TObject obj);
+        Task OnError(TOpCode opcode, TObject obj, Exception x);
     }
 
     public static class IExtensibleExtensions {
-        public static void ExecuteExtensions<TOpCode, T>(this T self, TOpCode opcode) where T : IExtensible<TOpCode> {
+        public static async Task ExecuteExtensionsAsync<TOpCode, T>(this T self, TOpCode opcode) where T : IExtensible<TOpCode> {
             if (self == null || self.EventsHub == null) {
                 throw new NullReferenceException($"EventHub was null when trying to execute opcode {opcode} for item of type {typeof(T)}");
             }
-            self.EventsHub.ExecuteExtensions<TOpCode, T>(opcode, self);
+            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, T>(opcode, self);
         }
-        public static void ExecuteExtensions<TOpCode, T, TOther>(this T self, TOpCode opcode, TOther other) where T : IExtensible<TOpCode> {
+        public static async Task ExecuteExtensionsAsync<TOpCode, T, TOther>(this T self, TOpCode opcode, TOther other) where T : IExtensible<TOpCode> {
             if (self == null || self.EventsHub == null) {
                 throw new NullReferenceException($"EventHub was null when trying to execute opcode {opcode} for item of type {typeof(T)}");
             }
-            self.EventsHub.ExecuteExtensions<TOpCode, TOther>(opcode, other);
+            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, TOther>(opcode, other);
         }
     }
 
@@ -39,18 +39,18 @@ namespace Figlotech.Core.DomainEvents
             _opcode = opcode;
         }
 
-        public abstract void Execute(T obj);
-        public abstract void OnError(T obj, Exception x);
+        public abstract Task Execute(T obj);
+        public abstract Task OnError(T obj, Exception x);
 
-        public void Execute(int opcode, T obj) {
+        public async Task Execute(int opcode, T obj) {
             if(opcode == _opcode) {
-                Execute((T) obj);
+                await Execute((T) obj);
             }
         }
 
-        public void OnError(int opcode, T obj, Exception x) {
+        public async Task OnError(int opcode, T obj, Exception x) {
             if (opcode == _opcode) {
-                OnError((T) obj, x);
+                await OnError((T) obj, x);
             }
         }
     }
@@ -61,10 +61,10 @@ namespace Figlotech.Core.DomainEvents
         }
 
         public abstract bool ShouldExecute(TOpCode opcode);
-        public abstract void Execute(T obj);
-        public abstract void OnError(T obj, Exception x);
+        public abstract Task Execute(T obj);
+        public abstract Task OnError(T obj, Exception x);
 
-        public void Execute(TOpCode opcode, T obj) {
+        public async Task Execute(TOpCode opcode, T obj) {
             if (obj == null || obj.GetType() != typeof(T)) {
                 return;
             }
@@ -72,14 +72,14 @@ namespace Figlotech.Core.DomainEvents
                 return;
             }
 
-            Execute((T)obj);
+            await Execute((T)obj);
         }
 
-        public void OnError(TOpCode opcode, T obj, Exception x) {
+        public async Task OnError(TOpCode opcode, T obj, Exception x) {
             if (obj == null || obj.GetType() != typeof(T)) {
                 return;
             }
-            OnError((T)obj, x);
+            await OnError((T)obj, x);
         }
     }
 
