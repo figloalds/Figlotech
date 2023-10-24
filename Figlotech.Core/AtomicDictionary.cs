@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
     public sealed class AtomicDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
         internal Dictionary<TKey, TValue> _dmmy = new Dictionary<TKey, TValue>();
-        Func<TKey, TValue> SelfInitFn { get; set; }
+
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {

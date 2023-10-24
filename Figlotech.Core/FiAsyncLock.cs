@@ -86,6 +86,7 @@ namespace Figlotech.Core {
         SemaphoreSlim _semaphore;
         internal FiAsyncMultiLock _lock;
         internal string _key;
+        private bool isDisposed {get;set;}
         public FiAsyncDisposableLock(SemaphoreSlim semaphore) {
             this._semaphore = semaphore;
         }
@@ -95,20 +96,27 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
-            try {
-                if(_semaphore.CurrentCount == 0) {
-                    _semaphore.Release(1);
-                } else {
-                    Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
+            lock(this) {
+                if(isDisposed) {
+                    return;
                 }
-                if(_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
-                    _lock.Remove(_key);
+                try {
+                    if (_semaphore.CurrentCount == 0) {
+                        _semaphore.Release(1);
+                    } else {
+                        Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
+                    }
+                    if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
+                        _lock.Remove(_key);
+                    }
+                } catch (Exception x) {
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
+                    Fi.Tech.Error(x);
+                } finally {
+                    isDisposed = true;
                 }
-            } catch(Exception x) {
-                if(Debugger.IsAttached) {
-                    Debugger.Break();
-                }
-                Fi.Tech.Error(x);
             }
         }   
     }
@@ -116,12 +124,12 @@ namespace Figlotech.Core {
     public sealed class FiAsyncLock {
         SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
-        public async Task<FiAsyncDisposableLock> Lock() {
+        public async ValueTask<FiAsyncDisposableLock> Lock() {
             await _semaphore.WaitAsync();
             return new FiAsyncDisposableLock(_semaphore);
         }
 
-        public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
+        public async ValueTask<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
             await Fi.Tech.ThrowIfTimesout(_semaphore.WaitAsync(), timeout, "Awaiting for lock timed out");
             return new FiAsyncDisposableLock(_semaphore);
         }

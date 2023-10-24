@@ -11,15 +11,13 @@ namespace Figlotech.Core
         AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
-                lock(_dmmy) {
-                    if(key == null) {
-                        return default(TValue);
-                    }
-                    if (_dmmy.TryGetValue(key, out var retv)) {
-                        return retv;
-                    }
+                if(key == null) {
                     return default(TValue);
                 }
+                if (_dmmy.TryGetValue(key, out var retv)) {
+                    return retv;
+                }
+                return default(TValue);
             }
             set {
                 _dmmy[key] = value;

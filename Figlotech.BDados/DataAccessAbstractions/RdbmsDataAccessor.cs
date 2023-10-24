@@ -952,6 +952,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
                 try {
                     await ExclusiveOpenConnectionAsync(connection).ConfigureAwait(false);
+
                     if (FiTechCoreExtensions.DebugConnectionLifecycle) {
                         var stack = Environment.StackTrace;
                         lock (ActiveConnections)
@@ -1048,38 +1049,39 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             while (connection?.State != ConnectionState.Open && attempts-- >= 0) {
                 try {
                     ExclusiveOpenConnection(connection);
-                    if (FiTechCoreExtensions.DebugConnectionLifecycle) {
-                        var stack = Environment.StackTrace;
-                        lock (ActiveConnections)
-                            ActiveConnections.Add((connection, Environment.StackTrace, myId));
-                        var trackId = $"TRACK_CONNECTION_{++ConnectionTracks}";
-                        Fi.Tech.ScheduleTask(trackId, DateTime.UtcNow + TimeSpan.FromSeconds(10), new WorkJob(() => {
-                            try {
-                                if (connection.State == ConnectionState.Open) {
-                                    var isActive = false;
-                                    lock (ActiveConnections)
-                                        isActive = ActiveConnections.Any(x => x.Connection == connection);
-                                    if (isActive) {
 
-                                    } else {
-                                        if (!Directory.Exists("CriticalFTHErrors")) {
-                                            Directory.CreateDirectory("CriticalFTHErrors");
+                    if (FiTechCoreExtensions.DebugConnectionLifecycle) {
+                            var stack = Environment.StackTrace;
+                            lock (ActiveConnections)
+                                ActiveConnections.Add((connection, Environment.StackTrace, myId));
+                            var trackId = $"TRACK_CONNECTION_{++ConnectionTracks}";
+                            Fi.Tech.ScheduleTask(trackId, DateTime.UtcNow + TimeSpan.FromSeconds(10), new WorkJob(() => {
+                                try {
+                                    if (connection.State == ConnectionState.Open) {
+                                        var isActive = false;
+                                        lock (ActiveConnections)
+                                            isActive = ActiveConnections.Any(x => x.Connection == connection);
+                                        if (isActive) {
+
+                                        } else {
+                                            if (!Directory.Exists("CriticalFTHErrors")) {
+                                                Directory.CreateDirectory("CriticalFTHErrors");
+                                            }
+                                            Debugger.Break();
+                                            try {
+                                                connection?.Dispose();
+                                            } catch (Exception x) { }
                                         }
-                                        Debugger.Break();
-                                        try {
-                                            connection?.Dispose();
-                                        } catch (Exception x) { }
+                                    } else {
+                                        Fi.Tech.Unschedule(trackId);
                                     }
-                                } else {
-                                    Fi.Tech.Unschedule(trackId);
+                                } catch (Exception x) {
+                                    Debugger.Break();
                                 }
-                            } catch (Exception x) {
-                                Debugger.Break();
-                            }
-                            return Fi.Result();
-                        }, x => Fi.Result(), s => Fi.Result()), TimeSpan.FromSeconds(10)
-                        );
-                    }
+                                return Fi.Result();
+                            }, x => Fi.Result(), s => Fi.Result()), TimeSpan.FromSeconds(10)
+                            );
+                        }
 
                     isOnline = true;
                     break;
