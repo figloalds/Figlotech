@@ -23,6 +23,7 @@ using System.Text.RegularExpressions;
 using Figlotech.Core.Autokryptex;
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
+using System.Data.Common;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -602,6 +603,21 @@ namespace Figlotech.Core {
             }
         }
 
+        public static async Task<List<T>> ReaderToObjectListUsingMapAsync<T>(this Fi _selfie, DbDataReader reader, Dictionary<string, string> map) where T : new() {
+            var retv = new List<T>();
+            var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
+            while (await reader.ReadAsync()) {
+                var field = new T();
+                var refl = field.AsReflectable();
+                foreach (var kvp in map) {
+                    if (readerNames.Contains(kvp.Value.ToUpper())) {
+                        refl[kvp.Key] = reader[kvp.Value];
+                    }
+                }
+                retv.Add(field);
+            }
+            return retv;
+        }
         public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, Dictionary<string, string> map) where T : new() {
             var retv = new List<T>();
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();

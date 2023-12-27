@@ -107,6 +107,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             BDadosTransaction transaction, 
             LoadAllArgs<T> args = null) where T : IDataObject, new();
 
-        List<FieldAttribute> GetInfoSchemaColumns();
+        Task<List<FieldAttribute>> GetInfoSchemaColumns();
     }
 }

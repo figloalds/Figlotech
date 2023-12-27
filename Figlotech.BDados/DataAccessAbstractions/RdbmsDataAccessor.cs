@@ -300,9 +300,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await ApplySuccessActionsAsync().ConfigureAwait(false);
                 }
                 IsCommited = true;
-                lock (ObjectsToNotify) {
-                    DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
-                    ObjectsToNotify.Clear();
+                if(ObjectsToNotify.Count > 0) {
+                    lock (ObjectsToNotify) {
+                        DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
+                        ObjectsToNotify.Clear();
+                    }
                 }
             }
         }
@@ -505,20 +507,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public int ThreadId => Thread.CurrentThread.ManagedThreadId;
 
-        public List<FieldAttribute> GetInfoSchemaColumns() {
+        public async Task<List<FieldAttribute>> GetInfoSchemaColumns() {
             var dbName = this.SchemaName;
             var map = Plugin.InfoSchemaColumnsMap;
 
             List<FieldAttribute> retv = new List<FieldAttribute>();
 
-            return UseTransaction((conn) => {
+            return await UseTransactionAsync(async (conn) => {
                 using (var cmd = conn.CreateCommand(this.QueryGenerator.InformationSchemaQueryColumns(dbName))) {
                     cmd.Prepare();
-                    using (var reader = cmd.ExecuteReader()) {
-                        return Fi.Tech.ReaderToObjectListUsingMap<FieldAttribute>(reader, map);
+                    if(cmd is DbCommand acom) {
+                        using (var reader = await acom.ExecuteReaderAsync(CommandBehavior.SingleResult)) {
+                            return await Fi.Tech.ReaderToObjectListUsingMapAsync<FieldAttribute>(reader, map);
+                        }
+                    } else {
+                        using (var reader = cmd.ExecuteReader(CommandBehavior.SingleResult)) {
+                            return Fi.Tech.ReaderToObjectListUsingMap<FieldAttribute>(reader, map);
+                        }
                     }
                 }
-            });
+            }, CancellationToken.None);
         }
 
         public IRdbmsDataAccessor Fork() {
@@ -928,7 +936,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private const string RDB_SYSTEM_LOGID = "FTH:RDB";
         public void WriteLog(String s) {
-            if(FiTechCoreExtensions.EnableBenchMarkers) {
+            if(string.IsNullOrEmpty(s)) {
+                return;
+            }
+            if(!FiTechCoreExtensions.EnableStdoutLogs) {
                 return;
             }
             Logger?.WriteLog(s);

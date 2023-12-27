@@ -817,7 +817,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async IAsyncEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
-            var columns = DataAccessor.GetInfoSchemaColumns();
+            var columns = await DataAccessor.GetInfoSchemaColumns();
             var neededKeys = GetNecessaryLinks().ToList();
             Console.WriteLine("Evaluating Necessary Actions:");
             Console.WriteLine($"{tables.Count} tables, {columns.Count} columns, {keys.Count} keys");
