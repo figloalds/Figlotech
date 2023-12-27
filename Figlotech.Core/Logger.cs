@@ -125,7 +125,7 @@ namespace Figlotech.Core {
         }
 
         public void WriteLog(Exception x) {
-            if (!Enabled)
+            if (!Enabled || x == null)
                 return;
 
             WriteLog($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");

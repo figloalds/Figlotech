@@ -15,8 +15,8 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
         public byte[] EncryptionKey { get; private set; }
         public byte[] DecryptionKey { get; private set; }
         public static (TwoWayRsaPair, TwoWayRsaPair) Generate() {
-            var RSA1 = new RSACryptoServiceProvider();
-            var RSA2 = new RSACryptoServiceProvider();
+            var RSA1 = new RSACryptoServiceProvider(2048);
+            var RSA2 = new RSACryptoServiceProvider(2048);
 
             var Keypair1 = new TwoWayRsaPair {
                 EncryptionKey = RSA1.ExportCspBlob(false),
