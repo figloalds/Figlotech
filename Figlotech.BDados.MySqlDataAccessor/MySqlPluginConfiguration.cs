@@ -53,7 +53,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
         }
 
         public String GetConnectionString() { 
-            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=1;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Timeout};Connect Timeout={ConnectTimeout};DefaultCommandTimeout={Timeout};ConnectionLifetime={Lifetime};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL?"Required":"None")};default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
+            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=1;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Timeout};Connect Timeout={ConnectTimeout};DefaultCommandTimeout={Timeout};ConnectionLifetime={Lifetime};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL?"Required":"None")};charset=utf8mb4;default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
             return connstr;
         }
     }

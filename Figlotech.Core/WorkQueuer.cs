@@ -410,7 +410,7 @@ namespace Figlotech.Core {
                                             await handlerTask.ConfigureAwait(false);
                                         }
                                     } catch(Exception exx) {
-                                        Fi.Tech.Throw(new AggregateException("User code gernerated exception in the hander AND in the handler of the handler.", x, ex, exx));
+                                        Fi.Tech.Throw(new AggregateException("User code generated exception in the hander AND in the handler of the handler.", x, ex, exx));
                                     }
                                 }
                             } else {

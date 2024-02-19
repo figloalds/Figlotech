@@ -567,7 +567,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     if(inputRecordset[ridx].IsReceivedFromSync) {
                         Query.Append($"AND {upd}<@u_{ridx}", inputRecordset[ridx].UpdatedTime);
                     }
-                    Query.Append($"THEN @{ggid}_{++x}", ReflectionTool.GetMemberValue(members[i], inputRecordset[ridx]));
+                    var val = ReflectionTool.GetMemberValue(members[i], inputRecordset[ridx]);
+                    Query.Append($"THEN @{ggid}_{++x}", val);
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
             }
