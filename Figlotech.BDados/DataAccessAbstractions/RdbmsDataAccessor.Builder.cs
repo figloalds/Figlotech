@@ -367,6 +367,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
                 }
+                if(currentObject != null) {
+                    yield return currentObject;
+                }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
