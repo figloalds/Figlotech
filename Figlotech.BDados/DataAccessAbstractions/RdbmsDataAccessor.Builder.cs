@@ -43,16 +43,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
         }
-        public IEnumerable<T> GetObjectEnumerable<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
+        public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             var refl = new ObjectReflector();
             transaction?.Benchmarker.Mark("Enter lock command");
-            lock (command) {
-                transaction?.Benchmarker.Mark("- Starting Execute Query");
-                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo)) {
-                    transaction?.Benchmarker.Mark("- Starting build");
-                    foreach (var item in Fi.Tech.MapFromReader<T>(reader)) {
-                        yield return item;
-                    }
+            transaction?.Benchmarker.Mark("- Starting Execute Query");
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+                transaction?.Benchmarker.Mark("- Starting build");
+                await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken)) {
+                    yield return item;
                 }
             }
         }
@@ -94,13 +92,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ConstructorCache[t].Invoke(emptyParameters);
         }
 
+        public sealed class AggregateListCachedMetadata {
+            public Type UlType { get; set; }
+            public int ParentRIDIndex { get; set; }
+            public int ChildRIDIndex { get; set; }
+            public object List { get; set; }
+            public MethodInfo AddMethod { get; set; }
+        }
+
         public void BuildAggregateObject(BDadosTransaction transaction,
-            Type t, IDataReader reader, ObjectReflector refl,
-            object obj, Dictionary<string, (int[], string[])> fieldNamesDict, JoiningTable[] joinTables, IDictionary<int, Relation[]> joinRelations,
+            Type t, object[] reader, object obj, Dictionary<string, (int[], string[])> fieldNamesDict, JoiningTable[] joinTables, IDictionary<int, Relation[]> joinRelations,
             int thisIndex, bool isNew,
             Dictionary<string, object> constructionCache, int recDepth) {
-            var myPrefix = joinTables[thisIndex].Prefix.ToLower();
-            refl.Slot(obj);
+            var myPrefix = joinTables[thisIndex].Prefix;
             if (isNew) {
                 //transaction.Benchmarker.Mark($"Enter Build Object {myPrefix}");
                 if (!fieldNamesDict.ContainsKey(myPrefix)) {
@@ -118,7 +122,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         // But I'll go with "If it isn't UTC, then you're saving dates wrong"
                         val = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, DateTimeKind.Utc);
                     }
-                    refl[fieldNames.Item2[i]] = val;
+                    ReflectionTool.SetValue(obj, fieldNames.Item2[i], val);
                 }
                 //transaction.Benchmarker.Mark($"End Build Object {myPrefix}");
             }
@@ -137,9 +141,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         // Aggregate fields are the beautiful easy ones to deal
                         case AggregateBuildOptions.AggregateField: {
                                 String childPrefix = joinTables[rel.ChildIndex].Prefix;
-                                var value = reader[childPrefix + "_" + rel.Fields[0]];
                                 String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                refl[name] = reader[childPrefix + "_" + rel.Fields[0]];
+                                var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOf(rel.Fields[0])];
+                                var value = reader[valueIndex];
+                                ReflectionTool.SetValue(obj, name, reader[valueIndex]);
 
                                 //transaction.Benchmarker.Mark($"Aggregate Field {myPrefix}::{name}");
                                 break;
@@ -148,43 +153,57 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         // Sure needs optimization.
                         case AggregateBuildOptions.AggregateList: {
                                 String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                                var objectType = ObjectTypeCache[t][fieldAlias];
-                                var ulType = UlTypeCache[objectType];
-                                var addMethod = AddMethodCache[objectType];
-                                if (addMethod == null)
-                                    continue;
+                                if(!constructionCache.ContainsKey($"AGLIST_{obj.GetHashCode()}_{fieldAlias}")) {
+                                    var objectType = ObjectTypeCache[t][fieldAlias];
+                                    var ulType = UlTypeCache[objectType];
+                                    var addMethod = AddMethodCache[objectType];
+                                    if (addMethod == null)
+                                        continue;
 
-                                if (refl[fieldAlias] == null) {
-                                    var newLi = NewInstance(ulType);
-                                    refl[fieldAlias] = newLi;
+                                    if (ReflectionTool.GetValue(obj, fieldAlias) == null) {
+                                        var newLi = NewInstance(ulType);
+                                        ReflectionTool.SetValue(obj, fieldAlias, newLi);
+                                    }
+                                    var li = ReflectionTool.GetValue(obj, fieldAlias);
+                                    if (li == null) {
+                                        continue;
+                                    }
+                                    var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                                    var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
+                                    var parentPrefix = joinTables[rel.ParentIndex].Prefix;
+                                    var parentRidIndex = fieldNamesDict[parentPrefix].Item1[fieldNamesDict[parentPrefix].Item2.GetIndexOf(rel.ParentKey)];
+                                    var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
+
+                                    constructionCache[$"AGLIST_{obj.GetHashCode()}_{fieldAlias}"] = new AggregateListCachedMetadata {
+                                        UlType = ulType,
+                                        ParentRIDIndex = parentRidIndex,
+                                        ChildRIDIndex = childRidIndex,
+                                        List = li,
+                                        AddMethod = addMethod
+                                    };
                                 }
-                                var li = refl[fieldAlias];
-                                if (li == null) {
-                                    continue;
-                                }
-                                var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
-                                var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
-                                string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
-                                string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
-                                string childRidCacheId = cacheId(reader, childRidCol, ulType);
+                                var metadata = (AggregateListCachedMetadata)constructionCache[$"AGLIST_{obj.GetHashCode()}_{fieldAlias}"];
+                                
+                                string parentRid = ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]) as string;
+                                string childRid = ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]) as string;
+                                string childRidCacheId = cacheId(reader, metadata.ChildRIDIndex, metadata.UlType);
                                 object newObj;
                                 if (parentRid == null || childRid == null) {
                                     continue;
                                 }
                                 bool isUlNew = false;
-                                //if (!constructionCache.ContainsKey(childRidCol))
-                                //    constructionCache.Add(childRidCol, new Dictionary<string, object>());
+
                                 if (constructionCache.ContainsKey(childRidCacheId)) {
                                     newObj = constructionCache[childRidCacheId];
                                 } else {
-                                    newObj = NewInstance(ulType);
-                                    addMethod.Invoke(li, new object[] { newObj });
+                                    newObj = NewInstance(metadata.UlType);
+                                    metadata.AddMethod.Invoke(metadata.List, new object[] { newObj });
                                     constructionCache[childRidCacheId] = newObj;
                                     isUlNew = true;
                                 }
 
                                 //transaction.Benchmarker.Mark($"Aggregate List Enter Item {myPrefix}::{childRid}");
-                                BuildAggregateObject(transaction, ulType, reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+                                BuildAggregateObject(transaction, metadata.UlType, reader, newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
 
                                 break;
                             }
@@ -198,17 +217,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     continue;
                                 }
                                 var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                                var parentRidCol = joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey;
+                                var parentRidIndex = fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item2.GetIndexOf(rel.ParentKey)];
                                 var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
-                                string parentRid = ReflectionTool.DbDeNull(reader[joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey]) as string;
-                                string childRid = ReflectionTool.DbDeNull(reader[childRidCol]) as string;
-                                string childRidCacheId = cacheId(reader, childRidCol, ulType);
+                                var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
+                                
+                                string parentRid = ReflectionTool.DbDeNull(reader[parentRidIndex]) as string;
+                                string childRid = ReflectionTool.DbDeNull(reader[childRidIndex]) as string;
+                                string childRidCacheId = cacheId(reader, childRidIndex, ulType);
                                 object newObj = null;
                                 if (parentRid == null || childRid == null) {
                                     continue;
                                 }
                                 bool isUlNew = false;
-                                if (!constructionCache.ContainsKey(childRidCol))
-                                    constructionCache.Add(childRidCol, new Dictionary<string, object>());
 
                                 if (constructionCache.ContainsKey(childRidCacheId)) {
                                     newObj = constructionCache[childRidCacheId];
@@ -217,10 +238,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     constructionCache[childRidCacheId] = newObj;
                                     isUlNew = true;
                                 }
-                                refl[fieldAlias] = newObj;
+                                ReflectionTool.SetValue(obj, fieldAlias, newObj);
 
                                 if (isUlNew || joinRelations[rel.ChildIndex].Any(x => x.AggregateBuildOption == AggregateBuildOptions.AggregateList)) {
-                                    BuildAggregateObject(transaction, ulType, reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+                                    BuildAggregateObject(transaction, ulType, reader, newObj, fieldNamesDict, joinTables, joinRelations, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
                                 }
                                 break;
                             }
@@ -253,6 +274,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static AtomicDictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new AtomicDictionary<string, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
+            var retv = $"{t.Name}_{rid}";
+
+            return retv;
+        }
+        public string cacheId(object[] reader, int myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
             var retv = $"{t.Name}_{rid}";
 
@@ -312,7 +339,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 constructionCache.Add(myRidCol, new Dictionary<string, object>());
                 transaction?.Benchmarker?.Mark("Enter Build Result");
                 int row = 0;
-                while (reader.Read()) {
+
+                while (await reader.ReadAsync(transaction.CancellationToken)) {
                     //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T newObj;
@@ -325,7 +353,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         isNew = false;
                     }
 
-                    BuildAggregateObject(transaction, typeof(T), reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
+                    var objArray = new object[reader.FieldCount];
+                    reader.GetValues(objArray);
+                    BuildAggregateObject(transaction, typeof(T), objArray, newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
                     //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
@@ -436,7 +466,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             isNew = false;
                         }
 
-                        BuildAggregateObject(transaction, typeof(T), reader, new ObjectReflector(), newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
+                        var objArray = new object[reader.FieldCount];
+                        reader.GetValues(objArray);
+                        BuildAggregateObject(transaction, typeof(T), objArray, newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
                         //transaction.Benchmarker.Mark($"End result row {row}");
                         row++;

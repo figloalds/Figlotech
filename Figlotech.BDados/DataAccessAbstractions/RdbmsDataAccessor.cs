@@ -2093,7 +2093,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        public IEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new() {
+        public async IAsyncEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new() {
             transaction.Step();
 
             if (query == null || query.GetCommandText() == null) {
@@ -2101,21 +2101,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
-            using (var command = transaction.CreateCommand()) {
+            using (var command = (DbCommand) transaction.CreateCommand()) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
                 transaction?.Benchmarker?.Mark($"[{accessId}] Enter lock region");
                 var c = 0;
-                lock (transaction) {
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
-                    foreach (var item in GetObjectEnumerable<T>(transaction, command)) {
-                        c++;
-                        yield return item;
-                    }
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{accessId}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
+                await foreach (var item in GetObjectEnumerableAsync<T>(transaction, command)) {
+                    c++;
+                    yield return item;
                 }
+                transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
 
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Fully consumed resultset (coroutinely) <{query.Id}> Size: {c}");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Avg consumption speed: {((double)elaps / (double)c).ToString("0.00")}ms/item");

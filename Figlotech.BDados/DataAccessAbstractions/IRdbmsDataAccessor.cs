@@ -68,7 +68,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
         ValueTask<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
         List<T> Query<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();
-        IEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new();
+        IAsyncEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new();
         int Execute(BDadosTransaction transaction, IQueryBuilder Query);
         IAsyncEnumerable<T> FetchAsync<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
