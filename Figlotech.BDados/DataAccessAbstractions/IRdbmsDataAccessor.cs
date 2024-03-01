@@ -55,6 +55,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IRdbmsDataAccessor Fork();
 
         BDadosTransaction CreateNewTransaction(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null);
+        ValueTask<BDadosTransaction> CreateNewTransactionAsync(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null);
 
         void SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);
