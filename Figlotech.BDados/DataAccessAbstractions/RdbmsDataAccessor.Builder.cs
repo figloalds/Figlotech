@@ -286,6 +286,95 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
+        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+            List<T> retv = new List<T>();
+            var myPrefix = join.Joins[thisIndex].Prefix;
+            var joinTables = join.Joins.ToArray();
+            var joinRelations = join.Relations.ToArray();
+            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
+                Debugger.Break();
+            }
+
+            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+                transaction?.Benchmarker?.Mark("Prepare caches");
+                Dictionary<string, (int[], string[])> fieldNamesDict;
+                Benchmarker.Assert(() => join != null);
+                var jstr = String.Intern(join.ToString());
+                lock (jstr) {
+                    if (!_autoAggregateCache.ContainsKey(jstr)) {
+                        // This is only ever used in the auto aggregations
+                        // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
+                        var fieldNames = new string[reader.FieldCount];
+                        for (int i = 0; i < fieldNames.Length; i++)
+                            fieldNames[i] = reader.GetName(i);
+                        int idx = 0;
+                        // With this I make a reusable cache and reduce the "per-object" field 
+                        // probing when copying values from the reader
+                        var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
+                            var prefix = name.Split('_')[0].ToLower();
+                            return (prefix, idx++, name.Replace($"{prefix}_", ""));
+                        })
+                        .Where(i => i.Item1 != null)
+                        .GroupBy(i => i.Item1);
+                        var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+
+                        _autoAggregateCache.Add(jstr, newEntry);
+                    }
+                }
+                Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
+                fieldNamesDict = _autoAggregateCache[jstr];
+
+                var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
+                    return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
+                });
+
+                var myRidCol = $"{myPrefix}_{ridcol}";
+                bool isNew;
+                var constructionCache = new Dictionary<string, object>();
+                if (myRidCol == null && Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+
+                transaction?.Benchmarker?.Mark("Enter Build Result");
+                int row = 0;
+
+                T currentObject = default(T);
+                while (await reader.ReadAsync(transaction.CancellationToken)) {
+                    //transaction.Benchmarker.Mark($"Enter result row {row}");
+                    isNew = true;
+                    T iterationObject;
+                    if (!constructionCache.ContainsKey(cacheId(reader, myRidCol, typeof(T)))) {
+
+                        iterationObject = new T();
+
+                        if (currentObject != null) {
+                            yield return currentObject;
+                        }
+                        constructionCache.Clear();
+                        currentObject = iterationObject;
+                        constructionCache[cacheId(reader, myRidCol, typeof(T))] = iterationObject;
+                    } else {
+                        iterationObject = (T)constructionCache[cacheId(reader, myRidCol, typeof(T))];
+                        isNew = false;
+                    }
+
+                    var objArray = new object[reader.FieldCount];
+                    reader.GetValues(objArray);
+                    BuildAggregateObject(transaction, typeof(T), objArray, iterationObject, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
+
+                    //transaction.Benchmarker.Mark($"End result row {row}");
+                    row++;
+                }
+                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
+                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
+
+                transaction?.Benchmarker?.Mark("Clear cache");
+                constructionCache.Clear();
+            }
+        }
+
         public async Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;

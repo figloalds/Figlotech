@@ -2448,8 +2448,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         );
 
-        public async ValueTask<List<T>> AggregateLoadAsync<T>
-            (BDadosTransaction transaction,
+        public async IAsyncEnumerable<T> AggregateLoadAsyncCoroutinely<T>(
+            BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new() {
             transaction.Step();
             args = args ?? new LoadAllArgs<T>();
@@ -2491,23 +2491,59 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
 
                     var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
-                    try {
-                        transaction?.Benchmarker?.Mark($"Generate Join Query");
-                        //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
-                        query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                        transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
-                        var retv = await BuildAggregateListDirectAsync<T>(transaction, command, join, 0, args.ContextObject).ConfigureAwait(false);
-                        transaction?.Benchmarker?.Mark($"Finished building the resultAggregateListDirect<{typeof(T).Name}> ({query.Id})");
-                        return retv;
-                    } catch (Exception x) {
-                        throw new BDadosException($"Error executing AggregateLoad query; Linear? {args.Linear}; Query Text: {query.GetCommandText()}", x);
-                    }
-                }
+                    transaction?.Benchmarker?.Mark($"Generate Join Query");
+                    //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
+                    query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+                    transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
 
+                    var dlc = new DataLoadContext {
+                        DataAccessor = this,
+                        IsAggregateLoad = true,
+                        ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
+                    };
+
+                    var typeIsBusinessObject = typeof(T).Implements(typeof(IBusinessObject));
+                    var typeIsBusinessObjectT = typeof(T).Implements(typeof(IBusinessObject<T>));
+
+                    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0, args.ContextObject).ConfigureAwait(false)) {
+                        if(typeIsBusinessObject) {
+                            (item as IBusinessObject).OnAfterLoad(dlc);
+                        }
+                        if(typeIsBusinessObjectT) {
+                            await (item as IBusinessObject<T>).OnAfterAggregateLoadAsync(dlc);
+                        }
+                        yield return item;
+                    }
+                    transaction?.Benchmarker?.Mark($"Finished building the resultAggregateListDirect<{typeof(T).Name}> ({query.Id})");
+                }
             } else {
                 WriteLog(args.Conditions?.ToString());
-                return await FetchAsync<T>(transaction, args).ToListAsync().ConfigureAwait(false);
+                await foreach(var item in FetchAsync<T>(transaction, args).ConfigureAwait(false)) {
+                    yield return item;
+                }
             }
+        }
+
+        public async ValueTask<List<T>> AggregateLoadAsync<T>
+            (BDadosTransaction transaction,
+            LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            List<T> retv = new List<T>();
+
+            await foreach(var item in AggregateLoadAsyncCoroutinely(transaction, args).ConfigureAwait(false)) {
+                retv.Add(item);
+            }
+
+            var dlc = new DataLoadContext {
+                DataAccessor = this,
+                IsAggregateLoad = true,
+                ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
+            };
+            var typeIsBusinessObjectT = typeof(T).Implements(typeof(IBusinessObject<T>));
+            if (retv.Count > 0 && typeIsBusinessObjectT) {
+                await (retv.First() as IBusinessObject<T>).OnAfterListAggregateLoadAsync(dlc, retv);
+            }
+
+            return retv;
         }
 
         public List<T> AggregateLoad<T>
