@@ -353,22 +353,66 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        bool Errored = false;
+        internal void MarkAsErrored() {
+            Errored = true;
+        }
+
+        public void Throw(Exception x) {
+            Errored = true;
+            throw new BusinessValidationException("Transaction interruped by an error", x);
+        }
+        
+        public async Task Complete() {
+            if (!IsCommited && !IsRolledBack) {
+                if (Errored || CancellationToken.IsCancellationRequested) {
+                    await RollbackAsync();
+                } else {
+                    try {
+                        await CommitAsync();
+                    } catch (Exception ex) {
+                        await RollbackAsync();
+                        Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
+                    }
+                }
+            }
+            await DisposeAsync();
+        }
+
         public void Dispose() {
+            DisposeAsync().GetAwaiter().GetResult();
+        }
+        bool isDisposed = false;
+        public async Task DisposeAsync() {
+            if (isDisposed) {
+                return;
+            }
             try {
+                
                 if (Transaction?.Connection?.State == ConnectionState.Open) {
                     try {
-                        Transaction?.Dispose();
+                        if(Transaction is DbTransaction dbt) {
+                            await dbt.DisposeAsync();
+                        } else {
+                            Transaction?.Dispose();
+                        }
                     } catch (Exception x) {
                         Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {x.Message}");
                     }
                     try {
-                        Connection.Dispose();
+                        if (Connection is DbConnection dbc) {
+                            await dbc.DisposeAsync();
+                        } else {
+                            Connection?.Dispose();
+                        }
                     } catch (Exception x) {
                         Fi.Tech.WriteLine($"Warning disposing connection from BDadosTransaction: {x.Message}");
                     }
                 }
             } catch (Exception ex) {
                 Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
+            } finally {
+                isDisposed = true;
             }
             if (FiTechCoreExtensions.DebugConnectionLifecycle) {
                 lock (DebugOnlyGlobalTransactions)
@@ -533,7 +577,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return new RdbmsDataAccessor(Plugin);
         }
 
-        public async ValueTask<BDadosTransaction> CreateNewTransactionAsync(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null) {
+        public async ValueTask<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
             BDadosTransaction retv;
             //if (FiTechCoreExtensions.EnableDebug) {
             //    WriteLog(Environment.StackTrace);
@@ -563,8 +607,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public BDadosTransaction CreateNewTransaction(IsolationLevel ilev, CancellationToken cancellationToken, Benchmarker bmark = null) {
-            return CreateNewTransactionAsync(ilev, cancellationToken, bmark)
+        public BDadosTransaction CreateNewTransaction(CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
+            return CreateNewTransactionAsync(cancellationToken, ilev, bmark)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
@@ -1110,12 +1154,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-
         private async ValueTask<T> UseTransactionAsync<T>(Func<BDadosTransaction, Task<T>> func, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
 
             if (func == null) return default(T);
 
-            using (var transaction = await CreateNewTransactionAsync(ilev, cancellationToken).ConfigureAwait(false)) {
+            await using (var transaction = await CreateNewTransactionAsync(cancellationToken, ilev).ConfigureAwait(false)) {
                 var b = transaction.Benchmarker;
                 if (FiTechCoreExtensions.EnableDebug) {
                     try {
@@ -1183,7 +1226,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     b.Mark($"[{accessId}] End Rollback");
                     WriteLog($"[{accessId}] Transaction rolled back ");
-
+                    transaction?.MarkAsErrored();
                     throw new BDadosException("Error accessing the database", transaction?.FrameHistory, null, x);
                 } finally {
                     if (!(transaction?.usingExternalBenchmarker ?? true)) {
@@ -1712,6 +1755,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
+                transaction?.MarkAsErrored();
                 throw new BDadosException($"Not everything could be saved list of type {typeof(T).Name}", transaction.FrameHistory, failedObjects, new AggregateException(failedSaves));
             }
             if (failedObjects.Any()) {
@@ -1737,10 +1781,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Object ScalarQuery(BDadosTransaction transaction, IQueryBuilder qb) {
             transaction.Step();
             Object retv = null;
-            try {
-                retv = Query(transaction, qb).Rows[0][0];
-            } catch (Exception) {
-            }
+            retv = Query(transaction, qb).Rows[0][0];
             return retv;
         }
         public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
@@ -1929,7 +1970,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             } catch (Exception x) {
                                 var elaps = transaction?.Benchmarker?.Mark("End data transmission");
                                 Console.WriteLine($"Error in {elaps}ms");
-                                throw x;
+                                transaction?.MarkAsErrored();
+                                throw new BDadosException("Error sending updates to peers", x);
                             }
                             transaction?.Benchmarker?.Mark($"End data transmission {readRows} items");
                         }
@@ -2032,6 +2074,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                     }, async x => {
                         await Task.Yield();
+                        transaction?.MarkAsErrored();
                         Console.WriteLine($"Error persisting batch {x.Message}");
                     });
                 }
@@ -2127,7 +2170,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
-                    throw x;
+                    transaction?.MarkAsErrored();
+                    throw new BDadosException("Error in query", x);
                 } finally {
                     WriteLog("------------------------------------");
                 }
@@ -2169,7 +2213,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
-                    throw x;
+                    transaction?.MarkAsErrored();
+                    throw new BDadosException("Error in Query", x);
                 } finally {
                     WriteLog("------------------------------------");
                 }
@@ -2266,6 +2311,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Step();
 
             if (input == null) {
+                transaction?.MarkAsErrored();
                 throw new BDadosException("Error updating item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
             }
 
@@ -2289,6 +2335,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Step();
 
             if (input == null) {
+                transaction?.MarkAsErrored();
                 throw new BDadosException("Error saving item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
             }
 
@@ -2343,7 +2390,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         Fi.Tech.Throw(xe);
                     });
                 }
-                throw x;
+                transaction?.MarkAsErrored();
+                throw new BusinessValidationException("Error Saving Item", x);
             }
 
             if (input.Id <= 0) {
@@ -2631,7 +2679,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     } catch(Exception) {
                         // empty catch
                     }
-                    throw x;
+                    transaction?.MarkAsErrored();
+                    throw new BDadosException("Error loading data", x);
                 } finally {
                     WriteLog("------------------------------------");
                 }
@@ -2753,6 +2802,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     int resultados = 0;
                     if (ds.Tables.Count < 1) {
+                        transaction?.MarkAsErrored();
                         throw new BDadosException("Database did not return any table.");
                     }
                     resultados = ds.Tables[0].Rows.Count;
@@ -2764,6 +2814,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog(x.StackTrace);
                     var ex = new BDadosException("Error executing Query", x);
                     ex.Data["query"] = query;
+                    transaction?.MarkAsErrored();
                     throw ex;
                 } finally {
                     WriteLog("------------------------------------");
@@ -2805,7 +2856,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     WriteLog($"BDados Execute: {x.Message}");
-                    throw x;
+                    transaction?.MarkAsErrored();
+                    throw new BDadosException("Error Executing Statement", x);
                 } finally {
                     WriteLog("------------------------------------");
                 }
