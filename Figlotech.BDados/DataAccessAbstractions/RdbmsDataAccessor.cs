@@ -2584,7 +2584,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
-                ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
+                ContextTransferObject = args?.ContextObject ?? transaction?.ContextTransferObject
             };
             var typeIsBusinessObjectT = typeof(T).Implements(typeof(IBusinessObject<T>));
             if (retv.Count > 0 && typeIsBusinessObjectT) {
