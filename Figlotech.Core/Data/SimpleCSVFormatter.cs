@@ -24,12 +24,12 @@ namespace Figlotech.Core.Data
             await Fi.Tech.ParallelFlow<T>((ch) => {
                 ch.ReturnRange(li);
             }).Then(Math.Max(Environment.ProcessorCount-1, 1), async (c) => {
-                return ObjectToRow(headers, new ObjectReflector(c).ToReadOnlyDictionaryStringObject());
+                return ObjectToRow(headers, c);
             }).Then(1, async (data) => {
                 WriteDataToStream(data, stream);
             });
         }
-        
+
         public string[] LineToData(string line) {
             return LineToData(line, false).ToArray();
         }
@@ -71,21 +71,26 @@ namespace Figlotech.Core.Data
             WriteDataToStream(data, stream);
         }
 
-        public byte[] ObjectToRow(string[] headers, IReadOnlyDictionary<string, object> obj) {
+        public byte[] ObjectToRow(string[] headers, object obj) {
+            if(obj == null) {
+                return Array.Empty<byte>();
+            }
+            var t = obj.GetType();
             var data = Encoding.UTF8.GetBytes(string.Join($"{Sep}", headers.Select(x => {
-                if(obj is ObjectReflector || obj.ContainsKey(x)) {
-                    if(obj[x] == null) {
+                if(ReflectionTool.TypeContains(t, x)) {
+                    var value = ReflectionTool.GetValue(obj, x);
+                    if(value == null) {
                         return "";
-                    } else if (obj[x] is string s) {
+                    } else if (value is string s) {
                         if(s.Contains(Sep)) {
                             return $"\"{s}\"";
                         } else {
                             return s;
                         }
-                    } else if (obj[x].GetType().IsClass) {
+                    } else if (value.GetType().IsClass) {
                         return "";
                     } else {
-                        return obj[x].ToString();
+                        return value.ToString();
                     }
                 } else {
                     return "";

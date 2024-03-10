@@ -2,6 +2,7 @@
 using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -16,7 +17,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
 
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
-            var refl = new ObjectReflector();
             transaction?.Benchmarker.Mark("Enter lock command");
             lock (command) {
                 transaction?.Benchmarker.Mark("- Starting Execute Query");
@@ -29,7 +29,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         FiAsyncMultiLock _lock = new FiAsyncMultiLock();
         public async Task<List<T>> GetObjectListAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
-            var refl = new ObjectReflector();
             transaction?.Benchmarker.Mark("Enter lock command");
             using (await _lock.Lock($"TRANSACTION_{transaction.Id}")) {
                 transaction?.Benchmarker.Mark("- Starting Execute Query");
@@ -44,7 +43,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
         public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
-            var refl = new ObjectReflector();
             transaction?.Benchmarker.Mark("Enter lock command");
             transaction?.Benchmarker.Mark("- Starting Execute Query");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
@@ -128,32 +126,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             var relations = joinRelations[thisIndex].AsSpan();
+
             //if(!isNew) {
             //    relations = relations.Where(r => r.AggregateBuildOption == AggregateBuildOptions.AggregateList);
             //}
             //transaction.Benchmarker.Mark($"Enter Relations for {myPrefix}");
             for (var i = 0; i < relations.Length; i++) {
                 var rel = relations[i];
-                if (isNew 
+                if (isNew
                     || rel.AggregateBuildOption == AggregateBuildOptions.AggregateList
                     || rel.AggregateBuildOption == AggregateBuildOptions.AggregateObject) {
                     switch (rel.AggregateBuildOption) {
                         // Aggregate fields are the beautiful easy ones to deal
                         case AggregateBuildOptions.AggregateField: {
-                                String childPrefix = joinTables[rel.ChildIndex].Prefix;
-                                String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOf(rel.Fields[0])];
-                                var value = reader[valueIndex];
-                                ReflectionTool.SetValue(obj, name, reader[valueIndex]);
+                            String childPrefix = joinTables[rel.ChildIndex].Prefix;
+                            String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
+                            var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOf(rel.Fields[0])];
+                            var value = reader[valueIndex];
+                            ReflectionTool.SetValue(obj, name, reader[valueIndex]);
 
-                                //transaction.Benchmarker.Mark($"Aggregate Field {myPrefix}::{name}");
-                                break;
-                            }
+                            //transaction.Benchmarker.Mark($"Aggregate Field {myPrefix}::{name}");
+                            break;
+                        }
                         // this one is RAD and the most cpu intensive
                         // Sure needs optimization.
                         case AggregateBuildOptions.AggregateList: {
                                 String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                                if(!constructionCache.ContainsKey($"AGLIST_{obj.GetHashCode()}_{fieldAlias}")) {
+                                if (!constructionCache.ContainsKey($"AGLIST_{obj.GetHashCode()}_{fieldAlias}")) {
                                     var objectType = ObjectTypeCache[t][fieldAlias];
                                     var ulType = UlTypeCache[objectType];
                                     var addMethod = AddMethodCache[objectType];
@@ -183,7 +182,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     };
                                 }
                                 var metadata = (AggregateListCachedMetadata)constructionCache[$"AGLIST_{obj.GetHashCode()}_{fieldAlias}"];
-                                
+
                                 string parentRid = ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]) as string;
                                 string childRid = ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]) as string;
                                 string childRidCacheId = cacheId(reader, metadata.ChildRIDIndex, metadata.UlType);
@@ -221,7 +220,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 var parentRidIndex = fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item2.GetIndexOf(rel.ParentKey)];
                                 var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
                                 var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
-                                
+
                                 string parentRid = ReflectionTool.DbDeNull(reader[parentRidIndex]) as string;
                                 string childRid = ReflectionTool.DbDeNull(reader[childRidIndex]) as string;
                                 string childRidCacheId = cacheId(reader, childRidIndex, ulType);
@@ -286,7 +285,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins.ToArray();
@@ -362,6 +361,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var objArray = new object[reader.FieldCount];
                     reader.GetValues(objArray);
+
                     BuildAggregateObject(transaction, typeof(T), objArray, iterationObject, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
                     //transaction.Benchmarker.Mark($"End result row {row}");
@@ -389,6 +389,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+            var dlc = new DataLoadContext {
+                DataAccessor = this,
+                IsAggregateLoad = true,
+                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
+            };
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[])> fieldNamesDict;
@@ -432,6 +437,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Enter Build Result");
                 int row = 0;
 
+                var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+                var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+                WorkQueuer afterLoads = implementsAfterLoad || implementsAfterAggregateLoad ? new WorkQueuer("AfterLoads") : null;
                 while (await reader.ReadAsync(transaction.CancellationToken)) {
                     //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
@@ -439,6 +447,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (!constructionCache.ContainsKey(cacheId(reader, myRidCol, typeof(T)))) {
                         newObj = new T();
                         constructionCache[cacheId(reader, myRidCol, typeof(T))] = newObj;
+                        if(implementsAfterLoad || implementsAfterAggregateLoad) {
+                            afterLoads.Enqueue(async () => {
+                                if(implementsAfterLoad) {
+                                    ((IBusinessObject)newObj).OnAfterLoad(dlc);
+                                }
+
+                                if(implementsAfterAggregateLoad) {
+                                    await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc);
+                                }
+                            });
+                        }
                         retv.Add(newObj);
                     } else {
                         newObj = (T)constructionCache[cacheId(reader, myRidCol, typeof(T))];
@@ -452,33 +471,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
                 }
+
+                if(afterLoads != null) {
+                    await afterLoads.Stop(true);
+                }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 constructionCache.Clear();
             }
-            var dlc = new DataLoadContext {
-                DataAccessor = this,
-                IsAggregateLoad = true,
-                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
-            };
             transaction?.Benchmarker?.Mark("Run afterloads");
 
-            if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
-                await ibo2.OnAfterListAggregateLoadAsync(dlc, retv);
-
-                var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
-                var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
-
-                if(implementsAfterLoad || implementsAfterAggregateLoad) {
-                    foreach(var item in retv) {
-                        if(item is IBusinessObject<T> ibo3) {
-                            ibo3.OnAfterLoad(dlc);
-                            await ibo3.OnAfterAggregateLoadAsync(dlc);
-                        }
-                    }
-                }
+            if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
+                await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");
@@ -486,10 +492,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
-            t => t.GetMethod(nameof(IBusinessObject.OnAfterLoad)).DeclaringType == t
+            t => t.Implements(typeof(IBusinessObject)) && t.GetMethod(nameof(IBusinessObject.OnAfterLoad)).DeclaringType == t
         );
         private SelfInitializerDictionary<Type, bool> CacheImplementsAfterAggregateLoad = new SelfInitializerDictionary<Type, bool>(
-            t => t.GetMethod("OnAfterAggregateLoadAsync").DeclaringType == t
+            t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterAggregateLoadAsync").DeclaringType == t
+        );
+        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterListAggregateLoad = new SelfInitializerDictionary<Type, bool>(
+            t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterListAggregateLoadAsync").DeclaringType == t
         );
 
         public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
@@ -579,18 +588,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             };
             transaction?.Benchmarker?.Mark("Run afterloads");
 
-            if (retv.Any() && retv.First() is IBusinessObject<T> ibo2) {
-                ibo2.OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false).GetAwaiter().GetResult();
+            if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
+                ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false).GetAwaiter().GetResult();
             }
-            foreach (var a in retv) {
-                if (a is IBusinessObject<T> ibo) {
-                    ibo.OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
+            if (CacheImplementsAfterAggregateLoad[typeof(T)]) {
+                foreach (var a in retv) {
+                    ((IBusinessObject<T>) a).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
             }
 
-            foreach (var a in retv) {
-                if (a is IBusinessObject ibo) {
-                    ibo.OnAfterLoad(dlc);
+            if(CacheImplementsAfterLoad[typeof(T)]) {
+                foreach (var a in retv) {
+                    ((IBusinessObject)a).OnAfterLoad(dlc);
                 }
             }
 
@@ -601,7 +610,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<IDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
             var retv = new List<IDataObject>();
             transaction?.Benchmarker?.Mark("Init Build Result");
-            ObjectReflector refl = new ObjectReflector();
             while (reader.Read()) {
                 var typename = reader["TypeName"] as String;
                 var type = workingTypes.FirstOrDefault(wt => wt.Name == typename);
@@ -609,13 +617,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     continue;
                 }
 
-                var instance = Activator.CreateInstance(type);
-                refl.Slot(instance);
+                var instance = NewInstance(type);
                 var tFields = fields[type];
                 for (int i = 0; i < tFields.Length; i++) {
-                    refl[tFields[i]] = reader[$"data_{i}"];
+                    ReflectionTool.SetMemberValue(tFields[i], instance, reader[$"data_{i}"]);
                 }
-                retv.Add(refl.Retrieve() as IDataObject);
+                retv.Add((IDataObject) instance);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");

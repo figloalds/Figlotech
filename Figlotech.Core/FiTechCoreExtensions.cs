@@ -608,10 +608,9 @@ namespace Figlotech.Core {
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
             while (await reader.ReadAsync()) {
                 var field = new T();
-                var refl = field.AsReflectable();
                 foreach (var kvp in map) {
                     if (readerNames.Contains(kvp.Value.ToUpper())) {
-                        refl[kvp.Key] = reader[kvp.Value];
+                        ReflectionTool.SetValue(field, kvp.Key, reader[kvp.Value]);
                     }
                 }
                 retv.Add(field);
@@ -623,10 +622,9 @@ namespace Figlotech.Core {
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
             while (reader.Read()) {
                 var field = new T();
-                var refl = field.AsReflectable();
                 foreach (var kvp in map) {
                     if (readerNames.Contains(kvp.Value.ToUpper())) {
-                        refl[kvp.Key] = reader[kvp.Value];
+                        ReflectionTool.SetValue(field, kvp.Key, reader[kvp.Value]);
                     }
                 }
                 retv.Add(field);
@@ -663,8 +661,6 @@ namespace Figlotech.Core {
             }
             var fields = preMeta.Item1;
             var propercolumns = preMeta.Item2;
-            var objBuilder = new ObjectReflector();
-            objBuilder.Slot(retv);
             foreach (var col in propercolumns) {
                 object o = dr[col.ColumnName];
                 string objField;
@@ -673,7 +669,7 @@ namespace Figlotech.Core {
                 } else {
                     objField = col.ColumnName;
                 }
-                objBuilder[objField] = Fi.Tech.ProperMapValue(o);
+                ReflectionTool.SetValue(retv, objField, Fi.Tech.ProperMapValue(o));
             }
         }
 
@@ -723,7 +719,6 @@ namespace Figlotech.Core {
             if (dt.Rows.Count < 1) return new List<T>();
             var init = Fi.Tech.GetUtcTime();
             var fields = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            var objBuilder = new ObjectReflector();
             var mapMeta = Fi.Tech.MapMeta<T>(dt);
             List<T> retv = new List<T>();
             Parallel.For(0, dt.Rows.Count, i => {
@@ -2002,17 +1997,21 @@ namespace Figlotech.Core {
                 return;
             if (destination == null)
                 return;
-            ObjectReflector.Open(origin, (objA) => {
-                ObjectReflector.Open(destination, (objB) => {
-                    foreach (var field in objB) {
-                        if (objA.ContainsKey(field.Key)) {
-                            objB[field.Key] = objA[field.Key];
-                        }
-                    }
-                    objB["Id"] = 0;
-                    objB["RID"] = null;
-                });
-            });
+
+            var sameType = origin.GetType() == destination.GetType();
+            var aMembers = ReflectionTool.FieldsAndPropertiesOf(origin.GetType()).ToDictionary(
+                (x)=> x.Name, x=> x   
+            );
+
+            foreach(var field in ReflectionTool.FieldsAndPropertiesOf(destination.GetType())) {
+                if(sameType || aMembers.ContainsKey(field.Name)) {
+                    var value = ReflectionTool.GetMemberValue(sameType ? field : aMembers[field.Name], origin);
+                    ReflectionTool.SetMemberValue(field, destination, value);
+                }
+            }
+
+            ReflectionTool.SetValue(destination, "Id", 0);
+            ReflectionTool.SetValue(destination, "RID", null);
         }
 
         static Random rng = new Random();

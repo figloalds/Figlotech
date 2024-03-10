@@ -172,9 +172,9 @@ namespace System
             var enny = me.GetEnumerator();
             if (!enny.MoveNext())
                 return dt;
-            var refl = enny.Current.AsReflectable();
-            foreach (var col in refl) {
-                dt.Columns.Add(col.Key.Name);
+
+            foreach (var col in ReflectionTool.FieldsAndPropertiesOf(enny.Current.GetType())) {
+                dt.Columns.Add(col.Name);
             }
             Tuple<List<MemberInfo>, List<DataColumn>> meta = Fi.Tech.MapMeta(typeof(T), dt);
             do {

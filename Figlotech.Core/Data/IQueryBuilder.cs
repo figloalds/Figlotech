@@ -22,7 +22,6 @@ namespace Figlotech.Data
             String QueryText = query.GetCommandText();
             command.CommandText = QueryText;
             // Adiciona os parametros
-            var paramRefl = new ObjectReflector();
             foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
                 var cmdParam = command.CreateParameter();
                 cmdParam.ParameterName = param.Key;
@@ -36,8 +35,6 @@ namespace Figlotech.Data
                 } else if (usableValue is String str) {
                     cmdParam.Value = str;
                     cmdParam.DbType = DbType.String;
-                    //paramRefl.Slot(cmdParam);
-                    //paramRefl["Encoding"] = Fi.StandardEncoding;
                 } else if (usableValue.GetType().IsEnum) {
                     cmdParam.Value = (int)usableValue;
                 } else {

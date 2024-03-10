@@ -62,9 +62,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         
         public void SetConfiguration(IDictionary<string, object> settings) {
             Config = new MySqlPluginConfiguration();
-            ObjectReflector o = new ObjectReflector(Config);
             foreach (var a in settings) {
-                o[a.Key] = a.Value;
+                ReflectionTool.SetValue(Config, a.Key, a.Value);
             }
         }
 

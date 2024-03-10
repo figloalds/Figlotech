@@ -98,7 +98,7 @@ namespace Figlotech.Core {
         /// </summary>
         /// <param name="input">The object to be scanned and have its dependencies resolved</param>
         public void SmartResolve(object input, bool ignoreErrors = false) {
-            ObjectReflector rflx = new ObjectReflector(input);
+
             var t = input.GetType();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
 
@@ -107,7 +107,7 @@ namespace Figlotech.Core {
                 if(type.IsInterface) {
                     var resolution = Resolve(type, ignoreErrors);
                     if(resolution != null) {
-                        rflx[member] = resolution;
+                        ReflectionTool.SetMemberValue(member, input, resolution);
                     }
                 }
             }

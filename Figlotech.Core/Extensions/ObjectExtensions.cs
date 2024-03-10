@@ -1,6 +1,7 @@
 ﻿using Figlotech.Core;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
 using System.Collections;
@@ -65,37 +66,67 @@ namespace System
                 me = null;
                 return;
             }
-            ObjectReflector.Open(other, (objA) => {
-                ObjectReflector.Open(me, (objB) => {
-                    foreach (var field in objB) {
-                        if (objA.ContainsKey(field.Key)) {
-                            var valA = objA[field.Key.Name];
-                            var valB = objB[field.Key.Name];
-                            if (
-                                valA.GetType().IsGenericType && valA.GetType().Implements(typeof(List<>)) &&
-                                valB.GetType().IsGenericType && valB.GetType().Implements(typeof(List<>))
-                            ) {
-                                var addMethod = valB.GetType().GetMethods().FirstOrDefault(m => m.Name == "Add" && m.GetParameters().Length == 1);
-                                var enny = (IEnumerator) valA.GetType().GetMethods().FirstOrDefault(e => e.Name == "GetEnumerator")?.Invoke(valA, new object[0]);
-                                var fodefMethod = valB.GetType().GetMethods().FirstOrDefault(m => m.Name == "FirstOrDefault" && m.GetParameters().Length == 1);
-                                while (enny.MoveNext()) {
-                                    var paramEx = Expression.Parameter(valB.GetType().GetGenericArguments().First(), "a");
-                                    var lambda = Expression.Lambda(Expression.Equal(paramEx, Expression.Constant(enny.Current)), paramEx);
-                                    var fodef = fodefMethod?.Invoke(valB, new object[] { lambda });
-                                    if (fodef != null) {
-                                        if(!fodef.Equals(enny.Current)) {
-                                            addMethod.Invoke(valB, new object[] { enny.Current });
-                                        } else {
-                                            CopyFromAndMergeLists(fodef, enny.Current);
-                                        }
-                                    }
-                                }
-                            }
-                            objB[field.Key] = objA[field.Key.Name];
-                        }
+            var origin = other; // 'other' object to copy from
+            var destination = me; // 'me' object to copy to
+
+            var originType = origin.GetType();
+            var destinationType = destination.GetType();
+            var sameType = originType == destinationType;
+
+            // Gather fields and properties of the origin object
+            var originMembers = ReflectionTool.FieldsAndPropertiesOf(originType)
+                .ToDictionary(member => member.Name);
+
+            foreach (var destMember in ReflectionTool.FieldsAndPropertiesOf(destinationType)) {
+                if (sameType || originMembers.ContainsKey(destMember.Name)) {
+                    var originMember = sameType ? destMember : originMembers[destMember.Name];
+                    var originValue = ReflectionTool.GetMemberValue(originMember, origin);
+
+                    // Check if both fields/properties are of type List<>
+                    if (ReflectionTool.IsListOfT(ReflectionTool.GetTypeOf(originMember)) && ReflectionTool.IsListOfT(ReflectionTool.GetTypeOf(originMember))) {
+                        var destValue = ReflectionTool.GetMemberValue(destMember, destination);
+                        MergeLists(originValue, destValue);
+                    } else {
+                        // Directly set the value if it's not a list or doesn't need special handling
+                        ReflectionTool.SetMemberValue(destMember, destination, originValue);
                     }
-                });
-            });
+                }
+            }
+        }
+
+        static void MergeLists(object originList, object destinationList) {
+            var elementType = ReflectionTool.GetListElementType(originList.GetType());
+            var addMethod = destinationList.GetType().GetMethod("Add");
+            var containsMethod = destinationList.GetType().GetMethod("Contains");
+            var listsHaveSameType = elementType == ReflectionTool.GetListElementType(destinationList.GetType());
+            var originListElementTypeIsDataObject = ReflectionTool.GetListElementType(originList).Implements(typeof(IDataObject));
+            var destinationListElementTypeIsDataObject = listsHaveSameType || ReflectionTool.GetListElementType(destinationList).Implements(typeof(IDataObject));
+
+            foreach (var item in (IEnumerable)originList) {
+                // Handle the merging of complex elements if necessary, e.g., if the lists contain objects that themselves have properties to merge
+
+                if(originListElementTypeIsDataObject && listsHaveSameType) {
+                    var existingItem = FindDataObjectInList(destinationList, item);
+                    if (existingItem != null) {
+                        // Optionally handle deep merging here
+                        CopyFromAndMergeLists((IDataObject) item, existingItem);
+                    } else {
+                        addMethod.Invoke(destinationList, new[] { item });
+                    }
+                } else {
+                    if (!(bool)containsMethod.Invoke(destinationList, new[] { item })) {
+                        addMethod.Invoke(destinationList, new[] { item });
+                    }
+                }
+            }
+        }
+        static object FindDataObjectInList(object list, object item) {
+            foreach(var i in ReflectionTool.EnumerateList(list)) {
+                if(((IDataObject) i).RID == ((IDataObject) item).RID) {
+                    return i;
+                }
+            }
+            return null;
         }
 
         public static T InvokeGenericMethod<T>(this Object me, string GenericMethodName, Type genericType, params object[] args) {
@@ -134,17 +165,10 @@ namespace System
                     nameof(FiTechCoreExtensions.MapMeta),
                     type,
                     dr);
-            var refl = me.AsReflectable();
-            foreach(var data in meta.Item2) {
-                dr[data.ColumnName] = refl[data.ColumnName];
-            }
-        }
 
-        public static ObjectReflector AsReflectable(this Object me) {
-            if (me == null) {
-                throw new NullReferenceException("Figlotech ToReflectable Extension method called on a null value, this is a natural NullReferenceException");
+            foreach(var data in meta.Item2) {
+                dr[data.ColumnName] = ReflectionTool.GetValue(me, data.ColumnName);
             }
-            return new ObjectReflector(me);
         }
 
         public static List<T> ToSingleElementList<T>(this T me) {
@@ -176,7 +200,6 @@ namespace System
             }
 
             var retv = new Dictionary<string, object>();
-            var refl = me.AsReflectable();
             foreach(var a in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
                 if(ReflectionTool.GetTypeOf(a).IsPublic) {
                     retv[a.Name] = ReflectionTool.GetMemberValue(a, me);
@@ -189,10 +212,9 @@ namespace System
             if (me == null) {
                 throw new NullReferenceException("Figlotech FromDictionary Extension method called on a null value, this is a natural NullReferenceException");
             }
-            var refl = me.AsReflectable();
             foreach (var a in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
                 if (ReflectionTool.GetTypeOf(a).IsPublic && input.ContainsKey(a.Name)) {
-                    refl[a.Name] = input[a.Name];
+                    ReflectionTool.SetValue(me, a.Name, input[a.Name]);
                 }
             }
         }

@@ -124,7 +124,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="valor"></param>
         /// <returns></returns>
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader, bool ignoreCase = false) where T : new() {
-            var refl = new ObjectReflector();
             var existingKeys = new string[reader.FieldCount];
             for (int i = 0; i < reader.FieldCount; i++) {
                 var name = reader.GetName(i);
@@ -136,25 +135,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             while (reader.Read()) {
                 T obj = new T();
-                refl.Slot(obj);
                 for (int i = 0; i < existingKeys.Length; i++) {
                     if(existingKeys[i] != null) {
                         try {
                             var o = reader.GetValue(i);
-                            refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
+                            ReflectionTool.SetValue(obj, existingKeys[i], Fi.Tech.ProperMapValue(o));
                         } catch(Exception x) {
                             Debugger.Break();
                             //throw x;
                         }
                     }
                 }
-                yield return (T) refl.Retrieve();
+                yield return obj;
             }
             yield break;
         }
 
         public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
-            var refl = new ObjectReflector();
             var existingKeys = new string[reader.FieldCount];
             for (int i = 0; i < reader.FieldCount; i++) {
                 var name = reader.GetName(i);
@@ -169,19 +166,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     break;
                 }
                 T obj = new T();
-                refl.Slot(obj);
                 for (int i = 0; i < existingKeys.Length; i++) {
                     if (existingKeys[i] != null) {
                         try {
                             var o = reader.GetValue(i);
-                            refl[existingKeys[i]] = Fi.Tech.ProperMapValue(o);
+                            ReflectionTool.SetValue(obj, existingKeys[i], Fi.Tech.ProperMapValue(o));
                         } catch (Exception x) {
                             Debugger.Break();
                             //throw x;
                         }
                     }
                 }
-                yield return (T)refl.Retrieve();
+                yield return obj;
             }
             yield break;
         }
@@ -222,17 +218,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         }
 
-        public static Object GetRecordSetOf(this Fi _selfie, Type t, IDataAccessor da) {
-            try {
-                var retv = Activator.CreateInstance(typeof(RecordSet<>).MakeGenericType(t), da);
-                return retv;
-
-            } catch (Exception x) {
-
-
-            }
-            return null;
-        }
         public static void SetPageSizeOfRecordSet(this Fi _selfie, Object o, int? val) {
             try {
                 o.GetType().GetMethod("Limit").Invoke(o, new object[] { val });

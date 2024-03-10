@@ -29,7 +29,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public string RID { get; set; }
     }
 
-    public sealed class BDadosTransaction : IDisposable {
+    public sealed class BDadosTransaction : IDisposable, IAsyncDisposable {
         public IDbConnection Connection { get; private set; }
         private IDbTransaction Transaction { get; set; }
         public Benchmarker Benchmarker { get; set; }
@@ -342,7 +342,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.OnTransactionEnding.Invoke();
             }
             if (Transaction is DbTransaction tsn) {
-                await tsn.DisposeAsync();
+                await tsn.DisposeAsync().ConfigureAwait(false);
             } else {
                 Transaction?.Dispose();
             }
@@ -360,11 +360,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void Throw(Exception x) {
             Errored = true;
-            throw new BusinessValidationException("Transaction interruped by an error", x);
+            throw new BDadosException("Transaction interruped by an error", x);
         }
         
-        public async Task Complete() {
-            if (!IsCommited && !IsRolledBack) {
+        public async Task AutoCommit() {
+            if (Connection.State == ConnectionState.Open && !IsCommited && !IsRolledBack) {
                 if (Errored || CancellationToken.IsCancellationRequested) {
                     await RollbackAsync();
                 } else {
@@ -376,19 +376,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            await DisposeAsync();
         }
 
         public void Dispose() {
             DisposeAsync().GetAwaiter().GetResult();
         }
         bool isDisposed = false;
-        public async Task DisposeAsync() {
+        public async ValueTask DisposeAsync() {
             if (isDisposed) {
                 return;
             }
             try {
-                
+                await AutoCommit().ConfigureAwait(false);
                 if (Transaction?.Connection?.State == ConnectionState.Open) {
                     try {
                         if(Transaction is DbTransaction dbt) {
@@ -785,7 +784,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     return SaveItem(transaction, input);
                 });
             } catch(Exception x) { 
-                throw new BusinessValidationException("Error saving item", x);
+                throw new BDadosException("Error saving item", x);
             }
         }
 
@@ -2008,7 +2007,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         Type type = types.FirstOrDefault(t => t.Name == values[0] as String);
                         if (type == null)
                             return;
-                        var instance = Activator.CreateInstance(type);
+                        var instance = NewInstance(type);
                         var ft = fields[type];
                         for (int i = 0; i < fields[type].Length; i++) {
                             ReflectionTool.SetMemberValue(ft[i], instance, v[i + 1]);
@@ -2391,7 +2390,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     });
                 }
                 transaction?.MarkAsErrored();
-                throw new BusinessValidationException("Error Saving Item", x);
+                throw new BDadosException("Error Saving Item", x);
             }
 
             if (input.Id <= 0) {
@@ -2550,15 +2549,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
                     };
 
-                    var typeIsBusinessObject = typeof(T).Implements(typeof(IBusinessObject));
-                    var typeIsBusinessObjectT = typeof(T).Implements(typeof(IBusinessObject<T>));
+                    var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+                    var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
 
-                    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0, args.ContextObject).ConfigureAwait(false)) {
-                        if(typeIsBusinessObject) {
-                            (item as IBusinessObject).OnAfterLoad(dlc);
+                    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
+                        if(implementsAfterLoad) {
+                            ((IBusinessObject)item).OnAfterLoad(dlc);
                         }
-                        if(typeIsBusinessObjectT) {
-                            await (item as IBusinessObject<T>).OnAfterAggregateLoadAsync(dlc);
+                        if(implementsAfterAggregateLoad) {
+                            await ((IBusinessObject<T>)item).OnAfterAggregateLoadAsync(dlc);
                         }
                         yield return item;
                     }
@@ -2586,9 +2585,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 IsAggregateLoad = true,
                 ContextTransferObject = args?.ContextObject ?? transaction?.ContextTransferObject
             };
-            var typeIsBusinessObjectT = typeof(T).Implements(typeof(IBusinessObject<T>));
-            if (retv.Count > 0 && typeIsBusinessObjectT) {
-                await (retv.First() as IBusinessObject<T>).OnAfterListAggregateLoadAsync(dlc, retv);
+            if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
+                await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv);
             }
 
             return retv;

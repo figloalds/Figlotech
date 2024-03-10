@@ -60,9 +60,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
 
         public void SetConfiguration(IDictionary<string, object> settings) {
             Config = new PgSQLPluginConfiguration();
-            ObjectReflector o = new ObjectReflector(Config);
             foreach (var a in settings) {
-                o[a.Key] = a.Value;
+                ReflectionTool.SetValue(Config, a.Key, a.Value);
             }
         }
 

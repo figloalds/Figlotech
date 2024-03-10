@@ -169,6 +169,35 @@ namespace Figlotech.Core.Helpers {
             return Activator.CreateInstance(generic.MakeGenericType(arg), args);
         }
 
+        public static bool IsListOfT(Type type) {
+            return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
+        }
+        public static Type GetListElementType(object list) {
+            return list.GetType().GetGenericArguments()[0];
+        }
+
+        private static SelfInitializerDictionary<Type, MethodInfo> ListEnumeratorCache = new SelfInitializerDictionary<Type, MethodInfo>(
+            t => t.GetMethod("GetEnumerator")
+        );
+        private static SelfInitializerDictionary<Type, MethodInfo> EnumeratorMoveNextCache = new SelfInitializerDictionary<Type, MethodInfo>(
+            t => t.GetMethod("MoveNext")
+        );
+        private static SelfInitializerDictionary<Type, PropertyInfo> EnumeratorPropCurrentCache = new SelfInitializerDictionary<Type, PropertyInfo>(
+            t => t.GetProperty("Current")
+        );
+
+        public static IEnumerable<object> EnumerateList(object list) {
+            if(list == null) {
+                yield break;
+            }
+            var enumerator = ListEnumeratorCache[list.GetType()].Invoke(list, Array.Empty<object>());
+            var enumeratorType = enumerator.GetType();
+            var moveNext = EnumeratorMoveNextCache[enumeratorType];
+            while ((bool) moveNext.Invoke(enumerator, Array.Empty<object>())) {
+                yield return EnumeratorPropCurrentCache[enumeratorType];
+            }
+        }
+
         public static T GetAttributeFrom<T>(MemberInfo member) where T : Attribute {
             return member.GetCustomAttribute<T>();
         }
@@ -206,23 +235,13 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {
-            try {
-                MemberInfo member = GetMember(target?.GetType(), fieldName);
-                if (member == null) {
-                    //Debugger.Break();
-                    return false;
-                }
-                SetMemberValue(member, target, value);
-                return true;
-            } catch (Exception x) {
-                //if(Debugger.IsAttached) {
-                //    Debugger.Break();
-                //}
-                if (StrictMode) {
-                    throw x;
-                }
+            MemberInfo member = GetMember(target?.GetType(), fieldName);
+            if (member == null) {
+                //Debugger.Break();
+                return false;
             }
-            return false;
+            SetMemberValue(member, target, value);
+            return true;
         }
 
         public static List<MemberInfo> FieldsWithAttribute<T>(Type type) where T : Attribute {
@@ -301,10 +320,10 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static object DbDeNull(object value) {
-            if (value is DBNull)
+            if (value is DBNull || value == null) {
                 return null;
-            if (value == null)
-                return null;
+            }
+
             return value;
         }
 
@@ -443,90 +462,91 @@ namespace Figlotech.Core.Helpers {
         );
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
-            try {
-                var pi = member as PropertyInfo;
-                var fi = member as FieldInfo;
-                if (pi != null && pi.SetMethod == null) {
-                    return;
-                }
-                if (fi != null && fi.IsInitOnly) {
-                    return;
-                }
+            var pi = member as PropertyInfo;
+            var fi = member as FieldInfo;
+            if (pi != null && pi.SetMethod == null) {
+                return;
+            }
+            if (fi != null && fi.IsInitOnly) {
+                return;
+            }
 
-                var t = GetTypeOf(member);
-                if (
-                    value == null && !t.IsValueType ||
-                    (value != null && t == value.GetType())
-                ) {
-                    _setMemberValueInternal(pi, fi, member, target, value);
-                    return;
-                }
+            var t = GetTypeOf(member);
+            if (value != null && value.GetType() == typeof(DBNull)) {
+                value = null;
+            }
+            (var isNullable, t) = ToUnderlying(t);
+            if (t == null) return;
 
-                value = DbEvalValue(value, t);
-                (var isNullable, t) = ToUnderlying(t);
-                if (t == null) return;
-
-
-                if (value == null) {
-                    if (t.IsValueType || !isNullable) {
-                        return;
-                    } else {
-                        _setMemberValueInternal(pi, fi, member, target, null);
-                    }
-                    return;
-                }
-
-                if (value.GetType() != t) {
-                    if (t.IsGenericType) {
-                        if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
-                            target = GetMemberValue(member, target);
-                            member = t.GetProperty("Value");
-                            t = t.GetGenericArguments()[0];
-                        }
-                    }
-                    if (t.IsEnum && value is long lval) {
-                        value = Enum.ToObject(t, (int)lval);
-                    } else if (t.IsEnum && value is int nval) {
-                        value = Enum.ToObject(t, nval);
-                    } else {
-                        if (value is string str && t == typeof(bool)) {
-                            value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
-                        }
-
-                        var castMethod = CastMethods[t][value.GetType()];
-                        if (castMethod != null) {
-                            value = castMethod.Invoke(target, new object[] { value });
-                        }
-
-                        if (!t.IsAssignableFrom(value.GetType())) {
-                            if (value.GetType().Implements(typeof(IConvertible))) {
-                                value = Convert.ChangeType(value, t);
-                            } else {
-                                return;
-                            }
-                        }
-
-                    }
-
-                    if (t.FullName == "System.TimeSpan" && value is string strTs) {
-                        value = TimeSpan.Parse(strTs);
-                    }
-                }
-
+            if (
+                value == null && !t.IsValueType ||
+                (value != null && t == value.GetType())
+            ) {
                 _setMemberValueInternal(pi, fi, member, target, value);
+                return;
+            }
+            if (t == typeof(bool) && value is sbyte v) {
+                _setMemberValueInternal(pi, fi, member, target, v != 0);
+                return;
+            }
+            if (t.IsEnum && value is int nval) {
+                value = Enum.ToObject(t, nval);
+                return;
+            } else if (t.IsEnum && value is long lval) {
+                value = Enum.ToObject(t, (int)lval);
+                return;
+            }
 
-            } catch (Exception x) {
-                //if (Debugger.IsAttached) {
-                //    Debugger.Break();
-                //}
-                if (StrictMode) {
-                    Console.WriteLine($"RTSV Error | {target?.GetType()?.Name}::{member?.Name}={value?.ToString()} ({value?.GetType()?.Name})");
-                    if (Debugger.IsAttached) {
-                        Debugger.Break();
+            if (value == null) {
+                if (t.IsValueType || !isNullable) {
+                    return;
+                } else {
+                    _setMemberValueInternal(pi, fi, member, target, null);
+                }
+                return;
+            }
+
+            if (value is long l && t == typeof(UInt64)) {
+                _setMemberValueInternal(pi, fi, member, target, (ulong)l);
+                return;
+            }
+
+            if (value.GetType() != t) {
+                if (t.IsGenericType) {
+                    if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+                        target = GetMemberValue(member, target);
+                        member = t.GetProperty("Value");
+                        t = t.GetGenericArguments()[0];
                     }
-                    throw x;
+                } else {
+                    if (value is string str && t == typeof(bool)) {
+                        value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                    }
+
+                    var castMethod = CastMethods[t][value.GetType()];
+                    if (castMethod != null) {
+                        value = castMethod.Invoke(target, new object[] { value });
+                    }
+
+                    if (!t.IsAssignableFrom(value.GetType())) {
+                        if (value.GetType().Implements(typeof(IConvertible))) {
+                            value = Convert.ChangeType(value, t);
+                        } else {
+                            return;
+                        }
+                    }
+
+                }
+
+                if (t.FullName == "System.TimeSpan" && value is string strTs) {
+                    value = TimeSpan.Parse(strTs);
                 }
             }
+
+            if(StrictMode) {
+                throw new ReflectionException($"Reflection Tool could not set {value} ({value?.GetType()}) into {member.DeclaringType.Name}::{member.Name}");
+            }
+            // _setMemberValueInternal(pi, fi, member, target, value);
         }
 
         public static Type GetTypeOf(MemberInfo member) {
