@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -216,6 +217,39 @@ namespace System
                 if (ReflectionTool.GetTypeOf(a).IsPublic && input.ContainsKey(a.Name)) {
                     ReflectionTool.SetValue(me, a.Name, input[a.Name]);
                 }
+            }
+        }
+
+        public static object ReflGet(this Object me, string prop) {
+            if(me == null) {
+                return null;
+            }
+            return ReflectionTool.GetValue(me, prop);
+        }
+        public static object ReflGet(this Object me, MemberInfo prop) {
+            if (me == null) {
+                return null;
+            }
+            return ReflectionTool.GetMemberValue(prop, me);
+        }
+        public static void ReflSet(this Object me, string prop, object value) {
+            if (me == null) {
+                return;
+            }
+            ReflectionTool.SetValue(me, prop, value);
+        }
+        public static void ReflSet(this Object me, MemberInfo prop, object value) {
+            if (me == null) {
+                return;
+            }
+            ReflectionTool.SetMemberValue(prop, me, value);
+        }
+        public static IEnumerable<(MemberInfo Key, object Value)> ReflEnumeratePropsAndValues(this Object me) {
+            if(me == null) {
+                yield break;
+            }
+            foreach(var item in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
+                yield return (item.Name, ReflectionTool.GetMemberValue(item, me));
             }
         }
 
