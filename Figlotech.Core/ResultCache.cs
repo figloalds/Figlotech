@@ -96,7 +96,7 @@ public sealed class ResultCache {
         using var l = await multilock.Lock(hash);
 
         var dict = new Dictionary<string, object>();
-        if (fileSystem.Exists(hash)) {
+        if (await fileSystem.ExistsAsync(hash).ConfigureAwait(false)) {
             try {
                 dict = JsonConvert.DeserializeObject<Dictionary<string, object>>(
                     Encoding.UTF8.GetString(await Fi.Tech.GzipInflateAsync(await fileSystem.ReadAllBytesAsync(hash)))
@@ -131,7 +131,7 @@ public sealed class ResultCache {
         return default(T);
     }
 
-    public T Run<T>(Expression<Func<T>> expression, bool bypass = false) {
+    public async Task<T> Run<T>(Expression<Func<T>> expression, bool bypass = false) {
         if (bypass) {
             return expression.Compile().Invoke();
         }
@@ -140,7 +140,7 @@ public sealed class ResultCache {
         using var l = multilock.Lock(hash).GetAwaiter().GetResult();
 
         var dict = new Dictionary<string, object>();
-        if(fileSystem.Exists(hash)) {
+        if(await fileSystem.ExistsAsync(hash).ConfigureAwait(false)) {
             try {
                 dict = JsonConvert.DeserializeObject<Dictionary<string, object>>(
                     Encoding.UTF8.GetString(Fi.Tech.GzipInflate(fileSystem.ReadAllBytes(hash)))

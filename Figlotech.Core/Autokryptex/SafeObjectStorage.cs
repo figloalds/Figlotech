@@ -197,7 +197,7 @@ namespace Figlotech.Core.Autokryptex
         public void Delete(string rid) {
             lock (Cache)
                 Cache.RemoveAll(c => c.RID == rid);
-            fileSystem.Delete(rid);
+            fileSystem.DeleteAsync(rid);
         }
 
         public void QueueDelete(string rid) {
@@ -231,8 +231,8 @@ namespace Figlotech.Core.Autokryptex
             return objectRID;
         }
 
-        public T GetObject<T>(string rid) {
-            if (!fileSystem.Exists(rid)) {
+        public async Task<T> GetObject<T>(string rid) {
+            if (!await fileSystem.ExistsAsync(rid).ConfigureAwait(false)) {
                 return default(T);
             }
             SafeDataPayload needle;

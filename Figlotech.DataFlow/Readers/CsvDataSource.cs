@@ -54,15 +54,14 @@ namespace Figlotech.DataFlow.Readers
             return Headers;
         }
 
-        public Task Initialize() {
+        public async Task Initialize() {
             if(IsOpen) {
                 Dispose();
             }
-            this.FileStream = FileSystem.Open(FilePath, FileMode.Open, FileAccess.Read);
+            this.FileStream = await FileSystem.OpenAsync(FilePath, FileMode.Open, FileAccess.Read).ConfigureAwait(false);
             this.Reader = new StreamReader(this.FileStream);
             IsOpen = true;
             CurrentRow = 0;
-            return Task.CompletedTask;
         }
 
         public async Task<bool> Next() {

@@ -59,26 +59,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         Task WriteAllBytesAsync(string relative, byte[] content);
 
-        Stream Open(String relative, FileMode fileMode, FileAccess fileAccess);
+        Task<Stream> OpenAsync(String relative, FileMode fileMode, FileAccess fileAccess);
+        Task<DateTime?> GetLastModifiedAsync(string relative);
+        Task<DateTime?> GetLastAccessAsync(string relative);
 
-        DateTime? GetLastModified(string relative);
-        DateTime? GetLastAccess(string relative);
-
-        long GetSize(string relative);
-
-        void SetLastModified(String relative, DateTime dt);
-        void SetLastAccess(String relative, DateTime dt);
-
-        void Rename(string relative, string newName);
-
-        void MkDirs(string relative);
-
-        bool Delete(string relative);
-
-        bool Exists(string relative);
-
-        bool IsDirectory(string relative);
-        bool IsFile(string relative);
+        Task<long> GetSizeAsync(string relative);
+        Task SetLastModifiedAsync(String relative, DateTime dt);
+        Task SetLastAccessAsync(String relative, DateTime dt);
+        Task RenameAsync(string relative, string newName);
+        Task MkDirsAsync(string relative);
+        Task<bool> DeleteAsync(string relative);
+        Task<bool> ExistsAsync(string relative);
+        Task<bool> IsDirectoryAsync(string relative);
+        Task<bool> IsFileAsync(string relative);
         
         void AppendAllLines(string relative, IEnumerable<string> content);
         void Hide(string relative);

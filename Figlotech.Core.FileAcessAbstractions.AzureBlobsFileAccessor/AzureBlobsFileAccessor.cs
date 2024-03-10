@@ -89,13 +89,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void AbsMkDirs(string dir) {
-
-            // NO WORK NEEDED HERE APPARENTLY
-            // YAYPERS
-
+            // Blobs are kinda crazy, folders don't exist there, so there's no need for this
         }
 
-        public void MkDirs(string dir) {
+        public async Task MkDirsAsync(string dir) {
             AbsMkDirs(dir);
         }
 
@@ -121,48 +118,48 @@ namespace Figlotech.Core.FileAcessAbstractions {
             
         }
 
-        public void Rename(string relative, string newName) {
+        public async Task RenameAsync(string relative, string newName) {
             FixRelative(ref relative);
             FixRelative(ref newName);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
             CloudBlockBlob newBlob = BlobContainer.GetBlockBlobReference(newName);
 
-            newBlob.StartCopyAsync(blob).Wait();
-            blob.DeleteAsync().Wait();
+            await newBlob.StartCopyAsync(blob).ConfigureAwait(false);
+            await blob.DeleteAsync().ConfigureAwait(false);
         }
 
-        public DateTime? GetLastModified(string relative) {
+        public async Task<DateTime?> GetLastModifiedAsync(string relative) {
             FixRelative(ref relative);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-            if (!blob.ExistsAsync().GetAwaiter().GetResult()) {
+            if (!await blob.ExistsAsync().ConfigureAwait(false)) {
                 return DateTime.MinValue;
             }
             if (!blob.Properties.LastModified.HasValue || blob.Properties.LastModified == DateTime.MinValue) {
-                blob.FetchAttributesAsync().GetAwaiter().GetResult();
+                await blob.FetchAttributesAsync().ConfigureAwait(false);
             }
             var dt = blob.Properties.LastModified ?? DateTime.MinValue;
             return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, DateTimeKind.Utc);
         }
-        public DateTime? GetLastAccess(string relative) {
+        public async Task<DateTime?> GetLastAccessAsync(string relative) {
             FixRelative(ref relative);
-            return GetLastModified(relative);
+            return await GetLastModifiedAsync(relative).ConfigureAwait(false);
         }
 
-        public long GetSize(string relative) {
+        public async Task<long> GetSizeAsync(string relative) {
             FixRelative(ref relative);
             CloudBlob blob = BlobContainer.GetBlobReference(relative);
-            if (!blob.ExistsAsync().Result) {
+            if (!await blob.ExistsAsync().ConfigureAwait(false)) {
                 return 0;
             }
             if (blob.Properties.Length == 0) {
-                blob.FetchAttributesAsync().Wait();
+                await blob.FetchAttributesAsync().ConfigureAwait(false);
             }
             return blob.Properties.Length;
         }
 
-        public void SetLastModified(String relative, DateTime dt) {
+        public async Task SetLastModifiedAsync(String relative, DateTime dt) {
         }
-        public void SetLastAccess(String relative, DateTime dt) {
+        public async Task SetLastAccessAsync(String relative, DateTime dt) {
         }
 
         public void ParallelForFilesIn(String relative, Action<String> execFunc, Action<String, Exception> handler = null) {
@@ -296,28 +293,28 @@ namespace Figlotech.Core.FileAcessAbstractions {
             WriteAllBytesAsync(relative, content).GetAwaiter().GetResult();
         }
 
-        public bool Delete(String relative) {
+        public async Task<bool> DeleteAsync(String relative) {
             FixRelative(ref relative);
-            if (!Exists(relative))
+            if (!await ExistsAsync(relative).ConfigureAwait(false))
                 return true;
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
 
-            blob.DeleteAsync().Wait();
+            await blob.DeleteAsync().ConfigureAwait(false);
             return true;
         }
 
-        public bool IsDirectory(string relative) {
+        public async Task<bool> IsDirectoryAsync(string relative) {
             FixRelative(ref relative);
             return false;
         }
-        public bool IsFile(string relative) {
+        public async Task<bool> IsFileAsync(string relative) {
             FixRelative(ref relative);
             CloudBlockBlob blob = BlobContainer.GetBlockBlobReference(relative);
-            return blob.ExistsAsync().Result;
+            return await blob.ExistsAsync().ConfigureAwait(false);
         }
 
-        public bool Exists(String relative) {
-            return IsFile(relative);
+        public async Task<bool> ExistsAsync(String relative) {
+            return await IsFileAsync(relative).ConfigureAwait(false);
         }
 
         public void AppendAllLines(String relative, IEnumerable<string> content) {
@@ -337,16 +334,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
             await blob.AppendTextAsync(String.Join("\n", content));
         }
 
-        public Stream Open(String relative, FileMode fileMode, FileAccess fileAccess) {
+        public async Task<Stream> OpenAsync(String relative, FileMode fileMode, FileAccess fileAccess) {
             FixRelative(ref relative);
             var blob = BlobContainer.GetAppendBlobReference(relative);
             if(
                 fileMode == FileMode.Append
                 || fileMode == FileMode.Create
                 || fileMode == FileMode.CreateNew) {
-                return blob.OpenWriteAsync(fileMode == FileMode.CreateNew).Result;
+                return await blob.OpenWriteAsync(fileMode == FileMode.CreateNew).ConfigureAwait(false);
             } else {
-                return blob.OpenReadAsync().Result;
+                return await blob.OpenReadAsync().ConfigureAwait(false);
             }
         }
 

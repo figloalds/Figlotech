@@ -144,16 +144,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (changed) {
                     retv.Add(new FileData {
                         RelativePath = f,
-                        Date = origin.GetLastModified(f)?.Ticks ?? 0,
+                        Date = (await origin.GetLastModifiedAsync(f).ConfigureAwait(false))?.Ticks ?? 0,
                         Hash = "", // GetHash(origin, f),
-                        Length = origin.GetSize(f)
+                        Length = await origin.GetSizeAsync(f).ConfigureAwait(false)
                     });
                 }
             }
 
             if (options.Recursive) {
                 foreach(var dir in origin.GetDirectoriesIn(path)) {
-                    destination.MkDirs(dir);
+                    await destination.MkDirsAsync(dir).ConfigureAwait(false);
                     var newAdds = await EnumerateDownloadableFiles(origin, destination, dir);
                     foreach(var a in newAdds) {
                         retv.Add(a);
@@ -171,7 +171,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var retv = new List<FileData>();
             foreach (var a in HashList) {
                 string hash = "";
-                if (local.Exists(a.RelativePath)) {
+                if (await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) {
                     await local.Read(a.RelativePath, async (stream) => {
                         await Task.Yield();
                         hash = await GetHash(stream);
@@ -181,8 +181,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 var gzSuffix = "";
                 if (options.UseGZip)
                     gzSuffix = GZIP_FILE_SUFFIX;
-                while ((a.Hash != hash || !local.Exists(a.RelativePath))) {
-                    if (remote.Exists(a.RelativePath + gzSuffix)) {
+                while ((a.Hash != hash || !await local.ExistsAsync(a.RelativePath).ConfigureAwait(false))) {
+                    if (await remote.ExistsAsync(a.RelativePath + gzSuffix).ConfigureAwait(false)) {
                         retv.Add(a);
                     }
                 }
@@ -282,8 +282,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     if (hash != match.Hash) {
                         Fi.Tech.WriteLine($"SmartCopy: Hash Changed: {f} ({hash}) ({match.Hash})");
                         var idx = HashList.IndexOf(match);
-                        HashList[idx].Date = o.GetLastModified(f)?.Ticks ?? 0;
-                        HashList[idx].Length = o.GetSize(f);
+                        HashList[idx].Date = (await o.GetLastModifiedAsync(f).ConfigureAwait(false))?.Ticks ?? 0;
+                        HashList[idx].Length = await o.GetSizeAsync(f).ConfigureAwait(false);
                         HashList[idx].Hash = hash;
                         return true;
                     } else {
@@ -292,22 +292,22 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     }
                 } else {
                     Fi.Tech.WriteLine($"SmartCopy: New File: {f} ({hash})");
+                    var fd = new FileData {
+                        RelativePath = f,
+                        Hash = hash,
+                        Date = (await o.GetLastModifiedAsync(f).ConfigureAwait(false))?.Ticks ?? 0,
+                        Length = await o.GetSizeAsync(f).ConfigureAwait(false)
+                    };
                     lock (HashList) {
-                        HashList.Add(
-                            new FileData {
-                                RelativePath = f,
-                                Hash = hash,
-                                Date = o.GetLastModified(f)?.Ticks ?? 0,
-                                Length = o.GetSize(f)
-                            });
+                        HashList.Add(fd);
                     }
                     return true;
                 }
             }
 
             bool changed = false;
-            var destLen = d.GetSize(f);
-            var oriLen = o.GetSize(f);
+            var destLen = d.GetSizeAsync(f);
+            var oriLen = o.GetSizeAsync(f);
 
             if (oriLen != destLen) {
                 return true;
@@ -321,8 +321,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     return false;
                 }
             } else {
-                var originDate = o.GetLastModified(f);
-                var destinationDate = d.GetLastModified(f);
+                var originDate = await o.GetLastModifiedAsync(f).ConfigureAwait(false);
+                var destinationDate = await d.GetLastModifiedAsync(f).ConfigureAwait(false);
                 changed = (
                     (originDate > destinationDate) ||
                     (
@@ -350,7 +350,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         return;
                     }
                     string hash = "";
-                    if (local.Exists(a.RelativePath)) {
+                    if (await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) {
                         await local.Read(a.RelativePath, async (stream) => {
                             await Task.Yield();
                             hash = await GetHash(stream);
@@ -363,9 +363,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     if (options.UseGZip)
                         gzSuffix = GZIP_FILE_SUFFIX;
                     int maxTries = 10;
-                    while ((a.Hash != hash || !local.Exists(a.RelativePath)) && maxTries-- > 0) {
+                    while ((a.Hash != hash || !await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) && maxTries-- > 0) {
                         processed = true;
-                        if (remote.Exists(a.RelativePath + gzSuffix)) {
+                        if (await remote.ExistsAsync(a.RelativePath + gzSuffix).ConfigureAwait(false)) {
                             await remote.Read(a.RelativePath + gzSuffix, async (downStream) => {
                                 await Task.Yield();
                                 //local.Delete(a.RelativePath);
@@ -377,19 +377,19 @@ namespace Figlotech.Core.FileAcessAbstractions {
                                     await downStream.CopyToAsync(fileStream, bufferSize);
                                 });
                                 var oldTempName = a.RelativePath + "_$ft_old-"+IntEx.GenerateShortRid();
-                                if (local.Exists(a.RelativePath)) {
-                                    local.Rename(a.RelativePath, oldTempName);
+                                if (await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) {
+                                    await local.RenameAsync(a.RelativePath, oldTempName).ConfigureAwait(false);
                                 }
-                                local.Rename(a.RelativePath + "_$ft_new", a.RelativePath);
-                                if (local.Exists(a.RelativePath)) {
+                                await local.RenameAsync(a.RelativePath + "_$ft_new", a.RelativePath).ConfigureAwait(false);
+                                if (await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) {
                                     await local.Read(a.RelativePath, async (stream) => {
                                         await Task.Yield();
                                         hash = await GetHash(stream);
                                     });
                                 }
                                 try {
-                                    if(local.Exists(oldTempName))
-                                        local.Delete(oldTempName);
+                                    if(await local.ExistsAsync(oldTempName).ConfigureAwait(false))
+                                        await local.DeleteAsync(oldTempName).ConfigureAwait(false);
                                 } catch(Exception x) {
                                     local.Hide(oldTempName);
                                 }
@@ -435,7 +435,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 }
                 if (!workinglist.Any(wl=> cmpFn(wl, file))) {
                     try {
-                        fs.Delete(file);
+                        fs.DeleteAsync(file);
                     }
                     catch (Exception x) {
 
@@ -497,7 +497,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             if (options.Recursive) {
                 foreach (var dir in origin.GetDirectoriesIn(path)) {
-                    destination.MkDirs(dir);
+                    await destination.MkDirsAsync(dir).ConfigureAwait(false);
                     retv.AddRange(await EnumerateFilesForMirroring(origin, destination, dir, way));
                 }
             }
@@ -539,18 +539,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             if (options.AllowDelete) {
                 int DeleteLimit = 15;
-                destination.ForFilesIn(path, (f) => {
+                foreach(var f in destination.GetFilesIn(path)) {
                     if (DeleteLimit < 1) return;
                     if (Excludes.Any(x => CheckMatch(f, x))) {
                         return;
                     }
-                    if (!origin.Exists(f)) {
+                    if (!await origin.ExistsAsync(f).ConfigureAwait(false)) {
                         if (DeleteLimit-- > 0) {
-                            destination.Delete(f);
+                            await destination.DeleteAsync(f).ConfigureAwait(false);
                             return;
                         }
                     }
-                });
+                }
             }
 
             wq.Start();
@@ -564,12 +564,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private async Task SaveHashList(IFileSystem origin, IFileSystem destination) {
             if (options.UseHashList) {
-                HashList.RemoveAll((f) =>
-                    !origin.Exists(f?.RelativePath)
-                );
+                for(var i = HashList.Count - 1; i >= 0; i--) {
+                    if (!await origin.ExistsAsync(HashList[i]?.RelativePath).ConfigureAwait(false)) {
+                        HashList.RemoveAt(i);
+                    }
+                }
                 Console.WriteLine("Saving HashList...");
                 if (HashList.Count > 0) {
-                    destination.Delete(HASHLIST_FILENAME);
+                    await destination.DeleteAsync(HASHLIST_FILENAME).ConfigureAwait(false);
                     await destination.Write(HASHLIST_FILENAME, async (stream) => {
                         await Task.Yield();
                         string text = JsonConvert.SerializeObject(HashList);
@@ -577,7 +579,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         await stream.WriteAsync(writev, 0, writev.Length);
                     });
 
-                    origin.Delete(HASHLIST_FILENAME);
+                    await origin.DeleteAsync(HASHLIST_FILENAME).ConfigureAwait(false);
                     await origin.Write(HASHLIST_FILENAME, async (stream) => {
                         await Task.Yield();
                         string text = JsonConvert.SerializeObject(HashList);

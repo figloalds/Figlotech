@@ -14,9 +14,9 @@ namespace Figlotech.Core.Extensions
         }
         public static async Task Copy(this IFileSystem me, string origin, IFileSystem remote, string destination) {
             if(me is FileAccessor && remote is FileAccessor) {
-                using (var inStream = me.Open(origin, System.IO.FileMode.Open, System.IO.FileAccess.Read)) {
-                    using (var outStream = remote.Open(destination, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite)) {
-                        inStream.EconomicCopyTo(outStream);
+                using (var inStream = await me.OpenAsync(origin, System.IO.FileMode.Open, System.IO.FileAccess.Read).ConfigureAwait(false)) {
+                    using (var outStream = await remote.OpenAsync(destination, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite).ConfigureAwait(false)) {
+                        await inStream.EconomicCopyToAsync(outStream).ConfigureAwait(false);
                     }
                 }
                 return;

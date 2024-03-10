@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Figlotech.Extensions
 {
@@ -40,24 +41,21 @@ namespace Figlotech.Extensions
         /// </summary>
         /// <param name="origin"></param>
         /// <param name="destination"></param>
-        public static void EconomicCopyTo(this Stream origin, Stream destination) {
+        public static async Task EconomicCopyToAsync(this Stream origin, Stream destination) {
             origin.Seek(0, SeekOrigin.Begin);
             destination.Seek(0, SeekOrigin.Begin);
             var bufferSize = 256 * 1024;
             if(origin.Length < bufferSize * 2) {
-                origin.CopyTo(destination);
+                await origin.CopyToAsync(destination).ConfigureAwait(false);
             }
             var originBuffer = new byte[bufferSize];
             var destinationBuffer = new byte[bufferSize];
             int bytesRead = 0;
-            while ((bytesRead = origin.Read(originBuffer, 0, originBuffer.Length)) > 0) {
-                destination.Read(destinationBuffer, 0, bytesRead);
-                if (originBuffer.SequenceEqual(destinationBuffer)) {
-                    // relax
-                }
-                else {
+            while ((bytesRead = await origin.ReadAsync(originBuffer, 0, originBuffer.Length).ConfigureAwait(false)) > 0) {
+                await destination.ReadAsync(destinationBuffer, 0, bytesRead).ConfigureAwait(false);
+                if (!originBuffer.SequenceEqual(destinationBuffer)) {
                     destination.Seek(origin.Position - bytesRead, SeekOrigin.Begin);
-                    destination.Write(originBuffer, 0, bytesRead);
+                    await destination.WriteAsync(originBuffer, 0, bytesRead).ConfigureAwait(false);
                 }
             }
         }

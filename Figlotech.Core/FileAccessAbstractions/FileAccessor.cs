@@ -67,7 +67,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
 
-        public void MkDirs(string dir) {
+        public async Task MkDirsAsync(string dir) {
             FixRel(ref dir);
             absMkDirs(AssemblePath(RootDirectory, dir));
         }
@@ -82,8 +82,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!File.Exists(WorkingDirectory)) {
                 using (var f = File.Create(WorkingDirectory)) { }
             }
-            using (Stream fs = Open(relative, FileMode.Truncate, FileAccess.Write)) {
-                await func(fs);
+            using (Stream fs = await OpenAsync(relative, FileMode.Truncate, FileAccess.Write).ConfigureAwait(false)) {
+                await func(fs).ConfigureAwait(false);
             }
         }
 
@@ -112,7 +112,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return AssemblePath(RootDirectory, relative);
         }
 
-        public void Rename(string relative, string newName) {
+        public async Task RenameAsync(string relative, string newName) {
             FixRel(ref relative);
             FileAttributes attr = File.GetAttributes(AssemblePath(RootDirectory, relative));
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
@@ -141,28 +141,28 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
 
-        public DateTime? GetLastModified(string relative) {
+        public async Task<DateTime?> GetLastModifiedAsync(string relative) {
             FixRel(ref relative);
-            if (IsFile(relative)) {
+            if (await IsFileAsync(relative).ConfigureAwait(false)) {
                 return new FileInfo(AssemblePath(RootDirectory, relative)).LastWriteTimeUtc;
             }
-            if (IsDirectory(relative)) {
+            if (await IsDirectoryAsync(relative).ConfigureAwait(false)) {
                 return new DirectoryInfo(AssemblePath(RootDirectory, relative)).LastWriteTimeUtc;
             }
             return DateTime.MinValue;
         }
-        public DateTime? GetLastAccess(string relative) {
+        public async Task<DateTime?> GetLastAccessAsync(string relative) {
             FixRel(ref relative);
-            if (IsFile(relative)) {
+            if (await IsFileAsync(relative).ConfigureAwait(false)) {
                 return new FileInfo(AssemblePath(RootDirectory, relative)).LastAccessTimeUtc;
             }
-            if (IsDirectory(relative)) {
+            if (await IsDirectoryAsync(relative).ConfigureAwait(false)) {
                 return new DirectoryInfo(AssemblePath(RootDirectory, relative)).LastAccessTimeUtc;
             }
             return DateTime.MinValue;
         }
 
-        public long GetSize(string relative) {
+        public async Task<long> GetSizeAsync(string relative) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (File.Exists(WorkingDirectory)) {
@@ -280,25 +280,25 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public async Task<bool> Read(String relative, Func<Stream, Task> func) {
             FixRel(ref relative);
-            if (!Exists(relative)) {
+            if (!await ExistsAsync(relative).ConfigureAwait(false)) {
                 return false;
             }
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!File.Exists(WorkingDirectory)) {
                 return false;
             }
-            using (Stream fs = Open(relative, FileMode.Open, FileAccess.Read)) {
-                await func(fs);
+            using (Stream fs = await OpenAsync(relative, FileMode.Open, FileAccess.Read).ConfigureAwait(false)) {
+                await func(fs).ConfigureAwait(false);
             }
             return true;
         }
 
-        public void SetLastModified(String relative, DateTime dt) {
+        public async Task SetLastModifiedAsync(String relative, DateTime dt) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             File.SetLastWriteTimeUtc(WorkingDirectory, dt);
         }
-        public void SetLastAccess(String relative, DateTime dt) {
+        public async Task SetLastAccessAsync(String relative, DateTime dt) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             File.SetLastAccessTimeUtc(WorkingDirectory, dt);
@@ -372,14 +372,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             });
         }
 
-        public bool Delete(String relative) {
+        public async Task<bool> DeleteAsync(String relative) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             // Metodo 1: Convencional File System:
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 return false;
             }
-            if(IsDirectory(relative)) {
+            if(await IsDirectoryAsync(relative).ConfigureAwait(false)) {
                 Directory.Delete(WorkingDirectory);
             } else {
                 if (!File.Exists(WorkingDirectory)) {
@@ -392,11 +392,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return true;
         }
 
-        public bool IsDirectory(string relative) {
+        public async Task<bool> IsDirectoryAsync(string relative) {
             FixRel(ref relative);
             return Directory.Exists(AssemblePath(RootDirectory, relative));
         }
-        public bool IsFile(string relative) {
+        public async Task<bool> IsFileAsync(string relative) {
             FixRel(ref relative);
             return File.Exists(AssemblePath(RootDirectory, relative));
         }
@@ -413,9 +413,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return retv;
         }
 
-        public bool Exists(String relative) {
+        public async Task<bool> ExistsAsync(String relative) {
             FixRel(ref relative);
-            return IsFile(relative) || IsDirectory(relative);
+            return await IsFileAsync(relative).ConfigureAwait(false) || await IsDirectoryAsync(relative).ConfigureAwait(false);
         }
 
         public void AppendAllLines(String relative, IEnumerable<string> content) {
@@ -447,17 +447,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         }
 
-        public Stream Open(string relative, FileMode fileMode, FileAccess fileAccess) {
+        public async Task<Stream> OpenAsync(string relative, FileMode fileMode, FileAccess fileAccess) {
             FixRel(ref relative);
-            var WorkingDirectory = AssemblePath(RootDirectory, relative);
-            if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
-                absMkDirs(Path.GetDirectoryName(WorkingDirectory));
+            var workingPath = AssemblePath(RootDirectory, relative);
+            if (!Directory.Exists(Path.GetDirectoryName(workingPath))) {
+                absMkDirs(Path.GetDirectoryName(workingPath));
             }
-            var bufferLength = Exists(relative) ? new FileInfo(WorkingDirectory).Length * .6 : 0;
-            bufferLength = Math.Max(8 * 1024 * 1024, bufferLength);
-            bufferLength = Math.Min(bufferLength, MaxStreamBufferLength);
 
-            return new FileStream(WorkingDirectory, fileMode, fileAccess, FileShare.Read, (int)bufferLength);
+            return File.Open(workingPath, fileMode, fileAccess, FileShare.Read);
         }
 
         public void Hide(string relative) {
@@ -477,10 +474,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public async Task<string> ReadAllTextAsync(string relative) {
-            if(!Exists(relative)) {
+            if(!await ExistsAsync(relative).ConfigureAwait(false)) {
                 return string.Empty;
             }
-            using (var fstream = Open(relative, FileMode.Open, FileAccess.Read)) {
+            using (var fstream = await OpenAsync(relative, FileMode.Open, FileAccess.Read).ConfigureAwait(false)) {
                 using (var reader = new StreamReader(fstream)) {
                     return await reader.ReadToEndAsync().ConfigureAwait(false);
                 }
@@ -488,10 +485,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public async Task<byte[]> ReadAllBytesAsync(string relative) {
-            if (!Exists(relative)) {
+            if (!await ExistsAsync(relative).ConfigureAwait(false)) {
                 return new byte[0];
             }
-            using (var fstream = Open(relative, FileMode.Open, FileAccess.Read)) {
+            using (var fstream = await OpenAsync(relative, FileMode.Open, FileAccess.Read).ConfigureAwait(false)) {
                 using (var ms = new MemoryStream()) {
                     await fstream.CopyToAsync(ms).ConfigureAwait(false);
                     ms.Seek(0, SeekOrigin.Begin);
@@ -501,7 +498,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public async Task WriteAllTextAsync(string relative, string content) {
-            using (var fstream = Open(relative, FileMode.Create, FileAccess.Write)) {
+            using (var fstream = await OpenAsync(relative, FileMode.Create, FileAccess.Write).ConfigureAwait(false)) {
                 using (var writer = new StreamWriter(fstream)) {
                     await writer.WriteAsync(content).ConfigureAwait(false);
                 }
@@ -509,7 +506,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public async Task WriteAllBytesAsync(string relative, byte[] content) {
-            using (var fstream = Open(relative, FileMode.Create, FileAccess.Write)) {
+            using (var fstream = await OpenAsync(relative, FileMode.Create, FileAccess.Write).ConfigureAwait(false)) {
                 using (var ms = new MemoryStream(content)) {
                     await ms.CopyToAsync(fstream).ConfigureAwait(false);
                 }
