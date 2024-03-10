@@ -42,7 +42,7 @@ namespace System {
             T retv;
             try {
                 self.Mark($"[RegionStart] {label}");
-                retv = await action.Invoke();
+                retv = await action.Invoke().ConfigureAwait(false);
                 self.Mark($"[RegionEndOk] {label}");
             }
             catch (Exception x) {

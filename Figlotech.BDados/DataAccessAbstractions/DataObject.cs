@@ -124,19 +124,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public virtual async Task<bool> ValidateAndPersistAsync(String iaToken) {
             if (!ia.CheckAuthorization(iaToken)) {
-                await ValidateAndPersistAsync(RunValidations());
+                await ValidateAndPersistAsync(RunValidations()).ConfigureAwait(false);
             }
 
             if (null == DataAccessor) {
                 throw new BDadosException($"Data Accessor is undefined in this instance of {this.GetType().Name}");
             }
-            await this.OnBeforePersistAsync();
+            await this.OnBeforePersistAsync().ConfigureAwait(false);
 
             var retv = true;
 
             retv &= DataAccessor.SaveItem(this);
 
-            await this.OnAfterPersistAsync();
+            await this.OnAfterPersistAsync().ConfigureAwait(false);
 
             return retv;
         }

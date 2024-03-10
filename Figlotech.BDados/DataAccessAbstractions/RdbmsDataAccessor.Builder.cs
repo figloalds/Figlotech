@@ -30,12 +30,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         FiAsyncMultiLock _lock = new FiAsyncMultiLock();
         public async Task<List<T>> GetObjectListAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
-            using (await _lock.Lock($"TRANSACTION_{transaction.Id}")) {
+            using (await _lock.Lock($"TRANSACTION_{transaction.Id}").ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting Execute Query");
-                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                     transaction?.Benchmarker.Mark("- Starting build");
                     if(!transaction.CancellationToken.IsCancellationRequested) {
-                        return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync();
+                        return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
                     } else {
                         return new List<T>();
                     }
@@ -45,9 +45,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
             transaction?.Benchmarker.Mark("- Starting Execute Query");
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
-                await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken)) {
+                await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ConfigureAwait(false)) {
                     yield return item;
                 }
             }
@@ -296,7 +296,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
@@ -340,7 +340,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 int row = 0;
 
                 T currentObject = default(T);
-                while (await reader.ReadAsync(transaction.CancellationToken)) {
+                while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                     //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T iterationObject;
@@ -394,7 +394,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 IsAggregateLoad = true,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken)) {
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
@@ -440,7 +440,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                 var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
                 WorkQueuer afterLoads = implementsAfterLoad || implementsAfterAggregateLoad ? new WorkQueuer("AfterLoads") : null;
-                while (await reader.ReadAsync(transaction.CancellationToken)) {
+                while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                     //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T newObj;
@@ -454,7 +454,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 }
 
                                 if(implementsAfterAggregateLoad) {
-                                    await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc);
+                                    await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                                 }
                             });
                         }
@@ -473,7 +473,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
 
                 if(afterLoads != null) {
-                    await afterLoads.Stop(true);
+                    await afterLoads.Stop(true).ConfigureAwait(false);
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List Size: {retv.Count} / {row} rows");
                 transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
@@ -484,7 +484,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark("Run afterloads");
 
             if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
-                await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv);
+                await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");

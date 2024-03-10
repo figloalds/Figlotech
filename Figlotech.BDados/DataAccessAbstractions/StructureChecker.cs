@@ -817,7 +817,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async IAsyncEnumerable<IStructureCheckNecessaryAction> EvaluateNecessaryActions() {
             var keys = GetInfoSchemaKeys();
             var tables = GetInfoSchemaTables();
-            var columns = await DataAccessor.GetInfoSchemaColumns();
+            var columns = await DataAccessor.GetInfoSchemaColumns().ConfigureAwait(false);
             var neededKeys = GetNecessaryLinks().ToList();
             Console.WriteLine("Evaluating Necessary Actions:");
             Console.WriteLine($"{tables.Count} tables, {columns.Count} columns, {keys.Count} keys");
@@ -1131,7 +1131,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Func<IStructureCheckNecessaryAction, Task<bool>> preAuthorizeAction = null,
             Func<int, Task> onReportTotalTasks = null
         ) {
-            var neededActions = await EvaluateNecessaryActions().ToListAsync();
+            var neededActions = await EvaluateNecessaryActions().ToListAsync().ConfigureAwait(false);
             var ortt = onReportTotalTasks?.Invoke(neededActions.Count);
             try {
                 await DataAccessor.EnsureDatabaseExistsAsync().ConfigureAwait(false);
@@ -1149,7 +1149,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 while (enumerator.MoveNext()) {
                     var action = enumerator.Current;
                     if (preAuthorizeAction != null)
-                        if (!await preAuthorizeAction(action))
+                        if (!await preAuthorizeAction(action).ConfigureAwait(false))
                             continue;
 
                     try {
@@ -1158,11 +1158,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }, CancellationToken.None).ConfigureAwait(false);
                         var t = onActionProcessed?.Invoke(action);
                         if(t != null && t is Task tk) {
-                            await tk;
+                            await tk.ConfigureAwait(false);
                         }
                     } catch (Exception x) {
-                        if (onError != null)
-                            await onError?.Invoke(action, x);
+                        if (onError != null) {
+                            await onError.Invoke(action, x).ConfigureAwait(false);
+                        }
                     }
                 }
 
@@ -1170,7 +1171,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             } finally {
                 await DataAccessor.AccessAsync(async tsn => {
-                    await DataAccessor.ExecuteAsync(tsn, DataAccessor.QueryGenerator.EnableForeignKeys());
+                    await DataAccessor.ExecuteAsync(tsn, DataAccessor.QueryGenerator.EnableForeignKeys()).ConfigureAwait(false);
                 }, CancellationToken.None).ConfigureAwait(false);
                 //DataAccessor.EndTransaction();
             }

@@ -92,7 +92,7 @@ namespace Figlotech.Core
             lock (Next) {
                 Next.Enqueue(t);
             }
-            return await t.Task;
+            return await t.Task.ConfigureAwait(false);
         }
 
         public IEnumerator GetEnumerator() {

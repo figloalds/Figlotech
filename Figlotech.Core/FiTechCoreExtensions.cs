@@ -125,7 +125,7 @@ namespace Figlotech.Core {
         }
 
         public static void AssertNotNull(this Fi _selfie, object o) {
-            if(o == null) {
+            if (o == null) {
                 try {
                     if (Debugger.IsAttached) {
                         Debugger.Break();
@@ -141,7 +141,7 @@ namespace Figlotech.Core {
                         }
                     }
                     throw new Exception(String.Join("\r\n", data));
-                } catch (Exception) { 
+                } catch (Exception) {
                     throw new Exception("Error asserting not null");
                 }
             }
@@ -284,7 +284,7 @@ namespace Figlotech.Core {
                 return _allowNTPTimeRequest;
             }
             set {
-                if(value && !NtpTimeHasBeenInitialized) {
+                if (value && !NtpTimeHasBeenInitialized) {
                     _initGlobalNtpRequest();
                 }
                 _allowNTPTimeRequest = value;
@@ -356,7 +356,7 @@ namespace Figlotech.Core {
 
             //**UTC** time
             var networkDateTime = (new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)).AddMilliseconds((long)milliseconds);
-            if(milliseconds < 1420070400) {
+            if (milliseconds < 1420070400) {
                 return Fi.Tech.GetUtcTime();
             }
             return networkDateTime;
@@ -443,7 +443,7 @@ namespace Figlotech.Core {
         static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
 
         private static void Reschedule(ScheduledWorkJob sched) {
-            lock(sched) {
+            lock (sched) {
                 if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
                     var nextRun = sched.ScheduledTime;
                     while (nextRun < Fi.Tech.GetUtcTime()) {
@@ -451,12 +451,12 @@ namespace Figlotech.Core {
                     }
                     try {
                         sched.Timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-                    } catch(Exception x) {
+                    } catch (Exception x) {
 
                     }
                     try {
                         sched.Timer?.Dispose();
-                    } catch(Exception x) {
+                    } catch (Exception x) {
 
                     }
                     sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - Fi.Tech.GetUtcTime()).TotalMilliseconds), System.Threading.Timeout.Infinite);
@@ -466,13 +466,13 @@ namespace Figlotech.Core {
 
         private static void _timerFn(object a) {
             var sched = a as ScheduledWorkJob;
-            if(sched.Cancellation.IsCancellationRequested) {
+            if (sched.Cancellation.IsCancellationRequested) {
                 return;
             }
             var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
             if (millisDiff > 5000) {
-                if(Debugger.IsAttached && DebugSchedules) {
+                if (Debugger.IsAttached && DebugSchedules) {
                     Debugger.Break();
                 }
             } else {
@@ -482,7 +482,7 @@ namespace Figlotech.Core {
                     }, sched.Cancellation.Token
                 );
             }
-            if(request == null) {
+            if (request == null) {
                 Fi.Tech.ScheduleTask(sched);
             } else {
                 if (sched.RecurrenceInterval.HasValue) {
@@ -500,7 +500,7 @@ namespace Figlotech.Core {
 
         public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
             lock (GlobalScheduledJobs) {
-                if(sched.Cancellation.IsCancellationRequested) {
+                if (sched.Cancellation.IsCancellationRequested) {
                     return;
                 }
                 var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
@@ -527,11 +527,11 @@ namespace Figlotech.Core {
         public static void ClearSchedulesByWorker(this Fi _selfie, WorkQueuer instance, bool cancelRunning) {
             lock (GlobalScheduledJobs) {
                 GlobalScheduledJobs.RemoveAll(s => {
-                    if(s.Queuer != instance) {
+                    if (s.Queuer != instance) {
                         return false;
                     }
                     s.Timer.Dispose();
-                    if(cancelRunning) {
+                    if (cancelRunning) {
                         s.Cancellation.Cancel();
                     }
                     s.IsActive = false;
@@ -543,7 +543,7 @@ namespace Figlotech.Core {
             lock (GlobalScheduledJobs) {
                 GlobalScheduledJobs.RemoveAll(s => {
                     s.Timer.Dispose();
-                    if(cancelRunning) {
+                    if (cancelRunning) {
                         s.Cancellation.Cancel();
                     }
                     s.IsActive = false;
@@ -687,7 +687,7 @@ namespace Figlotech.Core {
 
         public static T[] CombineArrays<T>(this Fi __selfie, params T[][] arrays) {
             var finalLength = 0;
-            for(int i = 0; i < arrays.Length; i++) {
+            for (int i = 0; i < arrays.Length; i++) {
                 finalLength += arrays[i].Length;
             }
             var final = new T[finalLength];
@@ -1582,9 +1582,9 @@ namespace Figlotech.Core {
 
         public static async Task<bool> WaitForCondition(this Fi __selfie, Func<bool> condition, TimeSpan checkInterval, Func<TimeSpan> timeout) {
             Stopwatch sw = Stopwatch.StartNew();
-            while(!condition()) {
+            while (!condition()) {
                 await Task.Delay(checkInterval);
-                if(sw.Elapsed > timeout()) {
+                if (sw.Elapsed > timeout()) {
                     return false;
                 }
             }
@@ -1786,8 +1786,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public sealed class QueueFlowStepIn<T> : IParallelFlowStepIn<T>
-        {
+        public sealed class QueueFlowStepIn<T> : IParallelFlowStepIn<T> {
             Queue<T> Host { get; set; }
             public QueueFlowStepIn(Queue<T> host) {
                 this.Host = host;
@@ -1804,11 +1803,14 @@ namespace Figlotech.Core {
 
         public sealed class FlowYield<T> {
             IParallelFlowStepIn<T> root { get; set; }
-            public FlowYield(IParallelFlowStepIn<T> root) {
+            ParallelFlowOutEnumerator<T> Enumerator { get; set; }
+            public FlowYield(IParallelFlowStepIn<T> root, ParallelFlowOutEnumerator<T> enumerator) {
                 this.root = root;
+                this.Enumerator = enumerator;
             }
             public void Return(T o) {
                 root.Put(o);
+                Enumerator.Publish(o);
             }
             public void ReturnRange(IEnumerable<T> list) {
                 list.ForEach(x => Return(x));
@@ -1817,14 +1819,56 @@ namespace Figlotech.Core {
 
         public interface IParallelFlowStep {
         }
-        public interface IParallelFlowStepOut<TOut> : IParallelFlowStep {
+        public interface IParallelFlowStepOut<TOut> : IParallelFlowStep, IAsyncEnumerable<TOut> {
             TaskAwaiter<List<TOut>> GetAwaiter();
+            IAsyncEnumerator<TOut> GetAsyncEnumerator(CancellationToken cancellation);
             Task<List<TOut>> TaskObj { get; }
         }
         public interface IParallelFlowStepIn<TIn> : IParallelFlowStep {
             void Put(TIn input);
             Task NotifyDoneQueueing();
         }
+
+        public class ParallelFlowOutEnumerator<T> : IAsyncEnumerator<T> {
+            public T Current { get; set; }
+
+            public ValueTask DisposeAsync() {
+                throw new NotImplementedException();
+            }
+
+            public async ValueTask<bool> MoveNextAsync() {
+                lock(cache) {
+                    if(cache.Count > 0) {
+                        Current = cache.Dequeue();
+                        return true;
+                    }
+                }
+                var retv = await MoveNext.Task;
+                if(!retv) {
+                    return false;
+                }
+                Current = cache.Dequeue();
+                return retv;
+            }
+
+            public void Publish(T o) {
+                lock(cache) {
+                    cache.Enqueue(o);
+                }
+                var mn = MoveNext;
+                MoveNext = new TaskCompletionSource<bool>();
+                mn.SetResult(true);
+            }
+            public void Finish() {
+                MoveNext.SetResult(false);
+            }
+
+            Queue<T> cache = new Queue<T>();
+
+            TaskCompletionSource<bool> MoveNext = new TaskCompletionSource<bool>();
+
+        }
+
         public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
@@ -1860,11 +1904,12 @@ namespace Figlotech.Core {
                                     ValueQueue.Enqueue(output);
                             }
                         }
+                        enumerator.Publish(output);
                     } else if (YieldAct != null) {
                         if (this.ConnectTo != null) {
-                            await YieldAct(input, new FlowYield<TOut>(this.ConnectTo));
+                            await YieldAct(input, new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
                         } else {
-                            await YieldAct(input, new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue)));
+                            await YieldAct(input, new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue), enumerator)).ConfigureAwait(false);
                         }
                     }
                 }, async x => {
@@ -1878,7 +1923,11 @@ namespace Figlotech.Core {
                 var src = new TaskCompletionSource<int>();
                 AlsoQueue.Enqueue(src);
                 Fi.Tech.FireAndForget(async () => {
-                    await yieldFn(new FlowYield<TOut>(this.ConnectTo)).ConfigureAwait(false);
+                    if (this.ConnectTo != null) {
+                        await yieldFn(new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
+                    } else {
+                        await yieldFn(new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue), enumerator)).ConfigureAwait(false);
+                    }
                     src.SetResult(0);
                 });
                 return this;
@@ -1942,7 +1991,7 @@ namespace Figlotech.Core {
             }
             public async Task NotifyDoneQueueing() {
                 while(AlsoQueue.Count > 0) {
-                    await AlsoQueue.Dequeue().Task;
+                    await AlsoQueue.Dequeue().Task.ConfigureAwait(false);
                 }
                 await queuer.Stop(true).ConfigureAwait(false);
                 if(this.ConnectTo != null) {
@@ -1954,6 +2003,11 @@ namespace Figlotech.Core {
             public TaskAwaiter<List<TOut>> GetAwaiter() {
                 return TaskCompletionSource.Task.GetAwaiter();
             }
+            private ParallelFlowOutEnumerator<TOut> enumerator = new ParallelFlowOutEnumerator<TOut>();
+            public IAsyncEnumerator<TOut> GetAsyncEnumerator(CancellationToken cancellation) {
+                return enumerator;
+            }
+
         }
 
         public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Action<FlowYield<TIn>> input, int maxParallelism = -1) {
@@ -1966,13 +2020,16 @@ namespace Figlotech.Core {
             if (maxParallelism < 0) {
                 maxParallelism = Environment.ProcessorCount;
             }
-            var retv = new ParallelFlowStepInOut<TIn, TIn>(f => {
-                return Fi.Result(f);
+
+            var retv = new ParallelFlowStepInOut<TIn, TIn>(async (x, yield) => {
+                await input(yield);
             }, null, maxParallelism);
+
             Fi.Tech.FireAndForget(async () => {
-                await input(new FlowYield<TIn>(retv)).ConfigureAwait(false);
-                await retv.NotifyDoneQueueing().ConfigureAwait(false);
+                await Task.Yield();
+                retv.Put(default(TIn));
             });
+
             return retv;
         }
 

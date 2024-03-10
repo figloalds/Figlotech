@@ -161,7 +161,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            while (await reader.ReadAsync(cancellationToken)) {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) {
                 if(cancellationToken.IsCancellationRequested) {
                     break;
                 }

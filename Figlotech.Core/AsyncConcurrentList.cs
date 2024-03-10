@@ -38,19 +38,19 @@ namespace Figlotech.Core
         }
 
         public async Task AddAsync(T item) {
-            using var _ = await alock.Lock();
+            using var _ = await alock.Lock().ConfigureAwait(false);
             dmmy.Add(item);
         }
         public async Task RemoveAsync(T item) {
-            using var _ = await alock.Lock();
+            using var _ = await alock.Lock().ConfigureAwait(false);
             dmmy.Remove(item);
         }
         public async Task RemoveAllAsync(Predicate<T> match) {
-            using var _ = await alock.Lock();
+            using var _ = await alock.Lock().ConfigureAwait(false);
             dmmy.RemoveAll(match);
         }
         public async Task<List<T>> ToList(Predicate<T> match) {
-            using var _ = await alock.Lock();
+            using var _ = await alock.Lock().ConfigureAwait(false);
             return dmmy.ToList();
         }
 

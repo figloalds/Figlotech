@@ -20,7 +20,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Transaction.DataAccessor.AggregateLoad(Transaction, LoadAllArgs);
         }
         public async Task<List<T>> AggregateAsync() {
-            return await Transaction.DataAccessor.AggregateLoadAsync(Transaction, LoadAllArgs);
+            return await Transaction.DataAccessor.AggregateLoadAsync(Transaction, LoadAllArgs).ConfigureAwait(false);
         }
         public IEnumerable<T> Fetch() {
             return Transaction.DataAccessor.Fetch(Transaction, LoadAllArgs);
@@ -29,7 +29,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Transaction.DataAccessor.LoadAll(Transaction, LoadAllArgs);
         }
         public async Task<List<T>> LoadAsync() {
-            return await Transaction.DataAccessor.LoadAllAsync(Transaction, LoadAllArgs);
+            return await Transaction.DataAccessor.LoadAllAsync(Transaction, LoadAllArgs).ConfigureAwait(false);
         }
     }
 
