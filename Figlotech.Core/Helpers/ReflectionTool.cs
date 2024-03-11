@@ -479,21 +479,38 @@ namespace Figlotech.Core.Helpers {
             if (t == null) return;
 
             if (
-                value == null && !t.IsValueType ||
+                (value == null && !t.IsValueType) ||
                 (value != null && t == value.GetType())
             ) {
                 _setMemberValueInternal(pi, fi, member, target, value);
                 return;
             }
+
+            if(value == null) {
+                return;
+            }
+
+            var vt = value.GetType();
+            if (t == typeof(Int32) && vt == typeof(Int64)) {
+                _setMemberValueInternal(pi, fi, member, target, (int)(long)value);
+                return;
+            }
+            if (t == typeof(Int64) && vt == typeof(Int32)) {
+                _setMemberValueInternal(pi, fi, member, target, (long)(int)value);
+                return;
+            }
+
             if (t == typeof(bool) && value is sbyte v) {
                 _setMemberValueInternal(pi, fi, member, target, v != 0);
                 return;
             }
             if (t.IsEnum && value is int nval) {
                 value = Enum.ToObject(t, nval);
+                _setMemberValueInternal(pi, fi, member, target, value);
                 return;
             } else if (t.IsEnum && value is long lval) {
                 value = Enum.ToObject(t, (int)lval);
+                _setMemberValueInternal(pi, fi, member, target, value);
                 return;
             }
 
@@ -502,8 +519,8 @@ namespace Figlotech.Core.Helpers {
                     return;
                 } else {
                     _setMemberValueInternal(pi, fi, member, target, null);
+                    return;
                 }
-                return;
             }
 
             if (value is long l && t == typeof(UInt64)) {
@@ -528,12 +545,15 @@ namespace Figlotech.Core.Helpers {
                         value = castMethod.Invoke(target, new object[] { value });
                     }
 
-                    if (!t.IsAssignableFrom(value.GetType())) {
-                        if (value.GetType().Implements(typeof(IConvertible))) {
-                            value = Convert.ChangeType(value, t);
-                        } else {
-                            return;
-                        }
+                    if (t.IsAssignableFrom(value.GetType())) {
+                        _setMemberValueInternal(pi, fi, member, target, value);
+                        return;
+                    }
+
+                    if (value.GetType().Implements(typeof(IConvertible))) {
+                        value = Convert.ChangeType(value, t);
+                        _setMemberValueInternal(pi, fi, member, target, value);
+                        return;
                     }
 
                 }
@@ -541,10 +561,13 @@ namespace Figlotech.Core.Helpers {
                 if (t.FullName == "System.TimeSpan" && value is string strTs) {
                     value = TimeSpan.Parse(strTs);
                 }
+            } else {
+                _setMemberValueInternal(pi, fi, member, target, value);
+                return;
             }
 
             if(StrictMode) {
-                throw new ReflectionException($"Reflection Tool could not set {value} ({value?.GetType()}) into {member.DeclaringType.Name}::{member.Name}");
+                throw new ReflectionException($"Reflection Tool could not set {value} ({value?.GetType()}) into {member.DeclaringType.Name}::{member.Name} ({ReflectionTool.GetTypeOf(member)})");
             }
             // _setMemberValueInternal(pi, fi, member, target, value);
         }

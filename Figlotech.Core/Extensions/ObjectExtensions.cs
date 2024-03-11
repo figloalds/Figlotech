@@ -249,7 +249,7 @@ namespace System
                 yield break;
             }
             foreach(var item in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
-                yield return (item.Name, ReflectionTool.GetMemberValue(item, me));
+                yield return (item, ReflectionTool.GetMemberValue(item, me));
             }
         }
 
