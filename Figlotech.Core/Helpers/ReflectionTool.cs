@@ -605,16 +605,9 @@ namespace Figlotech.Core.Helpers {
             if (target == null) {
                 return null;
             }
-            try {
-                var retv = GetMemberValue(GetMember(target.GetType(), fieldName), target);
-                return retv;
-            } catch (Exception) {
 
-                if (Debugger.IsAttached) {
-                    Debugger.Break();
-                }
-            }
-            return null;
+            var retv = GetMemberValue(GetMember(target.GetType(), fieldName), target);
+            return retv;
         }
 
         public static void ForFields(Object target, Action<FieldInfo> function) {

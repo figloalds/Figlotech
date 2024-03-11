@@ -2586,7 +2586,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             LoadAllArgs<T> args = null) where T : IDataObject, new() {
             List<T> retv = new List<T>();
 
-            
             await foreach(var item in AggregateLoadAsyncCoroutinely(transaction, args).ConfigureAwait(false)) {
                 retv.Add(item);
             }

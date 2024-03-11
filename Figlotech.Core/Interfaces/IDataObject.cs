@@ -55,7 +55,6 @@ namespace Figlotech.Core.Interfaces {
         DateTime CreatedTime { get; set; }
         String RID { get; set; }
         bool IsPersisted { get; set; }
-        bool IsLocalInstance { get; }
 
         int PersistedHash { get; set; }
         ulong AlteredBy { get; set; }
