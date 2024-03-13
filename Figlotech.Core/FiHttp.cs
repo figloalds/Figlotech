@@ -366,12 +366,32 @@ namespace Figlotech.Core {
         public async Task<FiHttpResult> Post(string url, string body) {
             return await SendRequest(HttpMethod.Post, url, body);
         }
+
+        public async Task<FiHttpResult> Post<T>(string url, IAsyncEnumerable<T> body) {
+            return await SendRequest(HttpMethod.Post, url, async stream => {
+                await using var writer = new StreamWriter(stream, Fi.StandardEncoding, 8192, true);
+                var isFirst = true;
+                await writer.WriteLineAsync("[");
+                await foreach(var item in body) {
+                    if(isFirst) {
+                        isFirst = false;
+                    } else {
+                        await writer.WriteLineAsync(",");
+                    }
+                    await writer.WriteLineAsync(JsonConvert.SerializeObject(item, JsonSettings));
+                }
+                await writer.WriteLineAsync("]");
+            }, "application/json");
+        }
+
         public async Task<FiHttpResult> Post(string url) {
             return await SendRequest(HttpMethod.Post, url);
         }
+
         public async Task<T> Post<T>(string url) {
             return await SendRequest<T>(HttpMethod.Post, url);
         }
+
         public async Task<FiHttpResult> Post<T>(String url, T bodyData, string contentType = null) {
             return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType);
         }
@@ -433,13 +453,16 @@ namespace Figlotech.Core {
             return await FiHttpResult.InitFromRequest(this, req);
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = null) {
             var req = CreateRequest(url);
             req.Method = method;
             using (var ms = new MemoryStream()) {
                 await streamFunction(ms);
                 ms.Seek(0, SeekOrigin.Begin);
                 req.Content = new StreamContent(ms);
+                if(!string.IsNullOrEmpty(contentType)) {
+                    req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+                }
                 return await FiHttpResult.InitFromRequest(this, req);
             }
         }
