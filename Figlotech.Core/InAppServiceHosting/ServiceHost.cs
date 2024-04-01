@@ -5,12 +5,10 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.InAppServiceHosting
-{
-    public sealed class ServiceHost
-    {
+namespace Figlotech.Core.InAppServiceHosting {
+    public sealed class ServiceHost {
         public static ServiceHost Default { get; set; } = new ServiceHost();
-        
+
         private List<IFthService> Services { get; set; } = new List<IFthService>();
         AtomicDictionary<IFthService, Thread> ServiceThreads = new AtomicDictionary<IFthService, Thread>();
         AtomicDictionary<IFthService, FthServiceInfo> ServiceInfos = new AtomicDictionary<IFthService, FthServiceInfo>();
@@ -34,17 +32,17 @@ namespace Figlotech.Core.InAppServiceHosting
 
         int idgen = 0;
         public void Start(IFthService service) {
-            if(!ServiceThreads.ContainsKey(service)) {
-                var t = Fi.Tech.SafeCreateThread(()=> {
+            if (!ServiceThreads.ContainsKey(service)) {
+                var t = Fi.Tech.SafeCreateThread(() => {
                     try {
                         var rt = service.Run();
                         if (rt != null) {
-                            rt?.Wait();
+                            rt.ConfigureAwait(false).GetAwaiter().GetResult();
                         }
-                        if(service is IFthCyclicService cServ) {
+                        if (service is IFthCyclicService cServ) {
                             var rt2 = cServ.MainLoopInit();
                             if (rt2 != null) {
-                                rt2?.Wait();
+                                rt2.ConfigureAwait(false).GetAwaiter().GetResult();
                             }
 
                             cServ.BreakMainLoop = false;
@@ -52,23 +50,22 @@ namespace Figlotech.Core.InAppServiceHosting
                             Task[] lt = new Task[1];
                             int l = 0;
                             while (!cServ.BreakMainLoop && !cServ.InterruptIssued) {
-                                lt[l] = cServ.MainLoopIteration();
-                                var prev = (l - 1) >= 0 ? l - 1 : lt.Length - 1;
-                                if (lt[prev] != null && !lt[prev].IsCompleted) {
-                                    lt[prev].Wait();
-                                }
-                                l = (l + 1) % lt.Length;
-                                try {
-                                    Task.Delay(cServ.IterationDelay, CyclicServiceIterationResets[cServ].Token).Wait();
-                                } catch(Exception) {
-                                    // this catch is because .Net throws on cancellation, cancelling is part of the main plan
-                                    // not the exceptional case for us here.
-                                } finally {
-                                    CyclicServiceIterationResets[cServ] = new CancellationTokenSource();
+                                using (CyclicServiceIterationResets[cServ] = new CancellationTokenSource()) {
+                                    lt[l] = cServ.MainLoopIteration();
+                                    var prev = (l - 1) >= 0 ? l - 1 : lt.Length - 1;
+                                    if (lt[prev] != null && !lt[prev].IsCompleted) {
+                                        lt[prev].ConfigureAwait(false).GetAwaiter().GetResult();
+                                    }
+                                    l = (l + 1) % lt.Length;
+                                    try {
+                                        Task.Delay(cServ.IterationDelay, CyclicServiceIterationResets[cServ].Token).ConfigureAwait(false).GetAwaiter().GetResult();
+                                    } catch (TaskCanceledException) {
+                                    } finally {
+                                    }
                                 }
                             }
                         }
-                    } catch(Exception x) {
+                    } catch (Exception x) {
 
                         Fi.Tech.WriteLine($"Error Executing Service {service.GetType().Name} {x.Message}");
                         OnServiceError?.Invoke(service, x);
@@ -80,7 +77,6 @@ namespace Figlotech.Core.InAppServiceHosting
                 Services.Add(service);
                 ServiceThreads[service] = t;
                 ServiceInfos[service] = new FthServiceInfo(service);
-                CyclicServiceIterationResets[service] = new CancellationTokenSource();
             }
         }
 
@@ -90,8 +86,8 @@ namespace Figlotech.Core.InAppServiceHosting
             if (ServiceThreads.ContainsKey(service)) {
                 service.InterruptIssued = true;
                 ServiceThreads[service].Join(TimeSpan.FromSeconds(12));
-                if(!service.IsCritical) {
-                    if(ServiceThreads[service].IsAlive) {
+                if (!service.IsCritical) {
+                    if (ServiceThreads[service].IsAlive) {
                         ServiceThreads[service].Interrupt();
                     }
                     ServiceThreads.Remove(service);
@@ -101,9 +97,9 @@ namespace Figlotech.Core.InAppServiceHosting
             }
         }
 
-        public void ResetIterationDelay<T>() where T: IFthCyclicService, new() {
+        public void ResetIterationDelay<T>() where T : IFthCyclicService, new() {
             var instance = GetInstance<T>();
-            if(CyclicServiceIterationResets.ContainsKey(instance)) {
+            if (CyclicServiceIterationResets.ContainsKey(instance)) {
                 CyclicServiceIterationResets[instance].Cancel();
             }
         }
@@ -120,9 +116,9 @@ namespace Figlotech.Core.InAppServiceHosting
         public IEnumerable<FthServiceInfo> GetServiceInfos() {
             return ServiceInfos.Values;
         }
-        public T GetInstance<T>() where T: IFthService {
-            return (T) Services
-                .FirstOrDefault(s => 
+        public T GetInstance<T>() where T : IFthService {
+            return (T)Services
+                .FirstOrDefault(s =>
                     s.GetType() == typeof(T)
                 );
         }

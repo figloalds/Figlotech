@@ -8,6 +8,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
+using System.IO.Pipes;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -22,7 +24,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public sealed class  FiHttpResult : IDisposable {
+    public sealed class FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
         public String ContentType { get; set; }
@@ -46,7 +48,7 @@ namespace Figlotech.Core {
             var retv = new FiHttpResult(caller);
             try {
                 var client = caller.HttpClient;
-                var response = await client.SendAsync(httpRequestMessage);
+                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead);
                 retv.Init(response);
             } catch (WebException ex) {
                 retv.Init(ex.Response as HttpWebResponse);
@@ -67,7 +69,7 @@ namespace Figlotech.Core {
             foreach (var header in resp.Headers.AllKeys) {
                 response.Headers.Add(header, resp.Headers.GetValues(header));
             }
-            response.Content = new System.Net.Http.StreamContent(resp.GetResponseStream());
+            response.Content = new StreamContent(resp.GetResponseStream());
             Init(response);
         }
 
@@ -89,7 +91,7 @@ namespace Figlotech.Core {
         }
 
         private async Task CacheResponseBody() {
-            if(CachedResponseBody == null) {
+            if (CachedResponseBody == null) {
                 CachedResponseBody = new MemoryStream();
                 if (Response?.Content != null) {
                     await Response.Content.CopyToAsync(CachedResponseBody);
@@ -112,8 +114,11 @@ namespace Figlotech.Core {
         }
 
         public async Task<Stream> AsStream() {
-            await CacheResponseBody();
-            return CachedResponseBody;
+            if(CachedResponseBody != null) {
+                CachedResponseBody.Seek(0, SeekOrigin.Begin);
+                return CachedResponseBody;
+            }
+            return await Response.Content.ReadAsStreamAsync();
         }
 
         //public Stream AsRawStream() {
@@ -142,8 +147,8 @@ namespace Figlotech.Core {
         }
 
         public async Task<T> As<T>() {
-            if(typeof(T) == typeof(String)) {
-                return (T) (object) await AsString();
+            if (typeof(T) == typeof(String)) {
+                return (T)(object)await AsString();
             }
             T retv = default(T);
             var json = await this.AsString();
@@ -176,12 +181,11 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class NonSuccessResponseException : Exception
-    {
+    public sealed class NonSuccessResponseException : Exception {
         public HttpStatusCode StatusCode { get; set; }
         public HttpResponseMessage Response { get; set; }
         public NonSuccessResponseException(string Message) : base(Message) { }
-        public NonSuccessResponseException(HttpStatusCode statusCode, string Message) : base(Message) { 
+        public NonSuccessResponseException(HttpStatusCode statusCode, string Message) : base(Message) {
             this.StatusCode = statusCode;
         }
         public NonSuccessResponseException(HttpResponseMessage resp) : base(resp.ReasonPhrase) {
@@ -192,29 +196,39 @@ namespace Figlotech.Core {
 
     public sealed class FiHttp {
         internal static HttpClient DefaultClient = new HttpClient() {
+            Timeout = TimeSpan.FromMinutes(120)
+        };
+        internal static HttpClient DefaultClientIgnoreBadCerts = new HttpClient(
+            new HttpClientHandler {
+                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true,
+            }    
+        ) {
             Timeout = TimeSpan.FromMinutes(120),
         };
 
-        internal static Dictionary<string, HttpClient> clientCache = new Dictionary<string, HttpClient>();
+        public bool IgnoreBadCertificates { get; set; } = false;
+        internal static SelfInitializedCache<string, HttpClient> clientCache = new SelfInitializedCache<string, HttpClient>(
+            s => {
+                return null;
+            }, TimeSpan.FromMinutes(30)
+        );
 
         public JsonSerializerSettings JsonSettings { get; set; } = new JsonSerializerSettings();
 
         HttpClient client;
         internal HttpClient HttpClient {
             get {
-                lock(Certificates) {
-                    return client ?? 
-                        (client = GetClientForCertificates(Certificates));
-                }
+                return GetHttpClientForInstance(this);
             }
         }
 
-        internal static HttpClient GetClientForCertificates(List<X509Certificate2> certs) {
-            if(certs.Count == 0) {
-                return DefaultClient;
+        internal static HttpClient GetHttpClientForInstance(FiHttp instance) {
+            var certs = instance.Certificates;
+            if (certs.Count == 0) {
+                return instance.IgnoreBadCertificates ? DefaultClientIgnoreBadCerts : DefaultClient;
             }
 
-            var id = string.Join("|", certs.OrderBy(x=> x.Thumbprint).Select(
+            var id = string.Join("|", certs.OrderBy(x => x.Thumbprint).Select(
                 x => Convert.ToBase64String(
                     BigInteger.Parse(
                         x.Thumbprint,
@@ -224,11 +238,15 @@ namespace Figlotech.Core {
                         .ToArray()
                     )
                 ));
+            id += $";IgnoreBadCerts={instance.IgnoreBadCertificates}";
 
             if (!clientCache.ContainsKey(id)) {
                 var handler = new HttpClientHandler();
-                foreach(var item in certs) {
+                foreach (var item in certs) {
                     handler.ClientCertificates.Add(item);
+                }
+                if (instance.IgnoreBadCertificates) {
+                    handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
                 }
                 var client = new HttpClient(handler);
                 clientCache[id] = client;
@@ -263,8 +281,8 @@ namespace Figlotech.Core {
         private List<X509Certificate2> Certificates { get; set; } = new List<X509Certificate2>();
 
         public void AddCertificate(X509Certificate2 certificate) {
-            lock(Certificates) {
-                if(!Certificates.Contains(certificate)) {
+            lock (Certificates) {
+                if (!Certificates.Contains(certificate)) {
                     Certificates.Add(certificate);
                     client = null;
                 }
@@ -286,26 +304,26 @@ namespace Figlotech.Core {
         }
 
         public async Task<bool> Check(string Url) {
-            var st = (int) (await (Get(Url))).StatusCode;
+            var st = (int)(await (Get(Url))).StatusCode;
             return st >= 200 && st < 300;
         }
 
         private byte[] GetObjectBytes<T>(T postData, string contentType) {
-            switch(contentType) {
+            switch (contentType) {
                 case ContentTypeFormUrlEncoded:
                     StringBuilder retv = new StringBuilder();
                     bool isFirst = true;
-                    foreach(var item in ReflectionTool.FieldsAndPropertiesOf(typeof(T))) {
-                        if(item.GetCustomAttribute<JsonIgnoreAttribute>() != null) {
+                    foreach (var item in ReflectionTool.FieldsAndPropertiesOf(typeof(T))) {
+                        if (item.GetCustomAttribute<JsonIgnoreAttribute>() != null) {
                             continue;
                         }
-                        if(isFirst) {
+                        if (isFirst) {
                             isFirst = false;
                         } else {
                             retv.Append("&");
                         }
                         var value = ReflectionTool.GetMemberValue(item, postData);
-                        if(value != null) {
+                        if (value != null) {
                             retv.Append($"{item.Name}={System.Net.WebUtility.UrlEncode(value.ToString())}");
                         }
                     }
@@ -372,8 +390,8 @@ namespace Figlotech.Core {
                 await using var writer = new StreamWriter(stream, Fi.StandardEncoding, 8192, true);
                 var isFirst = true;
                 await writer.WriteLineAsync("[");
-                await foreach(var item in body) {
-                    if(isFirst) {
+                await foreach (var item in body) {
+                    if (isFirst) {
                         isFirst = false;
                     } else {
                         await writer.WriteLineAsync(",");
@@ -460,7 +478,7 @@ namespace Figlotech.Core {
                 await streamFunction(ms);
                 ms.Seek(0, SeekOrigin.Begin);
                 req.Content = new StreamContent(ms);
-                if(!string.IsNullOrEmpty(contentType)) {
+                if (!string.IsNullOrEmpty(contentType)) {
                     req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 }
                 return await FiHttpResult.InitFromRequest(this, req);
@@ -534,7 +552,7 @@ namespace Figlotech.Core {
         private void AddHeaders(HttpRequestMessage req) {
             lock (headers) {
                 headers.ForEach((h) => {
-                    if(h.Key == "Content-Length") {
+                    if (h.Key == "Content-Length") {
                         return;
                     }
                     if (reservedHeaders.Contains(h.Key)) {
@@ -560,10 +578,10 @@ namespace Figlotech.Core {
         }
 
         public string UserAgent { get; set; } = "Figlotech Http Abstraction on netstandard2.1";
-        
+
         public string this[string k] {
             get {
-                lock(headers) {
+                lock (headers) {
                     if (headers.ContainsKey(k)) {
                         return headers[k];
                     }
@@ -571,7 +589,7 @@ namespace Figlotech.Core {
                 return null;
             }
             set {
-                lock(headers) {
+                lock (headers) {
                     headers[k] = value;
                 }
             }

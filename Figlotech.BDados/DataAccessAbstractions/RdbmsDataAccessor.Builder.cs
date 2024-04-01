@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable {
+    public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable, IAsyncDisposable {
 
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");

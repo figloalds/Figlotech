@@ -13,7 +13,7 @@ namespace Figlotech.BDados.DataAccessAbstractions
         bool ContinuousConnection { get; }
         int CommandTimeout { get; }
         string SchemaName { get; }
-
+        string ConnectionString { get; }
         Dictionary<string, string> InfoSchemaColumnsMap { get; }
 
         object ProcessParameterValue(object value);

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json.Serialization;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -551,9 +552,18 @@ namespace Figlotech.Core.Helpers {
                     }
 
                     if (value.GetType().Implements(typeof(IConvertible))) {
-                        value = Convert.ChangeType(value, t);
-                        _setMemberValueInternal(pi, fi, member, target, value);
-                        return;
+                        try {
+                            value = Convert.ChangeType(value, t);
+                            _setMemberValueInternal(pi, fi, member, target, value);
+                            return;
+                        } catch(Exception ex) {
+                            if(StrictMode) {
+                                if(Debugger.IsAttached) {
+                                    Debugger.Break();
+                                }
+                                throw new ReflectionException($"Error casting {value} from {value.GetType().Name} to {t.Name} for field {target.GetType().Name}{member.Name}");
+                            }
+                        }
                     }
 
                 }
@@ -567,6 +577,9 @@ namespace Figlotech.Core.Helpers {
             }
 
             if(StrictMode) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
                 throw new ReflectionException($"Reflection Tool could not set {value} ({value?.GetType()}) into {member.DeclaringType.Name}::{member.Name} ({ReflectionTool.GetTypeOf(member)})");
             }
             // _setMemberValueInternal(pi, fi, member, target, value);

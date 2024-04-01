@@ -47,6 +47,10 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new SqliteConnection(Config.GetConnectionString());
         }
 
+        public string ConnectionString {
+            get => Config.GetConnectionString();
+        }
+
         public IDbConnection GetNewSchemalessConnection() {
             return new SqliteConnection(Config.GetConnectionString());
         }
