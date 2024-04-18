@@ -130,8 +130,17 @@ namespace Figlotech.Core {
         }
 
         public async ValueTask<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
-            await Fi.Tech.ThrowIfTimesout(_semaphore.WaitAsync(), timeout, "Awaiting for lock timed out");
-            return new FiAsyncDisposableLock(_semaphore);
+            var timeoutCancellation = new CancellationTokenSource(timeout);
+
+            try {
+                await _semaphore.WaitAsync(timeoutCancellation.Token);
+                return new FiAsyncDisposableLock(_semaphore);
+            } catch (TaskCanceledException x) {
+                throw new TimeoutException("Awaiting for lock timed out", x);
+            } catch (Exception x) {
+                throw new Exception("Error waiting for Lock", x);
+            }
+
         }
     }
 }

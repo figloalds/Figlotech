@@ -344,7 +344,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 Query.Append(",");
             }
             Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            Query.Append("WHERE RID=@rid", input.RID);
+            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnOf[typeof(T)]}=@rid", input.RID);
 
             return Query;
         }

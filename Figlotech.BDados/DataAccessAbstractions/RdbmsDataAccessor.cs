@@ -1047,7 +1047,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static long ConnectionTracks = 0;
 
         internal async ValueTask<IDbConnection> GetNewOpenConnectionAsync() {
-            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(10)).ConfigureAwait(false)) {
+            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false)) {
                 var connection = Plugin.GetNewConnection();
                 try {
                     await OpenConnectionAsync(connection).ConfigureAwait(false);
@@ -1067,7 +1067,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
         internal async ValueTask<IDbConnection> GetNewOpenSchemalessConnectionAsync() {
-            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(10)).ConfigureAwait(false)) {
+            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false)) {
                 var connection = Plugin.GetNewSchemalessConnection();
                 try {
                     await OpenConnectionAsync(connection).ConfigureAwait(false);
@@ -1576,7 +1576,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool _isDisposed = false;
         bool _isDisposing = false;
         public async ValueTask DisposeAsync() {
-            if (!_isDisposed) {
+            if (!_isDisposed && !_isDisposing) {
                 _isDisposing = true;
                 try {
                     if (ActiveConnections != null) {
