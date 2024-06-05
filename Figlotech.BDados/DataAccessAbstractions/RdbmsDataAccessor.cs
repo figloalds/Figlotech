@@ -1047,43 +1047,42 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static long ConnectionTracks = 0;
 
         internal async ValueTask<IDbConnection> GetNewOpenConnectionAsync() {
-            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false)) {
-                var connection = Plugin.GetNewConnection();
+            //using var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false);
+            var connection = Plugin.GetNewConnection();
+            try {
+                await OpenConnectionAsync(connection).ConfigureAwait(false);
+                return connection;
+            } catch (Exception x) {
                 try {
-                    await OpenConnectionAsync(connection).ConfigureAwait(false);
-                    return connection;
-                } catch (Exception x) {
-                    try {
-                        if (connection is DbConnection acon) {
-                            await acon.DisposeAsync().ConfigureAwait(false);
-                        } else {
-                            connection?.Dispose();
-                        }
-                    } catch (Exception) {
-
+                    if (connection is DbConnection acon) {
+                        await acon.DisposeAsync().ConfigureAwait(false);
+                    } else {
+                        connection?.Dispose();
                     }
-                    throw new BDadosException("Error when trying to Open Connection", x);
+                } catch (Exception) {
+
                 }
+                throw new BDadosException("Error when trying to Open Connection", x);
             }
+            
         }
         internal async ValueTask<IDbConnection> GetNewOpenSchemalessConnectionAsync() {
-            using (var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false)) {
-                var connection = Plugin.GetNewSchemalessConnection();
+            //using var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false);
+            var connection = Plugin.GetNewSchemalessConnection();
+            try {
+                await OpenConnectionAsync(connection).ConfigureAwait(false);
+                return connection;
+            } catch (Exception x) {
                 try {
-                    await OpenConnectionAsync(connection).ConfigureAwait(false);
-                    return connection;
-                } catch (Exception x) {
-                    try {
-                        if (connection is DbConnection acon) {
-                            await acon.DisposeAsync().ConfigureAwait(false);
-                        } else {
-                            connection?.Dispose();
-                        }
-                    } catch (Exception) {
-
+                    if (connection is DbConnection acon) {
+                        await acon.DisposeAsync().ConfigureAwait(false);
+                    } else {
+                        connection?.Dispose();
                     }
-                    throw new BDadosException("Error when trying to Open Connection", x);
+                } catch (Exception) {
+
                 }
+                throw new BDadosException("Error when trying to Open Connection", x);
             }
         }
 
@@ -1109,7 +1108,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        FiAsyncMultiLock OpenConnectionLock = new FiAsyncMultiLock();
+        //FiAsyncMultiLock OpenConnectionLock = new FiAsyncMultiLock();
         private void ExclusiveOpenConnection(IDbConnection connection) {
             ExclusiveOpenConnectionAsync(connection).ConfigureAwait(false).GetAwaiter().GetResult();
         }

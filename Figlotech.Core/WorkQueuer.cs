@@ -26,7 +26,7 @@ namespace Figlotech.Core {
         public string[] EnqueuingContextStackTrace { get; private set; }
         public WorkJobExecutionStat WorkJobDetails { get; private set; }
         public WorkJobException(string message, WorkJobExecutionRequest job, Exception inner) : base(message, inner) {
-            this.EnqueuingContextStackTrace = job.StackTrace.ToString().Split('\n').Select(x => x?.Trim()).ToArray();
+            this.EnqueuingContextStackTrace = job.StackTraceText.Split('\n').Select(x => x?.Trim()).ToArray();
         }
     }
 
@@ -84,6 +84,7 @@ namespace Figlotech.Core {
         }
 
         public StackTrace StackTrace { get; internal set; }
+        public string StackTraceText { get; set; }
 
         public void Dispose() {
             if(!_disposed) {
@@ -106,6 +107,8 @@ namespace Figlotech.Core {
 
         public String Name { get; set; } = null;
         public String Description { get; set; } = null;
+
+        public string SchedulingStackTrace { get; internal set; }
 
         public ValueTask ActionTask { get; internal set; }
 
@@ -304,20 +307,21 @@ namespace Figlotech.Core {
             request.EnqueuedTime = DateTime.UtcNow;
             request.Status = WorkJobRequestStatus.Queued;
             request.StackTrace = new System.Diagnostics.StackTrace();
+            request.StackTraceText = request.StackTrace.ToString();
             request.TimeInQueueCounter = new Stopwatch();
             request.TimeInQueueCounter.Start();
             request.WorkQueuer = this;
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(request);
+                    InQueue++;
+                    TotalWork++;
                 }
             } else {
                 lock (HeldJobs) {
                     HeldJobs.Add(request);
                 }
             }
-            InQueue++;
-            TotalWork++;
             this.OnWorkEnqueued?.Invoke(request);
             SpawnWorker();
             return request;

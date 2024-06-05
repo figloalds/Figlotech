@@ -97,6 +97,7 @@ namespace Figlotech.Core {
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
         public bool IsActive { get; internal set; } = true;
+        public string SchedulingStackTrace { get; internal set; }
         public CancellationTokenSource Cancellation { get; internal set; }
 
         ~ScheduledWorkJob() {
@@ -469,6 +470,9 @@ namespace Figlotech.Core {
             if (sched.Cancellation.IsCancellationRequested) {
                 return;
             }
+            if(!sched.Queuer.Active) {
+                return;
+            }
             var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
             if (millisDiff > 5000) {
@@ -478,7 +482,8 @@ namespace Figlotech.Core {
             } else {
                 request = sched.Queuer.Enqueue(
                     new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
-                        Name = sched.WorkJob.Name
+                        Name = sched.WorkJob.Name,
+                        SchedulingStackTrace = sched.SchedulingStackTrace
                     }, sched.Cancellation.Token
                 );
             }
@@ -502,6 +507,12 @@ namespace Figlotech.Core {
             lock (GlobalScheduledJobs) {
                 if (sched.Cancellation.IsCancellationRequested) {
                     return;
+                }
+                if(!sched.Queuer.Active) {
+                    return;
+                }
+                if(sched.SchedulingStackTrace == null) {
+                    sched.SchedulingStackTrace = new StackTrace().ToString();
                 }
                 var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
                 var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;

@@ -48,7 +48,7 @@ namespace Figlotech.Core {
             var retv = new FiHttpResult(caller);
             try {
                 var client = caller.HttpClient;
-                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead);
+                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
                 retv.Init(response);
             } catch (WebException ex) {
                 retv.Init(ex.Response as HttpWebResponse);
@@ -196,7 +196,8 @@ namespace Figlotech.Core {
 
     public sealed class FiHttp {
         internal static HttpClient DefaultClient = new HttpClient() {
-            Timeout = TimeSpan.FromMinutes(120)
+            Timeout = TimeSpan.FromMinutes(120),
+            MaxResponseContentBufferSize = 1,
         };
         internal static HttpClient DefaultClientIgnoreBadCerts = new HttpClient(
             new HttpClientHandler {
@@ -204,13 +205,14 @@ namespace Figlotech.Core {
             }    
         ) {
             Timeout = TimeSpan.FromMinutes(120),
+            MaxResponseContentBufferSize = 1,
         };
 
         public bool IgnoreBadCertificates { get; set; } = false;
         internal static SelfInitializedCache<string, HttpClient> clientCache = new SelfInitializedCache<string, HttpClient>(
             s => {
                 return null;
-            }, TimeSpan.FromMinutes(30)
+            }, TimeSpan.FromMinutes(120)
         );
 
         public JsonSerializerSettings JsonSettings { get; set; } = new JsonSerializerSettings();
@@ -248,7 +250,10 @@ namespace Figlotech.Core {
                 if (instance.IgnoreBadCertificates) {
                     handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
                 }
-                var client = new HttpClient(handler);
+                var client = new HttpClient(handler) {
+                    Timeout = TimeSpan.FromMinutes(120),
+                    MaxResponseContentBufferSize = 1,
+                };
                 clientCache[id] = client;
             }
             return clientCache[id];
