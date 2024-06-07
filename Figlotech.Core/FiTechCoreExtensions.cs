@@ -745,7 +745,7 @@ namespace Figlotech.Core {
         public static Lazy<IBDadosStringsProvider> _Strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
         public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
-        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", 2, true) {
+        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Int32.MaxValue, true) {
 
         });
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
