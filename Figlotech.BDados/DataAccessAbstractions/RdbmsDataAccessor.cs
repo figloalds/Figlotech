@@ -395,6 +395,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.DataAccessor.ActiveConnections.Remove(Id);
             }
             isTransactionEnded = true;
+
+            this.DataAccessor.WriteLog($"Transaction Closed {Id}");
         }
         bool isTransactionEnded = false;
         bool Errored = false;
@@ -469,7 +471,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public static int DefaultMaxOpenAttempts { get; set; } = 5;
         public static int DefaultOpenAttemptInterval { get; set; } = 100;
-
+        public string Description { get; set; }
         public Benchmarker Benchmarker { get; set; }
 
         public Type[] _workingTypes = Array.Empty<Type>();
@@ -630,10 +632,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //if (FiTechCoreExtensions.EnableDebug) {
             //    WriteLog(Environment.StackTrace);
             //}
-            WriteLog("Opening Transaction");
             var connection = await GetNewOpenConnectionAsync().ConfigureAwait(false);
 
             retv = new BDadosTransaction(this, connection);
+            WriteLog($"Transaction Opened {retv.Id}");
             var trace = new StackTrace();
             await retv.BeginTransactionAsync(ilev).ConfigureAwait(false);
             retv.CancellationToken = cancellationToken;
@@ -939,8 +941,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IQueryGenerator QueryGenerator => Plugin.QueryGenerator;
 
-        int accessId = 0;
-
         public event Action<Type, IDataObject[]> OnSuccessfulSave;
         public event Action<Type, IDataObject[], Exception> OnFailedSave;
         public event Action<Type, IDataObject[]> OnDataObjectAltered;
@@ -962,9 +962,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async ValueTask<T> AccessAsync<T>(Func<BDadosTransaction, ValueTask<T>> functions, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             if (functions == null) return default(T);
 
-            int aid = accessId;
             return await UseTransactionAsync(async (transaction) => {
-                aid = ++accessId;
+                var aid = transaction.Id;
 
                 if (transaction.Benchmarker == null) {
                     transaction.Benchmarker = Benchmarker ?? new Benchmarker($"---- Access [{++aid}]");
@@ -978,9 +977,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 if (!transaction?.usingExternalBenchmarker ?? false) {
                     var total = transaction?.Benchmarker.FinalMark();
-                    WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
+                    WriteLog($"---- Access [{Description}:{aid}] Finished in {total}ms");
                 } else {
-                    WriteLog(String.Format("---- Access [{0}] Finished", aid));
+                    WriteLog($"---- Access [{Description}:{0}] Finished");
                 }
                 return retv;
             }, cancellationToken, ilev).ConfigureAwait(false);
@@ -992,9 +991,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //if (transactionHandle != null && transactionHandle.State == transactionState.Open) {
             //    return functions.Invoke(transaction);
             //}
-            int aid = accessId;
             return UseTransaction((transaction) => {
-                aid = ++accessId;
+                var aid = transaction.Id;
 
                 if (transaction.Benchmarker == null) {
                     transaction.Benchmarker = Benchmarker ?? new Benchmarker($"---- Access [{++aid}]");
@@ -1008,9 +1006,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 if (!transaction?.usingExternalBenchmarker ?? false) {
                     var total = transaction?.Benchmarker.FinalMark();
-                    WriteLog(String.Format("---- Access [{0}] Finished in {1}ms", aid, total));
+                    WriteLog($"---- Access [{Description}:{aid}] Finished in {total}ms");
                 } else {
-                    WriteLog(String.Format("---- Access [{0}] Finished", aid));
+                    WriteLog($"---- Access [{Description}:{aid}] Finished");
                 }
                 return retv;
             }, ilev);
@@ -1114,10 +1112,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private async ValueTask ExclusiveOpenConnectionAsync(IDbConnection connection) {
-            
             if (connection is DbConnection idbconn) {
                 using CancellationTokenSource cts = new CancellationTokenSource();
-                cts.CancelAfter(TimeSpan.FromSeconds(8));
+                cts.CancelAfter(TimeSpan.FromSeconds(12));
                 await idbconn.OpenAsync(cts.Token).ConfigureAwait(false);
             } else {
                 connection.Open();
@@ -1191,17 +1188,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     if (transaction.CancellationToken.IsCancellationRequested) {
-                        WriteLog($"[{accessId}] Transaction was cancelled via token");
-                        b.Mark($"[{accessId}] Begin Rollback");
+                        WriteLog($"[{Description}:{transaction.Id}] Transaction was cancelled via token");
+                        b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
                         await transaction.RollbackAsync().ConfigureAwait(false);
-                        b.Mark($"[{accessId}] End Rollback");
-                        WriteLog($"[{accessId}] Rollback OK ");
+                        b.Mark($"[{Description}:{transaction.Id}] End Rollback");
+                        WriteLog($"[{Description}:{transaction.Id}] Rollback OK ");
                     } else {
-                        WriteLog($"[{accessId}] Committing");
-                        b.Mark($"[{accessId}] Begin Commit");
+                        WriteLog($"[{Description}:{transaction.Id}] Committing");
+                        b.Mark($"[{Description}:{transaction.Id}] Begin Commit");
                         await transaction.CommitAsync().ConfigureAwait(false);
-                        b.Mark($"[{accessId}] End Commit");
-                        WriteLog($"[{accessId}] Commited OK ");
+                        b.Mark($"[{Description}:{transaction.Id}] End Commit");
+                        WriteLog($"[{Description}:{transaction.Id}] Commited OK ");
                     }
                     return retv;
                 } catch (TaskCanceledException x) {
@@ -1213,15 +1210,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
-                    WriteLog($"[{accessId}] Begin Rollback : {x.Message} {x.StackTrace}");
-                    b.Mark($"[{accessId}] Begin Rollback");
+                    WriteLog($"[{Description}:{transaction.Id}] Begin Rollback : {x.Message} {x.StackTrace}");
+                    b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
                     try {
                         await transaction.RollbackAsync().ConfigureAwait(false);
                     } catch (Exception rbex) {
                         Debugger.Break();
                     }
-                    b.Mark($"[{accessId}] End Rollback");
-                    WriteLog($"[{accessId}] Transaction rolled back ");
+                    b.Mark($"[{Description}:{transaction.Id}] End Rollback");
+                    WriteLog($"[{Description}:{transaction.Id}] Transaction rolled back ");
                     transaction?.MarkAsErrored();
                     throw new BDadosException("Error accessing the database", transaction?.FrameHistory, null, x);
                 } finally {
@@ -2142,8 +2139,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return;
             }
             String QueryText = query.GetCommandText();
-            WriteLog($"[{accessId}] -- Query <{query.Id}>:\n {QueryText}");
-            transaction?.Benchmarker?.Mark($"[{accessId}] Prepare Statement <{query.Id}>");
+            WriteLog($"[{Description}:{transaction.Id}] -- Query <{query.Id}>:\n {QueryText}");
+            transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Prepare Statement <{query.Id}>");
             // Adiciona os parametros
             foreach (KeyValuePair<String, Object> param in query.GetParameters()) {
 
@@ -2153,7 +2150,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     pval = $"'{pval}'";
                 }
 
-                WriteLog($"[{accessId}] SET @{param.Key} = {pval} -- {param.Value?.GetType()?.Name}");
+                WriteLog($"[{Description}:{transaction.Id}] SET @{param.Key} = {pval} -- {param.Value?.GetType()?.Name}");
             }
         }
 
@@ -2171,29 +2168,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
-                transaction?.Benchmarker?.Mark($"[{accessId}] Enter lock region");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Enter lock region");
                 var c = 0;
-                transaction?.Benchmarker?.Mark($"[{accessId}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
                 await foreach (var item in GetObjectEnumerableAsync<T>(transaction, command).ConfigureAwait(false)) {
                     c++;
                     yield return item;
                 }
-                transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build<{tName}> completed <{query.Id}>");
 
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Fully consumed resultset (coroutinely) <{query.Id}> Size: {c}");
-                transaction?.Benchmarker?.Mark($"[{accessId}] Avg consumption speed: {((double)elaps / (double)c).ToString("0.00")}ms/item");
+                var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Fully consumed resultset (coroutinely) <{query.Id}> Size: {c}");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Avg consumption speed: {((double)elaps / (double)c).ToString("0.00")}ms/item");
 
                 try {
                     int nResults = 0;
                     nResults = c;
-                    WriteLog($"[{accessId}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
                     yield break;
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     transaction?.MarkAsErrored();
-                    throw new BDadosException("Error in query", x);
+                    throw new BDadosException("Error in query", x) {
+                        Data = {
+                            ["Query"] = query,
+                        }
+                    };
                 } finally {
                     WriteLog("------------------------------------");
                 }
@@ -2215,27 +2216,31 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 // --
                 List<T> retv;
-                transaction?.Benchmarker?.Mark($"[{accessId}] Enter lock region");
-                transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query<{tName}> <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Enter lock region");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute Query<{tName}> <{query.Id}>");
                 retv = await GetObjectListAsync<T>(transaction, command).ConfigureAwait(false);
-                transaction?.Benchmarker?.Mark($"[{accessId}] Build<{tName}> completed <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build<{tName}> completed <{query.Id}>");
                 if (retv == null) {
                     throw new Exception("Null list generated");
                 }
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] Built List <{query.Id}> Size: {retv.Count}");
-                transaction?.Benchmarker?.Mark($"[{accessId}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
+                var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Built List <{query.Id}> Size: {retv.Count}");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item");
 
                 try {
                     int nResults = 0;
                     nResults = retv.Count;
-                    WriteLog($"[{accessId}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
                     return retv;
                 } catch (Exception x) {
-                    WriteLog($"[{accessId}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     transaction?.MarkAsErrored();
-                    throw new BDadosException("Error in Query", x);
+                    throw new BDadosException("Error in Query", x) {
+                        Data = {
+                            ["Query"] = query,
+                        }
+                    };
                 } finally {
                     WriteLog("------------------------------------");
                 }
@@ -2695,18 +2700,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 DbDataReader reader = null;
                 try {
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Wait for locked region");
                     using (await transaction.Lock().ConfigureAwait(false)) {
-                        transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query <{query.Id}>");
+                        transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute Query <{query.Id}>");
                         await command.PrepareAsync().ConfigureAwait(false);
                         reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, transaction.CancellationToken).ConfigureAwait(false);
                     }
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Query <{query.Id}> executed OK");
 
                 } catch (Exception x) {
                     sw.Stop();
                     transaction?.Benchmarker?.Mark($"Error executing query: {x.Message}\r\n\tQuery: {query.GetCommandText()}");
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     try {
@@ -2722,12 +2727,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } finally {
                     WriteLog("------------------------------------");
                 }
-                transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Reader executed OK <{query.Id}>");
                 await using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id})");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build retv List<{typeof(T).Name}> ({query.Id})");
 
                     var existingKeys = new MemberInfo[reader.FieldCount];
                     for (int i = 0; i < reader.FieldCount; i++) {
@@ -2763,9 +2768,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     sw.Stop();
                     swBuild.Stop();
                     double elaps = sw.ElapsedMilliseconds;
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id}) completed");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build retv List<{typeof(T).Name}> ({query.Id}) completed");
 
-                    WriteLog($"[{accessId}] -------- <{query.Id}> FetchAsync [OK] ({c} results) [{elaps} ms] [{swBuild.ElapsedMilliseconds}ms build]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- <{query.Id}> FetchAsync [OK] ({c} results) [{elaps} ms] [{swBuild.ElapsedMilliseconds}ms build]");
                 }
             }
         }
@@ -2803,18 +2808,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 IDataReader reader = null;
                 try {
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Wait for locked region");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Wait for locked region");
                     using (transaction.Lock().ConfigureAwait(false).GetAwaiter().GetResult()) {
-                        transaction?.Benchmarker?.Mark($"[{accessId}] Execute Query <{query.Id}>");
+                        transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute Query <{query.Id}>");
                         command.Prepare();
                         reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
                     }
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Query <{query.Id}> executed OK");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Query <{query.Id}> executed OK");
 
                 } catch (Exception x) {
                     sw.Stop();
                     transaction?.Benchmarker?.Mark($"Error executing query: {x.Message}\r\n\tQuery: {query.GetCommandText()}");
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error: {x.Message} ([{sw.ElapsedMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     try {
@@ -2827,12 +2832,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } finally {
                     WriteLog("------------------------------------");
                 }
-                transaction?.Benchmarker?.Mark($"[{accessId}] Reader executed OK <{query.Id}>");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Reader executed OK <{query.Id}>");
                 using (reader) {
                     var cols = new string[reader.FieldCount];
                     for (int i = 0; i < cols.Length; i++)
                         cols[i] = reader.GetName(i);
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id})");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build retv List<{typeof(T).Name}> ({query.Id})");
 
                     var existingKeys = new MemberInfo[reader.FieldCount];
                     for (int i = 0; i < reader.FieldCount; i++) {
@@ -2868,9 +2873,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     sw.Stop();
                     swBuild.Stop();
                     double elaps = sw.ElapsedMilliseconds;
-                    transaction?.Benchmarker?.Mark($"[{accessId}] Build retv List<{typeof(T).Name}> ({query.Id}) completed");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build retv List<{typeof(T).Name}> ({query.Id}) completed");
 
-                    WriteLog($"[{accessId}] -------- <{query.Id}> FetchAsync [OK] ({c} results) [{elaps} ms] [{swBuild.ElapsedMilliseconds}ms build]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- <{query.Id}> FetchAsync [OK] ({c} results) [{elaps} ms] [{swBuild.ElapsedMilliseconds}ms build]");
                 }
             }
         }
@@ -2889,7 +2894,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 // --
-                transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build Dataset");
                 using (await transaction.Lock().ConfigureAwait(false)) {
                     if (command is DbCommand acom) {
                         await acom.PrepareAsync().ConfigureAwait(false);
@@ -2928,12 +2933,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 // --
-                transaction?.Benchmarker?.Mark($"[{accessId}] Build Dataset");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build Dataset");
                 DataSet ds;
                 lock (transaction) {
                     ds = GetDataSet(command);
                 }
-                var elaps = transaction?.Benchmarker?.Mark($"[{accessId}] --");
+                var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] --");
 
                 try {
                     int resultados = 0;
@@ -2942,14 +2947,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         throw new BDadosException("Database did not return any table.");
                     }
                     resultados = ds.Tables[0].Rows.Count;
-                    transaction?.Benchmarker?.Mark($"[{accessId}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] -------- Queried [OK] ({resultados} results) [{elaps} ms]");
                     return ds.Tables[0];
                 } catch (Exception x) {
-                    transaction?.Benchmarker?.Mark($"[{accessId}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] -------- Error: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     var ex = new BDadosException("Error executing Query", x);
-                    ex.Data["query"] = query;
+                    ex.Data["Query"] = query;
                     transaction?.MarkAsErrored();
                     throw ex;
                 } finally {
@@ -2966,14 +2971,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw new OperationCanceledException("The transaction was cancelled");
             }
             int result = -1;
-            transaction.Benchmarker?.Mark($"[{accessId}] Prepare statement");
+            transaction.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Prepare statement");
             transaction.Benchmarker?.Mark("--");
-            WriteLog($"[{accessId}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout}s timeout]");
+            WriteLog($"[{Description}:{transaction.Id}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout}s timeout]");
             using (var command = transaction.CreateCommand()) {
                 try {
                     VerboseLogQueryParameterization(transaction, query);
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                    transaction.Benchmarker?.Mark($"[{accessId}] Execute");
+                    transaction.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute");
                     using (await transaction.Lock().ConfigureAwait(false)) {
                         if (command is DbCommand acom) {
                             await acom.PrepareAsync().ConfigureAwait(false);
@@ -2985,15 +2990,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     var elaps = transaction.Benchmarker?.Mark("--");
                     transaction.NotifyWriteOperation();
-                    WriteLog($"[{accessId}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
                 } catch (Exception x) {
                     var elapsed = transaction?.Benchmarker?.Mark($"Error executing query: {x.Message}\r\n\tQuery: {query.GetCommandText()}");
-                    WriteLog($"[{accessId}] -------- Error: {x.Message} ([{elapsed} ms]");
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error: {x.Message} ([{elapsed} ms]");
                     WriteLog(x.Message);
                     WriteLog(x.StackTrace);
                     WriteLog($"BDados Execute: {x.Message}");
                     transaction?.MarkAsErrored();
-                    throw new BDadosException("Error Executing Statement", x);
+                    throw new BDadosException("Error Executing Statement", x) {
+                        Data = {
+                            ["Query"] = query
+                        }
+                    };
                 } finally {
                     WriteLog("------------------------------------");
                 }

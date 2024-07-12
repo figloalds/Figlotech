@@ -135,6 +135,7 @@ namespace Figlotech.Core {
         public decimal TimeWaiting { get; set; }
         public string[] EnqueuingContextStackTrace { get; set; }
         public decimal TimeInExecution { get; set; }
+        public string SchedulingContextStackTrace { get; set; }
 
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
@@ -148,6 +149,7 @@ namespace Figlotech.Core {
                 .ToArray();
             TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
+            SchedulingContextStackTrace = x?.WorkJob?.SchedulingStackTrace;
         }
     }
 
