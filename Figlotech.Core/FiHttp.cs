@@ -197,15 +197,13 @@ namespace Figlotech.Core {
     public sealed class FiHttp {
         internal static HttpClient DefaultClient = new HttpClient() {
             Timeout = TimeSpan.FromMinutes(120),
-            MaxResponseContentBufferSize = 1,
         };
         internal static HttpClient DefaultClientIgnoreBadCerts = new HttpClient(
             new HttpClientHandler {
                 ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true,
-            }    
+            }
         ) {
             Timeout = TimeSpan.FromMinutes(120),
-            MaxResponseContentBufferSize = 1,
         };
 
         public bool IgnoreBadCertificates { get; set; } = false;
@@ -252,7 +250,6 @@ namespace Figlotech.Core {
                 }
                 var client = new HttpClient(handler) {
                     Timeout = TimeSpan.FromMinutes(120),
-                    MaxResponseContentBufferSize = 1,
                 };
                 clientCache[id] = client;
             }
