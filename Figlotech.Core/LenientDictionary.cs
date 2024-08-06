@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core
 {
     public sealed class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> {
-        AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
+        ConcurrentDictionary<TKey, TValue> _dmmy = new ConcurrentDictionary<TKey, TValue>();
         public TValue this[TKey key] {
             get {
                 if(key == null) {
@@ -23,11 +24,11 @@ namespace Figlotech.Core
                 _dmmy[key] = value;
             }
         }
-        public static implicit operator Dictionary<TKey, TValue>(LenientDictionary<TKey, TValue> a) {
-            return a._dmmy._dmmy;
+        public static implicit operator ConcurrentDictionary<TKey, TValue>(LenientDictionary<TKey, TValue> a) {
+            return a._dmmy;
         }
         public static implicit operator LenientDictionary<TKey, TValue>(Dictionary<TKey, TValue> a) {
-            return new LenientDictionary<TKey, TValue>() { _dmmy = new AtomicDictionary<TKey, TValue> { _dmmy = a } };
+            return new LenientDictionary<TKey, TValue>() { _dmmy = new ConcurrentDictionary<TKey, TValue>(a) };
         }
 
         public ICollection<TKey> Keys {

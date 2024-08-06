@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public sealed class Logger : ILogger {
+    public sealed class Logger : ITextToFileLogger {
         public static int gid = 0;
         private int myid = ++gid;
 

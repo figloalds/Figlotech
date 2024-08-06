@@ -22,7 +22,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             CacheableTypes.AddRange(TypesToCache);
         }
 
-        public ILogger Logger { get => DataAccessor.Logger; set => DataAccessor.Logger = value; }
+        public ITextToFileLogger Logger { get => DataAccessor.Logger; set => DataAccessor.Logger = value; }
         public Type[] WorkingTypes { get => DataAccessor.WorkingTypes; set => DataAccessor.WorkingTypes = value; }
 
         public T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new() {

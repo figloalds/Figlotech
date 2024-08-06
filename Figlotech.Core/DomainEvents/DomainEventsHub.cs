@@ -1,5 +1,6 @@
 ﻿using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Extensions;
+using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -142,6 +143,8 @@ namespace Figlotech.Core.DomainEvents {
             }
         }
 
+        public bool AllowTelemetry { get; set; } = false;
+
         public void Raise(IDomainEvent domainEvent) {
             WriteLog($"Raising Event {domainEvent.GetType()}");
             // Cache event
@@ -163,7 +166,11 @@ namespace Figlotech.Core.DomainEvents {
                 listeners = Listeners.ToList();
             }
             foreach (var listener in listeners) {
-                MainQueuer.Enqueue(async () => {
+                var t = listener.GetType().AsDerivingFromGeneric(typeof(DomainEventListener<>));
+                if (t != null && t.GetGenericArguments().First() != domainEvent.GetType()) {
+                    continue;
+                }
+                MainQueuer.Enqueue(new WorkJob(async () => {
                     await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
                     if (domainEvent.AllowPropagation) {
                         parentHub?.Raise(domainEvent);
@@ -176,6 +183,9 @@ namespace Figlotech.Core.DomainEvents {
                     }
                 }, (b)=> {
                     return Fi.Result();
+                }) { 
+                    Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
+                    AllowTelemetry = AllowTelemetry,
                 });
             }
 

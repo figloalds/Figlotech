@@ -36,8 +36,8 @@ namespace Figlotech.BDados.Builders {
         //public delegate void JoinBuild(Join join);
         //public delegate void ParametrizeBuild(BuildParametersHelper parametros);
 
-        ILogger _logger;
-        ILogger Logger {
+        ITextToFileLogger _logger;
+        ITextToFileLogger Logger {
             get {
                 return _logger = (_logger = new Logger(new FileAccessor("Logs")));
             }

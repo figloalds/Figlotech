@@ -140,7 +140,7 @@ namespace Figlotech.Core.Interfaces {
 
     public interface IDataAccessor
     {
-        ILogger Logger { get; set; }
+        ITextToFileLogger Logger { get; set; }
 
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();
         List<T> LoadAll<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();

@@ -2,8 +2,10 @@
 using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 using Figlotech.Extensions;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,6 +26,14 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
+    public sealed class FiHttpRequestLogging {
+        public IFileSystem FileSystem { get; set; }
+        public string RelativePath { get; set; }
+
+        public bool IncludeRequestHeaders { get; set; }
+        public bool IncludeResponseHeaders { get; set; }
+    }
+
     public sealed class FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
@@ -42,6 +52,8 @@ namespace Figlotech.Core {
             Dispose();
         }
 
+        public string PostData { get; set; }
+
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
         public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage) {
@@ -49,16 +61,16 @@ namespace Figlotech.Core {
             try {
                 var client = caller.HttpClient;
                 var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
-                retv.Init(response);
+                await retv.Init(response);
             } catch (WebException ex) {
-                retv.Init(ex.Response as HttpWebResponse);
+                await retv.Init(ex.Response as HttpWebResponse);
             } catch (Exception ex) {
-                retv.Init(null as HttpResponseMessage);
+                await retv.Init(null as HttpResponseMessage);
             }
             return retv;
         }
 
-        void Init(HttpWebResponse resp) {
+        async Task Init(HttpWebResponse resp) {
             if (resp == null) {
                 StatusCode = 0;
                 return;
@@ -70,10 +82,23 @@ namespace Figlotech.Core {
                 response.Headers.Add(header, resp.Headers.GetValues(header));
             }
             response.Content = new StreamContent(resp.GetResponseStream());
-            Init(response);
+            await Init(response);
         }
 
-        void Init(HttpResponseMessage resp) {
+        object ToMaybeJsonDynamic(string input) {
+            try {
+                return JsonConvert.DeserializeObject(input);
+            } catch {
+                return input;
+            }
+        }
+
+        static JsonSerializerSettings LoggerSerializerSettings = new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            Formatting = Formatting.Indented,
+        };
+
+        async Task Init(HttpResponseMessage resp) {
             if (resp == null) {
                 StatusCode = 0;
                 return;
@@ -83,6 +108,28 @@ namespace Figlotech.Core {
             StatusDescription = resp.ReasonPhrase;
             ContentType = resp.Content.Headers.ContentType?.MediaType;
             ContentLength = resp.Content.Headers.ContentLength ?? 0;
+
+            if(this.Caller.Logging != null) {
+                try {
+                    var postData = Response.RequestMessage.Content != null ? ToMaybeJsonDynamic(await Response.RequestMessage.Content.ReadAsStringAsync()) : null;
+                    var respData = ToMaybeJsonDynamic(await this.AsString());
+
+                    await this.Caller.Logging.FileSystem.WriteAllTextAsync(
+                        $"{this.Caller.Logging.RelativePath}/{DateTime.UtcNow:yyyyMMddHHmmssfff}{IntEx.GenerateShortRid()}-{(int)StatusCode}-{this.Response.RequestMessage.Method}-{this.Response.RequestMessage.RequestUri.PathAndQuery.Replace("/", "-").RegExReplace("\\W", "-")}.json",
+                        JsonConvert.SerializeObject(new {
+                            Method = Response.RequestMessage.Method.ToString(),
+                            Uri = Response.RequestMessage.RequestUri.ToString(),
+                            StatusCode = (int)StatusCode,
+                            RequestHeaders = Caller.Logging.IncludeRequestHeaders ? Response.RequestMessage.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
+                            ResponseHeaders = Caller.Logging.IncludeResponseHeaders ? Response.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
+                            Envio = postData,
+                            Retorno = respData
+                        }, LoggerSerializerSettings)
+                    );
+                } catch(Exception x) {
+                    Fi.Tech.Throw(x);
+                }
+            }
 
             foreach (var header in resp.Headers) {
                 string key = header.Key;
@@ -205,6 +252,8 @@ namespace Figlotech.Core {
         ) {
             Timeout = TimeSpan.FromMinutes(120),
         };
+
+        public FiHttpRequestLogging Logging { get; set; } = null;
 
         public bool IgnoreBadCertificates { get; set; } = false;
         internal static SelfInitializedCache<string, HttpClient> clientCache = new SelfInitializedCache<string, HttpClient>(
@@ -564,7 +613,7 @@ namespace Figlotech.Core {
                     }
                 });
             }
-            req.Headers.Add("User-Agent", UserAgent);
+            req.Headers.Add("User-Agent", $"{UserAgent}");
             if (!SyncKeyCodePassword.IsNullOrEmpty()) {
                 var hsc = HourlySyncCode.Generate(SyncKeyCodePassword).ToString();
                 req.Headers.Add("sync-key", hsc);
@@ -579,7 +628,8 @@ namespace Figlotech.Core {
             }
         }
 
-        public string UserAgent { get; set; } = "Figlotech Http Abstraction on netstandard2.1";
+        public static string DefaultUserAgent = "Figlotech Http Abstraction on netstandard2.1";
+        public string UserAgent { get; set; } = DefaultUserAgent;
 
         public string this[string k] {
             get {

@@ -1,4 +1,7 @@
+using Figlotech.Core.Extensions;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -37,6 +40,7 @@ namespace Figlotech.Core {
         public WorkJob WorkJob { get; internal set; }
         public CancellationTokenSource Cancellation { get; internal set; }
         public CancellationToken RequestCancellation { get; internal set; }
+        public Activity LoggingActivity { get; set; }
 
         private bool _disposed;
         public WorkJobExecutionRequest(WorkJob job, CancellationToken? requestCancellation = null) {
@@ -89,6 +93,8 @@ namespace Figlotech.Core {
         public void Dispose() {
             if(!_disposed) {
                 Cancellation.Dispose();
+                LoggingActivity?.Dispose();
+                _disposed = true;
             }
         }
 
@@ -107,8 +113,10 @@ namespace Figlotech.Core {
 
         public String Name { get; set; } = null;
         public String Description { get; set; } = null;
-
+        public bool AllowTelemetry { get; set; } = true;
         public string SchedulingStackTrace { get; internal set; }
+
+        public Dictionary<string, object> AdditionalTelemetryTags { get; private set; } = new Dictionary<string, object>();
 
         public ValueTask ActionTask { get; internal set; }
 
@@ -136,7 +144,6 @@ namespace Figlotech.Core {
         public string[] EnqueuingContextStackTrace { get; set; }
         public decimal TimeInExecution { get; set; }
         public string SchedulingContextStackTrace { get; set; }
-
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
             EnqueuedAt = x.EnqueuedTime;
@@ -155,8 +162,9 @@ namespace Figlotech.Core {
 
     public sealed class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
-        private int QID = ++qid_increment;
-        public String Name;
+        private int __qid = ++qid_increment;
+        public int QID => __qid;
+        public string Name { get;set; }
 
         public event Func<WorkJobExecutionRequest, Task> OnWorkEnqueued;
         public event Func<WorkJobExecutionRequest, Task> OnWorkDequeued;
@@ -164,6 +172,8 @@ namespace Figlotech.Core {
         public event Func<WorkJobExecutionRequest, Exception, Exception, Task> OnExceptionInHandler;
 
         Timer KeepAliveTimer;
+
+        public Dictionary<string, object> DefaultLoggingTags { get; private set; } = new Dictionary<string, object>();
 
         Queue<WorkJobExecutionRequest> WorkQueue = new Queue<WorkJobExecutionRequest>();
         List<WorkJobExecutionRequest> HeldJobs = new List<WorkJobExecutionRequest>();
@@ -293,8 +303,7 @@ namespace Figlotech.Core {
         public int InQueue { get; private set; } = 0;
         public int Cancelled { get; private set; } = 0;
 
-
-        private AtomicList<Task> Tasks = new AtomicList<Task>();
+        private List<Task> Tasks = new List<Task>();
 
         public WorkJobExecutionStat[] ActiveTaskStat() {
             lock (WorkQueue) {
@@ -313,6 +322,24 @@ namespace Figlotech.Core {
             request.TimeInQueueCounter = new Stopwatch();
             request.TimeInQueueCounter.Start();
             request.WorkQueuer = this;
+
+            if(job.Name is null) {
+                Debugger.Break();
+            }
+
+            if(job.AllowTelemetry) {
+                request.LoggingActivity = Fi.Tech.CreateTelemetryActivity(job?.Name ?? "Unnamed Task", ActivityKind.Internal);
+                if (request.LoggingActivity != null) {
+                    foreach (var (k, v) in DefaultLoggingTags) {
+                        request.LoggingActivity?.AddTag(k, v);
+                    }
+                    foreach (var (k, v) in job.AdditionalTelemetryTags) {
+                        request.LoggingActivity?.AddTag(k, v);
+                    }
+                }
+                request.LoggingActivity?.AddTag("WorkQueuer", this.Name);
+            }
+
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(request);
@@ -381,6 +408,8 @@ namespace Figlotech.Core {
                         Exception exception = null;
                         Executing++;
                         try {
+                            job.LoggingActivity?.Start();
+                            job.LoggingActivity?.SetStartTime(DateTime.UtcNow);
                             job.DequeuedTime = DateTime.UtcNow;
                             job._tcsNotifyDequeued.TrySetResult(0);
                             job.Status = WorkJobRequestStatus.Running;
@@ -390,6 +419,8 @@ namespace Figlotech.Core {
                                 }
                                 await job.WorkJob.ActionTask.ConfigureAwait(false);
                                 job.Status = WorkJobRequestStatus.Finished;
+                                job.LoggingActivity?.SetStatus(ActivityStatusCode.Ok);
+                                job.LoggingActivity?.SetEndTime(DateTime.UtcNow);
                             }
                             if (job.WorkJob.finished != null) {
                                 try {
@@ -402,6 +433,11 @@ namespace Figlotech.Core {
                             Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} executed OK");
                         } catch (Exception x) {
                             job.Status = WorkJobRequestStatus.Failed;
+                            job.LoggingActivity?.AddTag("Exception",
+                                JsonConvert.SerializeObject(ExceptionExtensions.ToRecursiveInnerExceptions(x))
+                            );
+                            job.LoggingActivity?.SetStatus(ActivityStatusCode.Error);
+                            job.LoggingActivity?.SetEndTime(DateTime.UtcNow);
                             var wrappedException = new WorkJobException("Error Executing WorkJob", job, x);
                             if (job.WorkJob.handling != null) {
                                 try {
@@ -446,6 +482,7 @@ namespace Figlotech.Core {
                                         Cancelled++;
                                     }
                                     job.Cancellation.Dispose();
+                                    job.LoggingActivity?.Dispose();
                                     Executing--;
                                     job.TimeToComplete = sw.Elapsed;
                                     if (exception != null) {

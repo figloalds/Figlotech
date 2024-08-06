@@ -4,6 +4,7 @@ using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -118,7 +119,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
-        static AtomicDictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new AtomicDictionary<string, Dictionary<string, (int[], string[])>>();
+        static ConcurrentDictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new ConcurrentDictionary<string, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
@@ -303,7 +304,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         .GroupBy(i => i.Item1);
                         var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
 
-                        _autoAggregateCache.Add(jstr, newEntry);
+                        _autoAggregateCache[jstr] = newEntry;
                     }
                 }
                 Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
@@ -404,7 +405,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         .GroupBy(i => i.Item1);
                         var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
 
-                        _autoAggregateCache.Add(jstr, newEntry);
+                        _autoAggregateCache[jstr] = newEntry;
                     }
                 }
                 Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
@@ -522,7 +523,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             .GroupBy(i => i.Item1);
                             var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
 
-                            _autoAggregateCache.Add(jstr, newEntry);
+                            _autoAggregateCache[jstr] = newEntry;
                         }
                     }
                     Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));

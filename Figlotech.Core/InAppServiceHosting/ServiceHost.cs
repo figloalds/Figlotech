@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,9 +11,9 @@ namespace Figlotech.Core.InAppServiceHosting {
         public static ServiceHost Default { get; set; } = new ServiceHost();
 
         private List<IFthService> Services { get; set; } = new List<IFthService>();
-        AtomicDictionary<IFthService, Thread> ServiceThreads = new AtomicDictionary<IFthService, Thread>();
-        AtomicDictionary<IFthService, FthServiceInfo> ServiceInfos = new AtomicDictionary<IFthService, FthServiceInfo>();
-        AtomicDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new AtomicDictionary<IFthService, CancellationTokenSource>();
+        ConcurrentDictionary<IFthService, Thread> ServiceThreads = new ConcurrentDictionary<IFthService, Thread>();
+        ConcurrentDictionary<IFthService, FthServiceInfo> ServiceInfos = new ConcurrentDictionary<IFthService, FthServiceInfo>();
+        ConcurrentDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new ConcurrentDictionary<IFthService, CancellationTokenSource>();
 
         public IFthService InitService<T>(params object[] args) {
             return InitService(typeof(T), args);
@@ -90,9 +91,9 @@ namespace Figlotech.Core.InAppServiceHosting {
                     if (ServiceThreads[service].IsAlive) {
                         ServiceThreads[service].Interrupt();
                     }
-                    ServiceThreads.Remove(service);
-                    ServiceInfos.Remove(service);
-                    CyclicServiceIterationResets.Remove(service);
+                    ServiceThreads.TryRemove(service, out _);
+                    ServiceInfos.TryRemove(service, out _);
+                    CyclicServiceIterationResets.TryRemove(service, out _);
                 }
             }
         }

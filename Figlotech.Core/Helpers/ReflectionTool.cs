@@ -19,6 +19,9 @@ namespace Figlotech.Core.Helpers {
         public static bool DerivesFromGeneric(this Type t, Type ancestorType) {
             return ReflectionTool.TypeDerivesFromGeneric(t, ancestorType);
         }
+        public static Type AsDerivingFromGeneric(this Type t, Type ancestorType) {
+            return ReflectionTool.TypeAsDerivingFromGeneric(t, ancestorType);
+        }
         public static MemberInfo[] GetFieldsAndProperties(this Type t) {
             return ReflectionTool.FieldsAndPropertiesOf(t);
         }
@@ -128,6 +131,16 @@ namespace Figlotech.Core.Helpers {
             return
                 t != null && t != typeof(Object) &&
                 (t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType));
+        }
+        public static Type? TypeAsDerivingFromGeneric(Type t, Type ancestorType) {
+            if(t == typeof(Object)) {
+                return null;
+            }
+            return (t != null && t != typeof(Object)) &&
+                (
+                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType
+                    
+                ) ? t : TypeAsDerivingFromGeneric(t.BaseType, ancestorType);
         }
         public static bool TypeDerivesFromGeneric(Type t, Type ancestorType) {
             return

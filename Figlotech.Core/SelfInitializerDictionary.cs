@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
-        AtomicDictionary<TKey, TValue> _dmmy = new AtomicDictionary<TKey, TValue>();
+        ConcurrentDictionary<TKey, TValue> _dmmy = new ConcurrentDictionary<TKey, TValue>();
         Func<TKey, TValue> SelfInitFn { get; set; }
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
@@ -40,7 +41,7 @@ namespace Figlotech.Core {
             lock (this) {
                 var init = SelfInitFn(key);
                 if (AllowNullValueCaching || init != null) {
-                    _dmmy.Add(key, init);
+                    _dmmy[key] = init;
                 }
                 return init;
             }

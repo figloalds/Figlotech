@@ -68,9 +68,9 @@ namespace Figlotech.Core {
         }
 
         public byte[] ToByteArray() {
-            byte[] retv = digits.ToArray();
+            var retv = digits.AsSpan(0, digitCursor);
             retv.Reverse();
-            return retv;
+            return retv.ToArray();
         }
 
         public IntEx(string number, string Base) {
@@ -78,21 +78,34 @@ namespace Figlotech.Core {
             digitCursor = 0;
             isNegative = number.StartsWith("-");
             if (isNegative)
-                number = new string(number.Skip(1).ToArray());
-            List<char> inputDigits = new List<char>();
-            inputDigits.AddRange(number.ToCharArray());
-            inputDigits.Reverse();
-            IntEx retv = 0;
-            IntEx multi = 1;
-            for (int i = 0; i < inputDigits.Count; i++) {
-                if (!Base.Contains(inputDigits[i]))
-                    continue;
-                retv += Base.IndexOf(inputDigits[i]) * multi;
-                multi *= Base.Length;
-            }
-            digits = retv.digits;
-            this.digitCursor = retv.digitCursor;
+                number = number.Substring(1);
+
+            var v = StringToBigInteger(number, Base);
+            this.digits = v.ToByteArray();
+            this.digitCursor = v.ToByteArray().Length;
         }
+
+        public static BigInteger StringToBigInteger(string value, string Base = "0123456789") {
+            if (string.IsNullOrEmpty(value))
+                throw new ArgumentException("Value cannot be null or empty", nameof(value));
+
+            if (string.IsNullOrEmpty(Base))
+                throw new ArgumentException("Base cannot be null or empty", nameof(Base));
+
+            BigInteger result = BigInteger.Zero;
+            BigInteger baseLength = new BigInteger(Base.Length);
+
+            foreach (char c in value) {
+                int digitValue = Base.IndexOf(c);
+                if (digitValue < 0)
+                    throw new ArgumentException($"Invalid character '{c}' for base {Base}");
+
+                result = result * baseLength + digitValue;
+            }
+
+            return result;
+        }
+
         private static int sequentia = 0;
         private static int _runtimeHash = -1;
         private static int RuntimeHash {

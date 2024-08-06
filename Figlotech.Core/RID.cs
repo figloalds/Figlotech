@@ -348,6 +348,12 @@ namespace Figlotech.Core {
         public static implicit operator String(RID a) {
             return a.AsBase64;
         }
+        public static implicit operator byte[](RID a) {
+            return a.AsByteArray;
+        }
+        public static implicit operator RID(String a) {
+            return new RID(Convert.FromBase64String(a));
+        }
 
     }
 }

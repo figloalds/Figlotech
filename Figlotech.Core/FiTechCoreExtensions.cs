@@ -24,6 +24,7 @@ using Figlotech.Core.Autokryptex;
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
 using System.Data.Common;
+using Microsoft.Extensions.Logging;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -90,6 +91,7 @@ namespace Figlotech.Core {
 
     public sealed class ScheduledWorkJob
     {
+        public string Key => Queuer != null ? $"{Queuer.QID}_{Identifier}" : Identifier;
         public WorkQueuer Queuer { get; set; }
         public WorkJob WorkJob { get; set; }
         public DateTime ScheduledTime { get; set; }
@@ -99,6 +101,7 @@ namespace Figlotech.Core {
         public bool IsActive { get; internal set; } = true;
         public string SchedulingStackTrace { get; internal set; }
         public CancellationTokenSource Cancellation { get; internal set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         ~ScheduledWorkJob() {
             try {
@@ -118,7 +121,7 @@ namespace Figlotech.Core {
 
         private static int _generalId = 0;
 
-        public static ILogger ApiLogger;
+        public static ITextToFileLogger ApiLogger;
         public static bool EnableDebug { get; set; } = false;
 
         public static object Null(this Fi _selfie) {
@@ -441,26 +444,22 @@ namespace Figlotech.Core {
             return value;
         }
 
-        static List<ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new List<ScheduledWorkJob>();
+        static Dictionary<string, ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new Dictionary<string, ScheduledWorkJob>();
 
         private static void Reschedule(ScheduledWorkJob sched) {
             lock (sched) {
                 if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
                     var nextRun = sched.ScheduledTime;
-                    while (nextRun < Fi.Tech.GetUtcTime()) {
-                        nextRun += sched.RecurrenceInterval.Value;
+                    var now = DateTime.UtcNow;
+                    if(now > nextRun) {
+                        var diff = now - nextRun;
+                        var interval = sched.RecurrenceInterval.Value;
+                        var times = (int)(diff.TotalMilliseconds / interval.TotalMilliseconds);
+                        nextRun = nextRun.AddMilliseconds(interval.TotalMilliseconds * (times + 1));
                     }
-                    try {
-                        sched.Timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-                    } catch (Exception x) {
 
-                    }
-                    try {
-                        sched.Timer?.Dispose();
-                    } catch (Exception x) {
-
-                    }
-                    sched.Timer = new Timer(_timerFn, sched, (int)Math.Max(0.0, (nextRun - Fi.Tech.GetUtcTime()).TotalMilliseconds), System.Threading.Timeout.Infinite);
+                    sched.ScheduledTime = nextRun;
+                    ResetTimer(sched);
                 }
             }
         }
@@ -473,28 +472,30 @@ namespace Figlotech.Core {
             if(!sched.Queuer.Active) {
                 return;
             }
-            var millisDiff = (sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
+            var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
-            if (millisDiff > 5000) {
-                if (Debugger.IsAttached && DebugSchedules) {
-                    Debugger.Break();
+            if (millisDiff < 100) {
+                if(sched.WorkJob.SchedulingStackTrace == null) {
+                    sched.WorkJob.SchedulingStackTrace = sched.SchedulingStackTrace;
                 }
-            } else {
                 request = sched.Queuer.Enqueue(
-                    new WorkJob(sched.WorkJob.action, sched.WorkJob.handling, sched.WorkJob.finished) {
-                        Name = sched.WorkJob.Name,
-                        SchedulingStackTrace = sched.SchedulingStackTrace
-                    }, sched.Cancellation.Token
+                    sched.WorkJob, sched.Cancellation.Token
                 );
-            }
-            if (request == null) {
-                Fi.Tech.ScheduleTask(sched);
-            } else {
-                if (sched.RecurrenceInterval.HasValue) {
-                    request.GetAwaiter().OnCompleted(() => {
+                request.GetAwaiter().OnCompleted(() => {
+                    if (sched.RecurrenceInterval.HasValue) {
                         Reschedule(sched);
-                    });
-                }
+                    } else {
+                        try {
+                            sched.Timer?.Dispose();
+                        } catch (Exception x) {
+                        }
+                        lock (GlobalScheduledJobs) {
+                            GlobalScheduledJobs.Remove(sched.Key);
+                        }
+                    }
+                });
+            } else {
+                ResetTimer(sched);
             }
         }
 
@@ -503,25 +504,60 @@ namespace Figlotech.Core {
         }
         public static bool DebugSchedules { get; set; } = false;
 
+        public sealed class FiTechSchedulerStats {
+            public string Key { get; set; }
+            public DateTime Created { get; set; } 
+            public DateTime Next { get; set; }
+            public TimeSpan? Recurrence { get; set; }
+            public int QueuerId { get; set; }
+        }
+        public static FiTechSchedulerStats[] GetSchedulerStats(this Fi _selfie) {
+            lock(GlobalScheduledJobs) {
+                var retv = new FiTechSchedulerStats[GlobalScheduledJobs.Count];
+                var keys = GlobalScheduledJobs.Keys.ToList();
+                for(int i = 0; i < keys.Count; i++) {
+                    retv[i] = new FiTechSchedulerStats {
+                        Key = keys[i],
+                        Created = GlobalScheduledJobs[keys[i]].Created,
+                        Next = GlobalScheduledJobs[keys[i]].ScheduledTime,
+                        Recurrence = GlobalScheduledJobs[keys[i]].RecurrenceInterval,
+                        QueuerId = GlobalScheduledJobs[keys[i]].Queuer.QID,
+                    };
+                }
+                
+                return retv;
+            }
+        }
+
+        private static void ResetTimer(ScheduledWorkJob sched) {
+            var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
+            var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
+            var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
+            if (sched.Timer != null) {
+                sched.Timer.Dispose();
+            }
+            sched.Timer = new Timer(_timerFn, sched, timeToFire, System.Threading.Timeout.Infinite);
+        }
+
         public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
+            if (sched.Cancellation.IsCancellationRequested) {
+                return;
+            }
+            if (!sched.Queuer.Active) {
+                return;
+            }
+            if(sched.WorkJob.Name == null) {
+                sched.WorkJob.Name = sched.Identifier;
+            }
             lock (GlobalScheduledJobs) {
-                if (sched.Cancellation.IsCancellationRequested) {
-                    return;
+                if (GlobalScheduledJobs.ContainsKey(sched.Key) && GlobalScheduledJobs[sched.Key] != sched) {
+                    UnscheduleByKey(_selfie, sched.Key);
                 }
-                if(!sched.Queuer.Active) {
-                    return;
-                }
-                if(sched.SchedulingStackTrace == null) {
+                if (sched.SchedulingStackTrace == null) {
                     sched.SchedulingStackTrace = new StackTrace().ToString();
                 }
-                var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
-                var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
-                var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
-                sched.Timer = new Timer(_timerFn, sched, timeToFire, System.Threading.Timeout.Infinite);
-                GlobalScheduledJobs.Add(sched);
-                if (Debugger.IsAttached && DebugSchedules) {
-                    Debugger.Break();
-                }
+                ResetTimer(sched);
+                GlobalScheduledJobs[sched.Key] = sched;
             }
         }
         public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, CancellationToken? cancellation = null) {
@@ -537,43 +573,51 @@ namespace Figlotech.Core {
         }
         public static void ClearSchedulesByWorker(this Fi _selfie, WorkQueuer instance, bool cancelRunning) {
             lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.RemoveAll(s => {
-                    if (s.Queuer != instance) {
-                        return false;
+                foreach(var k in GlobalScheduledJobs.Keys) {
+                    if (GlobalScheduledJobs[k].Queuer != instance) {
+                        continue;
                     }
-                    s.Timer.Dispose();
                     if (cancelRunning) {
-                        s.Cancellation.Cancel();
+                        GlobalScheduledJobs[k].Cancellation.Cancel();
                     }
-                    s.IsActive = false;
-                    return true;
-                });
+                    UnscheduleByKey(_selfie, k);
+                }
             }
         }
         public static void ClearSchedules(this Fi _selfie, bool cancelRunning = false) {
             lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.RemoveAll(s => {
-                    s.Timer.Dispose();
+                foreach (var k in GlobalScheduledJobs.Keys) {
                     if (cancelRunning) {
-                        s.Cancellation.Cancel();
+                        GlobalScheduledJobs[k].Cancellation.Cancel();
                     }
-                    s.IsActive = false;
-                    return true;
-                });
+                    UnscheduleByKey(_selfie, k);
+                }
             }
         }
 
-        public static void Unschedule(this Fi _selfie, string identifier) {
+        public static void Unschedule(this Fi _selfie, string identifier, WorkQueuer wq = null) {
             lock (GlobalScheduledJobs) {
-                GlobalScheduledJobs.RemoveAll(s => {
-                    if (s.Identifier == identifier) {
-                        s.Timer.Dispose();
-                        s.IsActive = false;
-                        return true;
-                    } else {
-                        return false;
+                if(wq != null) {
+                    UnscheduleByKey(_selfie, $"{wq.QID}_{identifier}");
+                    return;
+                }
+                foreach (var k in GlobalScheduledJobs.Keys) {
+                    if (GlobalScheduledJobs[k].Identifier != identifier) {
+                        continue;
                     }
-                });
+                    UnscheduleByKey(_selfie, k);
+                }
+            }
+        }
+
+        public static void UnscheduleByKey(this Fi _selfie, string k) {
+            lock (GlobalScheduledJobs) {
+                if (!GlobalScheduledJobs.ContainsKey(k)) {
+                    return;
+                }
+                GlobalScheduledJobs[k].Timer.Dispose();
+                GlobalScheduledJobs[k].IsActive = false;
+                GlobalScheduledJobs.Remove(k);
             }
         }
 
@@ -1398,9 +1442,38 @@ namespace Figlotech.Core {
             }
         }
 
-        public static Logger logger = new Logger(new FileAccessor(Environment.CurrentDirectory)) {
-            Filename = "fi_uncaughterrors.txt"
-        };
+        internal static ActivitySource LoggingActivitySource { get; private set; }
+        internal static ILoggerFactory LoggerFactory { get; private set; }
+
+        static Dictionary<string, object> DefaultLoggingTags { get; set; } = new Dictionary<string, object>();
+        public static bool IsTelemetryLoggingEnabled => LoggingActivitySource != null;
+        public static Activity CreateTelemetryActivity(this Fi _selfie, string name, ActivityKind whatKind = ActivityKind.Internal) {
+            var retv = LoggingActivitySource?.CreateActivity(name, whatKind);
+            if(retv == null) {
+                return null;
+            }
+            foreach(var item in DefaultLoggingTags) {
+                retv?.AddTag(item.Key, item.Value);
+            }
+            retv?.AddTag("MachineRID2", RID.MachineRID2.AsBase36);
+            retv?.AddTag("MachineName", Environment.MachineName);
+            return retv;
+        }
+
+        public static ILogger CreateTelemetryLogger(this Fi _selfie, string name) {
+            return LoggerFactory?.CreateLogger(name);
+        }
+
+        public static void ConfigureTelemetry(
+            this Fi _selfie, 
+            ActivitySource activitySource,
+            ILoggerFactory loggerFactory,
+            Dictionary<string, object> defaultTags
+        ) {
+            LoggingActivitySource = activitySource;
+            LoggerFactory = loggerFactory;
+            DefaultLoggingTags = defaultTags;
+        }
 
         public static void Error(this Fi _selfie, Exception x) {
             //logger.WriteLog(x);
@@ -1636,15 +1709,21 @@ namespace Figlotech.Core {
         static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
 
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
-            wj.WorkJob.Name = name;
+            var wj = FiTechFireTaskWorker.Enqueue(new WorkJob(
+                job, handler, then
+                ) {
+                Name = name
+            });
             FiTechFireTaskWorker.Start();
             return wj;
         }
 
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            var wj = FiTechFireTaskWorker.EnqueueTask(job, handler, then);
-            wj.WorkJob.Name = name;
+            var wj = FiTechFireTaskWorker.Enqueue(new WorkJob(
+                job, handler, then
+                ) {
+                Name = name
+            });
             FiTechFireTaskWorker.Start();
             return wj;
         }

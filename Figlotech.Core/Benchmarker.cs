@@ -109,8 +109,6 @@ namespace System {
             if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 yield break;
 
-            var lines = new List<String>();
-
             var retv = TotalTime(self);
             yield return ($"--------------------------");
             yield return ($"{self.myName}");
@@ -148,7 +146,7 @@ namespace System {
                     self.marks.Add(new TimeMark(initMark.Timestamp, self.myName));
                 self.marks.Add(new TimeMark(DateTime.UtcNow, "--- end"));
                 var retv = (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
-                if (self.WriteToStdout) {
+                if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut || self.WriteToStdout) {
                     lock ("BENCHMARKER BM_WRITE") {
                         foreach(var item in self.VerboseLog()) {
                             Console.WriteLine(item);
@@ -190,7 +188,7 @@ namespace System {
             marks.Add(new TimeMark(DateTime.UtcNow, myName));
         }
 
-        public bool WriteToStdout { get; set; } = true;
+        public bool WriteToStdout { get; set; } = false;
         public bool Active { get; set; } = true;
     }
 }

@@ -3,6 +3,7 @@ using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Figlotech.Data;
@@ -17,6 +18,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
@@ -40,6 +42,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         static long _idGen = 0;
 
+        public Activity LoggerActivity { get; set; }
+
         int WriteOperationsCount { get; set; }
 
         public long Id { get; private set; } = ++_idGen;
@@ -59,6 +63,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public BDadosTransaction(RdbmsDataAccessor rda, IDbConnection connection) {
             DataAccessor = rda;
             Connection = connection;
+            LoggerActivity = Fi.Tech.CreateTelemetryActivity($"Database Transaction", ActivityKind.Internal);
+            if(LoggerActivity != null) {
+                foreach(var (k, v) in rda.AdditionalTelemetryTags) {
+                    LoggerActivity.AddTag(k, v);
+                }
+                LoggerActivity?.Start();
+            }
             if (FiTechCoreExtensions.DebugConnectionLifecycle) {
                 lock (DebugOnlyGlobalTransactions)
                     DebugOnlyGlobalTransactions.Add(this);
@@ -328,6 +339,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await ApplySuccessActionsAsync().ConfigureAwait(false);
                 }
                 IsCommited = true;
+                LoggerActivity?.SetStatus(ActivityStatusCode.Ok);
                 if (ObjectsToNotify.Count > 0) {
                     lock (ObjectsToNotify) {
                         DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
@@ -391,6 +403,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Connection?.Dispose();
             }
             Connection = null;
+            if(!usingExternalBenchmarker) {
+                LoggerActivity?.AddTag("Status", string.Join("\r\n", Benchmarker?.VerboseLog()));
+            }
+            LoggerActivity?.SetEndTime(DateTime.UtcNow);
+            LoggerActivity?.Dispose();
+            LoggerActivity = null;
             lock (this.DataAccessor.ActiveConnections) {
                 this.DataAccessor.ActiveConnections.Remove(Id);
             }
@@ -402,11 +420,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Errored = false;
         internal void MarkAsErrored() {
             Errored = true;
+            LoggerActivity?.SetStatus(ActivityStatusCode.Error);
         }
 
         public void Throw(Exception x) {
             Errored = true;
-            throw new BDadosException("Transaction interruped by an error", x);
+            LoggerActivity?.AddTag("Exception",
+                JsonConvert.SerializeObject(ExceptionExtensions.ToRecursiveInnerExceptions(x))
+            );
+            throw Exception(x);
+        }
+
+        public Exception Exception<T>(T x) where T: Exception {
+            Errored = true;
+            if (x is MainLogicGeneratedException) {
+                return Activator.CreateInstance(x.GetType(), x.Message, x) as T;
+            }
+            return new BDadosException("Transaction interruped by an error", x);
         }
 
         public async Task AutoCommit() {
@@ -467,8 +497,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public Dictionary<long, BDadosTransaction> ActiveConnections = new Dictionary<long, BDadosTransaction>();
 
-        public ILogger Logger { get; set; }
-
+        public ITextToFileLogger Logger { get; set; }
         public static int DefaultMaxOpenAttempts { get; set; } = 5;
         public static int DefaultOpenAttemptInterval { get; set; } = 100;
         public string Description { get; set; }
@@ -481,6 +510,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 _workingTypes = value.Where(t => t.GetInterfaces().Contains(typeof(IDataObject))).ToArray();
             }
         }
+
+        public Dictionary<string, object> AdditionalTelemetryTags = new Dictionary<string, object>();
 
         internal void RaiseForChangeIn(IDataObject[] ido) {
             if (!ido.Any()) {
@@ -640,7 +671,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             await retv.BeginTransactionAsync(ilev).ConfigureAwait(false);
             retv.CancellationToken = cancellationToken;
             retv.StackTrace = trace;
-            retv.Benchmarker = bmark ?? Benchmarker ?? new Benchmarker("Database Access");
+            retv.Benchmarker = bmark ?? new Benchmarker("Database Access", FiTechCoreExtensions.IsTelemetryLoggingEnabled) {
+                Active = true
+            };
             retv.usingExternalBenchmarker = bmark != null;
             lock (ActiveConnections) {
                 ActiveConnections[retv.Id] = retv;
@@ -2553,7 +2586,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Construct Join Definition");
 
                 transaction?.Benchmarker?.Mark("Resolve ordering Member");
-                var om = GetOrderingMember(args.OrderingMember);
+                var om = GetOrderingMember<T>(x => x.Id);
                 transaction?.Benchmarker?.Mark("--");
 
                 using (var command = (DbCommand)transaction?.CreateCommand()) {
@@ -2564,7 +2597,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
 
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, args.OrderingType, builtConditionsRoot);
+                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, OrderingType.Asc, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark($"Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
@@ -2606,7 +2639,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         yield return item;
                     }
-                    transaction?.Benchmarker?.Mark($"Finished building the resultAggregateListDirect<{typeof(T).Name}> ({query.Id})");
+                    transaction?.Benchmarker?.Mark($"Finished building the result AggregateListDirect<{typeof(T).Name}> ({query.Id})");
                 }
             } else {
                 WriteLog(args.Conditions?.ToString());
