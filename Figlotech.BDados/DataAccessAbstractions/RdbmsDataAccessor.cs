@@ -208,7 +208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal DateTime? DisposedTime { get; private set; }
         internal TimeSpan TimeAlive => (DisposedTime ?? DateTime.UtcNow) - CreatedTime; 
         internal StackTrace StackTrace { get; set; }
-        internal CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+        public CancellationToken CancellationToken { get; internal set; } = CancellationToken.None;
 
         private void ApplySuccessActions() {
             Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
@@ -2560,10 +2560,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             LoadAllArgs<T> args = null) where T : IDataObject, new() {
             transaction.Step();
             args = args ?? new LoadAllArgs<T>();
-            var limit = args.RowLimit;
-            if (limit < 0) {
-                limit = DefaultQueryLimit;
-            }
+            int? queryLimit = args.Linear ? args.RowLimit : null; // args.RowLimit ?? DefaultQueryLimit;
+            
             transaction?.Benchmarker?.Mark($"Begin AggregateLoad<{typeof(T).Name}>");
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var prefixer = args.Linear ? CacheAutoPrefixerLinear[typeof(T)] : CacheAutoPrefixer[typeof(T)];
@@ -2587,6 +2585,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("Resolve ordering Member");
                 var om = GetOrderingMember<T>(x => x.Id);
+
                 transaction?.Benchmarker?.Mark("--");
 
                 using (var command = (DbCommand)transaction?.CreateCommand()) {
@@ -2597,7 +2596,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
 
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, args.RowSkip, limit, om, OrderingType.Asc, builtConditionsRoot);
+                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, null, queryLimit, om, args.OrderingType, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark($"Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
@@ -2629,7 +2628,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //})) {
                     //    yield return item;
                     //}
-
+                    var yieldedItems = 0;
+                    var rowSkip = args.RowSkip ?? 0;
                     await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
                         if (implementsAfterLoad) {
                             ((IBusinessObject)item).OnAfterLoad(dlc);
@@ -2637,7 +2637,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (implementsAfterAggregateLoad) {
                             await ((IBusinessObject<T>)item).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                         }
+                        if(rowSkip > 0) {
+                            rowSkip--;
+                            continue;
+                        }
                         yield return item;
+                        yieldedItems++;
+                        if(args.RowLimit.HasValue && yieldedItems >= args.RowLimit) {
+                            break;
+                        }
                     }
                     transaction?.Benchmarker?.Mark($"Finished building the result AggregateListDirect<{typeof(T).Name}> ({query.Id})");
                 }

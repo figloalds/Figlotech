@@ -387,7 +387,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
             }
 
-
             Query.Append(") AS sub\n");
 
             return Query;

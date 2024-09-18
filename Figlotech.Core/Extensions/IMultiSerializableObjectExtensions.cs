@@ -31,7 +31,7 @@ namespace Figlotech.Core.Extensions {
                 await StreamOptions
                     .Process(ms, async (usableStream) => {
                         await Task.Yield();
-                        usableStream.CopyTo(rawStream);
+                        await usableStream.CopyToAsync(rawStream);
                     });
             }
         }
