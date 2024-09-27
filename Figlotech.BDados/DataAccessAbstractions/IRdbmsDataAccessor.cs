@@ -26,10 +26,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         ValueTask EnsureDatabaseExistsAsync();
 
         int DefaultQueryLimit { get; set; }
-        void Access(Action<BDadosTransaction> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        T Access<T>(Func<BDadosTransaction, T> tryFun, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
-        ValueTask<T> AccessAsync<T>(Func<BDadosTransaction, ValueTask<T>> tryFun, CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted);
+        void Access(Action<BDadosTransaction> tryFun, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
+        T Access<T>(Func<BDadosTransaction, T> tryFun, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
+        ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> tryFun, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
+        ValueTask<T> AccessAsync<T>(Func<BDadosTransaction, ValueTask<T>> tryFun, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
 
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         
@@ -54,8 +54,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         IRdbmsDataAccessor Fork();
 
-        BDadosTransaction CreateNewTransaction(CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
-        ValueTask<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
+        BDadosTransaction CreateNewTransaction(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
+        
+        ValueTask<BDadosTransaction> CreateNonDbLevelTransaction(CancellationToken cancellationToken, Benchmarker bmark = null);
+
+        ValueTask<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
         void SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);

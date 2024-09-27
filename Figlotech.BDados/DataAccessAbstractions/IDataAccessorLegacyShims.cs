@@ -148,7 +148,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             where T : new() {
             return await self.AccessAsync(async tsn=> {
                 return await self.QueryAsync<T>(tsn, query).ConfigureAwait(false);
-            }, CancellationToken.None).ConfigureAwait(false);
+            }, CancellationToken.None, null).ConfigureAwait(false);
         }
 
         public static async Task<List<T>> LoadAllAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
@@ -160,7 +160,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .OrderBy(orderingMember, ordering)
                     .Using(transaction)
                     .LoadAsync().ConfigureAwait(false);
-            }, CancellationToken.None).ConfigureAwait(false);
+            }, CancellationToken.None, null).ConfigureAwait(false);
         }
 
         public static T LoadFirstOrDefault<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
@@ -221,7 +221,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         .GroupBy(GroupingMember)
                         .LinearIf(Linear)
                 ).ConfigureAwait(false);
-            }, CancellationToken.None).ConfigureAwait(false);
+            }, CancellationToken.None, null).ConfigureAwait(false);
         }
     }
 }

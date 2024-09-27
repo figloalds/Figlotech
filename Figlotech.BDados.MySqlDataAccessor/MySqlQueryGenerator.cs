@@ -397,44 +397,33 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new() {
-            var alias = "tba";
             QueryBuilder Query = new QueryBuilder();
-            if (!AutoSelectCache.ContainsKey(typeof(T))) {
-                QueryBuilder baseSelect = new QbFmt("SELECT ");
-                baseSelect.Append(GenerateFieldsString(typeof(T), false));
-                baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
-                AutoSelectCache[typeof(T)] = baseSelect;
-            }
-
             Query.Append(AutoSelectCache[typeof(T)]);
             return Query;
         }
 
-        static Dictionary<Type, QueryBuilder> AutoSelectCache = new Dictionary<Type, QueryBuilder>();
+        static MySqlQueryGenerator instance = new MySqlQueryGenerator();
+        static SelfInitializerDictionary<Type, QueryBuilder> AutoSelectCache = new SelfInitializerDictionary<Type, QueryBuilder>(
+            t=> {
+                QueryBuilder baseSelect = new QbFmt("SELECT ");
+                baseSelect.Append(instance.GenerateFieldsString(t, false));
+                baseSelect.Append(String.Format($"FROM {t.Name} AS tba"));
+                return baseSelect;
+            }
+        );
+
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             
-            var alias = "tba";
             QueryBuilder Query = new QueryBuilder();
             
-            lock(string.Intern($"MYSQL_SELECTS_{typeof(T).Name}")) {
-                if (!AutoSelectCache.ContainsKey(typeof(T))) {
-                    Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
-                    QueryBuilder baseSelect = new QbFmt("SELECT ");
-                    baseSelect.Append(GenerateFieldsString(typeof(T), false));
-                    baseSelect.Append(String.Format($"FROM {typeof(T).Name} AS { alias }"));
-                    AutoSelectCache.Add(typeof(T), baseSelect);
-                }
-
-                Query.Append(AutoSelectCache[typeof(T)]);
-            }
-
+            Query.Append(AutoSelectCache[typeof(T)]);
 
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
             }
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
+                Query.Append($"ORDER BY tba.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
             if (limit != null || skip != null) {
                 Query.Append($"LIMIT {(skip != null ? $"{skip}," : "")} {limit ?? Int32.MaxValue}");
@@ -623,9 +612,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
+        public static IQueryBuilder GenerateFieldsString_Static(Type type, bool ommitPk = false) {
+            QueryBuilder sb = new QueryBuilder();
+            var fields = MemberFields[type];
+            for (int i = 0; i < fields.Length; i++) {
+                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                    continue;
+                if (!sb.IsEmpty)
+                    sb.Append(", ");
+                sb.Append(fields[i].Name);
+            }
+            return sb;
+        }
+
         public IQueryBuilder GenerateFieldsString(Type type, bool ommitPk = false) {
             QueryBuilder sb = new QueryBuilder();
-            var fields = GetMembers(type);
+            var fields = MemberFields[type];
             for (int i = 0; i < fields.Length; i++) {
                 if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
                     continue;
@@ -741,26 +743,13 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
         }
 
-        static Dictionary<Type, MemberInfo[]> MemberFields = new Dictionary<Type, MemberInfo[]>();
-        private MemberInfo[] GetMembers(Type t) {
-            lock(MemberFields) {
-                if(!MemberFields.ContainsKey(t)) {
-                    MemberFields[t] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(t).Select(x => x.Member).ToArray();
-                }
-                return MemberFields[t];
+        static SelfInitializerDictionary<Type, MemberInfo[]> MemberFields = new SelfInitializerDictionary<Type, MemberInfo[]>(
+            t => {
+                return ReflectionTool.GetAttributedMemberValues<FieldAttribute>(t).Select(x => x.Member).ToArray();
             }
-            //List<MemberInfo> lifi = new List<MemberInfo>();
-            //var members = ReflectionTool.FieldsAndPropertiesOf(t);
-            //foreach (var fi in members
-            //    .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
-            //    .ToArray()) {
-            //    foreach (var at in fi.CustomAttributes) {
-            //        if (at.AttributeType == typeof(FieldAttribute)) {
-            //            lifi.Add(fi);
-            //        }
-            //    }
-            //}
-            //return lifi;
+        );
+        private MemberInfo[] GetMembers(Type t) {
+            return MemberFields[t];
         }
 
         public IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new() {
