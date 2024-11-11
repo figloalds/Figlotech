@@ -327,19 +327,6 @@ namespace Figlotech.Core {
                 Debugger.Break();
             }
 
-            if(job.AllowTelemetry) {
-                request.LoggingActivity = Fi.Tech.CreateTelemetryActivity(job?.Name ?? "Unnamed Task", ActivityKind.Internal);
-                if (request.LoggingActivity != null) {
-                    foreach (var (k, v) in DefaultLoggingTags) {
-                        request.LoggingActivity?.AddTag(k, v);
-                    }
-                    foreach (var (k, v) in job.AdditionalTelemetryTags) {
-                        request.LoggingActivity?.AddTag(k, v);
-                    }
-                }
-                request.LoggingActivity?.AddTag("WorkQueuer", this.Name);
-            }
-
             if (Active) {
                 lock (WorkQueue) {
                     WorkQueue.Enqueue(request);
@@ -397,7 +384,22 @@ namespace Figlotech.Core {
                     } while(job != null);
                 }
                 if (job != null) {
+
                     return ThreadPool.UnsafeQueueUserWorkItem(async _ => {
+
+                        if (job.WorkJob.AllowTelemetry) {
+                            job.LoggingActivity = Fi.Tech.CreateTelemetryActivity(job.WorkJob?.Name ?? "Unnamed Task", ActivityKind.Internal);
+                            if (job.LoggingActivity != null) {
+                                foreach (var (k, v) in DefaultLoggingTags) {
+                                    job.LoggingActivity?.AddTag(k, v);
+                                }
+                                foreach (var (k, v) in job.WorkJob.AdditionalTelemetryTags) {
+                                    job.LoggingActivity?.AddTag(k, v);
+                                }
+                            }
+                            job.LoggingActivity?.AddTag("WorkQueuer", this.Name);
+                        }
+
                         job.TimeInQueueCounter.Stop();
                         job.TimeInQueue = TimeSpan.FromMilliseconds(job.TimeInQueueCounter.ElapsedMilliseconds);
                         this.OnWorkDequeued?.Invoke(job);
