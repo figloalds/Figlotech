@@ -66,12 +66,26 @@ namespace Figlotech.Core.Autokryptex
             lock (Cache)
                 cachedRids = Cache.Select(c => c.RID).ToList();
             var newList = new List<SafeDataPayload>();
-            fileSystem.ForFilesIn("", rid => {
+            foreach(var rid in fileSystem.GetFilesIn("")) {
                 if (cachedRids.Contains(rid)) {
                     return;
                 }
-                _cachePayload(_getPayloadFromFile(rid));
-            });
+                var tries = 3;
+                while(tries-- > 0) {
+                    try {
+                        _cachePayload(_getPayloadFromFile(rid));
+                        break;
+                    } catch(Exception x) {
+                        try {
+                            Fi.Tech.FireAndForget(async () => {
+                                await fileSystem.DeleteAsync(rid);
+                            });
+                        } catch(Exception ex) { 
+                        
+                        }
+                    }
+                }
+            }
             lock (Cache) {
                 Cache.Sort((a, b) =>
                     a.CreatedTime > b.CreatedTime ? 1 :

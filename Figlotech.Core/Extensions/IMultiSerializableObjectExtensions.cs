@@ -22,7 +22,11 @@ namespace Figlotech.Core.Extensions {
             if (obj == null)
                 return;
             using (var ms = new MemoryStream()) {
-                var json = JsonConvert.SerializeObject(obj, options.Formatted ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
+                var json = JsonConvert.SerializeObject(obj, new JsonSerializerSettings {
+                    Formatting = options.Formatted ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None,
+                    NullValueHandling = NullValueHandling.Ignore,
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                });
 
                 ms.Write(json);
                 ms.Seek(0, SeekOrigin.Begin);
