@@ -450,8 +450,8 @@ namespace Figlotech.Core {
             lock (sched) {
                 if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
                     var nextRun = sched.ScheduledTime;
-                    var now = DateTime.UtcNow;
-                    if(now > nextRun) {
+                    var now = DateTime.UtcNow + TimeSpan.FromMilliseconds(100);
+                    if(now >= nextRun) {
                         var diff = now - nextRun;
                         var interval = sched.RecurrenceInterval.Value;
                         var times = (int)(diff.TotalMilliseconds / interval.TotalMilliseconds);
