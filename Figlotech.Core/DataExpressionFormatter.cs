@@ -22,10 +22,6 @@ namespace Figlotech.Core
         private readonly Dictionary<string, IExpressionFilter> _filterDictionary;
         private static readonly Regex DoubleBracketRegex = new Regex(@"\[\[([^\[\]]*)\]\]", RegexOptions.Compiled);
         private static readonly Regex DoubleCurlyBraceRegex = new Regex(@"\{\{([^\{\}]*)\}\}", RegexOptions.Compiled);
-        private static readonly Regex MathRegexExponent = new Regex(@"([\d\.\,]{1,})([\^])(([\d\.\,]{1,}))", RegexOptions.Compiled);
-        private static readonly Regex MathRegexMultiplyDivide = new Regex(@"([\d\.\,]{1,})([*/])([\d\.\,]{1,})", RegexOptions.Compiled);
-        private static readonly Regex MathRegexAddSubtract = new Regex(@"([\d\.\,]{1,})([+\-])([\d\.\,]{1,})", RegexOptions.Compiled);
-        private readonly ConcurrentDictionary<string, string> _expressionCache = new();
 
         public DataExpressionFormatter(params IExpressionFilter[] filters) {
             _filterDictionary = filters.ToDictionary(
@@ -89,36 +85,33 @@ namespace Figlotech.Core
         }
 
         public string Format(object input, string expression) {
-            return _expressionCache.GetOrAdd(expression, expr =>
-            {
-                var sb = new StringBuilder(expr);
-                // Handle [[...]] replacements
-                foreach (Match match in DoubleBracketRegex.Matches(sb.ToString())) {
-                    var parsed = Format(input, match.Groups[1].Value);
-                    var mathablePart = parsed;
-                    string replacement;
+            var sb = new StringBuilder(expression);
+            // Handle [[...]] replacements
+            foreach (Match match in DoubleBracketRegex.Matches(sb.ToString())) {
+                var parsed = Format(input, match.Groups[1].Value);
+                var mathablePart = parsed;
+                string replacement;
 
-                    if (mathablePart.Contains('|')) {
-                        var idx = mathablePart.IndexOf('|');
-                        var mathable = mathablePart.Substring(0, idx);
-                        var rest = mathablePart.Substring(idx + 1);
-                        mathable = RunMaths(mathable);
-                        replacement = Parse(input, mathable + "|" + rest) ?? string.Empty;
-                    } else {
-                        replacement = RunMaths(mathablePart);
-                    }
-
-                    sb.Replace(match.Value, replacement);
+                if (mathablePart.Contains('|')) {
+                    var idx = mathablePart.IndexOf('|');
+                    var mathable = mathablePart.Substring(0, idx);
+                    var rest = mathablePart.Substring(idx + 1);
+                    mathable = RunMaths(mathable);
+                    replacement = Parse(input, mathable + "|" + rest) ?? string.Empty;
+                } else {
+                    replacement = RunMaths(mathablePart);
                 }
 
-                // Handle {{...}} replacements
-                foreach (Match match in DoubleCurlyBraceRegex.Matches(sb.ToString())) {
-                    var parsed = Parse(input, match.Groups[1].Value) ?? string.Empty;
-                    sb.Replace(match.Value, parsed);
-                }
+                sb.Replace(match.Value, replacement);
+            }
 
-                return sb.ToString();
-            });
+            // Handle {{...}} replacements
+            foreach (Match match in DoubleCurlyBraceRegex.Matches(sb.ToString())) {
+                var parsed = Parse(input, match.Groups[1].Value) ?? string.Empty;
+                sb.Replace(match.Value, parsed);
+            }
+
+            return sb.ToString();
         }
     }
 }
