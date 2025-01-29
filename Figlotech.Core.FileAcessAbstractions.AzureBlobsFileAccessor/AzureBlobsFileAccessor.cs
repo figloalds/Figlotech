@@ -191,7 +191,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     };
                 }
             } catch (StorageException sex) {
-                Console.WriteLine(sex); // lmao
+                Console.WriteLine(sex); // nice
             } catch (Exception ex) {
                 Console.WriteLine(ex);
             }

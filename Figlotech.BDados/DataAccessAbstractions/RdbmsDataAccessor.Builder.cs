@@ -283,6 +283,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
+                if((transaction?.CancellationToken.IsCancellationRequested) ?? false) {
+                    throw transaction.Exception(new TaskCanceledException("Task was cancelled"));
+                }
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
                 var jstr = String.Intern(join.ToString());

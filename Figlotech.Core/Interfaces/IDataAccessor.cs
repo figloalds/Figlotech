@@ -77,7 +77,7 @@ namespace Figlotech.Core.Interfaces {
         }
     }
 
-    public sealed class IntermediateLoadAllArgs<T> where T : IDataObject, new() {
+    public class IntermediateLoadAllArgs<T> where T : IDataObject, new() {
         public IntermediateLoadAllArgs(IDataAccessor dataAccessor, LoadAllArgs<T> largs) {
             DataAccessor = dataAccessor;
             LoadAllArgs = largs;

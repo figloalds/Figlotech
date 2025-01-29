@@ -57,7 +57,7 @@ namespace Figlotech.Core.DomainEvents {
             MainQueuer = queuer ?? FiTechCoreExtensions.GlobalQueuer;
         }
 
-        public bool EnableEventCache { get; set; } = true;
+        public bool EnableEventCache { get; set; } = false;
         private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
         private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
         public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
@@ -170,23 +170,25 @@ namespace Figlotech.Core.DomainEvents {
                 if (t != null && t.GetGenericArguments().First() != domainEvent.GetType()) {
                     continue;
                 }
-                MainQueuer.Enqueue(new WorkJob(async () => {
-                    await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
-                    if (domainEvent.AllowPropagation) {
-                        parentHub?.Raise(domainEvent);
-                    }
-                }, async x=> {
-                    try {
-                        await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
-                    } catch (Exception y) {
-                        Fi.Tech.Throw(x);
-                    }
-                }, (b)=> {
-                    return Fi.Result();
-                }) { 
-                    Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
-                    AllowTelemetry = AllowTelemetry,
-                });
+                if(MainQueuer != null) {
+                    _ = MainQueuer.Enqueue(new WorkJob(async () => {
+                        await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
+                        if (domainEvent.AllowPropagation) {
+                            parentHub?.Raise(domainEvent);
+                        }
+                    }, async x=> {
+                        try {
+                            await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
+                        } catch (Exception y) {
+                            Fi.Tech.Throw(x);
+                        }
+                    }, (b)=> {
+                        return Fi.Result();
+                    }) { 
+                        Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
+                        AllowTelemetry = AllowTelemetry,
+                    });
+                }
             }
 
             if(EnableEventCache) {
@@ -243,11 +245,15 @@ namespace Figlotech.Core.DomainEvents {
                         return events;
                     }
 
-                    var wh = CancelationTokenSource;
-                    try {
-                        await Task.Delay(maximumPollTime, CancelationTokenSource.Token).ConfigureAwait(false);
-                    } catch(Exception x) {
+                    if(maximumPollTime > TimeSpan.Zero) {
+                        var wh = CancelationTokenSource;
+                        try {
+                            await Task.Delay(maximumPollTime, CancelationTokenSource.Token).ConfigureAwait(false);
+                        } catch(Exception x) {
 
+                        }
+                    } else {
+                        break;
                     }
                 } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
                 flushOrder.IsReleased = true;

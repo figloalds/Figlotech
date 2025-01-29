@@ -95,6 +95,7 @@ namespace Figlotech.Core {
         public WorkQueuer Queuer { get; set; }
         public WorkJob WorkJob { get; set; }
         public DateTime ScheduledTime { get; set; }
+        public DateTime LastExecuted { get; set; }
         public TimeSpan? RecurrenceInterval { get; set; }
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
@@ -457,7 +458,6 @@ namespace Figlotech.Core {
                         var times = (int)(diff.TotalMilliseconds / interval.TotalMilliseconds);
                         nextRun = nextRun.AddMilliseconds(interval.TotalMilliseconds * (times + 1));
                     }
-
                     sched.ScheduledTime = nextRun;
                     ResetTimer(sched);
                 }
@@ -472,6 +472,16 @@ namespace Figlotech.Core {
             if(!sched.Queuer.Active) {
                 return;
             }
+            //lock(sched) {
+            //    if(sched.RecurrenceInterval.HasValue) {
+            //        var ela = DateTime.UtcNow - sched.LastExecuted;
+            //        if (ela < sched.RecurrenceInterval.Value) {
+            //            Reschedule(sched);
+            //            return;
+            //        }
+            //    }
+            //    sched.LastExecuted = DateTime.UtcNow;
+            //}
             var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
             if (millisDiff < 100) {
@@ -530,7 +540,7 @@ namespace Figlotech.Core {
         }
 
         private static void ResetTimer(ScheduledWorkJob sched) {
-            var longRunningCheckEvery = DebugSchedules ? 5000 : 60000;
+            var longRunningCheckEvery = DebugSchedules ? 5000 : 120000;
             var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
             var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
             if (sched.Timer != null) {
@@ -1476,7 +1486,8 @@ namespace Figlotech.Core {
         }
 
         public static void Error(this Fi _selfie, Exception x) {
-            //logger.WriteLog(x);
+            Console.WriteLine($"Uncaught exception: {x.Message}");
+            Console.WriteLine(x.StackTrace);
         }
 
         public static IEnumerable<Exception> ToExceptionArray(this Exception ex) {
