@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json.Serialization;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -46,7 +47,7 @@ namespace Figlotech.Core.Helpers {
     }
 
     public sealed class ReflectionTool {
-
+        
         private static LenientDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new LenientDictionary<Type, MemberInfo[]>();
 
         public static bool StrictMode { get; set; } = false;
@@ -446,16 +447,6 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
-        private static void _setMemberValueInternal(PropertyInfo pi, FieldInfo fi, MemberInfo member, object target, Object value) {
-            if (pi != null) {
-                pi.SetValue(target, value);
-                return;
-            }
-
-            if (fi != null) {
-                fi.SetValue(target, value);
-            }
-        }
 
         static SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>> CastMethods = new SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>>(
             fieldType => {
@@ -475,7 +466,34 @@ namespace Figlotech.Core.Helpers {
             }
         );
 
+        private static void _setMemberValueInternal(PropertyInfo pi, FieldInfo fi, MemberInfo member, object target, Object value) {
+            if (_setterMethodCache.TryGetValue(member, out var method)) {
+                if (method != null) {
+                    method(target, value);
+                }
+            }
+
+            if (pi != null) {
+                _setterMethodCache[member] = pi.SetValue;
+                pi.SetValue(target, value);
+            }
+
+            if (fi != null) {
+                _setterMethodCache[member] = fi.SetValue;
+                fi.SetValue(target, value);
+            }
+        }
+
+        static ConcurrentDictionary<MemberInfo, Action<object, object>?> _setterMethodCache = new ConcurrentDictionary<MemberInfo, Action<object, object>?>();
+        static ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>> _setterConversionCache = new ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>>();
+        static void TvDoNothing(object t, object v) { }
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
+
+            if (_setterConversionCache.TryGetValue((member, value?.GetType()), out var setter)) {
+                setter(target, value);
+                return;
+            }
+
             var pi = member as PropertyInfo;
             var fi = member as FieldInfo;
             if (pi != null && pi.SetMethod == null) {
@@ -485,111 +503,142 @@ namespace Figlotech.Core.Helpers {
                 return;
             }
 
-            var t = GetTypeOf(member);
-            if (value != null && value.GetType() == typeof(DBNull)) {
+            var type = GetTypeOf(member);
+            if (value != null && value is DBNull) {
                 value = null;
+                if (value is string) {
+                    Debugger.Break();
+                }
+                if(type.IsValueType) {
+                    _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
+                } else {
+                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null); _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null);
+                    _setMemberValueInternal(pi, fi, member, target, null);
+                }
+                return;
             }
-            (var isNullable, t) = ToUnderlying(t);
-            if (t == null) return;
+            (var isNullable, type) = ToUnderlying(type);
+            if (type == null) return;
 
             if (
-                (value == null && !t.IsValueType) ||
-                (value != null && t == value.GetType())
+                (value == null && !type.IsValueType) ||
+                (value != null && type == value.GetType())
             ) {
-                _setMemberValueInternal(pi, fi, member, target, value);
-                return;
-            }
-
-            if(value == null) {
-                return;
-            }
-
-            var vt = value.GetType();
-            if (t == typeof(Int32) && vt == typeof(Int64)) {
-                _setMemberValueInternal(pi, fi, member, target, (int)(long)value);
-                return;
-            }
-            if (t == typeof(Int64) && vt == typeof(Int32)) {
-                _setMemberValueInternal(pi, fi, member, target, (long)(int)value);
-                return;
-            }
-
-            if (t == typeof(bool) && value is sbyte v) {
-                _setMemberValueInternal(pi, fi, member, target, v != 0);
-                return;
-            }
-            if (t.IsEnum && value is int nval) {
-                value = Enum.ToObject(t, nval);
-                _setMemberValueInternal(pi, fi, member, target, value);
-                return;
-            } else if (t.IsEnum && value is long lval) {
-                value = Enum.ToObject(t, (int)lval);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
                 _setMemberValueInternal(pi, fi, member, target, value);
                 return;
             }
 
             if (value == null) {
-                if (t.IsValueType || !isNullable) {
+                _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
+                return;
+            }
+
+            var vt = value.GetType();
+            if (type == typeof(Int32) && vt == typeof(Int64)) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (int)(long)v);
+                _setMemberValueInternal(pi, fi, member, target, (int)(long)value);
+                return;
+            }
+            if (type == typeof(Int64) && vt == typeof(Int32)) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (long)(int)v);
+                _setMemberValueInternal(pi, fi, member, target, (long)(int)value);
+                return;
+            }
+
+            if (type == typeof(bool) && value is sbyte vb) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (sbyte)v != 0);
+                _setMemberValueInternal(pi, fi, member, target, vb != 0);
+                return;
+            }
+            if (type.IsEnum && value is int nval) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Enum.ToObject(type, (int)v));
+                value = Enum.ToObject(type, nval);
+                _setMemberValueInternal(pi, fi, member, target, value);
+                return;
+            } else if (type.IsEnum && value is long lval) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Enum.ToObject(type, (int)v));
+                value = Enum.ToObject(type, (int)lval);
+                _setMemberValueInternal(pi, fi, member, target, value);
+                return;
+            }
+
+            if (value == null) {
+                if (type.IsValueType || !isNullable) {
+                    _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
                     return;
                 } else {
+                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null);
                     _setMemberValueInternal(pi, fi, member, target, null);
                     return;
                 }
             }
 
-            if (value is long l && t == typeof(UInt64)) {
+            if (value is long l && type == typeof(UInt64)) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (ulong)l);
                 _setMemberValueInternal(pi, fi, member, target, (ulong)l);
                 return;
             }
 
-            if (value.GetType() != t) {
-                if (t.IsGenericType) {
-                    if (t.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+            if (value.GetType() != type) {
+                if (type.IsGenericType) {
+                    if (type.GetGenericTypeDefinition() == typeof(FnVal<>)) {
                         target = GetMemberValue(member, target);
-                        member = t.GetProperty("Value");
-                        t = t.GetGenericArguments()[0];
+                        member = type.GetProperty("Value");
+                        type = type.GetGenericArguments()[0];
                     }
                 } else {
-                    if (value is string str && t == typeof(bool)) {
+                    if (value is string str && type == typeof(bool)) {
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, str.ToLower() == "true" || str.ToLower() == "yes" || str == "1");
                         value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
+                        _setMemberValueInternal(pi, fi, member, target, value);
+                        return;
                     }
 
-                    var castMethod = CastMethods[t][value.GetType()];
+                    if (type.IsAssignableFrom(value.GetType())) {
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
+                        _setMemberValueInternal(pi, fi, member, target, value);
+                        return;
+                    }
+
+                    var castMethod = CastMethods[type][value.GetType()];
                     if (castMethod != null) {
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, castMethod.Invoke(t, new object[] { v }));
                         value = castMethod.Invoke(target, new object[] { value });
-                    }
-
-                    if (t.IsAssignableFrom(value.GetType())) {
                         _setMemberValueInternal(pi, fi, member, target, value);
                         return;
                     }
 
                     if (value.GetType().Implements(typeof(IConvertible))) {
                         try {
-                            value = Convert.ChangeType(value, t);
+                            _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Convert.ChangeType(v, type));
+                            value = Convert.ChangeType(value, type);
                             _setMemberValueInternal(pi, fi, member, target, value);
                             return;
-                        } catch(Exception ex) {
-                            if(StrictMode) {
-                                if(Debugger.IsAttached) {
+                        } catch (Exception ex) {
+                            if (StrictMode) {
+                                if (Debugger.IsAttached) {
                                     Debugger.Break();
                                 }
-                                throw new ReflectionException($"Error casting {value} from {value.GetType().Name} to {t.Name} for field {target.GetType().Name}{member.Name}");
+                                throw new ReflectionException($"Error casting {value} from {value.GetType().Name} to {type.Name} for field {target.GetType().Name}{member.Name}");
                             }
                         }
                     }
 
                 }
 
-                if (t.FullName == "System.TimeSpan" && value is string strTs) {
+                if (type.FullName == "System.TimeSpan" && value is string strTs) {
                     value = TimeSpan.Parse(strTs);
                 }
             } else {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
                 _setMemberValueInternal(pi, fi, member, target, value);
                 return;
             }
 
-            if(StrictMode) {
+            _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
+
+            if (StrictMode) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
