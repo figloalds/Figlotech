@@ -27,6 +27,7 @@ using Figlotech.Core.Helpers;
 using System.Diagnostics;
 using Figlotech.Data;
 using Org.BouncyCastle.Asn1.Crmf;
+using System.Collections.Concurrent;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
@@ -304,7 +305,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
-        static Dictionary<JoinDefinition, QueryBuilder> AutoJoinCache = new Dictionary<JoinDefinition, QueryBuilder>();
+        static ConcurrentDictionary<JoinDefinition, QueryBuilder> AutoJoinCache = new ConcurrentDictionary<JoinDefinition, QueryBuilder>();
         public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
             if (rootConditions == null)
                 rootConditions = new QbFmt("true");
@@ -323,53 +324,51 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             QueryBuilder Query = new QueryBuilder();
 
-            if (!AutoJoinCache.ContainsKey(inputJoin)) {
-                lock (AutoJoinCache) {
-                    if (!AutoJoinCache.ContainsKey(inputJoin)) {
-                        // By caching this heavy process I might gain loads of performance
-                        // When redoing the same queries.
-                        QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");
-                        autoJoinMain.Append($"\t FROM (SELECT\n");
-                        for (int i = 0; i < tables.Count; i++) {
-                            autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
-                            var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
-                            if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
-                                columns[i].Add(ridF);
-                            var nonexcl = columns[i];
-                            for (int j = 0; j < nonexcl.Count; j++) {
-                                autoJoinMain.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]},\n");
-                            }
-                            autoJoinMain.Append("\n");
-                        }
-
-                        autoJoinMain.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-
-                        if (isLinedAggregateJoin) {
-                            if (rootConditions != null) {
-                                autoJoinMain.Append("WHERE ");
-                                autoJoinMain.Append(rootConditions);
-                            }
-                            if (orderingMember != null) {
-                                autoJoinMain.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-                            }
-                            if (skip != null || take != null) {
-                                autoJoinMain.Append("LIMIT ");
-                                autoJoinMain.Append(
-                                    skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
-                                );
-                            }
-                            autoJoinMain.Append($"");
-                        }
-                        autoJoinMain.Append($") AS {prefixes[0]}\n");
-
-                        for (int i = 1; i < tables.Count; i++) {
-                            autoJoinMain.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
-                        }
-                        AutoJoinCache[inputJoin] = (autoJoinMain);
+            var mainJoin = AutoJoinCache.GetOrAdd(inputJoin, ij => {
+                // By caching this heavy process I might gain loads of performance
+                // When redoing the same queries.
+                QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");
+                autoJoinMain.Append($"\t FROM (SELECT\n");
+                for (int i = 0; i < tables.Count; i++) {
+                    autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
+                    var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
+                    if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
+                        columns[i].Add(ridF);
+                    var nonexcl = columns[i];
+                    for (int j = 0; j < nonexcl.Count; j++) {
+                        autoJoinMain.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]},\n");
                     }
+                    autoJoinMain.Append("\n");
                 }
-            }
-            Query.Append(AutoJoinCache[inputJoin]);
+
+                autoJoinMain.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
+
+                if (isLinedAggregateJoin) {
+                    if (rootConditions != null) {
+                        autoJoinMain.Append("WHERE ");
+                        autoJoinMain.Append(rootConditions);
+                    }
+                    if (orderingMember != null) {
+                        autoJoinMain.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
+                    }
+                    if (skip != null || take != null) {
+                        autoJoinMain.Append("LIMIT ");
+                        autoJoinMain.Append(
+                            skip != null ? $"{skip},{take ?? Int32.MaxValue}" : $"{take ?? Int32.MaxValue}"
+                        );
+                    }
+                    autoJoinMain.Append($"");
+                }
+                autoJoinMain.Append($") AS {prefixes[0]}\n");
+
+                for (int i = 1; i < tables.Count; i++) {
+                    autoJoinMain.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+                }
+
+                return autoJoinMain;
+            });
+
+            Query.Append(mainJoin);
 
             if (!isLinedAggregateJoin) {
                 if (conditions != null && !conditions.IsEmpty) {

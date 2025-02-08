@@ -1506,9 +1506,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-
         private static void MakeBuildAggregations(BuildParametersHelper build, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
-            // Don't try this at home kids.
             var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType);
 
             String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);

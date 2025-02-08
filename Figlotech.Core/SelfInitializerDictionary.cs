@@ -14,37 +14,22 @@ namespace Figlotech.Core {
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {
-                if (!_dmmy.TryGetValue(key, out var retv)) {
-                    lock (this) {
-                        if (!_dmmy.TryGetValue(key, out retv)) {
-                            if (FullDictionaryLockOnInit) {
-                                lock (_dmmy) retv = Initialize(key);
-                            } else {
-                                retv = Initialize(key);
-                            }
-                        }
-                    }
-                }
-                return retv;
+                return _dmmy.GetOrAdd(key, Initialize);
             }
             set {
-                lock (this) {
-                    if (!AllowNullValueCaching && value == null) {
-                        return;
-                    }
-                    _dmmy[key] = value;
+                if (!AllowNullValueCaching && value == null) {
+                    return;
                 }
+                _dmmy[key] = value;
             }
         }
 
         private TValue Initialize(TKey key) {
-            lock (this) {
-                var init = SelfInitFn(key);
-                if (AllowNullValueCaching || init != null) {
-                    _dmmy[key] = init;
-                }
-                return init;
+            var init = SelfInitFn(key);
+            if (AllowNullValueCaching || init != null) {
+                _dmmy[key] = init;
             }
+            return init;
         }
 
         bool FullDictionaryLockOnInit = false;
@@ -53,7 +38,6 @@ namespace Figlotech.Core {
             SelfInitFn = initFn;
             FullDictionaryLockOnInit = fullDictionaryLockOnInit;
         }
-
 
         public ICollection<TKey> Keys => ((IDictionary<TKey, TValue>)_dmmy).Keys;
 
@@ -64,62 +48,50 @@ namespace Figlotech.Core {
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
 
         public void Add(TKey key, TValue value) {
-            lock (this) {
-                if (key == null) {
-                    Debugger.Break();
-                }
-                ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
+            if (key == null) {
+                Debugger.Break();
             }
+            ((IDictionary<TKey, TValue>)_dmmy).Add(key, value);
         }
 
         public void Add(KeyValuePair<TKey, TValue> item) {
-            lock (this)
-                ((IDictionary<TKey, TValue>)_dmmy).Add(item);
+            ((IDictionary<TKey, TValue>)_dmmy).Add(item);
         }
 
         public void Clear() {
-            lock (this)
-                ((IDictionary<TKey, TValue>)_dmmy).Clear();
+            ((IDictionary<TKey, TValue>)_dmmy).Clear();
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item) {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).Contains(item);
+            return ((IDictionary<TKey, TValue>)_dmmy).Contains(item);
         }
 
         public bool ContainsKey(TKey key) {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).ContainsKey(key);
+            return ((IDictionary<TKey, TValue>)_dmmy).ContainsKey(key);
         }
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
-            lock (this)
-                ((IDictionary<TKey, TValue>)_dmmy).CopyTo(array, arrayIndex);
+            ((IDictionary<TKey, TValue>)_dmmy).CopyTo(array, arrayIndex);
         }
 
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
+            return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
         }
 
         public bool Remove(TKey key) {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
+            return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item) {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).Remove(item);
+            return ((IDictionary<TKey, TValue>)_dmmy).Remove(item);
         }
 
         public bool TryGetValue(TKey key, out TValue value) {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).TryGetValue(key, out value);
+            return ((IDictionary<TKey, TValue>)_dmmy).TryGetValue(key, out value);
         }
 
         IEnumerator IEnumerable.GetEnumerator() {
-            lock (this)
-                return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
+            return ((IDictionary<TKey, TValue>)_dmmy).GetEnumerator();
         }
     }
 }
