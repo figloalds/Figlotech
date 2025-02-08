@@ -722,7 +722,7 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static bool DoesTypeHaveFieldOrProperty(Type type, string key) {
-            if (key == null || type == null || MemberCacheFromString[type] == null) {
+            if (key == null || type == null) {
                 Debugger.Break();
                 return false;
             }

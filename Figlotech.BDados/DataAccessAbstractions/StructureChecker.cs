@@ -625,7 +625,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (!renamed) {
                         TablesToCreate.Add(type.Name.ToLower());
                         keys.Add(new ScStructuralLink {
-                            Column = Fi.Tech.GetIdColumn(type),
+                            Column = FiTechBDadosExtensions.IdColumnOf[type],
                             Type = ScStructuralKeyType.PrimaryKey,
                             KeyName = $"pk_{type.Name.ToLower()}",
                             IsUnique = true,
