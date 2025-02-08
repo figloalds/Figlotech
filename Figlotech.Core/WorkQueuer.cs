@@ -160,11 +160,11 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class WorkQueuer : IDisposable {
+public sealed class WorkQueuer : IDisposable {
         public static int qid_increment = 0;
         private int __qid = ++qid_increment;
         public int QID => __qid;
-        public string Name { get;set; }
+        public string Name { get; set; }
 
         public event Func<WorkJobExecutionRequest, Task> OnWorkEnqueued;
         public event Func<WorkJobExecutionRequest, Task> OnWorkDequeued;
@@ -175,7 +175,7 @@ namespace Figlotech.Core {
 
         public Dictionary<string, object> DefaultLoggingTags { get; private set; } = new Dictionary<string, object>();
 
-        Queue<WorkJobExecutionRequest> WorkQueue = new Queue<WorkJobExecutionRequest>();
+        ConcurrentQueue<WorkJobExecutionRequest> WorkQueue = new ConcurrentQueue<WorkJobExecutionRequest>();
         List<WorkJobExecutionRequest> HeldJobs = new List<WorkJobExecutionRequest>();
         List<WorkJobExecutionRequest> ActiveJobs = new List<WorkJobExecutionRequest>();
         int NumActiveJobs {
@@ -229,9 +229,9 @@ namespace Figlotech.Core {
                     if (NumActiveJobs < Math.Min(this.MaxParallelTasks, WorkQueue.Count)) {
                         SpawnWorker();
                     }
-                    lock(WorkQueue) {
-                        if(WorkQueue.Count > 0) {
-                            peekJob = WorkQueue.Peek();
+                    if (WorkQueue.TryPeek(out peekJob)) {
+                        if(peekJob.DequeuedTime != null) {
+                            await peekJob.GetAwaiterInternal().ConfigureAwait(false);
                         }
                     }
 
@@ -266,10 +266,8 @@ namespace Figlotech.Core {
             Active = true;
             IsRunning = true;
             lock (HeldJobs) {
-                lock (WorkQueue) {
-                    foreach (var job in HeldJobs) {
-                        WorkQueue.Enqueue(job);
-                    }
+                foreach (var job in HeldJobs) {
+                    WorkQueue.Enqueue(job);
                 }
                 HeldJobs.Clear();
             }
@@ -323,16 +321,14 @@ namespace Figlotech.Core {
             request.TimeInQueueCounter.Start();
             request.WorkQueuer = this;
 
-            if(job.Name is null) {
+            if (job.Name is null) {
                 Debugger.Break();
             }
 
             if (Active) {
-                lock (WorkQueue) {
-                    WorkQueue.Enqueue(request);
-                    InQueue++;
-                    TotalWork++;
-                }
+                WorkQueue.Enqueue(request);
+                InQueue++;
+                TotalWork++;
             } else {
                 lock (HeldJobs) {
                     HeldJobs.Add(request);
@@ -362,27 +358,24 @@ namespace Figlotech.Core {
         private bool SpawnWorker() {
             WorkJobExecutionRequest job = null;
             lock (selfLockSpawnWorker2) {
-                lock (WorkQueue) {
-                    do {
-                        if (NumActiveJobs < this.MaxParallelTasks && WorkQueue.Count > 0) {
-                            job = WorkQueue.Dequeue();
-                            InQueue--;
-                            if(job.Cancellation.IsCancellationRequested) {
-                                Cancelled++;
-                                WorkDone++;
-                                job.Cancellation.Dispose();
-                                continue;
-                            }
-                            lock (Tasks) {
-                                Tasks.Add(job.TaskCompletionSource.Task);
-                            }
-                            lock (ActiveJobs) {
-                                ActiveJobs.Add(job);
-                            }
-                            break;
+                do {
+                    if (NumActiveJobs < this.MaxParallelTasks && WorkQueue.TryDequeue(out job)) {
+                        InQueue--;
+                        if (job.Cancellation.IsCancellationRequested) {
+                            Cancelled++;
+                            WorkDone++;
+                            job.Cancellation.Dispose();
+                            continue;
                         }
-                    } while(job != null);
-                }
+                        lock (Tasks) {
+                            Tasks.Add(job.TaskCompletionSource.Task);
+                        }
+                        lock (ActiveJobs) {
+                            ActiveJobs.Add(job);
+                        }
+                        break;
+                    }
+                } while (job != null);
                 if (job != null) {
 
                     return ThreadPool.UnsafeQueueUserWorkItem(async _ => {
@@ -416,7 +409,7 @@ namespace Figlotech.Core {
                             job._tcsNotifyDequeued.TrySetResult(0);
                             job.Status = WorkJobRequestStatus.Running;
                             if (job.WorkJob.action != null) {
-                                using(var womboCombo = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
+                                using (var womboCombo = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
                                     job.WorkJob.ActionTask = job.WorkJob.action(job.Cancellation.Token);
                                 }
                                 await job.WorkJob.ActionTask.ConfigureAwait(false);
@@ -450,10 +443,10 @@ namespace Figlotech.Core {
                                     exception = ex;
                                     try {
                                         var handlerTask = this.OnExceptionInHandler?.Invoke(job, x, ex);
-                                        if(handlerTask is Task) {
+                                        if (handlerTask is Task) {
                                             await handlerTask.ConfigureAwait(false);
                                         }
-                                    } catch(Exception exx) {
+                                    } catch (Exception exx) {
                                         Fi.Tech.Throw(new AggregateException("User code generated exception in the hander AND in the handler of the handler.", x, ex, exx));
                                     }
                                 }
@@ -480,7 +473,7 @@ namespace Figlotech.Core {
                                     job.Status = WorkJobRequestStatus.Finished;
                                     this.OnWorkComplete?.Invoke(job);
                                     WorkDone++;
-                                    if(job.Cancellation.IsCancellationRequested) {
+                                    if (job.Cancellation.IsCancellationRequested) {
                                         Cancelled++;
                                     }
                                     job.Cancellation.Dispose();

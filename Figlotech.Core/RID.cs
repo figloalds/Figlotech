@@ -305,17 +305,13 @@ namespace Figlotech.Core {
             NewRid();
         }
 
-        static Lazy<byte[]> RidSessionSegment = new Lazy<byte[]>(() => BitConverter.GetBytes(DateTime.UtcNow.Ticks));
+        static byte[] RidSessionSegment = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
         private void NewRid() {
-            lock ("GLOBAL_RID_GENERATION") {
-
-                Buffer.BlockCopy(RidSessionSegment.Value, 0, Signature, 0, 8);
-                Buffer.BlockCopy(BitConverter.GetBytes(DateTime.UtcNow.Ticks), 0, Signature, 8, 8);
-                Buffer.BlockCopy(CSeg, 0, Signature, 16, 8);
-                Buffer.BlockCopy(BitConverter.GetBytes(rng.Next()), 0, Signature, 24, 4);
-                Buffer.BlockCopy(BitConverter.GetBytes(segmentEOrigin + ++segmentESequential), 0, Signature, 28, 4);
-
-            }
+            Buffer.BlockCopy(RidSessionSegment, 0, Signature, 0, 8);
+            Buffer.BlockCopy(BitConverter.GetBytes(DateTime.UtcNow.Ticks), 0, Signature, 8, 8);
+            Buffer.BlockCopy(CSeg, 0, Signature, 16, 8);
+            Buffer.BlockCopy(BitConverter.GetBytes(rng.Next()), 0, Signature, 24, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(segmentEOrigin + ++segmentESequential), 0, Signature, 28, 4);
         }
 
         public RID(byte[] barr) {
@@ -338,7 +334,7 @@ namespace Figlotech.Core {
         }
 
         public string ToHex() {
-            return BitConverter.ToString(Signature).Replace("-", "");
+            return IntEx.BigIntegerToString(new BigInteger(Signature, true), IntEx.Hexadecimal);
         }
 
         public byte[] ToByteArray() {

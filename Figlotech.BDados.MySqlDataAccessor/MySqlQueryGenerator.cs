@@ -481,7 +481,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             int k = 0;
             bool isFirst = true;
             for (int i = 0; i < lifi.Length; i++) {
-                if (OmmitPk && lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(lifi[i]) != null)
                     continue;
                 foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
@@ -616,7 +616,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = MemberFields[type];
             for (int i = 0; i < fields.Length; i++) {
-                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");
@@ -629,7 +629,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = MemberFields[type];
             for (int i = 0; i < fields.Length; i++) {
-                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");

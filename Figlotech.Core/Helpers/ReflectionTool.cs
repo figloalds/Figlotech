@@ -213,8 +213,11 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
+        static ConcurrentDictionary<(MemberInfo, Type), Attribute[]> MemberAttributesByTypeCache = new ConcurrentDictionary<(MemberInfo, Type), Attribute[]>();
         public static T GetAttributeFrom<T>(MemberInfo member) where T : Attribute {
-            return member.GetCustomAttribute<T>();
+            return MemberAttributesByTypeCache.GetOrAdd((member, typeof(T)), (k) => {
+                return member.GetCustomAttributes<T>().ToArray();
+            })?.FirstOrDefault() as T;
         }
 
         private static SelfInitializerDictionary<Type, LenientDictionary<string, MemberInfo>> MemberCacheFromString { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, MemberInfo>>(
@@ -466,11 +469,20 @@ namespace Figlotech.Core.Helpers {
             }
         );
 
-        private static void _setMemberValueInternal(PropertyInfo pi, FieldInfo fi, MemberInfo member, object target, Object value) {
+        private static void _setMemberValueInternal(MemberInfo member, object target, Object value) {
             if (_setterMethodCache.TryGetValue(member, out var method)) {
                 if (method != null) {
                     method(target, value);
                 }
+            }
+
+            var pi = member as PropertyInfo;
+            var fi = member as FieldInfo;
+            if (pi != null && pi.SetMethod == null) {
+                return;
+            }
+            if (fi != null && fi.IsInitOnly) {
+                return;
             }
 
             if (pi != null) {
@@ -487,19 +499,11 @@ namespace Figlotech.Core.Helpers {
         static ConcurrentDictionary<MemberInfo, Action<object, object>?> _setterMethodCache = new ConcurrentDictionary<MemberInfo, Action<object, object>?>();
         static ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>> _setterConversionCache = new ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>>();
         static void TvDoNothing(object t, object v) { }
+
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
 
             if (_setterConversionCache.TryGetValue((member, value?.GetType()), out var setter)) {
                 setter(target, value);
-                return;
-            }
-
-            var pi = member as PropertyInfo;
-            var fi = member as FieldInfo;
-            if (pi != null && pi.SetMethod == null) {
-                return;
-            }
-            if (fi != null && fi.IsInitOnly) {
                 return;
             }
 
@@ -512,8 +516,8 @@ namespace Figlotech.Core.Helpers {
                 if(type.IsValueType) {
                     _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
                 } else {
-                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null); _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null);
-                    _setMemberValueInternal(pi, fi, member, target, null);
+                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, null); _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, null);
+                    _setMemberValueInternal(member, target, null);
                 }
                 return;
             }
@@ -524,8 +528,8 @@ namespace Figlotech.Core.Helpers {
                 (value == null && !type.IsValueType) ||
                 (value != null && type == value.GetType())
             ) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
-                _setMemberValueInternal(pi, fi, member, target, value);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, v);
+                _setMemberValueInternal(member, target, value);
                 return;
             }
 
@@ -536,30 +540,30 @@ namespace Figlotech.Core.Helpers {
 
             var vt = value.GetType();
             if (type == typeof(Int32) && vt == typeof(Int64)) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (int)(long)v);
-                _setMemberValueInternal(pi, fi, member, target, (int)(long)value);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (int)(long)v);
+                _setMemberValueInternal(member, target, (int)(long)value);
                 return;
             }
             if (type == typeof(Int64) && vt == typeof(Int32)) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (long)(int)v);
-                _setMemberValueInternal(pi, fi, member, target, (long)(int)value);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (long)(int)v);
+                _setMemberValueInternal(member, target, (long)(int)value);
                 return;
             }
 
             if (type == typeof(bool) && value is sbyte vb) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (sbyte)v != 0);
-                _setMemberValueInternal(pi, fi, member, target, vb != 0);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (sbyte)v != 0);
+                _setMemberValueInternal(member, target, vb != 0);
                 return;
             }
             if (type.IsEnum && value is int nval) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Enum.ToObject(type, (int)v));
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, Enum.ToObject(type, (int)v));
                 value = Enum.ToObject(type, nval);
-                _setMemberValueInternal(pi, fi, member, target, value);
+                _setMemberValueInternal(member, target, value);
                 return;
             } else if (type.IsEnum && value is long lval) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Enum.ToObject(type, (int)v));
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, Enum.ToObject(type, (int)v));
                 value = Enum.ToObject(type, (int)lval);
-                _setMemberValueInternal(pi, fi, member, target, value);
+                _setMemberValueInternal(member, target, value);
                 return;
             }
 
@@ -568,15 +572,15 @@ namespace Figlotech.Core.Helpers {
                     _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
                     return;
                 } else {
-                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, null);
-                    _setMemberValueInternal(pi, fi, member, target, null);
+                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, null);
+                    _setMemberValueInternal(member, target, null);
                     return;
                 }
             }
 
             if (value is long l && type == typeof(UInt64)) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, (ulong)l);
-                _setMemberValueInternal(pi, fi, member, target, (ulong)l);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (ulong)l);
+                _setMemberValueInternal(member, target, (ulong)l);
                 return;
             }
 
@@ -589,31 +593,31 @@ namespace Figlotech.Core.Helpers {
                     }
                 } else {
                     if (value is string str && type == typeof(bool)) {
-                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, str.ToLower() == "true" || str.ToLower() == "yes" || str == "1");
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, str.ToLower() == "true" || str.ToLower() == "yes" || str == "1");
                         value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
-                        _setMemberValueInternal(pi, fi, member, target, value);
+                        _setMemberValueInternal(member, target, value);
                         return;
                     }
 
                     if (type.IsAssignableFrom(value.GetType())) {
-                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
-                        _setMemberValueInternal(pi, fi, member, target, value);
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, v);
+                        _setMemberValueInternal(member, target, value);
                         return;
                     }
 
                     var castMethod = CastMethods[type][value.GetType()];
                     if (castMethod != null) {
-                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, castMethod.Invoke(t, new object[] { v }));
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, castMethod.Invoke(t, new object[] { v }));
                         value = castMethod.Invoke(target, new object[] { value });
-                        _setMemberValueInternal(pi, fi, member, target, value);
+                        _setMemberValueInternal(member, target, value);
                         return;
                     }
 
                     if (value.GetType().Implements(typeof(IConvertible))) {
                         try {
-                            _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, Convert.ChangeType(v, type));
+                            _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, Convert.ChangeType(v, type));
                             value = Convert.ChangeType(value, type);
-                            _setMemberValueInternal(pi, fi, member, target, value);
+                            _setMemberValueInternal(member, target, value);
                             return;
                         } catch (Exception ex) {
                             if (StrictMode) {
@@ -624,15 +628,17 @@ namespace Figlotech.Core.Helpers {
                             }
                         }
                     }
-
                 }
 
                 if (type.FullName == "System.TimeSpan" && value is string strTs) {
+                    _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, TimeSpan.Parse((string) v));
                     value = TimeSpan.Parse(strTs);
+                    _setMemberValueInternal(member, target, value);
+                    return;
                 }
             } else {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(pi, fi, member, t, v);
-                _setMemberValueInternal(pi, fi, member, target, value);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, v);
+                _setMemberValueInternal(member, target, value);
                 return;
             }
 

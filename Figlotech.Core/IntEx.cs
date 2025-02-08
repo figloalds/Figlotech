@@ -8,6 +8,7 @@
 **/
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -368,70 +369,109 @@ namespace Figlotech.Core {
             return new String(result);
         }
 
+        static ConcurrentDictionary<string, int[]> charToValCache = new ConcurrentDictionary<string, int[]>();
         public static string BaseMult(string a, string b, string baseStr) {
-            string[] multiParts = new string[a.Length];
-            int multipartIdx = 0;
-            //a = new string(a.Reverse().ToArray()); 
-            //b = new string(b.Reverse().ToArray()); 
-            for (int i = 0; i < a.Length; i++) {
-                Span<char> thisPart = stackalloc char[i + b.Length + 1];
-                var cursor = 0;
-                //List<char> thisPart = new List<char>(); 
-                for (int k = 0; k < i; k++)
-                    thisPart[thisPart.Length - ++cursor] = baseStr[0];
-                int leftovers = 0;
-                for (int j = 0; j < b.Length; j++) {
-                    int MultiFragment = baseStr.IndexOf(a[a.Length - 1 - i]) * baseStr.IndexOf(b[b.Length - 1 - j]) + leftovers;
-                    leftovers = MultiFragment / baseStr.Length;
-                    thisPart[thisPart.Length - ++cursor] = (baseStr[MultiFragment % baseStr.Length]);
-                }
-                int extraCharacters = 0;
-                while (leftovers > 0) {
-                    thisPart[thisPart.Length - ++cursor] = (baseStr[leftovers % baseStr.Length]);
-                    leftovers = leftovers / baseStr.Length;
-                    extraCharacters++;
-                }
-                // thisPart.Reverse(); 
-                int realLength = i + b.Length + extraCharacters;
-                multiParts[multipartIdx++] = new string(thisPart.Slice(thisPart.Length - realLength, realLength).ToArray());
+            if (a.Length == 1 && a[0] == baseStr[0] || b.Length == 1 && b.Length == baseStr[0]) {
+                return baseStr[0].ToString();
             }
-            string Retorno = new String(new[] { baseStr[0] });
-            for (int i = 0; i < multipartIdx; i++) {
-                Retorno = BaseSum(Retorno, multiParts[i], baseStr);
+
+            int baseLen = baseStr.Length;
+
+            // Retrieve or compute lookup: char -> int
+            int[] charToVal = charToValCache.GetOrAdd(baseStr, key => {
+                int[] lookup = new int[128];
+                for (int i = 0; i < baseLen; i++) {
+                    lookup[baseStr[i]] = i;
+                }
+                return lookup;
+            });
+
+            // Convert the input strings to digit arrays (in reverse order)
+            int aLen = a.Length;
+            int bLen = b.Length;
+            int[] aDigits = new int[aLen];
+            int[] bDigits = new int[bLen];
+            for (int i = 0; i < aLen; i++) {
+                aDigits[i] = charToVal[a[aLen - 1 - i]];
             }
-            return Retorno;
+            for (int i = 0; i < bLen; i++) {
+                bDigits[i] = charToVal[b[bLen - 1 - i]];
+            }
+
+            // Allocate array for the product (max length = a.Length + b.Length)
+            int[] product = new int[aLen + bLen];
+
+            // Multiply digit-by-digit
+            for (int i = 0; i < aLen; i++) {
+                int carry = 0;
+                for (int j = 0; j < bLen; j++) {
+                    int tmp = product[i + j] + aDigits[i] * bDigits[j] + carry;
+                    product[i + j] = tmp % baseLen;
+                    carry = tmp / baseLen;
+                }
+                product[i + bLen] += carry;
+            }
+
+            // Find the actual length (skip any leading zero digits)
+            int resultLen = product.Length;
+            while (resultLen > 1 && product[resultLen - 1] == 0) {
+                resultLen--;
+            }
+
+            // Build the result string (convert digits back to characters)
+            char[] result = new char[resultLen];
+            for (int i = 0; i < resultLen; i++) {
+                // Note: product is in reverse order
+                result[i] = baseStr[product[resultLen - 1 - i]];
+            }
+
+            return new string(result);
         }
 
-        public static string BaseSum(string a, string b, string Base) {
-            //a = new string(a.Reverse().ToArray()); 
-            //b = new string(b.Reverse().ToArray()); 
-            string Maior = a.Length > b.Length ? a : b;
-            string Menor = a.Length < b.Length ? a : b;
-            int leftovers = 0;
-            Span<char> Resultado = stackalloc char[Math.Max(a.Length, b.Length) + 1];
-            int cursorResultado = 0;
-            for (int i = 0; i < Maior.Length || leftovers > 0; i++) {
-                int Soma;
-                if (i >= Maior.Length)
-                    Soma = leftovers;
-                else if (i >= Menor.Length)
-                    Soma = leftovers + Base.IndexOf(Maior[Maior.Length - 1 - i]);
-                else
-                    Soma = Base.IndexOf(a[a.Length - 1 - i]) + Base.IndexOf(b[b.Length - 1 - i]) + leftovers;
-                leftovers = 0;
-                if (Soma > Base.Length - 1) {
-                    while (Soma > Base.Length - 1) {
-                        Soma -= Base.Length;
-                        leftovers += 1;
-                    }
-                    Resultado[Resultado.Length - cursorResultado++ - 1] = (Base[Soma]);
-                } else {
-                    Resultado[Resultado.Length - cursorResultado++ - 1] = (Base[Soma]);
-                    leftovers = 0;
+        public static string BaseSum(string a, string b, string baseStr) {
+            int baseLen = baseStr.Length;
+
+            // Retrieve or compute lookup: char -> int
+            int[] charToVal = charToValCache.GetOrAdd(baseStr, key => {
+                int[] lookup = new int[128];
+                for (int i = 0; i < baseLen; i++) {
+                    lookup[baseStr[i]] = i;
                 }
+                return lookup;
+            });
+
+            int iA = a.Length - 1;
+            int iB = b.Length - 1;
+            int carry = 0;
+            // The maximum possible length is max(a.Length, b.Length) + 1
+            int maxLen = Math.Max(a.Length, b.Length) + 1;
+            int[] sumDigits = new int[maxLen];
+            int pos = maxLen - 1;
+
+            while (iA >= 0 || iB >= 0 || carry > 0) {
+                int sum = carry;
+                if (iA >= 0) {
+                    sum += charToVal[a[iA--]];
+                }
+                if (iB >= 0) {
+                    sum += charToVal[b[iB--]];
+                }
+                sumDigits[pos--] = sum % baseLen;
+                carry = sum / baseLen;
             }
-            //Resultado.Reverse(); 
-            return new string(Resultado[0] == '\0' ? Resultado.Slice(1).ToArray() : Resultado.ToArray());
+
+            // Determine starting index (skip any leading zeros)
+            int start = 0;
+            while (start < maxLen - 1 && sumDigits[start] == 0) {
+                start++;
+            }
+
+            // Convert the digits back to characters.
+            char[] result = new char[maxLen - start];
+            for (int i = start; i < maxLen; i++) {
+                result[i - start] = baseStr[sumDigits[i]];
+            }
+            return new string(result);
         }
 
         public static string Int64ToString(long value, string Base = Decimal) {
@@ -451,43 +491,24 @@ namespace Figlotech.Core {
         }
 
         public static string BigIntegerToString(BigInteger value, string Base = Decimal) {
-            StringBuilder base36 = new StringBuilder();
-
             if (value == 0) {
                 return Base[0].ToString();
             }
 
+            char[] buffer = new char[(int)Math.Ceiling(BigInteger.Log(value, Base.Length))];
+            int position = buffer.Length;
+
             while (value > 0) {
-                int remainder = (int)(value % Base.Length);
+                buffer[--position] = Base[(int)(value % Base.Length)];
                 value /= Base.Length;
-                base36.Insert(0, Base[remainder]);
             }
 
-            return base36.ToString();
+            return new string(buffer, position, buffer.Length - position);
         }
 
         public string ToString(string Base = Decimal) {
             BigInteger value = new BigInteger(this.digits, true);
             return BigIntegerToString(value, Base);
-        }
-        public string ToStringLegacy(string Base = Decimal) {
-            if (digits == null) {
-                return null;
-            }
-            char[] CharsBase = Base.ToArray();
-            int TamanhoBase = Base.Length;
-            string Result = Base[0] + "";
-            string mult = Base[1] + "";
-            string BaseLength = BaseConvert(BaseSize, Base);
-            for (int i = 0; i < digitCursor; i++) {
-                string ThisByte = BaseConvert((long)digits[i], Base);
-                string Next = BaseMult(ThisByte, mult, Base);
-                Result = BaseSum(Result, Next, Base);
-                mult = BaseMult(mult, BaseLength, Base);
-            }
-            while (Base == Base64 && Result.Length % 4 != 0)
-                Result += "=";
-            return Result;
         }
         public static String NewRID() {
             ++rtProgression;

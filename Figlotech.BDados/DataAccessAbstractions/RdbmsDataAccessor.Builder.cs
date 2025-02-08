@@ -139,11 +139,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Dictionary<string, object> constructionCache, int recDepth) {
             var myPrefix = joinTables[thisIndex].Prefix;
             if (isNew) {
-                if (!fieldNamesDict.ContainsKey(myPrefix)) {
+                if (!fieldNamesDict.TryGetValue(myPrefix, out var fieldNames)) {
                     throw new BDadosException($"Failed to build aggregate list: Aggregated reference {myPrefix} of type {joinTables[thisIndex].ValueObject.Name} was not present in the resulting fields");
                 }
 
-                var fieldNames = fieldNamesDict[myPrefix];
                 for (int i = 0; i < fieldNames.Item1.Length; i++) {
                     var val = reader[fieldNames.Item1[i]];
                     if (val is DateTime dt && dt.Kind != DateTimeKind.Utc) {
@@ -167,7 +166,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
                                 var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOf(rel.Fields[0])];
                                 var value = reader[valueIndex];
-                                ReflectionTool.SetValue(obj, name, reader[valueIndex]);
+                                ReflectionTool.SetValue(obj, name, value);
 
                                 break;
                             }
@@ -175,7 +174,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         case AggregateBuildOptions.AggregateList: {
                                 String fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
                                 var aglistId = $"AGLIST_{obj.GetHashCode()}_{fieldAlias}";
-                                if (!constructionCache.ContainsKey(aglistId)) {
+                                if (!constructionCache.TryGetValue(aglistId, out var metadataObj)) {
                                     var objectType = ObjectTypeCache[t][fieldAlias];
                                     var ulType = UlTypeCache[objectType];
                                     var addMethod = AddMethodCache[objectType];
@@ -194,18 +193,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     var parentRidIndex = fieldNamesDict[parentPrefix].Item1[fieldNamesDict[parentPrefix].Item2.GetIndexOf(rel.ParentKey)];
                                     var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
 
-                                    constructionCache[aglistId] = new AggregateListCachedMetadata {
+                                    metadataObj = new AggregateListCachedMetadata {
                                         UlType = ulType,
                                         ParentRIDIndex = parentRidIndex,
                                         ChildRIDIndex = childRidIndex,
                                         List = li,
                                         AddMethod = addMethod
                                     };
+                                    constructionCache[aglistId] = metadataObj;
                                 }
-                                var metadata = (AggregateListCachedMetadata)constructionCache[aglistId];
+                                var metadata = (AggregateListCachedMetadata)metadataObj;
 
-                                string parentRid = (string) ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]);
-                                string childRid = (string) ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]);
+                                string parentRid = (string)ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]);
+                                string childRid = (string)ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]);
                                 string childRidCacheId = cacheId(reader, metadata.ChildRIDIndex, metadata.UlType);
                                 object newObj;
                                 if (parentRid == null || childRid == null) {
@@ -213,9 +213,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 }
                                 bool isUlNew = false;
 
-                                if (constructionCache.ContainsKey(childRidCacheId)) {
-                                    newObj = constructionCache[childRidCacheId];
-                                } else {
+                                if (!constructionCache.TryGetValue(childRidCacheId, out newObj)) {
                                     newObj = NewInstance(metadata.UlType);
                                     metadata.AddMethod.Invoke(metadata.List, new object[] { newObj });
                                     constructionCache[childRidCacheId] = newObj;
@@ -251,9 +249,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 }
                                 bool isUlNew = false;
 
-                                if (constructionCache.ContainsKey(childRidCacheId)) {
-                                    newObj = constructionCache[childRidCacheId];
-                                } else {
+                                if (!constructionCache.TryGetValue(childRidCacheId, out newObj)) {
                                     newObj = NewInstance(ulType);
                                     constructionCache[childRidCacheId] = newObj;
                                     isUlNew = true;
@@ -282,14 +278,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
-                if((transaction?.CancellationToken.IsCancellationRequested) ?? false) {
+                if ((transaction?.CancellationToken.IsCancellationRequested) ?? false) {
                     throw transaction.Exception(new TaskCanceledException("Task was cancelled"));
                 }
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
                 var jstr = String.Intern(join.ToString());
                 lock (jstr) {
-                    if (!_autoAggregateCache.ContainsKey(jstr)) {
+                    if (!_autoAggregateCache.TryGetValue(jstr, out var newEntry)) {
                         // This is only ever used in the auto aggregations
                         // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
                         var fieldNames = new string[reader.FieldCount];
@@ -304,7 +300,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         })
                         .Where(i => i.Item1 != null)
                         .GroupBy(i => i.Item1);
-                        var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                        newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
 
                         _autoAggregateCache[jstr] = newEntry;
                     }
@@ -332,7 +328,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     isNew = true;
                     T iterationObject;
                     var thisCacheId = cacheId(reader, myRidCol, typeof(T));
-                    if (!constructionCache.ContainsKey(thisCacheId)) {
+                    if (!constructionCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
 
                         iterationObject = new T();
 
@@ -344,7 +340,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         currentObject = iterationObject;
                         constructionCache[thisCacheId] = iterationObject;
                     } else {
-                        iterationObject = (T)constructionCache[thisCacheId];
+                        iterationObject = (T)iterationObjectObj;
                         isNew = false;
                     }
 
@@ -356,7 +352,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
                 }
-                if(currentObject != null) {
+                if (currentObject != null) {
                     objs++;
                     yield return currentObject;
                 }
@@ -390,7 +386,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Benchmarker.Assert(() => join != null);
                 var jstr = String.Intern(join.ToString());
                 lock (jstr) {
-                    if (!_autoAggregateCache.ContainsKey(jstr)) {
+                    if (!_autoAggregateCache.TryGetValue(jstr, out var newEntry)) {
                         // This is only ever used in the auto aggregations
                         // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
                         var fieldNames = new string[reader.FieldCount];
@@ -405,7 +401,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         })
                         .Where(i => i.Item1 != null)
                         .GroupBy(i => i.Item1);
-                        var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
+                        newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
 
                         _autoAggregateCache[jstr] = newEntry;
                     }
@@ -434,23 +430,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T newObj;
-                    if (!constructionCache.ContainsKey(cacheId(reader, myRidCol, typeof(T)))) {
+                    if (!constructionCache.TryGetValue(cacheId(reader, myRidCol, typeof(T)), out var newObjObj)) {
                         newObj = new T();
                         constructionCache[cacheId(reader, myRidCol, typeof(T))] = newObj;
-                        if(implementsAfterLoad || implementsAfterAggregateLoad) {
+                        if (implementsAfterLoad || implementsAfterAggregateLoad) {
                             afterLoads.Enqueue(async () => {
-                                if(implementsAfterLoad) {
+                                if (implementsAfterLoad) {
                                     ((IBusinessObject)newObj).OnAfterLoad(dlc);
                                 }
 
-                                if(implementsAfterAggregateLoad) {
+                                if (implementsAfterAggregateLoad) {
                                     await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                                 }
                             });
                         }
                         retv.Add(newObj);
                     } else {
-                        newObj = (T)constructionCache[cacheId(reader, myRidCol, typeof(T))];
+                        newObj = (T)newObjObj;
                         isNew = false;
                     }
 
@@ -462,7 +458,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     row++;
                 }
 
-                if(afterLoads != null) {
+                if (afterLoads != null) {
                     await afterLoads.Stop(true).ConfigureAwait(false);
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");

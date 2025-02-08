@@ -259,7 +259,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 Query.Append($"\t\t-- Table {tableNames[i]}\n");
                 var fields = ReflectionTool.FieldsAndPropertiesOf(
                     tables[i])
-                    .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                    .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
                     .ToArray();
                 if (!columns[i].Contains("RID"))
                     columns[i].Add("RID");
@@ -389,7 +389,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             var lifi = GetMembers(tabelaInput.GetType());
             int k = 0;
             for (int i = 0; i < lifi.Count; i++) {
-                if (OmmitPk && lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(lifi[i]) != null)
                     continue;
                 foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
@@ -494,8 +494,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             var fields = GetMembers(type);
             for (int i = 0; i < fields.Count; i++) {
                 if (
-                    fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null ||
-                    fields[i].GetCustomAttribute<FieldAttribute>()?.Unique == true
+                    ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null ||
+                    ReflectionTool.GetAttributeFrom<FieldAttribute>(fields[i])?.Unique == true
                 )
                     sb.Append(", ");
             }
@@ -506,7 +506,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = GetMembers(type);
             for (int i = 0; i < fields.Count; i++) {
-                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null && fields[i].GetCustomAttribute<ReliableIdAttribute>() == null)
+                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null && fields[i].GetCustomAttribute<ReliableIdAttribute>() == null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");
@@ -620,7 +620,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             List<MemberInfo> lifi = new List<MemberInfo>();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
             foreach (var fi in members
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
                 .ToArray()) {
                 foreach (var at in fi.CustomAttributes) {
                     if (at.AttributeType == typeof(FieldAttribute)) {

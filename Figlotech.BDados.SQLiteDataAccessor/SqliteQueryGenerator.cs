@@ -50,7 +50,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             query.Append(") ON DUPLICATE KEY UPDATE ");
             var Fields = GetMembers(inputObject.GetType());
             for (int i = 0; i < Fields.Count; ++i) {
-                if (Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(Fields[i]) != null)
                     continue;
                 query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
                 if (i < Fields.Count - 1) {
@@ -228,7 +228,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 Query.Append($"\t\t-- Table {tableNames[i]}\n");
                 var fields = ReflectionTool.FieldsAndPropertiesOf(
                     tables[i])
-                    .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                    .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
                     .ToArray();
                 if (!columns[i].Contains("RID"))
                     columns[i].Add("RID");
@@ -353,7 +353,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             var lifi = GetMembers(tabelaInput.GetType());
             int k = 0;
             for (int i = 0; i < lifi.Count; i++) {
-                if (OmmitPk && lifi[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(lifi[i]) != null)
                     continue;
                 foreach (CustomAttributeData att in lifi[i].CustomAttributes) {
                     if (att.AttributeType == typeof(FieldAttribute)) {
@@ -443,7 +443,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             Query.Append("ON DUPLICATE KEY UPDATE ");
             var Fields = GetMembers(typeof(T));
             for (int i = 0; i < Fields.Count; ++i) {
-                if (OmmitPk && Fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (OmmitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(Fields[i]) != null)
                     continue;
                 Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
                 if (i < Fields.Count - 1) {
@@ -458,7 +458,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = GetMembers(type);
             for (int i = 0; i < fields.Count; i++) {
-                if (ommitPk && fields[i].GetCustomAttribute(typeof(PrimaryKeyAttribute)) != null)
+                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");
@@ -552,7 +552,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             List<MemberInfo> lifi = new List<MemberInfo>();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
             foreach (var fi in members
-                .Where((a) => a.GetCustomAttribute(typeof(FieldAttribute)) != null)
+                .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
                 .ToArray()) {
                 foreach (var at in fi.CustomAttributes) {
                     if (at.AttributeType == typeof(FieldAttribute)) {
