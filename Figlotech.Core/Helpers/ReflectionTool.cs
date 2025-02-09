@@ -561,7 +561,7 @@ namespace Figlotech.Core.Helpers {
                 _setMemberValueInternal(member, target, value);
                 return;
             } else if (type.IsEnum && value is long lval) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, Enum.ToObject(type, (int)v));
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, Enum.ToObject(type, (int)(long)v));
                 value = Enum.ToObject(type, (int)lval);
                 _setMemberValueInternal(member, target, value);
                 return;

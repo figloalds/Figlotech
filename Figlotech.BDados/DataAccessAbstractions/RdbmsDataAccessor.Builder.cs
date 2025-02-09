@@ -9,8 +9,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -50,6 +52,52 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ConfigureAwait(false)) {
                     yield return item;
                 }
+            }
+        }
+
+        public async Task GetJsonStringFromQueryAsync<T>(BDadosTransaction transaction, DbCommand command, TextWriter writer) where T : new() {
+            transaction?.Benchmarker.Mark("Enter lock command");
+            transaction?.Benchmarker.Mark("- Starting Execute Query");
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
+                transaction?.Benchmarker.Mark("- Starting build");
+                var existingKeys = new string[reader.FieldCount];
+                for (int i = 0; i < reader.FieldCount; i++) {
+                    var name = reader.GetName(i);
+                    if (name != null) {
+                        if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
+                            existingKeys[i] = name;
+                        }
+                    }
+                }
+                await writer.WriteAsync("[").ConfigureAwait(false);
+                var isFirst = true;
+                while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
+                    if (transaction.CancellationToken.IsCancellationRequested) {
+                        break;
+                    }
+                    if(!isFirst) {
+                        await writer.WriteAsync(",").ConfigureAwait(false);
+                    }
+                    await writer.WriteAsync("{").ConfigureAwait(false);
+                    for (int i = 0; i < existingKeys.Length; i++) {
+                        if (existingKeys[i] != null) {
+                            try {
+                                var o = reader.GetValue(i);
+                                await writer.WriteAsync($"\"{existingKeys[i]}\":").ConfigureAwait(false);
+                                await writer.WriteAsync(JsonConvert.SerializeObject(o)).ConfigureAwait(false);
+                                if (i < existingKeys.Length - 1) {
+                                    await writer.WriteAsync(",").ConfigureAwait(false);
+                                }
+                            } catch (Exception x) {
+                                Debugger.Break();
+                                //throw x;
+                            }
+                        }
+                    }
+                    await writer.WriteAsync("}").ConfigureAwait(false);
+                    isFirst = false;
+                }
+                await writer.WriteAsync("]").ConfigureAwait(false);
             }
         }
 
@@ -118,7 +166,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .FirstOrDefault()
         );
 
-        static ConcurrentDictionary<string, Dictionary<string, (int[], string[])>> _autoAggregateCache = new ConcurrentDictionary<string, Dictionary<string, (int[], string[])>>();
+        static ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
@@ -283,30 +331,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                var jstr = String.Intern(join.ToString());
-                lock (jstr) {
-                    if (!_autoAggregateCache.TryGetValue(jstr, out var newEntry)) {
-                        // This is only ever used in the auto aggregations
-                        // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
-                        var fieldNames = new string[reader.FieldCount];
-                        for (int i = 0; i < fieldNames.Length; i++)
-                            fieldNames[i] = reader.GetName(i);
-                        int idx = 0;
-                        // With this I make a reusable cache and reduce the "per-object" field 
-                        // probing when copying values from the reader
-                        var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
-                            var prefix = name.Split('_')[0].ToLower();
-                            return (prefix, idx++, name.Replace($"{prefix}_", ""));
-                        })
-                        .Where(i => i.Item1 != null)
-                        .GroupBy(i => i.Item1);
-                        newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-
-                        _autoAggregateCache[jstr] = newEntry;
-                    }
-                }
-                Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
-                fieldNamesDict = _autoAggregateCache[jstr];
+                fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -324,14 +349,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 int objs = 0;
                 T currentObject = default(T);
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
-                    //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T iterationObject;
                     var thisCacheId = cacheId(reader, myRidCol, typeof(T));
                     if (!constructionCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
-
                         iterationObject = new T();
-
                         if (currentObject != null) {
                             objs++;
                             yield return currentObject;
@@ -349,7 +371,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     BuildAggregateObject(transaction, typeof(T), objArray, iterationObject, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
-                    //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
                 }
                 if (currentObject != null) {
@@ -384,30 +405,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                var jstr = String.Intern(join.ToString());
-                lock (jstr) {
-                    if (!_autoAggregateCache.TryGetValue(jstr, out var newEntry)) {
-                        // This is only ever used in the auto aggregations
-                        // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
-                        var fieldNames = new string[reader.FieldCount];
-                        for (int i = 0; i < fieldNames.Length; i++)
-                            fieldNames[i] = reader.GetName(i);
-                        int idx = 0;
-                        // With this I make a reusable cache and reduce the "per-object" field 
-                        // probing when copying values from the reader
-                        var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
-                            var prefix = name.Split('_')[0].ToLower();
-                            return (prefix, idx++, name.Replace($"{prefix}_", ""));
-                        })
-                        .Where(i => i.Item1 != null)
-                        .GroupBy(i => i.Item1);
-                        newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-
-                        _autoAggregateCache[jstr] = newEntry;
-                    }
-                }
-                Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
-                fieldNamesDict = _autoAggregateCache[jstr];
+                fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -427,7 +425,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
                 WorkQueuer afterLoads = implementsAfterLoad || implementsAfterAggregateLoad ? new WorkQueuer("AfterLoads") : null;
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
-                    //transaction.Benchmarker.Mark($"Enter result row {row}");
                     isNew = true;
                     T newObj;
                     if (!constructionCache.TryGetValue(cacheId(reader, myRidCol, typeof(T)), out var newObjObj)) {
@@ -454,7 +451,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     reader.GetValues(objArray);
                     BuildAggregateObject(transaction, typeof(T), objArray, newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
-                    //transaction.Benchmarker.Mark($"End result row {row}");
                     row++;
                 }
 
@@ -502,30 +498,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
                     Benchmarker.Assert(() => join != null);
-                    var jstr = String.Intern(join.ToString());
-                    lock (jstr) {
-                        if (!_autoAggregateCache.ContainsKey(jstr)) {
-                            // This is only ever used in the auto aggregations
-                            // So it would be a waste of processing power to reflect these fieldNames and their indexes every time
-                            var fieldNames = new string[reader.FieldCount];
-                            for (int i = 0; i < fieldNames.Length; i++)
-                                fieldNames[i] = reader.GetName(i);
-                            int idx = 0;
-                            // With this I make a reusable cache and reduce the "per-object" field 
-                            // probing when copying values from the reader
-                            var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
-                                var prefix = name.Split('_')[0].ToLower();
-                                return (prefix, idx++, name.Replace($"{prefix}_", ""));
-                            })
-                            .Where(i => i.Item1 != null)
-                            .GroupBy(i => i.Item1);
-                            var newEntry = newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
-
-                            _autoAggregateCache[jstr] = newEntry;
-                        }
-                    }
-                    Benchmarker.Assert(() => _autoAggregateCache.ContainsKey(jstr));
-                    fieldNamesDict = _autoAggregateCache[jstr];
+                    fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -541,7 +514,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Enter Build Result");
                     int row = 0;
                     while (reader.Read()) {
-                        //transaction.Benchmarker.Mark($"Enter result row {row}");
                         isNew = true;
                         T newObj;
                         if (!constructionCache.ContainsKey(cacheId(reader, myRidCol, typeof(T)))) {
@@ -557,7 +529,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         reader.GetValues(objArray);
                         BuildAggregateObject(transaction, typeof(T), objArray, newObj, fieldNamesDict, joinTables, cachedRelations, thisIndex, isNew, constructionCache, 0);
 
-                        //transaction.Benchmarker.Mark($"End result row {row}");
                         row++;
                     }
                     var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
@@ -579,11 +550,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (CacheImplementsAfterAggregateLoad[typeof(T)]) {
                 foreach (var a in retv) {
-                    ((IBusinessObject<T>) a).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
+                    ((IBusinessObject<T>)a).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
             }
 
-            if(CacheImplementsAfterLoad[typeof(T)]) {
+            if (CacheImplementsAfterLoad[typeof(T)]) {
                 foreach (var a in retv) {
                     ((IBusinessObject)a).OnAfterLoad(dlc);
                 }
@@ -613,6 +584,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
+        }
+        private Dictionary<string, (int[], string[])> CreateFieldNamesDict(IDataReader reader, JoinDefinition join) {
+            var fieldNames = new string[reader.FieldCount];
+            for (int i = 0; i < fieldNames.Length; i++)
+                fieldNames[i] = reader.GetName(i);
+            int idx = 0;
+            var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
+                var prefix = name.Split('_')[0].ToLower();
+                return (prefix, idx++, name.Replace($"{prefix}_", ""));
+            })
+            .Where(i => i.Item1 != null)
+            .GroupBy(i => i.Item1);
+            return newEntryGrp.ToDictionary(i => i.First().Item1, i => (i.Select(j => j.Item2).ToArray(), i.Select(j => j.Item3).ToArray()));
         }
     }
 }

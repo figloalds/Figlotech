@@ -2200,6 +2200,48 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        public async ValueTask QueryToJsonAsync<T>(BDadosTransaction transaction, IQueryBuilder query, TextWriter writer) where T : new() {
+            transaction.Step();
+
+            if (query == null || query.GetCommandText() == null) {
+                await writer.WriteAsync("[]").ConfigureAwait(false);
+                return;
+            }
+            var tName = typeof(T).Name;
+            DateTime Inicio = DateTime.Now;
+            using (var command = (DbCommand)transaction.CreateCommand()) {
+                command.CommandTimeout = Plugin.CommandTimeout;
+                query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+                VerboseLogQueryParameterization(transaction, query);
+                // --
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Enter lock region");
+                var c = 0;
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Execute QueryCoroutinely<{tName}> <{query.Id}>");
+                await GetJsonStringFromQueryAsync<T>(transaction, command, writer).ConfigureAwait(false);
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build<{tName}> completed <{query.Id}>");
+
+                var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Fully consumed resultset (coroutinely) <{query.Id}> Size: {c}");
+                transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Avg consumption speed: {((double)elaps / (double)c).ToString("0.00")}ms/item");
+
+                try {
+                    int nResults = 0;
+                    nResults = c;
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Query<{tName}> <{query.Id}> [OK] ({nResults} results) [{elaps} ms]");
+                } catch (Exception x) {
+                    WriteLog($"[{Description}:{transaction.Id}] -------- Error<{tName}> <{query.Id}>: {x.Message} ([{DateTime.Now.Subtract(Inicio).TotalMilliseconds} ms]");
+                    WriteLog(x.Message);
+                    WriteLog(x.StackTrace);
+                    transaction?.MarkAsErrored();
+                    throw new BDadosException("Error in query", x) {
+                        Data = {
+                            ["Query"] = query,
+                        }
+                    };
+                } finally {
+                    WriteLog("------------------------------------");
+                }
+            }
+        }
 
         public async IAsyncEnumerable<T> QueryCoroutinely<T>(BDadosTransaction transaction, IQueryBuilder query) where T : new() {
             transaction.Step();
