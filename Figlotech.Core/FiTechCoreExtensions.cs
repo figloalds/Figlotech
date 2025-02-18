@@ -21,7 +21,6 @@ using System.Text;
 using System.Drawing;
 using System.Text.RegularExpressions;
 using Figlotech.Core.Autokryptex;
-using System.Runtime.CompilerServices;
 using System.IO.Compression;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
@@ -117,7 +116,7 @@ namespace Figlotech.Core {
             Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
     }
 
-    public static class FiTechCoreExtensions {
+    public static partial class FiTechCoreExtensions {
         private static Object _readLock = new Object();
 
         private static int _generalId = 0;
@@ -775,6 +774,19 @@ namespace Figlotech.Core {
         public static DateTime ProgramStartupTimestamp => _startupstamp;
         public static bool DidTimeElapseFromProgramStart(this Fi _selfie, TimeSpan ts) {
             return Fi.Tech.GetUtcTime().Subtract(_startupstamp) > ts;
+        }
+
+        public static async ValueTask AsyncMultiProcess<T>(
+            this Fi _selfie,
+            WorkQueuer queuer,
+            IAsyncEnumerable<T> source,
+            params Func<T, ValueTask>[] methods
+        ) {
+            await foreach (var item in source) {
+                foreach (var method in methods) {
+                    queuer.Enqueue(async () => await method(item));
+                }
+            }
         }
 
         public static List<T> Map<T>(this Fi _selfie, DataTable dt, Dictionary<String, string> mapReplacements = null) where T : new() {
@@ -1885,230 +1897,6 @@ namespace Figlotech.Core {
                     retv.Add(input);
                 }
             }
-        }
-
-        public sealed class QueueFlowStepIn<T> : IParallelFlowStepIn<T> {
-            Queue<T> Host { get; set; }
-            public QueueFlowStepIn(Queue<T> host) {
-                this.Host = host;
-            }
-
-            public void Put(T input) {
-                this.Host.Enqueue(input);
-            }
-
-            public Task NotifyDoneQueueing() {
-                return Task.FromResult(0);
-            }
-        }
-
-        public sealed class FlowYield<T> {
-            IParallelFlowStepIn<T> root { get; set; }
-            ParallelFlowOutEnumerator<T> Enumerator { get; set; }
-            public FlowYield(IParallelFlowStepIn<T> root, ParallelFlowOutEnumerator<T> enumerator) {
-                this.root = root;
-                this.Enumerator = enumerator;
-            }
-            public void Return(T o) {
-                root.Put(o);
-                Enumerator.Publish(o);
-            }
-            public void ReturnRange(IEnumerable<T> list) {
-                list.ForEach(x => Return(x));
-            }
-        }
-
-        public interface IParallelFlowStep {
-        }
-        public interface IParallelFlowStepOut<TOut> : IParallelFlowStep, IAsyncEnumerable<TOut> {
-            TaskAwaiter<List<TOut>> GetAwaiter();
-            IAsyncEnumerator<TOut> GetAsyncEnumerator(CancellationToken cancellation);
-            Task<List<TOut>> TaskObj { get; }
-        }
-        public interface IParallelFlowStepIn<TIn> : IParallelFlowStep {
-            void Put(TIn input);
-            Task NotifyDoneQueueing();
-        }
-
-        public class ParallelFlowOutEnumerator<T> : IAsyncEnumerator<T> {
-            public T Current { get; set; }
-
-            public ValueTask DisposeAsync() {
-                throw new NotImplementedException();
-            }
-
-            public async ValueTask<bool> MoveNextAsync() {
-                lock(cache) {
-                    if(cache.Count > 0) {
-                        Current = cache.Dequeue();
-                        return true;
-                    }
-                }
-                var retv = await MoveNext.Task;
-                if(!retv) {
-                    return false;
-                }
-                Current = cache.Dequeue();
-                return retv;
-            }
-
-            public void Publish(T o) {
-                lock(cache) {
-                    cache.Enqueue(o);
-                }
-                var mn = MoveNext;
-                MoveNext = new TaskCompletionSource<bool>();
-                mn.SetResult(true);
-            }
-            public void Finish() {
-                MoveNext.SetResult(false);
-            }
-
-            Queue<T> cache = new Queue<T>();
-
-            TaskCompletionSource<bool> MoveNext = new TaskCompletionSource<bool>();
-
-        }
-
-        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
-            WorkQueuer queuer { get; set; }
-            Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
-            Func<TIn, ValueTask<TOut>> SimpleAct { get; set; }
-            Func<TIn, FlowYield<TOut>, ValueTask> YieldAct { get; set; }
-            Func<Exception, Task> ExceptionHandler { get; set; }
-            IParallelFlowStepIn<TOut> ConnectTo { get; set; }
-            bool IgnoreOutput { get; set; } = false;
-            IParallelFlowStepOut<TIn> Parent { get; set; }
-
-            public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
-            public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
-            public ParallelFlowStepInOut(Func<TIn, ValueTask<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
-                this.SimpleAct = Act;
-                this.Parent = parent;
-                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
-            }
-            public ParallelFlowStepInOut(Func<TIn, FlowYield<TOut>, ValueTask> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
-                this.YieldAct = Act;
-                this.Parent = parent;
-                this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
-            }
-
-            public void Put(TIn input) {
-                queuer.Enqueue(async () => {
-                    if (SimpleAct != null) {
-                        var output = await SimpleAct(input).ConfigureAwait(false);
-                        if (this.ConnectTo != null) {
-                            this.ConnectTo.Put(output);
-                        } else {
-                            if (!IgnoreOutput) {
-                                lock (ValueQueue)
-                                    ValueQueue.Enqueue(output);
-                            }
-                        }
-                        enumerator.Publish(output);
-                    } else if (YieldAct != null) {
-                        if (this.ConnectTo != null) {
-                            await YieldAct(input, new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
-                        } else {
-                            await YieldAct(input, new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue), enumerator)).ConfigureAwait(false);
-                        }
-                    }
-                }, async x => {
-                    if (ExceptionHandler != null) {
-                        await ExceptionHandler(x);
-                    }
-                });
-            }
-            Queue<TaskCompletionSource<int>> AlsoQueue { get; set; } = new Queue<TaskCompletionSource<int>>();
-            public ParallelFlowStepInOut<TIn, TOut> Also(Func<FlowYield<TOut>, Task> yieldFn) {
-                var src = new TaskCompletionSource<int>();
-                AlsoQueue.Enqueue(src);
-                Fi.Tech.FireAndForget(async () => {
-                    if (this.ConnectTo != null) {
-                        await yieldFn(new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
-                    } else {
-                        await yieldFn(new FlowYield<TOut>(new QueueFlowStepIn<TOut>(this.ValueQueue), enumerator)).ConfigureAwait(false);
-                    }
-                    src.SetResult(0);
-                });
-                return this;
-            }
-
-            public ParallelFlowStepInOut<TIn, TOut> Except(Func<Exception, Task> except) {
-                this.ExceptionHandler = except;
-                return this;
-            }
-
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, TNext> act)
-                => Then(Environment.ProcessorCount, (i)=> Fi.Result(act(i)));
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, ValueTask<TNext>> act)
-                => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, ValueTask<TNext>> act) {
-                if (maxParallelism < 0) {
-                    maxParallelism = Environment.ProcessorCount;
-                }
-                var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
-                return retv;
-            }
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Action<TOut, FlowYield<TNext>> act)
-                => Then<TNext>(Environment.ProcessorCount, (o, yield) => {
-                    act(o, yield);
-                    return Fi.Result();
-                });
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, FlowYield<TNext>, ValueTask> act)
-                => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, FlowYield<TNext>, ValueTask> act) {
-                if (maxParallelism < 0) {
-                    maxParallelism = Environment.ProcessorCount;
-                }
-                var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
-                return retv;
-            }
-
-            public ParallelFlowStepInOut<TOut, TOut> Then(Func<TOut, Task> act)
-                => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TOut> Then(int maxParallelism, Func<TOut, Task> act) {
-                if (maxParallelism < 0) {
-                    maxParallelism = Environment.ProcessorCount;
-                }
-                var retv = new ParallelFlowStepInOut<TOut, TOut>(async (x) => {
-                    await act(x).ConfigureAwait(false);
-                    return x;
-                }, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
-                return retv;
-            }
-            public void FlushToConnected() {
-                if(this.ConnectTo != null) {
-                    lock (ValueQueue)
-                        while(ValueQueue.Count > 0)
-                            this.ConnectTo.Put(ValueQueue.Dequeue());
-                }
-            }
-            public async Task NotifyDoneQueueing() {
-                while(AlsoQueue.Count > 0) {
-                    await AlsoQueue.Dequeue().Task.ConfigureAwait(false);
-                }
-                await queuer.Stop(true).ConfigureAwait(false);
-                if(this.ConnectTo != null) {
-                    FlushToConnected();
-                    await this.ConnectTo.NotifyDoneQueueing().ConfigureAwait(false);
-                }
-                TaskCompletionSource.SetResult(ValueQueue.ToList());
-            }
-            public TaskAwaiter<List<TOut>> GetAwaiter() {
-                return TaskCompletionSource.Task.GetAwaiter();
-            }
-            private ParallelFlowOutEnumerator<TOut> enumerator = new ParallelFlowOutEnumerator<TOut>();
-            public IAsyncEnumerator<TOut> GetAsyncEnumerator(CancellationToken cancellation) {
-                return enumerator;
-            }
-
         }
 
         public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Action<FlowYield<TIn>> input, int maxParallelism = -1) {
