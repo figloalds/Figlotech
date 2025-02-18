@@ -2616,7 +2616,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction.Step();
             args = args ?? new LoadAllArgs<T>();
             int? queryLimit = args.Linear ? args.RowLimit : null; // args.RowLimit ?? DefaultQueryLimit;
-            
+            int? querySkip = args.Linear ? args.RowSkip : null;
+
             transaction?.Benchmarker?.Mark($"Begin AggregateLoad<{typeof(T).Name}>");
             var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
             var prefixer = args.Linear ? CacheAutoPrefixerLinear[typeof(T)] : CacheAutoPrefixer[typeof(T)];
@@ -2651,7 +2652,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
 
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, null, queryLimit, om, args.OrderingType, builtConditionsRoot);
+                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, querySkip, queryLimit, om, args.OrderingType, builtConditionsRoot);
                     transaction?.Benchmarker?.Mark($"Generate Join Query");
                     //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
@@ -2684,7 +2685,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     //    yield return item;
                     //}
                     var yieldedItems = 0;
-                    var rowSkip = args.RowSkip ?? 0;
+                    var rowSkip = args.Linear ? 0 : (args.RowSkip ?? 0);
                     await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
                         if (implementsAfterLoad) {
                             ((IBusinessObject)item).OnAfterLoad(dlc);
@@ -2698,7 +2699,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         yield return item;
                         yieldedItems++;
-                        if(args.RowLimit.HasValue && yieldedItems >= args.RowLimit) {
+                        if(!args.Linear && args.RowLimit.HasValue && yieldedItems >= args.RowLimit) {
                             break;
                         }
                     }
