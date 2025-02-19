@@ -1,69 +1,95 @@
-﻿using Figlotech.Core.Interfaces;
+﻿using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Linq.Expressions;
 
-namespace Figlotech.Core
-{
-    public sealed class BasicMemoryCache
-    {
+namespace Figlotech.Core {
+    public sealed class BasicMemoryCache {
         static int idGen = 0;
         int myId = ++idGen;
-        private SelfInitializerDictionary<Type, object> DataCache = new SelfInitializerDictionary<Type, object>(
-            t => {
-                return Activator.CreateInstance(typeof(List<>).MakeGenericType(t));
-            }
-        );
+
+        private readonly ConcurrentDictionary<Type, object> DataCache = new ConcurrentDictionary<Type, object>();
+        private readonly ConcurrentDictionary<Type, object> DataCacheByIndex = new ConcurrentDictionary<Type, object>();
 
         IDataAccessor DataAccessor { get; set; }
+
         public BasicMemoryCache(IDataAccessor dataAccessor = null) {
             DataAccessor = dataAccessor;
         }
-
-        private List<T> InternalCache<T>() where T : IDataObject, new()  {
-            lock (String.Intern($"{myId}_BasicMemoryCache_{typeof(T).Name}")) {
-                if(!DataCache.ContainsKey(typeof(T))) {
-                    DataCache[typeof(T)] = LoadListOfType<T>();
-                }
-                return ((List<T>)DataCache[typeof(T)]);
-            }
+        
+        private ConcurrentDictionary<string, T> InternalCache<T>() where T : IDataObject, new() {
+            return (ConcurrentDictionary<string, T>)DataCache.GetOrAdd(typeof(T), t => {
+                var list = LoadListOfType<T>();
+                return new ConcurrentDictionary<string, T>(list.ToDictionary(x => x.RID, x => x));
+            });
         }
-
         public void Put<T>(IEnumerable<T> objs) where T : IDataObject, new() {
-            lock (String.Intern($"{myId}_BasicMemoryCache_{typeof(T).Name}")) {
-                foreach (var a in objs) {
-                    Put(a);
-                }
+            foreach (var obj in objs) {
+                Put(obj);
             }
         }
 
         public void Put<T>(T obj) where T : IDataObject, new() {
-            lock (String.Intern($"{myId}_BasicMemoryCache_{typeof(T).Name}")) {
-                var ic = InternalCache<T>();
-                var idx = ic.FindIndex(x => x.RID == obj.RID);
-                if (idx > -1) {
-                    ic[idx] = obj;
-                } else {
-                    ic.Add(obj);
+            var mainCache = InternalCache<T>();
+            mainCache.AddOrUpdate(obj.RID, obj, (key, old) => obj);
+
+            // If any index caches exist for T, update them.
+            if (DataCacheByIndex.TryGetValue(typeof(T), out var indexCacheObj)
+                && indexCacheObj is ConcurrentDictionary<string, ConcurrentDictionary<object, ConcurrentDictionary<string, T>>> indexCache) {
+                foreach (var kv in indexCache) {
+                    string indexName = kv.Key;
+                    var indexDict = kv.Value; // Maps index value -> objects keyed by RID.
+                    var idxValue = ReflectionTool.GetValue(obj, indexName);
+                    var subDict = indexDict.GetOrAdd(idxValue, _ => new ConcurrentDictionary<string, T>());
+                    subDict.AddOrUpdate(obj.RID, obj, (key, old) => obj);
                 }
             }
         }
 
         public List<T> Get<T>() where T : IDataObject, new() {
-            lock (String.Intern($"{myId}_BasicMemoryCache_{typeof(T).Name}")) {
-                
-                return InternalCache<T>().ToList();
-            }
+            return InternalCache<T>().Values.ToList();
         }
 
-        public T Find<T>(Func<T, bool> predi) where T : IDataObject, new() {
-            lock (String.Intern($"{myId}_BasicMemoryCache_{typeof(T).Name}")) {
-                return Get<T>().FirstOrDefault(predi);
-            }
+        public T Find<T>(Func<T, bool> predicate) where T : IDataObject, new() {
+            return InternalCache<T>().Values.FirstOrDefault(predicate);
         }
 
-        public List<T> LoadListOfType<T>() where T: IDataObject, new() {
+        public List<T> GetByIndex<T, TIndex>(Expression<Func<T, TIndex>> expr, TIndex indexValue) where T : IDataObject, new() {
+            if (expr.Body is MemberExpression mex) {
+                string indexName = mex.Member.Name;
+
+                var typedIndexCache =
+                    (ConcurrentDictionary<string, ConcurrentDictionary<object, ConcurrentDictionary<string, T>>>)
+                    DataCacheByIndex.GetOrAdd(typeof(T), t =>
+                        new ConcurrentDictionary<string, ConcurrentDictionary<object, ConcurrentDictionary<string, T>>>());
+
+                var indexDict = typedIndexCache.GetOrAdd(indexName, name => {
+                    var mainCache = InternalCache<T>();
+                    var groups = mainCache.Values.GroupBy(x => ReflectionTool.GetValue(x, name));
+                    var newIndexDict = new ConcurrentDictionary<object, ConcurrentDictionary<string, T>>();
+                    foreach (var group in groups) {
+                        newIndexDict.TryAdd(group.Key, new ConcurrentDictionary<string, T>(
+                            group.ToDictionary(x => x.RID, x => x)
+                        ));
+                    }
+                    return newIndexDict;
+                });
+
+                if (indexDict.TryGetValue(indexValue, out var subDict)) {
+                    return subDict.Values.ToList();
+                } else {
+                    indexDict.TryAdd(indexValue, new ConcurrentDictionary<string, T>());
+                    return new List<T>();
+                }
+            }
+
+            throw new ArgumentException("Expression must be a MemberExpression");
+        }
+
+        public List<T> LoadListOfType<T>() where T : IDataObject, new() {
             return LoadAll.From<T>().Using(DataAccessor).Load();
         }
     }
