@@ -784,7 +784,9 @@ namespace Figlotech.Core {
         ) {
             await foreach (var item in source) {
                 foreach (var method in methods) {
-                    queuer.Enqueue(async () => await method(item));
+                    _ = queuer.Enqueue(new WorkJob(async () => await method(item)) {
+                        Name = "Annonymous AsyncMultiProcess Job"
+                    });
                 }
             }
         }

@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.Helpers;
+﻿using Figlotech.Core.Extensions;
+using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Concurrent;
@@ -20,12 +21,13 @@ namespace Figlotech.Core {
             DataAccessor = dataAccessor;
         }
         
-        private ConcurrentDictionary<string, T> InternalCache<T>() where T : IDataObject, new() {
-            return (ConcurrentDictionary<string, T>)DataCache.GetOrAdd(typeof(T), t => {
+        public ConcurrentDictionary<string, T> InternalCache<T>() where T : IDataObject, new() {
+            return (ConcurrentDictionary<string, T>)DataCache.GetOrAddWithLocking(typeof(T), t => {
                 var list = LoadListOfType<T>();
                 return new ConcurrentDictionary<string, T>(list.ToDictionary(x => x.RID, x => x));
             });
         }
+
         public void Put<T>(IEnumerable<T> objs) where T : IDataObject, new() {
             foreach (var obj in objs) {
                 Put(obj);
@@ -43,7 +45,7 @@ namespace Figlotech.Core {
                     string indexName = kv.Key;
                     var indexDict = kv.Value; // Maps index value -> objects keyed by RID.
                     var idxValue = ReflectionTool.GetValue(obj, indexName);
-                    var subDict = indexDict.GetOrAdd(idxValue, _ => new ConcurrentDictionary<string, T>());
+                    var subDict = indexDict.GetOrAddWithLocking(idxValue, _ => new ConcurrentDictionary<string, T>());
                     subDict.AddOrUpdate(obj.RID, obj, (key, old) => obj);
                 }
             }
@@ -61,12 +63,21 @@ namespace Figlotech.Core {
             if (expr.Body is MemberExpression mex) {
                 string indexName = mex.Member.Name;
 
+                if (indexName == nameof(IDataObject.RID)) {
+                    var mainCache = InternalCache<T>();
+                    if (mainCache.TryGetValue(indexValue as String, out var obj)) {
+                        return new List<T> { obj };
+                    } else {
+                        return new List<T>();
+                    }
+                }
+
                 var typedIndexCache =
                     (ConcurrentDictionary<string, ConcurrentDictionary<object, ConcurrentDictionary<string, T>>>)
-                    DataCacheByIndex.GetOrAdd(typeof(T), t =>
+                    DataCacheByIndex.GetOrAddWithLocking(typeof(T), t =>
                         new ConcurrentDictionary<string, ConcurrentDictionary<object, ConcurrentDictionary<string, T>>>());
 
-                var indexDict = typedIndexCache.GetOrAdd(indexName, name => {
+                var indexDict = typedIndexCache.GetOrAddWithLocking(indexName, name => {
                     var mainCache = InternalCache<T>();
                     var groups = mainCache.Values.GroupBy(x => ReflectionTool.GetValue(x, name));
                     var newIndexDict = new ConcurrentDictionary<object, ConcurrentDictionary<string, T>>();

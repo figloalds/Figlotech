@@ -1,3 +1,4 @@
+using Figlotech.Core.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -14,7 +15,7 @@ namespace Figlotech.Core {
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
             get {
-                return _dmmy.GetOrAdd(key, Initialize);
+                return _dmmy.GetOrAddWithLocking(key, Initialize);
             }
             set {
                 if (!AllowNullValueCaching && value == null) {
