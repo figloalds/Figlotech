@@ -1,25 +1,37 @@
-﻿using System;
+﻿using Figlotech.Core.Extensions;
+using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class FiAsyncMultiLock : IDictionary<string, FiAsyncLock> {
-        SelfInitializerDictionary<string, FiAsyncLock> _dmmy;
+        ConcurrentDictionary<string, FiAsyncLock> _dmmy;
         public FiAsyncMultiLock() {
-            this._dmmy = new SelfInitializerDictionary<string, FiAsyncLock>(s => new FiAsyncLock(), true);
+            this._dmmy = new ConcurrentDictionary<string, FiAsyncLock>();
         }
 
         public bool AutoRemoveLocks { get; set; } = false;
 
-        public FiAsyncLock this[string key] { 
-            get => this._dmmy[key]; 
-            set => this._dmmy[key] = value; 
+        public FiAsyncLock this[string key] {
+            get {
+                var retv = _dmmy.TryGetValue(key, out var value);
+                if(retv) {
+                    return value;
+                }
+                lock(_dmmy) {
+                    value = _dmmy.GetOrAdd(key, k => new FiAsyncLock());
+                    return value;
+                }
+            }
+            set => this._dmmy[key] = value;
         }
 
         public ICollection<string> Keys => this._dmmy.Keys;
@@ -28,14 +40,18 @@ namespace Figlotech.Core {
 
         public int Count => this._dmmy.Count;
 
-        public bool IsReadOnly => this._dmmy.IsReadOnly;
+        public bool IsReadOnly => false;
 
         public void Add(string key, FiAsyncLock value) {
-            this._dmmy.Add(key, value);
+            if(!this._dmmy.TryAdd(key, value)) {
+                throw new Exception("Key already exists");
+            }
         }
 
         public void Add(KeyValuePair<string, FiAsyncLock> item) {
-            this._dmmy.Add(item);
+            if(!this._dmmy.TryAdd(item.Key, item.Value)) {
+                throw new Exception("Key already exists");
+            }
         }
 
         public void Clear() {
@@ -51,7 +67,7 @@ namespace Figlotech.Core {
         }
 
         public void CopyTo(KeyValuePair<string, FiAsyncLock>[] array, int arrayIndex) {
-            this._dmmy.CopyTo(array, arrayIndex);
+            this._dmmy.ToSetAsList().CopyTo(array, arrayIndex);
         }
 
         public IEnumerator<KeyValuePair<string, FiAsyncLock>> GetEnumerator() {
@@ -66,11 +82,15 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(string key) {
-            return this._dmmy.Remove(key);
+            lock(_dmmy) {
+                return this._dmmy.TryRemove(key, out var _);
+            }
         }
 
         public bool Remove(KeyValuePair<string, FiAsyncLock> item) {
-            return this._dmmy.Remove(item);
+            lock (_dmmy) {
+                return this._dmmy.TryRemove(item.Key, out var _);
+            }
         }
 
         public bool TryGetValue(string key, out FiAsyncLock value) {
@@ -82,11 +102,11 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class FiAsyncDisposableLock : IDisposable {
+    public sealed class FiAsyncDisposableLock : IDisposable, IAsyncDisposable {
         SemaphoreSlim _semaphore;
         internal FiAsyncMultiLock _lock;
         internal string _key;
-        private bool isDisposed {get;set;}
+        private bool isDisposed { get; set; }
         public FiAsyncDisposableLock(SemaphoreSlim semaphore) {
             this._semaphore = semaphore;
         }
@@ -96,8 +116,8 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
-            lock(this) {
-                if(isDisposed) {
+            lock (this) {
+                if (isDisposed) {
                     return;
                 }
                 try {
@@ -118,7 +138,33 @@ namespace Figlotech.Core {
                     isDisposed = true;
                 }
             }
-        }   
+        }
+
+        public ValueTask DisposeAsync() {
+            lock (this) {
+                if (isDisposed) {
+                    return Fi.CompletedValueTask;
+                }
+                try {
+                    if (_semaphore.CurrentCount == 0) {
+                        _semaphore.Release(1);
+                    } else {
+                        Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
+                    }
+                    if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
+                        _lock.Remove(_key);
+                    }
+                } catch (Exception x) {
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
+                    Fi.Tech.Error(x);
+                } finally {
+                    isDisposed = true;
+                }
+            }
+            return Fi.CompletedValueTask;
+        }
     }
 
     public sealed class FiAsyncLock {

@@ -305,8 +305,9 @@ namespace Figlotech.Core {
                         _globalTimeStampSource = await SyncTimeStampSource.FromNtpServerCached("0.pool.ntp.org");
                         Fi.Tech.Unschedule(taskid);
                         Fi.Tech.WriteLineInternal("SyncTime", () => "NTP time initialized");
-                    }, async x => {
+                    }, x => {
                         Fi.Tech.WriteLineInternal("SyncTime", () => "Error updating time with NTP server");
+                        return Fi.EmptyValueTask;
                     }), TimeSpan.FromSeconds(5));
                 }
             }
@@ -1893,7 +1894,7 @@ namespace Figlotech.Core {
                 }, async (ex) => {
                     Console.Write(ex.Message);
                     await thisStep.except(ex);
-                }, async (b) => { }));
+                }, (b) => Fi.EmptyValueTask));
             } else {
                 lock (retv) {
                     retv.Add(input);

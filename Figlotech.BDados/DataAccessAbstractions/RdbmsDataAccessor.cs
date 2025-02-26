@@ -1284,7 +1284,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private T UseTransaction<T>(Func<BDadosTransaction, T> func, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
             try {
                 return UseTransactionAsync<T>(
-                    async (tsn) => func(tsn),
+                    async (tsn) => {
+                        return await Task.Run(()=> func(tsn)).ConfigureAwait(false);
+                    },
                     CancellationToken.None,
                     ilev
                 ).ConfigureAwait(false)
@@ -3013,7 +3015,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public T QueryReader<T>(BDadosTransaction transaction, IQueryBuilder query, Func<IDataReader, T> actionRead) {
-            return QueryReaderAsync<T>(transaction, query, async (dr) => actionRead(dr))
+            return QueryReaderAsync<T>(transaction, query, async (dr) => {
+                    return await Task.Run(()=> actionRead(dr)).ConfigureAwait(false);
+                })
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();

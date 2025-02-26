@@ -66,10 +66,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 //Fi.Tech.WriteLine(x.Message);
             }
         }
+        private async Task absMkDirsAsync(string dir) {
+            await Task.Run(() => {
+                absMkDirs(dir);
+            }).ConfigureAwait(false);
+        }
 
         public async Task MkDirsAsync(string dir) {
             FixRel(ref dir);
-            absMkDirs(AssemblePath(RootDirectory, dir));
+            await absMkDirsAsync(dir).ConfigureAwait(false);
         }
 
         public async Task Write(String relative, Func<Stream, Task> func) {
@@ -116,29 +121,33 @@ namespace Figlotech.Core.FileAcessAbstractions {
             FixRel(ref relative);
             FileAttributes attr = File.GetAttributes(AssemblePath(RootDirectory, relative));
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
-            LockRegion(WorkingDirectory, () => {
+            await LockRegion(WorkingDirectory, async () => {
                 //detect whether its a directory or file
                 if ((attr & FileAttributes.Directory) == FileAttributes.Directory) {
-                    if (Directory.Exists(AssemblePath(RootDirectory, relative))) {
-                        if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
-                            absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
-                        if (Directory.Exists(AssemblePath(RootDirectory, newName))) {
-                            RenDir(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
-                        } else {
-                            Directory.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
+                    await Task.Run(() => {
+                        if (Directory.Exists(AssemblePath(RootDirectory, relative))) {
+                            if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
+                                absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
+                            if (Directory.Exists(AssemblePath(RootDirectory, newName))) {
+                                RenDir(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
+                            } else {
+                                Directory.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
+                            }
                         }
-                    }
+                    }).ConfigureAwait(false);
                 } else {
-                    if (File.Exists(AssemblePath(RootDirectory, relative))) {
-                        if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
-                            absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
-                        if (File.Exists(AssemblePath(RootDirectory, newName))) {
-                            File.Delete(AssemblePath(RootDirectory, newName));
+                    await Task.Run(() => {
+                        if (File.Exists(AssemblePath(RootDirectory, relative))) {
+                            if (!Directory.Exists(Path.GetDirectoryName(AssemblePath(RootDirectory, newName))))
+                                absMkDirs(Path.GetDirectoryName(AssemblePath(RootDirectory, newName)));
+                            if (File.Exists(AssemblePath(RootDirectory, newName))) {
+                                File.Delete(AssemblePath(RootDirectory, newName));
+                            }
+                            File.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
                         }
-                        File.Move(AssemblePath(RootDirectory, relative), AssemblePath(RootDirectory, newName));
-                    }
+                    }).ConfigureAwait(false);
                 }
-            });
+            }).ConfigureAwait(false);
         }
 
         public async Task<DateTime?> GetLastModifiedAsync(string relative) {
@@ -165,10 +174,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public async Task<long> GetSizeAsync(string relative) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
-            if (File.Exists(WorkingDirectory)) {
-                return new FileInfo(WorkingDirectory).Length;
-            }
-            return 0;
+            return await Task.Run(() => {
+                if (File.Exists(WorkingDirectory)) {
+                    return new FileInfo(WorkingDirectory).Length;
+                }
+                return 0;
+            }).ConfigureAwait(false);
         }
 
         public void ParallelForFilesIn(String relative, Action<String> execFunc) {
@@ -296,12 +307,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public async Task SetLastModifiedAsync(String relative, DateTime dt) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
-            File.SetLastWriteTimeUtc(WorkingDirectory, dt);
+            await Task.Run(() => {
+                File.SetLastWriteTimeUtc(WorkingDirectory, dt);
+            }).ConfigureAwait(false);
         }
         public async Task SetLastAccessAsync(String relative, DateTime dt) {
             FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
-            File.SetLastAccessTimeUtc(WorkingDirectory, dt);
+            await Task.Run(() => {
+                File.SetLastAccessTimeUtc(WorkingDirectory, dt);
+            });
         }
 
         public String ReadAllText(String relative) {
@@ -394,11 +409,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public async Task<bool> IsDirectoryAsync(string relative) {
             FixRel(ref relative);
-            return Directory.Exists(AssemblePath(RootDirectory, relative));
+            return await Task.Run(()=> Directory.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
         }
         public async Task<bool> IsFileAsync(string relative) {
             FixRel(ref relative);
-            return File.Exists(AssemblePath(RootDirectory, relative));
+            return await Task.Run(()=> File.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
         }
 
         private string AssemblePath(params string[] segments) {
@@ -451,10 +466,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             FixRel(ref relative);
             var workingPath = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(Path.GetDirectoryName(workingPath))) {
-                absMkDirs(Path.GetDirectoryName(workingPath));
+                await absMkDirsAsync(Path.GetDirectoryName(workingPath));
             }
 
-            return File.Open(workingPath, fileMode, fileAccess, FileShare.Read);
+            return await Task.Run(() => File.Open(workingPath, fileMode, fileAccess, FileShare.Read)).ConfigureAwait(false);
         }
 
         public void Hide(string relative) {

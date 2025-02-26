@@ -28,6 +28,7 @@ using System.Diagnostics;
 using Figlotech.Data;
 using Org.BouncyCastle.Asn1.Crmf;
 using System.Collections.Concurrent;
+using Figlotech.Core.Extensions;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
@@ -324,7 +325,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             QueryBuilder Query = new QueryBuilder();
 
-            var mainJoin = AutoJoinCache.GetOrAdd(inputJoin, ij => {
+            var mainJoin = AutoJoinCache.GetOrAddWithLocking(inputJoin, ij => {
                 // By caching this heavy process I might gain loads of performance
                 // When redoing the same queries.
                 QueryBuilder autoJoinMain = new QbFmt("SELECT sub.*\n");

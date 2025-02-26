@@ -41,6 +41,8 @@ namespace Figlotech.Core {
 
         public static Fi Tech = new Fi();
 
+        public static readonly ValueTask EmptyValueTask = new ValueTask();
+
         public static IEnumerable<int> Range(int min, int max, int skip = 1) {
             if (skip < 0) {
                 for (int i = max - 1; i >= min; i += skip) {

@@ -7,6 +7,7 @@
  *  
 **/
 
+using Figlotech.Core.Extensions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -378,7 +379,7 @@ namespace Figlotech.Core {
             int baseLen = baseStr.Length;
 
             // Retrieve or compute lookup: char -> int
-            int[] charToVal = charToValCache.GetOrAdd(baseStr, key => {
+            int[] charToVal = charToValCache.GetOrAddWithLocking(baseStr, key => {
                 int[] lookup = new int[128];
                 for (int i = 0; i < baseLen; i++) {
                     lookup[baseStr[i]] = i;
@@ -432,7 +433,7 @@ namespace Figlotech.Core {
             int baseLen = baseStr.Length;
 
             // Retrieve or compute lookup: char -> int
-            int[] charToVal = charToValCache.GetOrAdd(baseStr, key => {
+            int[] charToVal = charToValCache.GetOrAddWithLocking(baseStr, key => {
                 int[] lookup = new int[128];
                 for (int i = 0; i < baseLen; i++) {
                     lookup[baseStr[i]] = i;

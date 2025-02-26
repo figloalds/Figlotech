@@ -1,5 +1,6 @@
 ﻿using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
@@ -331,7 +332,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
+                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -405,7 +406,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[])> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
+                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -498,7 +499,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[])> fieldNamesDict;
                     Benchmarker.Assert(() => join != null);
-                    fieldNamesDict = _autoAggregateCache.GetOrAdd(join, _ => CreateFieldNamesDict(reader, join));
+                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();

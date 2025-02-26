@@ -1,26 +1,29 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
-    <RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>netstandard2.1</TargetFramework>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <OutputPath>..\_dist</OutputPath>
-    <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
-  </PropertyGroup>
+		<WarningsAsErrors>CS4014</WarningsAsErrors>
+		<WarningsAsErrors>CS1998</WarningsAsErrors>
+		<RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="8.0.1" />
-  </ItemGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<OutputPath>..\_dist</OutputPath>
+		<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="System.Diagnostics.DiagnosticSource" Version="8.0.1" />
+	</ItemGroup>
 
-  <!-- NETSTANDARD REFS -->
-  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.1'">
-  </ItemGroup>
-  
+	<ItemGroup>
+		<ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
+	</ItemGroup>
+
+	<!-- NETSTANDARD REFS -->
+	<ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.1'">
+	</ItemGroup>
+
 </Project>

@@ -82,23 +82,25 @@ namespace Figlotech.Core {
                     var groups = mainCache.Values.GroupBy(x => ReflectionTool.GetValue(x, name));
                     var newIndexDict = new ConcurrentDictionary<object, ConcurrentDictionary<string, T>>();
                     foreach (var group in groups) {
-                        newIndexDict.TryAdd(group.Key, new ConcurrentDictionary<string, T>(
-                            group.ToDictionary(x => x.RID, x => x)
+                        newIndexDict.TryAdd(group.Key ?? ObjectThatLiterallyMeansNull, new ConcurrentDictionary<string, T>(
+                            group.Where(x=> !string.IsNullOrEmpty(x?.RID)).ToDictionary(x => x.RID, x => x)
                         ));
                     }
                     return newIndexDict;
                 });
 
-                if (indexDict.TryGetValue(indexValue, out var subDict)) {
+                if (indexDict.TryGetValue(indexValue ?? ObjectThatLiterallyMeansNull, out var subDict)) {
                     return subDict.Values.ToList();
                 } else {
-                    indexDict.TryAdd(indexValue, new ConcurrentDictionary<string, T>());
+                    indexDict.TryAdd(indexValue ?? ObjectThatLiterallyMeansNull, new ConcurrentDictionary<string, T>());
                     return new List<T>();
                 }
             }
 
             throw new ArgumentException("Expression must be a MemberExpression");
         }
+
+        static object ObjectThatLiterallyMeansNull = new object();
 
         public List<T> LoadListOfType<T>() where T : IDataObject, new() {
             return LoadAll.From<T>().Using(DataAccessor).Load();

@@ -97,7 +97,6 @@ namespace Figlotech.Core {
                 _disposed = true;
             }
         }
-
         ~WorkJobExecutionRequest() {
             Dispose();
         }
@@ -160,7 +159,7 @@ namespace Figlotech.Core {
         }
     }
 
-public sealed class WorkQueuer : IDisposable {
+public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
         public static int qid_increment = 0;
         private int __qid = ++qid_increment;
         public int QID => __qid;
@@ -409,8 +408,8 @@ public sealed class WorkQueuer : IDisposable {
                             job._tcsNotifyDequeued.TrySetResult(0);
                             job.Status = WorkJobRequestStatus.Running;
                             if (job.WorkJob.action != null) {
-                                using (var womboCombo = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
-                                    job.WorkJob.ActionTask = job.WorkJob.action(job.Cancellation.Token);
+                                using (var cancellationCombo = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
+                                    job.WorkJob.ActionTask = job.WorkJob.action(cancellationCombo.Token);
                                 }
                                 await job.WorkJob.ActionTask.ConfigureAwait(false);
                                 job.Status = WorkJobRequestStatus.Finished;
@@ -522,7 +521,10 @@ public sealed class WorkQueuer : IDisposable {
         }
 
         public void Dispose() {
-            Stop(true).Wait();
+            Stop(true).GetAwaiter().GetResult();
+        }
+        public async ValueTask DisposeAsync() {
+            await Stop(true);
         }
     }
 }

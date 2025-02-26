@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json.Serialization;
+﻿using Figlotech.Core.Extensions;
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -215,7 +216,7 @@ namespace Figlotech.Core.Helpers {
 
         static ConcurrentDictionary<(MemberInfo, Type), Attribute[]> MemberAttributesByTypeCache = new ConcurrentDictionary<(MemberInfo, Type), Attribute[]>();
         public static T GetAttributeFrom<T>(MemberInfo member) where T : Attribute {
-            return MemberAttributesByTypeCache.GetOrAdd((member, typeof(T)), (k) => {
+            return MemberAttributesByTypeCache.GetOrAddWithLocking((member, typeof(T)), (k) => {
                 return member.GetCustomAttributes<T>().ToArray();
             })?.FirstOrDefault() as T;
         }

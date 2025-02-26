@@ -24,9 +24,10 @@ namespace Figlotech.Core.Data
             await Fi.Tech.ParallelFlow<T>((ch) => {
                 ch.ReturnRange(li);
             }).Then(Math.Max(Environment.ProcessorCount-1, 1), async (c) => {
+                await Task.Yield();
                 return ObjectToRow(headers, c);
             }).Then(1, async (data) => {
-                WriteDataToStream(data, stream);
+                await WriteDataToStreamAsync(data, stream);
             });
         }
 
@@ -100,6 +101,9 @@ namespace Figlotech.Core.Data
         }
         public void WriteDataToStream(byte[] data, Stream stream) {
             stream.Write(data, 0, data.Length);
+        }
+        public async Task WriteDataToStreamAsync(byte[] data, Stream stream) {
+            await stream.WriteAsync(data, 0, data.Length);
         }
     }
 }
