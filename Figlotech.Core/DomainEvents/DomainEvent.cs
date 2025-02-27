@@ -7,7 +7,32 @@ using System.Threading.Tasks;
 using System.Timers;
 
 namespace Figlotech.Core.DomainEvents {
-
+    public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent {
+        private string _cachedSerialization;
+        public string GetSerializedData() {
+            if (_cachedSerialization != null) {
+                return _cachedSerialization;
+            }
+            lock (this) {
+                if (_cachedSerialization == null) {
+                    _cachedSerialization = JsonConvert.SerializeObject(this);
+                }
+                return _cachedSerialization;
+            }
+        }
+        public void ClearSerializedData() {
+            lock (this) {
+                _cachedSerialization = null;
+            }
+        }
+        public void Serialize() {
+            lock (this) {
+                if (_cachedSerialization == null) {
+                    _cachedSerialization = JsonConvert.SerializeObject(this);
+                }
+            }
+        }
+    }
 
     public class DomainEvent : IDomainEvent {
         static short antiCollider = 0;

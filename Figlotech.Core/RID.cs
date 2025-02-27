@@ -253,15 +253,13 @@ namespace Figlotech.Core {
             }
         }
 
-        byte[] _cSeg = null;
-        byte[] CSeg {
-            get {
-                if (_cSeg == null) {
-                    _cSeg = new byte[8];
-                    Array.Copy(MachineRID.Signature, 16, _cSeg, 0, 8);
-                }
-                return _cSeg;
+        static byte[] _cSeg = null;
+        static byte[] GetCSeg() {
+            if (_cSeg == null) {
+                _cSeg = new byte[8];
+                Array.Copy(MachineRID.Signature, 16, _cSeg, 0, 8);
             }
+            return _cSeg;
         }
 
         public String AsBase64 {
@@ -297,21 +295,26 @@ namespace Figlotech.Core {
 
         private RID(bool noAutoInit) {
             if (!noAutoInit) {
-                NewRid();
+                Signature = GenerateNewAsByteArray();
             }
         }
 
         public RID() {
-            NewRid();
+            Signature = GenerateNewAsByteArray();
         }
 
         static byte[] RidSessionSegment = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
-        private void NewRid() {
+        public static byte[] GenerateNewAsByteArray() {
+            var Signature = new byte[32];
             Buffer.BlockCopy(RidSessionSegment, 0, Signature, 0, 8);
             Buffer.BlockCopy(BitConverter.GetBytes(DateTime.UtcNow.Ticks), 0, Signature, 8, 8);
-            Buffer.BlockCopy(CSeg, 0, Signature, 16, 8);
+            Buffer.BlockCopy(GetCSeg(), 0, Signature, 16, 8);
             Buffer.BlockCopy(BitConverter.GetBytes(rng.Next()), 0, Signature, 24, 4);
             Buffer.BlockCopy(BitConverter.GetBytes(segmentEOrigin + ++segmentESequential), 0, Signature, 28, 4);
+            return Signature;
+        }
+        public static string GenerateNewAsBase36() {
+            return IntEx.BigIntegerToString(new BigInteger(GenerateNewAsByteArray(), true), IntEx.Base36);
         }
 
         public RID(byte[] barr) {
@@ -319,6 +322,8 @@ namespace Figlotech.Core {
                 Signature = barr;
             } else
                 throw new InvalidOperationException("Trying to initialize RID to a byte[] that is not 32 bytes long");
+        }
+        ~RID() {
         }
 
         public override string ToString() {
@@ -333,6 +338,10 @@ namespace Figlotech.Core {
             return IntEx.BigIntegerToString(new BigInteger(Signature, true), IntEx.Base36);
         }
 
+        public static RID FromBase36(String base36) {
+            return new RID(IntEx.StringToBigInteger(base36, IntEx.Base36).ToByteArray());
+        }
+
         public string ToHex() {
             return IntEx.BigIntegerToString(new BigInteger(Signature, true), IntEx.Hexadecimal);
         }
@@ -342,13 +351,13 @@ namespace Figlotech.Core {
         }
 
         public static implicit operator String(RID a) {
-            return a.AsBase64;
+            return a.AsBase36;
         }
         public static implicit operator byte[](RID a) {
             return a.AsByteArray;
         }
         public static implicit operator RID(String a) {
-            return new RID(Convert.FromBase64String(a));
+            return RID.FromBase36(a);
         }
 
     }

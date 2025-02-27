@@ -14,4 +14,10 @@ namespace Figlotech.Core.DomainEvents
         string RID { get; }
         long Id { get; }
     }
+
+    public interface IPreserializableDomainEvent {
+        string GetSerializedData();
+        void ClearSerializedData();
+        void Serialize();
+    }
 }

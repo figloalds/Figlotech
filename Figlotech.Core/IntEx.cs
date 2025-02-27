@@ -87,27 +87,6 @@ namespace Figlotech.Core {
             this.digitCursor = v.ToByteArray().Length;
         }
 
-        public static BigInteger StringToBigInteger(string value, string Base = "0123456789") {
-            if (string.IsNullOrEmpty(value))
-                throw new ArgumentException("Value cannot be null or empty", nameof(value));
-
-            if (string.IsNullOrEmpty(Base))
-                throw new ArgumentException("Base cannot be null or empty", nameof(Base));
-
-            BigInteger result = BigInteger.Zero;
-            BigInteger baseLength = new BigInteger(Base.Length);
-
-            foreach (char c in value) {
-                int digitValue = Base.IndexOf(c);
-                if (digitValue < 0)
-                    throw new ArgumentException($"Invalid character '{c}' for base {Base}");
-
-                result = result * baseLength + digitValue;
-            }
-
-            return result;
-        }
-
         private static int sequentia = 0;
         private static int _runtimeHash = -1;
         private static int RuntimeHash {
@@ -505,6 +484,27 @@ namespace Figlotech.Core {
             }
 
             return new string(buffer, position, buffer.Length - position);
+        }
+
+        public static BigInteger StringToBigInteger(string value, string Base = Decimal) {
+            if (string.IsNullOrEmpty(value))
+                throw new ArgumentException("Value cannot be null or empty", nameof(value));
+
+            if (string.IsNullOrEmpty(Base))
+                throw new ArgumentException("Base cannot be null or empty", nameof(Base));
+
+            BigInteger result = BigInteger.Zero;
+            BigInteger baseLength = new BigInteger(Base.Length);
+
+            foreach (char c in value) {
+                int digitValue = Base.IndexOf(c);
+                if (digitValue < 0)
+                    throw new ArgumentException($"Invalid character '{c}' for base {Base}");
+
+                result = result * baseLength + digitValue;
+            }
+
+            return result;
         }
 
         public string ToString(string Base = Decimal) {

@@ -237,10 +237,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             return Directory.GetFiles(WorkingDirectory).Select(
                     ((a) => {
-                        var s = a.Substring(RootDirectory.Length);
-                        if (s.StartsWith(System.IO.Path.DirectorySeparatorChar.ToString())) {
-                            s = s.Substring(1);
-                        }
+                        var s = a.Substring(RootDirectory.Length + 1).Replace(Path.DirectorySeparatorChar, '/');
                         return this.UnFixRel(ref s);
                     }));
         }
@@ -284,8 +281,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             return Directory.GetDirectories(WorkingDirectory)
                 .Select((Func<string, string>)((a) => {
-                    a = a.Replace(RootDirectory, "");
-                    return this.FixRel(ref a);
+                    a = a.Substring(RootDirectory.Length + 1).Replace(Path.DirectorySeparatorChar, '/');
+                    return a;
                 }));
         }
 

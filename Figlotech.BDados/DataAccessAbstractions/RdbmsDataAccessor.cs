@@ -1161,9 +1161,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private async ValueTask ExclusiveOpenConnectionAsync(IDbConnection connection) {
             if (connection is DbConnection idbconn) {
-                using CancellationTokenSource cts = new CancellationTokenSource();
-                cts.CancelAfter(TimeSpan.FromSeconds(12));
-                await idbconn.OpenAsync(cts.Token).ConfigureAwait(false);
+                await idbconn.OpenAsync(CancellationToken.None).ConfigureAwait(false);
             } else {
                 connection.Open();
             }

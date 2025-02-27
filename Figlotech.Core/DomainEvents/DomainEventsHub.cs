@@ -67,7 +67,7 @@ namespace Figlotech.Core.DomainEvents {
             var due = when.ToUniversalTime() - DateTime.UtcNow;
             var sched = ScheduledEvents.FirstOrDefault(s=> s.Identifier == identifier) ??
                 new ScheduledDomainEvent() {
-                    Identifier = identifier ?? new RID().AsBase36,
+                    Identifier = identifier ?? RID.GenerateNewAsBase36(),
                 };
             sched.Event = evt;
             sched.ScheduledTime = when;
@@ -152,6 +152,9 @@ namespace Figlotech.Core.DomainEvents {
                 domainEvent.d_RaiseOrigin = Environment.StackTrace;
             }
             domainEvent.EventsHub = this;
+            if(domainEvent is IPreserializableDomainEvent seri) {
+                seri.Serialize();
+            }
             lock (EventCache) {
                 if(EventCache.Any(x=> x.RID == domainEvent.RID)) {
                     return;
@@ -165,13 +168,15 @@ namespace Figlotech.Core.DomainEvents {
                 Listeners.RemoveAll(l => l == null);
                 listeners = Listeners.ToList();
             }
-            foreach (var listener in listeners) {
+            var tcsList = new List<TaskCompletionSource<int>>(listeners.Count);
+            for (int i = 0; i < listeners.Count; i++) {
+                var listener = listeners[i];
                 var t = listener.GetType().AsDerivingFromGeneric(typeof(DomainEventListener<>));
                 if (t != null && t.GetGenericArguments().First() != domainEvent.GetType()) {
                     continue;
                 }
                 if(MainQueuer != null) {
-                    _ = MainQueuer.Enqueue(new WorkJob(async () => {
+                    var req = MainQueuer.Enqueue(new WorkJob(async () => {
                         await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
                         if (domainEvent.AllowPropagation) {
                             parentHub?.Raise(domainEvent);
@@ -188,6 +193,7 @@ namespace Figlotech.Core.DomainEvents {
                         Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
                         AllowTelemetry = AllowTelemetry,
                     });
+                    tcsList.Add(req.TaskCompletionSource);
                 }
             }
 
@@ -199,6 +205,16 @@ namespace Figlotech.Core.DomainEvents {
                 LastEventDateTime = Fi.Tech.GetUtcTime();
                 CancelationTokenSource.Cancel();
                 CancelationTokenSource = new CancellationTokenSource();
+            } else if(domainEvent is IPreserializableDomainEvent ser && ser.GetSerializedData() != null) {
+                Task.WhenAll(tcsList.Select(x=> x.Task))
+                    .ContinueWith((t) => {
+                        var gen = GC.GetGeneration(ser.GetSerializedData());
+                        ser.ClearSerializedData();
+                        domainEvent = null;
+                        if (gen <= 2) {
+                            GC.Collect(gen);
+                        }
+                    });
             }
         }
 

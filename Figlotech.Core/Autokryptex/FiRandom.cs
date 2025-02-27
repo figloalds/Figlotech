@@ -52,8 +52,8 @@ namespace Figlotech.Core.Autokryptex
                     chunk[r] ^= chunk[chunk[r]];
                 }
                 if (g1 > 8)
-                    for(int i = 0; i < 32; i++) {
-                        for(int j = 0; j < Math.Min(g1 - 1, 8); j++) {
+                    for (int i = 0; i < 32; i++) {
+                        for (int j = 0; j < Math.Min(g1 - 1, 8); j++) {
                             chunk[i * j] ^= hashs[j][i];
                         }
                     }
@@ -62,7 +62,7 @@ namespace Figlotech.Core.Autokryptex
             hashs[g1 % 8] = hash;
             cursor = 0;
         }
-        
+
         private int Gen() {
             if(cursor > chunk.Length - sizeof(int)) {
                 InitSeed(Seed++);
