@@ -26,10 +26,10 @@ namespace Figlotech.Core {
     }
 
     public sealed class WorkJobException : Exception {
-        public string[] EnqueuingContextStackTrace { get; private set; }
+        public string EnqueuingContextStackTrace { get; private set; }
         public WorkJobExecutionStat WorkJobDetails { get; private set; }
         public WorkJobException(string message, WorkJobExecutionRequest job, Exception inner) : base(message, inner) {
-            this.EnqueuingContextStackTrace = job.StackTraceText.Split('\n').Select(x => x?.Trim()).ToArray();
+            this.EnqueuingContextStackTrace = job.StackTrace.ToString();
         }
     }
 
@@ -56,7 +56,6 @@ namespace Figlotech.Core {
         public DateTime? CompletedTime { get; internal set; }
         public TimeSpan? TimeToComplete { get; internal set; }
         public TimeSpan? TimeInQueue { get; internal set; }
-        internal Stopwatch TimeInQueueCounter { get; set; }
         internal WorkQueuer WorkQueuer { get; set; }
 
         internal TaskCompletionSource<int> _tcsNotifyDequeued = new TaskCompletionSource<int>();
@@ -88,7 +87,6 @@ namespace Figlotech.Core {
         }
 
         public StackTrace StackTrace { get; internal set; }
-        public string StackTraceText { get; set; }
 
         public void Dispose() {
             if(!_disposed) {
@@ -113,7 +111,6 @@ namespace Figlotech.Core {
         public String Name { get; set; } = null;
         public String Description { get; set; } = null;
         public bool AllowTelemetry { get; set; } = true;
-        public string SchedulingStackTrace { get; internal set; }
 
         public Dictionary<string, object> AdditionalTelemetryTags { get; private set; } = new Dictionary<string, object>();
 
@@ -140,22 +137,15 @@ namespace Figlotech.Core {
         public DateTime? EnqueuedAt { get; set; }
         public DateTime? StartedAt { get; set; }
         public decimal TimeWaiting { get; set; }
-        public string[] EnqueuingContextStackTrace { get; set; }
         public decimal TimeInExecution { get; set; }
-        public string SchedulingContextStackTrace { get; set; }
+        public StackTrace SchedulingContextStackTrace { get; set; }
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
             EnqueuedAt = x.EnqueuedTime;
             StartedAt = x.DequeuedTime;
-            EnqueuingContextStackTrace = x.StackTrace.ToString()
-                .Split('\n')
-                .SkipWhile(x => x.Contains("Figlotech.Core.WorkQueuer"))
-                .Select(x => x?.Trim())
-                .Where(x => !string.IsNullOrEmpty(x))
-                .ToArray();
             TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
-            SchedulingContextStackTrace = x?.WorkJob?.SchedulingStackTrace;
+            SchedulingContextStackTrace = x?.StackTrace;
         }
     }
 
@@ -314,10 +304,9 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
 
             request.EnqueuedTime = DateTime.UtcNow;
             request.Status = WorkJobRequestStatus.Queued;
-            request.StackTrace = new System.Diagnostics.StackTrace();
-            request.StackTraceText = request.StackTrace.ToString();
-            request.TimeInQueueCounter = new Stopwatch();
-            request.TimeInQueueCounter.Start();
+            if(FiTechCoreExtensions.DebugTasks) {
+                request.StackTrace = new System.Diagnostics.StackTrace();
+            }
             request.WorkQueuer = this;
 
             if (job.Name is null) {
@@ -392,8 +381,7 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
                             job.LoggingActivity?.AddTag("WorkQueuer", this.Name);
                         }
 
-                        job.TimeInQueueCounter.Stop();
-                        job.TimeInQueue = TimeSpan.FromMilliseconds(job.TimeInQueueCounter.ElapsedMilliseconds);
+                        job.TimeInQueue = DateTime.UtcNow - job.EnqueuedTime;
                         this.OnWorkDequeued?.Invoke(job);
                         Stopwatch sw = new Stopwatch();
                         sw.Start();

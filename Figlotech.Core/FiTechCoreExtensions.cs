@@ -99,7 +99,7 @@ namespace Figlotech.Core {
         public string Identifier { get; set; }
         public Timer Timer { get; set; }
         public bool IsActive { get; internal set; } = true;
-        public string SchedulingStackTrace { get; internal set; }
+        public StackTrace SchedulingStackTrace { get; internal set; }
         public CancellationTokenSource Cancellation { get; internal set; }
         public DateTime Created { get; set; } = DateTime.UtcNow;
 
@@ -485,9 +485,6 @@ namespace Figlotech.Core {
             var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
             if (millisDiff < 100) {
-                if(sched.WorkJob.SchedulingStackTrace == null) {
-                    sched.WorkJob.SchedulingStackTrace = sched.SchedulingStackTrace;
-                }
                 request = sched.Queuer.Enqueue(
                     sched.WorkJob, sched.Cancellation.Token
                 );
@@ -513,6 +510,7 @@ namespace Figlotech.Core {
             ScheduleTask(_selfie, identifier, FiTechFireTaskWorker, when, job, RecurrenceInterval);
         }
         public static bool DebugSchedules { get; set; } = false;
+        public static bool DebugTasks { get; set; } = false;
 
         public sealed class FiTechSchedulerStats {
             public string Key { get; set; }
@@ -563,8 +561,8 @@ namespace Figlotech.Core {
                 if (GlobalScheduledJobs.ContainsKey(sched.Key) && GlobalScheduledJobs[sched.Key] != sched) {
                     UnscheduleByKey(_selfie, sched.Key);
                 }
-                if (sched.SchedulingStackTrace == null) {
-                    sched.SchedulingStackTrace = new StackTrace().ToString();
+                if (sched.SchedulingStackTrace == null && DebugSchedules) {
+                    sched.SchedulingStackTrace = new StackTrace();
                 }
                 ResetTimer(sched);
                 GlobalScheduledJobs[sched.Key] = sched;
