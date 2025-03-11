@@ -29,6 +29,7 @@ namespace Figlotech.Core.Autokryptex
 
         private void InitSeed(long seed) {
             Seed = seed;
+            var g0 = g1;
             g1++;
             byte[] hash;
             var bytes = BitConverter.GetBytes(seed);
@@ -51,15 +52,16 @@ namespace Figlotech.Core.Autokryptex
                 for (int r = 0; r < chunk.Length; r++) {
                     chunk[r] ^= chunk[chunk[r]];
                 }
-                if (g1 > 8)
+                if (g0 >= hashs.Length) {
                     for (int i = 0; i < 32; i++) {
-                        for (int j = 0; j < Math.Min(g1 - 1, 8); j++) {
+                        for (int j = 0; j < Math.Min(((g0 - 1) % hashs.Length), hashs.Length - 1); j++) {
                             chunk[i * j] ^= hashs[j][i];
                         }
                     }
+                }
                 hash = Fi.Tech.ComputeHash(chunk);
             }
-            hashs[g1 % 8] = hash;
+            hashs[g0 % hashs.Length] = hash;
             cursor = 0;
         }
 
