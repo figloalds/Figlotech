@@ -99,7 +99,7 @@ namespace Figlotech.BDados.Builders {
         //    var Relacoes = _join.Relations;
         //    String Prefix = _join.Joins[thisIndex].Prefix;
         //    String parentPrefix = _join.Joins[parentIndex].Prefix;
-        //    string rid = FiTechBDadosExtensions.RidColumnOf[type];
+        //    string rid = FiTechBDadosExtensions.RidColumnNameOf[type];
         //    List<DataRow> rs = new List<DataRow>();
         //    List<object> ids = new List<object>();
         //    for (int i = 0; i < dt.Rows.Count; i++) {
@@ -281,7 +281,7 @@ namespace Figlotech.BDados.Builders {
         //    var rs = new List<DataRow>();
         //    foreach (DataRow dr in dt.Rows)
         //        rs.Add(dr);
-        //    string rid = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+        //    string rid = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
         //    rs = rs.GroupBy(c => c[Prefix + $"_{rid}"]).Select(grp => grp.First()).ToList();
         //    // This says: Foreach datarow at the 
         //    // "grouped by the Aggregate Root RID"

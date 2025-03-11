@@ -1308,7 +1308,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //var reflectedJoinMethod = query.GetType().GetMethod("Join");
 
             String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
-            var selfRIDColumn = FiTechBDadosExtensions.RidColumnOf[theType];
+            var selfRIDColumn = FiTechBDadosExtensions.RidColumnNameOf[theType];
 
             // Iterating through AggregateFields
             var aggregateFieldAttributes = ReflectionTool.GetAttributedMemberValues<AggregateFieldAttribute>(theType);
@@ -1332,7 +1332,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     tname,
                     pkey);
 
-                String OnClause = $"{thisAlias}.{key}={childAlias}.{FiTechBDadosExtensions.RidColumnOf[type]}";
+                String OnClause = $"{thisAlias}.{key}={childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[type]}";
 
                 if (!ReflectionTool.TypeContains(theType, key)) {
                     OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
@@ -1371,7 +1371,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var qimediate = query.Joins.Where((j) => j.Alias == childAlias);
                 if (!qimediate.Any()) {
 
-                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.ImediateType]}";
+                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.ImediateType]}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(theType, info.ImediateKey)) {
@@ -1395,11 +1395,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     qfar.First().Columns.Add(info.FarField);
                     continue;
                 } else {
-                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.{FiTechBDadosExtensions.RidColumnOf[info.FarType]}";
+                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.FarType]}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(info.ImediateType, info.FarKey)) {
-                        OnClause2 = $"{childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.ImediateType]}={farAlias}.{info.FarKey}";
+                        OnClause2 = $"{childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.ImediateType]}={farAlias}.{info.FarKey}";
                     }
 
                     var joh2 = query.Join(info.FarType, farAlias, OnClause2, JoinType.LEFT);
@@ -1484,7 +1484,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.{selfRIDColumn}";
                 // Yuck
                 if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
-                    OnClause = $"{childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.RemoteObjectType]}={thisAlias}.{info.RemoteField}";
+                    OnClause = $"{childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.RemoteObjectType]}={thisAlias}.{info.RemoteField}";
                 }
                 var joh = query.Join(info.RemoteObjectType, childAlias, OnClause, JoinType.RIGHT);
                 // The ultra supreme gimmick mode reigns supreme here.
@@ -2388,7 +2388,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             //var id = GetIdColumn(obj.GetType());
             var rid = obj.RID;
-            var ridcol = FiTechBDadosExtensions.RidColumnOf[obj.GetType()];
+            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[obj.GetType()];
             string ridname = "RID";
             if (ridcol != null) {
                 ridname = ridcol;
@@ -2411,7 +2411,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             bool retv = false;
 
-            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
             string ridname = "RID";
             if (ridcol != null) {
                 ridname = ridcol;
@@ -2643,7 +2643,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Construct Join Definition");
 
                 transaction?.Benchmarker?.Mark("Resolve ordering Member");
-                var om = GetOrderingMember<T>(x => x.Id);
+                var om = FiTechBDadosExtensions.IdColumnOf[typeof(T)];
 
                 transaction?.Benchmarker?.Mark("--");
 

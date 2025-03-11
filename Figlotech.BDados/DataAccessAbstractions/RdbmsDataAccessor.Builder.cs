@@ -170,13 +170,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[])>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[])>>();
 
         public string cacheId(IDataReader reader, string myRidCol, Type t) {
-            var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
             var retv = $"{t.Name}_{rid}";
 
             return retv;
         }
         public string cacheId(object[] reader, int myRidCol, Type t) {
-            var rid = ReflectionTool.DbDeNull(reader[myRidCol]) as string;
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
             var retv = $"{t.Name}_{rid}";
 
             return retv;
@@ -213,7 +213,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         case AggregateBuildOptions.AggregateField: {
                                 String childPrefix = joinTables[rel.ChildIndex].Prefix;
                                 String name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                                var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOf(rel.Fields[0])];
+                                var valueIndex = fieldNamesDict[childPrefix].Item1[fieldNamesDict[childPrefix].Item2.GetIndexOfIgnoreCase(rel.Fields[0])];
                                 var value = reader[valueIndex];
                                 ReflectionTool.SetValue(obj, name, value);
 
@@ -236,11 +236,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                         ReflectionTool.SetValue(obj, fieldAlias, li);
                                     }
 
-                                    var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                                    var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
                                     var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
                                     var parentPrefix = joinTables[rel.ParentIndex].Prefix;
-                                    var parentRidIndex = fieldNamesDict[parentPrefix].Item1[fieldNamesDict[parentPrefix].Item2.GetIndexOf(rel.ParentKey)];
-                                    var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
+                                    var parentRidIndex = fieldNamesDict[parentPrefix].Item1[fieldNamesDict[parentPrefix].Item2.GetIndexOfIgnoreCase(rel.ParentKey)];
+                                    var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOfIgnoreCase(ridCol)];
 
                                     metadataObj = new AggregateListCachedMetadata {
                                         UlType = ulType,
@@ -253,8 +253,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 }
                                 var metadata = (AggregateListCachedMetadata)metadataObj;
 
-                                string parentRid = (string)ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]);
-                                string childRid = (string)ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]);
+                                var parentRid = ReflectionTool.DbDeNull(reader[metadata.ParentRIDIndex]);
+                                var childRid = ReflectionTool.DbDeNull(reader[metadata.ChildRIDIndex]);
                                 string childRidCacheId = cacheId(reader, metadata.ChildRIDIndex, metadata.UlType);
                                 object newObj;
                                 if (parentRid == null || childRid == null) {
@@ -283,14 +283,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 if (ulType == null) {
                                     continue;
                                 }
-                                var ridCol = FiTechBDadosExtensions.RidColumnOf[ulType];
+                                var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
                                 var parentRidCol = joinTables[rel.ParentIndex].Prefix + "_" + rel.ParentKey;
-                                var parentRidIndex = fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item2.GetIndexOf(rel.ParentKey)];
+                                var parentRidIndex = fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ParentIndex].Prefix].Item2.GetIndexOfIgnoreCase(rel.ParentKey)];
                                 var childRidCol = joinTables[rel.ChildIndex].Prefix + "_" + ridCol;
-                                var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOf(ridCol)];
+                                var childRidIndex = fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item1[fieldNamesDict[joinTables[rel.ChildIndex].Prefix].Item2.GetIndexOfIgnoreCase(ridCol)];
 
-                                string parentRid = ReflectionTool.DbDeNull(reader[parentRidIndex]) as string;
-                                string childRid = ReflectionTool.DbDeNull(reader[childRidIndex]) as string;
+                                var parentRid = ReflectionTool.DbDeNull(reader[parentRidIndex]);
+                                var childRid = ReflectionTool.DbDeNull(reader[childRidIndex]);
                                 string childRidCacheId = cacheId(reader, childRidIndex, ulType);
                                 object newObj = null;
                                 if (parentRid == null || childRid == null) {
@@ -319,7 +319,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
             var joinRelations = join.Relations;
-            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
             if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
                 Debugger.Break();
             }
@@ -391,7 +391,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
             var joinRelations = join.Relations.ToArray();
-            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
             if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
                 Debugger.Break();
             }
@@ -489,7 +489,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
             var joinRelations = join.Relations.ToArray();
-            var ridcol = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
             if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
                 Debugger.Break();
             }

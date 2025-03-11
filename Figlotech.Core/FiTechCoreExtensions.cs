@@ -385,8 +385,10 @@ namespace Figlotech.Core {
         public static SelfInitializerDictionary<string, bool> EnabledSystemLogs { get; private set; } = new SelfInitializerDictionary<string, bool>((str) => false);
         internal static void WriteLineInternal(this Fi _selfie, string origin, Func<string> s) {
             if (EnableStdoutLogs && EnabledSystemLogs[origin]) {
-                FTHLogStream.WriteLine($"[{origin}] {s()}");
-                FTHLogStream.Flush();
+                lock(FTHLogStream) {
+                    FTHLogStream.WriteLine($"[{origin}] {s()}");
+                    FTHLogStream.Flush();
+                }
             }
         }
 

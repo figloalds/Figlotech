@@ -32,39 +32,38 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //        public static bool EnableStdoutLogs { get; set; } = false;
 
 
-        public static String GetUpdateColumn(this Fi _selfie, Type type) {
+        public static MemberInfo GetUpdateColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
             var retv = fields
                 .Where((f) => f.GetCustomAttribute<UpdateTimeStampAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "UpdatedTime";
+                .FirstOrDefault();
             return retv;
         }
 
-        public static String GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
-        public static String GetRidColumn(this Fi _selfie, Type type) {
+        public static MemberInfo GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
+        public static MemberInfo GetRidColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
 
             var retv = fields
                 .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "RID";
+                .FirstOrDefault();
             return retv;
         }
-        public static SelfInitializerDictionary<Type, String> UpdateColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetUpdateColumn(t));
-        public static SelfInitializerDictionary<Type, String> RidColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t));
-        public static SelfInitializerDictionary<Type, String> IdColumnOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetIdColumn(t));
+        public static SelfInitializerDictionary<Type, string> UpdateColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetUpdateColumn(t)?.Name ?? "UpdatedTime");
+        public static SelfInitializerDictionary<Type, MemberInfo> UpdateColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetUpdateColumn(t));
+        
+        public static SelfInitializerDictionary<Type, String> RidColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t)?.Name ?? "RID");
+        public static SelfInitializerDictionary<Type, MemberInfo> RidColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetRidColumn(t));
 
-        public static String GetIdColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
-        public static String GetIdColumn(this Fi _selfie, Type type) {
+        public static SelfInitializerDictionary<Type, String> IdColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetIdColumn(t)?.Name ?? "Id");
+        public static SelfInitializerDictionary<Type, MemberInfo> IdColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetIdColumn(t));
+
+        public static MemberInfo GetIdColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
+        public static MemberInfo GetIdColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
             var retv = fields
                 .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "Id";
+                .FirstOrDefault();
             return retv;
         }
 

@@ -261,8 +261,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     tables[i])
                     .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
                     .ToArray();
-                if (!columns[i].Contains("RID"))
-                    columns[i].Add("RID");
+                if (!columns[i].Contains(FiTechBDadosExtensions.RidColumnNameOf[tables[i]]))
+                    columns[i].Add(FiTechBDadosExtensions.RidColumnNameOf[tables[i]]);
                 var nonexcl = columns[i];
                 for (int j = 0; j < nonexcl.Count; j++) {
                     Query.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
@@ -350,7 +350,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
             var type = tabelaInput.GetType();
-            var rid = FiTechBDadosExtensions.RidColumnOf[type];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[type];
             var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));
 
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
@@ -379,7 +379,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 Query.Append(",");
             }
             Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnOf[typeof(T)]}=@rid", input.RID);
+            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", input.RID);
 
             return Query;
         }
@@ -424,7 +424,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             // -- 
             List<T> workingSet = new List<T>();
 
-            var rid = FiTechBDadosExtensions.RidColumnOf[typeof(T)];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
@@ -649,8 +649,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
 
         public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
             var type = rs.FirstOrDefault()?.GetType()??typeof(T);
-            var id = FiTechBDadosExtensions.IdColumnOf[type];
-            var rid = FiTechBDadosExtensions.RidColumnOf[type];
+            var id = FiTechBDadosExtensions.IdColumnNameOf[type];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[type];
             var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));
 
             return Qb.Fmt($"SELECT {id} AS Id, {rid} AS RID FROM {type.Name} WHERE") + Qb.In(rid, rs, i => Convert.ChangeType(i.RID, ridType));

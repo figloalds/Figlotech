@@ -145,6 +145,18 @@ namespace System
             }
             return -1;
         }
+        public static int GetIndexOfIgnoreCase(this IEnumerable<string> self, string value) {
+            var enny = self.GetEnumerator();
+            int i = 0;
+            while(enny.MoveNext()) {
+                if (enny.Current?.Equals(value, StringComparison.OrdinalIgnoreCase) ?? false) {
+                    return i;
+                } else {
+                    i++;
+                }
+            }
+            return -1;
+        }
 
         public static IEnumerable<T> PickRandom<T>(this IEnumerable<T> me, int count) {
             var arr = me.ToArray();

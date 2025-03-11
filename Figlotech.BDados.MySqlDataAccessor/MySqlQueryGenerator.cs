@@ -332,7 +332,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 autoJoinMain.Append($"\t FROM (SELECT\n");
                 for (int i = 0; i < tables.Count; i++) {
                     autoJoinMain.Append($"\t\t-- Table {tableNames[i]}\n");
-                    var ridF = FiTechBDadosExtensions.RidColumnOf[tables[i]];
+                    var ridF = FiTechBDadosExtensions.RidColumnNameOf[tables[i]];
                     if (!columns[i].Any(c => c.ToUpper() == ridF.ToUpper()))
                         columns[i].Add(ridF);
                     var nonexcl = columns[i];
@@ -433,7 +433,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var rid = FiTechBDadosExtensions.RidColumnOf[tabelaInput.GetType()];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[tabelaInput.GetType()];
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, true));
@@ -470,7 +470,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append(",");
             }
             Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnOf[typeof(T)]}=@rid", input.RID);
+            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", input.RID);
 
             return Query;
         }
@@ -524,7 +524,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             List<T> workingSet = new List<T>();
 
-            var rid = FiTechBDadosExtensions.RidColumnOf[t];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[t];
             var upd = FiTechBDadosExtensions.UpdateColumnOf[t];
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
@@ -773,8 +773,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }
             var t = rs.First().GetType();
-            var id = FiTechBDadosExtensions.IdColumnOf[t];
-            var rid = FiTechBDadosExtensions.RidColumnOf[t];
+            var id = FiTechBDadosExtensions.IdColumnNameOf[t];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[t];
 
             var retv = Qb.Fmt($"SELECT {id}, {rid} FROM {t.Name} WHERE") + Qb.In(rid, rs, i => i.RID);
 
