@@ -1451,9 +1451,6 @@ namespace Figlotech.Core {
             MainThreadHandler = Thread.CurrentThread;
         }
 
-        static List<Task> FiredTasksPreventGC = new List<Task>();
-
-
         public static void Throw(this Fi _selfie, Exception x) {
             if (Debugger.IsAttached) {
                 Debugger.Break();
@@ -1776,39 +1773,6 @@ namespace Figlotech.Core {
         }
         public static void FireAndForget(this Fi _selfie, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             _ = FireTask(_selfie, "Anonymous_FireTask", job, handler, then);
-        }
-
-        public static CoroutineChannel<T> FireCoroutine<T>(this Fi _selfie, Func<CoroutineChannel<T>, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
-            var retv = new CoroutineChannel<T>();
-            _ = FireTask(_selfie, "Anonymous_FireTask", async () => {
-                var t = job(retv);
-                await t;
-                if (!retv.IsClosed) {
-                    retv.Close();
-                }
-            }, handler, then);
-            return retv;
-        }
-
-        public static async Task<T> Promisify<T>(this Fi _selfie, Func<T> fn) {
-            T retv = default(T);
-            await Task.Run(async () => {
-                try {
-                    await Task.Yield();
-                    retv = fn();
-                } catch (Exception x) {
-                    throw x;
-                }
-            });
-            return retv;
-        }
-        public static async Task<T> Promisify<T>(this Fi _selfie, Func<Task<T>> fn) {
-            T retv = default(T);
-            await Fi.Tech.FireTask(async () => {
-                await Task.Yield();
-                retv = await fn();
-            });
-            return retv;
         }
 
         public static byte[] GenerateKey(this Fi _selfie, string Str) {

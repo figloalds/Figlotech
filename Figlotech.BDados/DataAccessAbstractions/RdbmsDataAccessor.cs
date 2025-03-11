@@ -1308,6 +1308,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             //var reflectedJoinMethod = query.GetType().GetMethod("Join");
 
             String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
+            var selfRIDColumn = FiTechBDadosExtensions.RidColumnOf[theType];
 
             // Iterating through AggregateFields
             var aggregateFieldAttributes = ReflectionTool.GetAttributedMemberValues<AggregateFieldAttribute>(theType);
@@ -1331,10 +1332,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     tname,
                     pkey);
 
-                String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
+                String OnClause = $"{thisAlias}.{key}={childAlias}.{FiTechBDadosExtensions.RidColumnOf[type]}";
 
                 if (!ReflectionTool.TypeContains(theType, key)) {
-                    OnClause = $"{thisAlias}.RID={childAlias}.{key}";
+                    OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
                 }
                 var joh = query.Join(type, childAlias, OnClause, JoinType.LEFT);
 
@@ -1370,11 +1371,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var qimediate = query.Joins.Where((j) => j.Alias == childAlias);
                 if (!qimediate.Any()) {
 
-                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.RID";
+                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.ImediateType]}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(theType, info.ImediateKey)) {
-                        OnClause = $"{thisAlias}.RID={childAlias}.{info.ImediateKey}";
+                        OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{info.ImediateKey}";
                     }
                     if (query.Joins.Where((a) => a.Alias == childAlias).Any())
                         continue;
@@ -1394,11 +1395,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     qfar.First().Columns.Add(info.FarField);
                     continue;
                 } else {
-                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.RID";
+                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.{FiTechBDadosExtensions.RidColumnOf[info.FarType]}";
                     // This inversion principle will be fucktastic.
                     // But has to be this way for now.
                     if (!ReflectionTool.TypeContains(info.ImediateType, info.FarKey)) {
-                        OnClause2 = $"{childAlias}.RID={farAlias}.{info.FarKey}";
+                        OnClause2 = $"{childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.ImediateType]}={farAlias}.{info.FarKey}";
                     }
 
                     var joh2 = query.Join(info.FarType, farAlias, OnClause2, JoinType.LEFT);
@@ -1442,7 +1443,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
 
                 if (!ReflectionTool.TypeContains(theType, key)) {
-                    OnClause = $"{thisAlias}.RID={childAlias}.{key}";
+                    OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
                 }
 
                 var joh = query.Join(type, childAlias, OnClause, JoinType.LEFT);
@@ -1480,10 +1481,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
 
-                String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.RID";
+                String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.{selfRIDColumn}";
                 // Yuck
                 if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
-                    OnClause = $"{childAlias}.RID={thisAlias}.{info.RemoteField}";
+                    OnClause = $"{childAlias}.{FiTechBDadosExtensions.RidColumnOf[info.RemoteObjectType]}={thisAlias}.{info.RemoteField}";
                 }
                 var joh = query.Join(info.RemoteObjectType, childAlias, OnClause, JoinType.RIGHT);
                 // The ultra supreme gimmick mode reigns supreme here.
@@ -2580,7 +2581,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
             type => {
                 var prefixer = CacheAutoPrefixer[type];
-                return MakeJoin(
+                var retv = MakeJoin(
                     (query) => {
                         // Starting with T itself
                         var jh = query.AggregateRoot(type, prefixer.GetAliasFor("root", type.Name, String.Empty)).As(prefixer.GetAliasFor("root", type.Name, String.Empty));
@@ -2591,6 +2592,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         );
                         MakeQueryAggregations(ref query, type, "root", type.Name, String.Empty, prefixer, false);
                     });
+
+                return retv;
             }
         );
         static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilderLinear = new SelfInitializerDictionary<Type, IJoinBuilder>(

@@ -129,6 +129,7 @@ namespace Figlotech.Core.Helpers {
                     TypeImplements(t.BaseType, interfaceType)
                 );
         }
+
         public static bool TypeDerivesFrom(Type t, Type ancestorType) {
             return
                 t != null && t != typeof(Object) &&
@@ -251,6 +252,20 @@ namespace Figlotech.Core.Helpers {
         }
         public static MemberInfo GetMember(Type t, int i) {
             return MembersCache[t][i];
+        }
+
+        public static bool SetValueAndConfirmChange(Object target, string fieldName, Object value) {
+            var oldValue = GetValue(target, fieldName);
+            ReflectionTool.SetValue(target, fieldName, value);
+            var newValue = GetValue(target, fieldName);
+            if ((newValue == null && oldValue == null)) {
+                return false;
+            }
+            return (
+                (newValue == null ^ oldValue == null) ||
+                (newValue is IComparable ic && newValue.Equals(oldValue)) ||
+                (newValue!.Equals(oldValue))
+            );
         }
 
         public static bool SetValue(Object target, string fieldName, Object value) {
