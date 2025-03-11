@@ -29,7 +29,7 @@ namespace Figlotech.Core {
         public string EnqueuingContextStackTrace { get; private set; }
         public WorkJobExecutionStat WorkJobDetails { get; private set; }
         public WorkJobException(string message, WorkJobExecutionRequest job, Exception inner) : base(message, inner) {
-            this.EnqueuingContextStackTrace = job.StackTrace.ToString();
+            this.EnqueuingContextStackTrace = job.StackTrace?.ToString();
         }
     }
 
@@ -284,13 +284,16 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
 
         private DateTime WentIdle = DateTime.UtcNow;
 
-        public int TotalWork { get; private set; } = 0;
-        public int WorkDone { get; private set; } = 0;
-        public int Executing { get; private set; } = 0;
-        public int InQueue { get; private set; } = 0;
-        public int Cancelled { get; private set; } = 0;
-
-        private List<Task> Tasks = new List<Task>();
+        private int _cancelledInternal;
+        private int _workDoneInternal;
+        private int _inQueueInternal;
+        private int _executingInternal;
+        private int _totalWorkInternal;
+        public int TotalWork => _totalWorkInternal;
+        public int Executing => _executingInternal;
+        public int InQueue => _inQueueInternal;
+        public int WorkDone => _workDoneInternal;
+        public int Cancelled => _cancelledInternal;
 
         public WorkJobExecutionStat[] ActiveTaskStat() {
             lock (WorkQueue) {
@@ -315,8 +318,8 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
 
             if (Active) {
                 WorkQueue.Enqueue(request);
-                InQueue++;
-                TotalWork++;
+                Interlocked.Increment(ref _inQueueInternal);
+                Interlocked.Increment(ref _totalWorkInternal);
             } else {
                 lock (HeldJobs) {
                     HeldJobs.Add(request);
@@ -348,15 +351,12 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
             lock (selfLockSpawnWorker2) {
                 do {
                     if (NumActiveJobs < this.MaxParallelTasks && WorkQueue.TryDequeue(out job)) {
-                        InQueue--;
+                        Interlocked.Decrement(ref _inQueueInternal);
                         if (job.Cancellation.IsCancellationRequested) {
-                            Cancelled++;
-                            WorkDone++;
+                            Interlocked.Increment(ref _cancelledInternal);
+                            Interlocked.Increment(ref _workDoneInternal);
                             job.Cancellation.Dispose();
                             continue;
-                        }
-                        lock (Tasks) {
-                            Tasks.Add(job.TaskCompletionSource.Task);
                         }
                         lock (ActiveJobs) {
                             ActiveJobs.Add(job);
@@ -388,7 +388,7 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
                         var thisWorkerId = workerIds++;
                         Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {thisWorkerId} started");
                         Exception exception = null;
-                        Executing++;
+                        Interlocked.Increment(ref _executingInternal);
                         try {
                             job.LoggingActivity?.Start();
                             job.LoggingActivity?.SetStartTime(DateTime.UtcNow);
@@ -454,35 +454,34 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
                         } finally {
                             try {
                                 sw.Stop();
-                                lock (this) {
-                                    job.CompletedTime = DateTime.UtcNow;
-                                    job.TimeToComplete = sw.Elapsed;
-                                    job.Status = WorkJobRequestStatus.Finished;
-                                    this.OnWorkComplete?.Invoke(job);
-                                    WorkDone++;
-                                    if (job.Cancellation.IsCancellationRequested) {
-                                        Cancelled++;
-                                    }
-                                    job.Cancellation.Dispose();
-                                    job.LoggingActivity?.Dispose();
-                                    Executing--;
-                                    job.TimeToComplete = sw.Elapsed;
-                                    if (exception != null) {
-                                        job.TaskCompletionSource.SetException(exception);
-                                        _ = job.TaskCompletionSource.Task.Exception;
-                                    } else {
-                                        job.TaskCompletionSource.SetResult(0);
-                                    }
-                                    this.TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
-
-                                    lock (ActiveJobs) {
-                                        ActiveJobs.Remove(job);
-                                    }
-                                    lock (Tasks) {
-                                        Tasks.Remove(job.TaskCompletionSource.Task);
-                                    }
-                                    SpawnWorker();
+                                lock (ActiveJobs) {
+                                    ActiveJobs.Remove(job);
                                 }
+                                job.CompletedTime = DateTime.UtcNow;
+                                job.TimeToComplete = sw.Elapsed;
+                                job.Status = WorkJobRequestStatus.Finished;
+                                try {
+                                    this.OnWorkComplete?.Invoke(job);
+                                } catch(Exception x) {
+                                    Fi.Tech.Throw(x);
+                                }
+                                Interlocked.Increment(ref _workDoneInternal);
+                                if (job.Cancellation.IsCancellationRequested) {
+                                    Interlocked.Increment(ref _cancelledInternal);
+                                }
+                                job.Cancellation.Dispose();
+                                job.LoggingActivity?.Dispose();
+                                Interlocked.Decrement(ref _executingInternal);
+                                job.TimeToComplete = sw.Elapsed;
+                                if (exception != null) {
+                                    job.TaskCompletionSource.SetException(exception);
+                                    _ = job.TaskCompletionSource.Task.Exception;
+                                } else {
+                                    job.TaskCompletionSource.SetResult(0);
+                                }
+                                this.TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
+
+                                _ = Task.Run(()=> SpawnWorker());
                             } catch (Exception x) {
                                 Debugger.Break();
                             }
