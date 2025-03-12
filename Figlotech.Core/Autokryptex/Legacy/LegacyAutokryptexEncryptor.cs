@@ -47,7 +47,7 @@ namespace Figlotech.Core.Autokryptex.Legacy {
                 typeof(BinaryBlur),
                 typeof(BinaryNegativation),
                 typeof(LegacyBinaryScramble),
-                typeof(EnigmaEncryptor),
+                typeof(LegacyEnigmaEncryptor),
             };
             var pickedKeys = new Queue<int>();
             for(int i = 0; i < maxEncryptors; i++) {
@@ -77,7 +77,7 @@ namespace Figlotech.Core.Autokryptex.Legacy {
 
                     passBytes = inst.Encrypt(passBytes);
 
-                    if(MultiPassRandomEncoder && inst.GetType() != typeof(EnigmaEncryptor)) {
+                    if(MultiPassRandomEncoder && inst.GetType() != typeof(LegacyEnigmaEncryptor)) {
                         encryptor.Add(
                             inst
                         );

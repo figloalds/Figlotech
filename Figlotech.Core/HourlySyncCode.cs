@@ -34,10 +34,14 @@ namespace Figlotech.Core {
             return Convert.ToBase64String(this.Code);
         }
 
+
         public static HourlySyncCode Generate(DateTime KeyMoment, String Password = null) {
-            Password = "FTH_HOURLYSYNC:" + (Password ?? "");
             var mins = (long)(TimeSpan.FromTicks(KeyMoment.Ticks)).TotalMinutes;
-            FiRandom cs = new FiRandom(mins);
+            return Generate(new FiRandom(mins), KeyMoment, Password);
+        }
+
+        public static HourlySyncCode Generate(ICSRNG cs, DateTime KeyMoment, String Password = null) {
+            Password = "FTH_HOURLYSYNC:" + (Password ?? "");
             byte[] barr = new byte[64];
             for (int i = 0; i < barr.Length; i++) {
                 barr[i] = (byte)cs.Next(256);
@@ -76,6 +80,21 @@ namespace Figlotech.Core {
                 var dt = keyMoment.Value.Add(TimeSpan.FromMinutes(i));
                 if (Generate(dt, Password).Code.SequenceEqual(code.Code)) {
                     return true;
+                }
+            }
+
+            if(DateTime.UtcNow < new DateTime(2026, 01, 01)) {
+                var mins = (long)(TimeSpan.FromTicks(keyMoment.Value.Ticks)).TotalMinutes;
+                if (Generate(new LegacyFiRandom(mins), keyMoment.Value, Password).Code.SequenceEqual(code.Code)) {
+                    return true;
+                }
+
+                for (int i = -3; i <= 3; ++i) {
+                    var dt = keyMoment.Value.Add(TimeSpan.FromMinutes(i));
+                    var mins2 = (long)(TimeSpan.FromTicks(dt.Ticks)).TotalMinutes;
+                    if (Generate(new LegacyFiRandom(mins2), dt, Password).Code.SequenceEqual(code.Code)) {
+                        return true;
+                    }
                 }
             }
 

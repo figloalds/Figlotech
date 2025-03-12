@@ -11,8 +11,8 @@ namespace Figlotech.Core.Autokryptex
     /// Calling this class with the same parameters will output
     /// the exact same numbers every time.
     /// </summary>
-    public sealed class  FiRandom {
-        
+    public sealed class FiRandom : ICSRNG {
+
         private long Seed;
 
         public FiRandom() {
@@ -66,11 +66,11 @@ namespace Figlotech.Core.Autokryptex
         }
 
         private int Gen() {
-            if(cursor > chunk.Length - sizeof(int)) {
+            if (cursor > chunk.Length - sizeof(int)) {
                 InitSeed(Seed++);
             }
             var gen = BitConverter.ToInt32(chunk, cursor);
-            while(gen < 0) gen += Int32.MaxValue;
+            while (gen < 0) gen += Int32.MaxValue;
             cursor += sizeof(int);
             return gen;
         }
