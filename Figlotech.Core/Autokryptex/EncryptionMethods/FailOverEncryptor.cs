@@ -35,7 +35,7 @@ namespace Figlotech.Core.Autokryptex {
                 try {
                     return enc.Decrypt(en);
                 } catch(Exception x) {
-                    
+                    exces.Add(x);
                 }
             }
             throw new AggregateException("Unable to decrypt data", exces);

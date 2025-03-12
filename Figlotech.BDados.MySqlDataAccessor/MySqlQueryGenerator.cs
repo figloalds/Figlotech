@@ -469,7 +469,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if(addComma) {
                 Query.Append(",");
             }
-            Query.Append($"{FiTechBDadosExtensions.UpdateColumnOf[typeof(T)]}=@dt", DateTime.UtcNow);
+            Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[typeof(T)]}=@dt", DateTime.UtcNow);
             Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", input.RID);
 
             return Query;
@@ -525,7 +525,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             List<T> workingSet = new List<T>();
 
             var rid = FiTechBDadosExtensions.RidColumnNameOf[t];
-            var upd = FiTechBDadosExtensions.UpdateColumnOf[t];
+            var upd = FiTechBDadosExtensions.UpdateColumnNameOf[t];
 
             workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
