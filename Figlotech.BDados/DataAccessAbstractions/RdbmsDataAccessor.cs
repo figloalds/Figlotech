@@ -1159,11 +1159,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ExclusiveOpenConnectionAsync(connection).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
+        FiAsyncLock ExclusiveOpenConnectionLock = new FiAsyncLock();
         private async ValueTask ExclusiveOpenConnectionAsync(IDbConnection connection) {
-            if (connection is DbConnection idbconn) {
-                await idbconn.OpenAsync(CancellationToken.None).ConfigureAwait(false);
-            } else {
-                connection.Open();
+            using (var handle = await ExclusiveOpenConnectionLock.Lock()) {
+                if (connection is DbConnection idbconn) {
+                    await idbconn.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+                } else {
+                    connection.Open();
+                }
             }
         }
 
@@ -2577,6 +2580,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return retv;
             }
         );
+
+        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject{
+            return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsByRID<T>(RID))).FirstOrDefault()?.Value ?? 0) > 0;
+        }
+        public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, long Id) where T : IDataObject{
+            return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsById<T>(Id))).FirstOrDefault()?.Value ?? 0) > 0;
+        }
+        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject{
+            return await AccessAsync(async (tsn) => {
+                return await ExistsByRIDAsync<T>(tsn, RID);
+            }, CancellationToken.None);
+        }
+        public async Task<bool> ExistsByIdAsync<T>(long Id) where T : IDataObject {
+            return await AccessAsync(async (tsn) => {
+                return await ExistsByIdAsync<T>(tsn, Id);
+            }, CancellationToken.None);
+        }
+
 
         static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
             type => {

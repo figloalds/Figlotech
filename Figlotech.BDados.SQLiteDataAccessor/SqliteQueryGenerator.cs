@@ -33,6 +33,13 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
         }
 
+        public IQueryBuilder CheckExistsById<T>(long Id) where T : IDataObject {
+            return Qb.Fmt(@$"SELECT COUNT(*) FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
+        }
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+            return Qb.Fmt(@$"SELECT COUNT(*) FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
+        }
+
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");

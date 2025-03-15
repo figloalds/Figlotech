@@ -51,6 +51,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd);
         IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject;
+        IQueryBuilder CheckExistsById<T>(long Id) where T : IDataObject;
+        IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject;
         IQueryBuilder DisableForeignKeys();
         IQueryBuilder EnableForeignKeys();
         string GetDatabaseType(MemberInfo field, FieldAttribute fieldAtt);

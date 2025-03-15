@@ -30,6 +30,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
         }
 
+        public IQueryBuilder CheckExistsById<T>(long Id) where T : IDataObject {
+            return Qb.Fmt(@$"SELECT COUNT(*) FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
+        }
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+            return Qb.Fmt(@$"SELECT COUNT(*) FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
+        }
+
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
             var type = inputObject.GetType();
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
@@ -559,7 +566,10 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} RENAME COLUMN {column} TO {newDefinition.Name};");
         }
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING({member.Name}::{GetDatabaseType(member, fieldAttribute)});");
+            return new QueryBuilder().Append(@$"ALTER TABLE {table} 
+ALTER COLUMN {member.Name} DROP DEFAULT, 
+ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING(nullif({member.Name}, '')::{GetDatabaseType(member, fieldAttribute)}), 
+ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.DefaultValue, ReflectionTool.GetTypeOf(member))};");
         }
         public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append($"ALTER TABLE {table} ALTER COLUMN {member.Name} {(fieldAttribute.AllowNull ? "DROP" : "SET")} NOT NULL;");

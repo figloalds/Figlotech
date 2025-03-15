@@ -645,6 +645,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private List<string> TablesToCreate = new List<string>();
 
+        static bool AnnoyTheProgrammerAboutUnspecifiedStringSizes = true;
+
         private IEnumerable<IStructureCheckNecessaryAction> EvaluateColumnChanges(List<FieldAttribute> columns, List<ScStructuralLink> keys) {
 
             foreach (var type in workingTypes) {
@@ -717,7 +719,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             };
                             var dbDefinition = DataAccessor.QueryGenerator.GetDatabaseType(field, fieldAtt);
                             var sizesMatch = !typesToCheckSize.Contains(dbDefinition.ToUpper()) || length == fieldAtt.Size;
-                            if (Debugger.IsAttached && dbDefinition == "VARCHAR" && fieldAtt.Size == 0) {
+                            if (AnnoyTheProgrammerAboutUnspecifiedStringSizes && Debugger.IsAttached && dbDefinition == "VARCHAR" && fieldAtt.Size == 0) {
                                 Console.WriteLine($"Invalid size for VARCHAR: {type.Name}::{col.Name}");
                                 Debugger.Break();
                             }

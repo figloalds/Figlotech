@@ -37,7 +37,7 @@ namespace Figlotech.Core {
 
         public static HourlySyncCode Generate(DateTime KeyMoment, String Password = null) {
             var mins = (long)(TimeSpan.FromTicks(KeyMoment.Ticks)).TotalMinutes;
-            return Generate(new FiRandom(mins), KeyMoment, Password);
+            return Generate(new LegacyFiRandom(mins), KeyMoment, Password);
         }
 
         public static HourlySyncCode Generate(ICSRNG cs, DateTime KeyMoment, String Password = null) {

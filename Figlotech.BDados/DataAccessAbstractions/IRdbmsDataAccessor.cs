@@ -69,6 +69,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         List<IDataObject> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
 
+        Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject;
+        Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, long Id) where T : IDataObject;
+
+        Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject;
+        Task<bool> ExistsByIdAsync<T>(long Id) where T : IDataObject;
+
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
         ValueTask QueryToJsonAsync<T>(BDadosTransaction transaction, IQueryBuilder query, TextWriter writer) where T : new();
         ValueTask<List<T>> QueryAsync<T>(BDadosTransaction transaction, IQueryBuilder Query = null) where T : new();

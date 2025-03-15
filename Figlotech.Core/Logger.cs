@@ -52,6 +52,9 @@ namespace Figlotech.Core {
         public void WriteLog(String log) {
             if (!Enabled)
                 return;
+            if(log == null) {
+                return;
+            }
             //Debug.WriteLine(log);
             Fi.Tech.FireAndForget(async () => {
                 await Task.Yield();
