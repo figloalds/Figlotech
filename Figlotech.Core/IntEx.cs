@@ -470,20 +470,22 @@ namespace Figlotech.Core {
             return base36.ToString();
         }
 
-        public static string BigIntegerToString(BigInteger value, string Base = Decimal) {
+        public static string BigIntegerToString(BigInteger value, string digits = "0123456789") {
             if (value == 0) {
-                return Base[0].ToString();
+                return digits[0].ToString();
             }
 
-            char[] buffer = new char[(int)Math.Ceiling(BigInteger.Log(value, Base.Length))];
-            int position = buffer.Length;
+            // Calculate the number of digits needed:
+            int length = (int)BigInteger.Log(value, digits.Length) + 1;
+            char[] buffer = new char[length];
+            int position = length;
 
             while (value > 0) {
-                buffer[--position] = Base[(int)(value % Base.Length)];
-                value /= Base.Length;
+                buffer[--position] = digits[(int)(value % digits.Length)];
+                value /= digits.Length;
             }
 
-            return new string(buffer, position, buffer.Length - position);
+            return new string(buffer, position, length - position);
         }
 
         public static BigInteger StringToBigInteger(string value, string Base = Decimal) {
