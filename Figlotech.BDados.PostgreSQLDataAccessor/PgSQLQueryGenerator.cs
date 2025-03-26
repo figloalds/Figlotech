@@ -289,10 +289,12 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
             }
+            if (skip != null && skip > 0) {
+                Query.Append($"OFFSET");
+                Query.Append($"{skip}");
+            }
             if (limit != null) {
                 Query.Append($"LIMIT");
-                if (skip != null)
-                    Query.Append($"{skip},");
                 Query.Append($"{limit}");
             }
             Query.Append($"");
@@ -311,10 +313,12 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
             }
+            if (skip != null && skip > 0) {
+                Query.Append($"OFFSET");
+                Query.Append($"{skip}");
+            }
             if (limit != null) {
                 Query.Append($"LIMIT");
-                if ((skip ?? 0) > 0)
-                    Query.Append($"{skip}, ");
                 Query.Append($"{limit}");
             }
             Query.Append(") AS sub\n");
@@ -348,8 +352,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {alias}.{orderingMember.Name} {ordering.ToString().ToUpper()}");
             }
-            if (limit != null || skip != null) {
-                Query.Append($"LIMIT {(skip != null ? $"{skip}," : "")} {limit ?? Int32.MaxValue}");
+            if (skip != null && skip > 0) {
+                Query.Append($"OFFSET");
+                Query.Append($"{skip}");
+            }
+            if (limit != null) {
+                Query.Append($"LIMIT");
+                Query.Append($"{limit}");
             }
             Query.Append(";");
             return Query;
