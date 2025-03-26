@@ -209,7 +209,10 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
             if (wait) {
                 WorkJobExecutionRequest peekJob = null;
                 while (true) {
-                    if (NumActiveJobs < this.MaxParallelTasks) {
+                    if(HeldJobs.Count > 0) {
+                        FlushHeldJobs();
+                    }
+                    if (NumActiveJobs < this.MaxParallelTasks && WorkQueue.Count > 0) {
                         SpawnWorker();
                     }
                     if (NumActiveJobs == 0 && TotalWork == WorkDone) {
@@ -249,17 +252,22 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
             closed = true;
         }
 
+        private void FlushHeldJobs() {
+            lock (HeldJobs) {
+                foreach (var job in HeldJobs) {
+                    WorkQueue.Enqueue(job);
+                    Interlocked.Increment(ref _inQueueInternal);
+                }
+                HeldJobs.Clear();
+            }
+        }
+
         public void Start() {
             if (Active || IsRunning)
                 return;
             Active = true;
             IsRunning = true;
-            lock (HeldJobs) {
-                foreach (var job in HeldJobs) {
-                    WorkQueue.Enqueue(job);
-                }
-                HeldJobs.Clear();
-            }
+            FlushHeldJobs();
 
             if (KeepAliveTimer != null) {
                 KeepAliveTimer.Dispose();
@@ -319,18 +327,18 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
             if (Active) {
                 WorkQueue.Enqueue(request);
                 Interlocked.Increment(ref _inQueueInternal);
-                Interlocked.Increment(ref _totalWorkInternal);
             } else {
                 lock (HeldJobs) {
                     HeldJobs.Add(request);
                 }
             }
+            Interlocked.Increment(ref _totalWorkInternal);
             this.OnWorkEnqueued?.Invoke(request);
             SpawnWorker();
             return request;
         }
 
-        object selfLockSpawnWorker2 = new object();
+        readonly object selfLockSpawnWorker2 = new object();
         int i;
 
         private void _keepAlive(object ctx) {
