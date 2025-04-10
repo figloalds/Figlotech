@@ -503,7 +503,7 @@ public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
         }
 
         public void Enqueue(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
-            var retv = new WorkJob(a, exceptionHandler, finished);
+            var retv = new WorkJob(a, exceptionHandler, finished) { Name = "Annonymous Work Item" };
             var t = Enqueue(retv);
         }
         public WorkJobExecutionRequest EnqueueTask(Func<CancellationToken, ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {

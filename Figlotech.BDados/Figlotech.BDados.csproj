@@ -5,6 +5,7 @@
 
 		<WarningsAsErrors>CS4014</WarningsAsErrors>
 		<WarningsAsErrors>CS1998</WarningsAsErrors>
+		<WarningsAsErrors>CA2007</WarningsAsErrors>
 		<RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
 	</PropertyGroup>
 

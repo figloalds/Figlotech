@@ -27,16 +27,21 @@ namespace Figlotech.Core {
                 return retv;
             }
 
+            private readonly object publishLock = new object();
             public void Publish(T o) {
                 lock(cache) {
                     cache.Enqueue(o);
                 }
-                var mn = MoveNext;
-                MoveNext = new TaskCompletionSource<bool>();
-                mn.SetResult(true);
+                lock(publishLock) {
+                    var mn = MoveNext;
+                    MoveNext = new TaskCompletionSource<bool>();
+                    mn.SetResult(true);
+                }
             }
             public void Finish() {
-                MoveNext.SetResult(false);
+                lock (publishLock) {
+                    MoveNext.SetResult(false);
+                }
             }
 
             Queue<T> cache = new Queue<T>();

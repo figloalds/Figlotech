@@ -364,8 +364,9 @@ namespace Figlotech.Core {
                 case ContentTypeFormUrlEncoded:
                     StringBuilder retv = new StringBuilder();
                     bool isFirst = true;
-                    foreach (var item in ReflectionTool.FieldsAndPropertiesOf(typeof(T))) {
-                        if (item.GetCustomAttribute<JsonIgnoreAttribute>() != null) {
+                    var kvpairs = Fi.Tech.EnumerateKvpFromObject(postData);
+                    foreach (var item in kvpairs) {
+                        if(item.Value == null) {
                             continue;
                         }
                         if (isFirst) {
@@ -373,10 +374,7 @@ namespace Figlotech.Core {
                         } else {
                             retv.Append("&");
                         }
-                        var value = ReflectionTool.GetMemberValue(item, postData);
-                        if (value != null) {
-                            retv.Append($"{item.Name}={System.Net.WebUtility.UrlEncode(value.ToString())}");
-                        }
+                        retv.Append($"{item.Key}={item.Value}");
                     }
                     var retvStr = retv.ToString();
                     return Fi.StandardEncoding.GetBytes(retvStr);

@@ -11,7 +11,7 @@ namespace Figlotech.Core {
         public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
-            Func<TIn, ValueTask<TOut>> SimpleAct { get; set; }
+            Func<TIn, Task<TOut>> SimpleAct { get; set; }
             Func<TIn, FlowYield<TOut>, ValueTask> YieldAct { get; set; }
             Func<Exception, Task> ExceptionHandler { get; set; }
             IParallelFlowStepIn<TOut> ConnectTo { get; set; }
@@ -20,7 +20,7 @@ namespace Figlotech.Core {
 
             public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
             public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
-            public ParallelFlowStepInOut(Func<TIn, ValueTask<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
+            public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.SimpleAct = Act;
                 this.Parent = parent;
                 this.queuer = new WorkQueuer("flow_step_enqueuer", Math.Max(1, maxParallelism));
@@ -78,10 +78,14 @@ namespace Figlotech.Core {
             }
 
             public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, TNext> act)
-                => Then(Environment.ProcessorCount, (i)=> Fi.Result(act(i)));
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, ValueTask<TNext>> act)
+                => Then(Environment.ProcessorCount, async (i) => {
+                    return await Task.Run(()=> {
+                        return act(i);
+                    }).ConfigureAwait(false);
+                });
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, Task<TNext>> act)
                 => Then(Environment.ProcessorCount, act);
-            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, ValueTask<TNext>> act) {
+            public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(int maxParallelism, Func<TOut, Task<TNext>> act) {
                 if (maxParallelism < 0) {
                     maxParallelism = Environment.ProcessorCount;
                 }

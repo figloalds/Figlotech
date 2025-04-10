@@ -75,7 +75,7 @@ namespace Figlotech.Core {
         }
 
         public async Task<FiAsyncDisposableLock> Lock(string key, TimeSpan? timeout = null) {
-            var retv = await this[key].LockWithTimeout(timeout ?? TimeSpan.FromSeconds(30));
+            var retv = await this[key].LockWithTimeout(timeout ?? TimeSpan.FromSeconds(30)).ConfigureAwait(false);
             retv._lock = this;
             retv._key = key;
             return retv;
@@ -170,16 +170,16 @@ namespace Figlotech.Core {
     public sealed class FiAsyncLock {
         SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
-        public async ValueTask<FiAsyncDisposableLock> Lock() {
-            await _semaphore.WaitAsync();
+        public async Task<FiAsyncDisposableLock> Lock() {
+            await _semaphore.WaitAsync().ConfigureAwait(false);
             return new FiAsyncDisposableLock(_semaphore);
         }
 
-        public async ValueTask<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
+        public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
             var timeoutCancellation = new CancellationTokenSource(timeout);
 
             try {
-                await _semaphore.WaitAsync(timeoutCancellation.Token);
+                await _semaphore.WaitAsync(timeoutCancellation.Token).ConfigureAwait(false);
                 return new FiAsyncDisposableLock(_semaphore);
             } catch (TaskCanceledException x) {
                 throw new TimeoutException("Awaiting for lock timed out", x);

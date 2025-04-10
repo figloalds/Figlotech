@@ -21,7 +21,7 @@ namespace Figlotech.Core {
 
         public bool IsReadOnly => Dictionary.IsReadOnly;
 
-        public Func<TKey, ValueTask<T>> OnFailOver { get; set; }
+        public Func<TKey, Task<T>> OnFailOver { get; set; }
         public Func<TKey,ValueTask> OnFree { get; set; }
         public Func<TKey, T, ValueTask> OnSet { get; set; }
 

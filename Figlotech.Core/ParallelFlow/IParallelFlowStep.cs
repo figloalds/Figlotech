@@ -6,9 +6,7 @@ using System.Threading;
 
 namespace Figlotech.Core {
 
-    public static partial class FiTechCoreExtensions {
-        public interface IParallelFlowStep {
-        }
+    public interface IParallelFlowStep {
     }
     public interface IParallelFlowStepOut<TOut> : IParallelFlowStep, IAsyncEnumerable<TOut> {
         TaskAwaiter<List<TOut>> GetAwaiter();

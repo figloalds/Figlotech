@@ -24,6 +24,8 @@ using Figlotech.Core.Autokryptex;
 using System.IO.Compression;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using Newtonsoft.Json.Linq;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -149,6 +151,96 @@ namespace Figlotech.Core {
                     throw new Exception("Error asserting not null");
                 }
             }
+        }
+
+        public static TRetv MapIntoDTO<TRetv, TInput>(this Fi _selfie, TInput other) {
+            return (TRetv)MapIntoDTO(_selfie, typeof(TRetv), other);
+        }
+
+        public static object MapIntoDTO<TInput>(this Fi _selfie, Type TRetv, TInput other) {
+            if(other == null) {
+                return null;
+            }
+            var retv = Activator.CreateInstance(TRetv);
+            if(other.GetType().Implements(typeof(IEnumerable<>))) {
+                var addMethod = TRetv.GetMethod("Add");
+                if(addMethod != null) {
+                    foreach (var item in EnumerateUnknownTypeList(other)) {
+                        var objValue = MapIntoDTO(_selfie, TRetv.GetGenericArguments()[0], item);
+                        addMethod.Invoke(retv, new object[] { objValue });
+                    }
+                }
+                return retv;
+            }
+
+            var sametype = other.GetType() == retv.GetType();
+            foreach (var rel in mwc_MemberRelationCache[(retv.GetType(), other.GetType())]) {
+                var otherValue = ReflectionTool.GetMemberValue(rel.MemberB, other);
+                if (rel.TypeA != rel.TypeB && !rel.TypeA.IsPrimitive && !rel.TypeB.IsPrimitive) {
+                    var objValue = MapIntoDTO(_selfie, rel.TypeA, otherValue);
+                    ReflectionTool.SetMemberValue(rel.MemberA, retv, objValue);
+                } else {
+                    ReflectionTool.SetMemberValue(rel.MemberA, retv, otherValue);
+                }
+            }
+
+            return retv;
+        }
+
+        static ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)> EnumerateUnknownListCache = new
+            ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)>();
+
+        public static IEnumerable<object> EnumerateUnknownTypeList(object list) {
+            if(list == null) {
+                yield break;
+            }
+            var t = list.GetType();
+            if(!t.IsGenericType || !t.Implements(typeof(IEnumerable<>))) {
+                yield break;
+            }
+
+            var reflData = EnumerateUnknownListCache.GetOrAddWithLocking(t, type => {
+                var getEnumerator = type.GetMethod("GetEnumerator");
+                var enumeratorType = getEnumerator.ReturnType;
+                var moveNext = enumeratorType.GetMethod("MoveNext");
+                var currentProp = enumeratorType.GetProperty("Current");
+
+                return (getEnumerator, enumeratorType, moveNext, currentProp);
+            });
+
+            var enny = reflData.Item1.Invoke(list, Array.Empty<object>());
+            while((bool) reflData.Item3.Invoke(enny, Array.Empty<object>())) {
+                yield return reflData.Item4.GetValue(enny);
+            }
+        }
+
+        public static List<KeyValuePair<string, string>> EnumerateKvpFromObject(this Fi _selfie, object obj) {
+            if (obj == null) {
+                return new List<KeyValuePair<string, string>>();
+            }
+            if (obj is IDictionary<string, object> map) {
+                return map.Select(kvp => new KeyValuePair<string, string>(kvp.Key, System.Net.WebUtility.UrlEncode(kvp.Value?.ToString()))).ToList();
+            }
+            if (obj is IDictionary<string, string> map2) {
+                return map2.Select(kvp => new KeyValuePair<string, string>(kvp.Key, System.Net.WebUtility.UrlEncode(kvp.Value?.ToString()))).ToList();
+            }
+
+            if (obj is JObject jobj) {
+                return jobj.Properties().Select(x => new KeyValuePair<string, string>(x.Name, System.Net.WebUtility.UrlEncode(x.Value?.ToString()))).ToList();
+            }
+
+            List<KeyValuePair<string, string>> retv = new List<KeyValuePair<string, string>>();
+            foreach (var item in ReflectionTool.FieldsAndPropertiesOf(obj.GetType())) {
+                if (item.GetCustomAttribute<JsonIgnoreAttribute>() != null) {
+                    continue;
+                }
+                var value = ReflectionTool.GetMemberValue(item, obj);
+                if (value != null) {
+                    retv.Add(new KeyValuePair<string, string>(item.Name, System.Net.WebUtility.UrlEncode(value.ToString())));
+                }
+            }
+
+            return retv;
         }
 
         public static T CopyOf<T>(this Fi _selfie, T other) where T : new() {
@@ -1819,16 +1911,19 @@ namespace Figlotech.Core {
             return new string(retval);
         }
 
-        private static SelfInitializerDictionary<(Type, Type), List<(MemberInfo, MemberInfo)>> mwc_MemberRelationCache =
-            new SelfInitializerDictionary<(Type, Type), List<(MemberInfo, MemberInfo)>>
+        private static SelfInitializerDictionary<(Type TypeA, Type TypeB), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>> mwc_MemberRelationCache =
+            new SelfInitializerDictionary<(Type, Type), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>>
         (
             ((Type, Type) tup) => {
                 var (t1, t2) = tup;
-                var retv = new List<(MemberInfo, MemberInfo)>();
+                var retv = new List<(MemberInfo, MemberInfo, Type, Type)>();
                 foreach (var m1 in ReflectionTool.FieldsAndPropertiesOf(t1)) {
                     foreach (var m2 in ReflectionTool.FieldsAndPropertiesOf(t2)) {
                         if (m1.Name == m2.Name) {
-                            retv.Add((m1, m2));
+                            var mt1 = ReflectionTool.GetTypeOf(m1);
+                            var mt2 = ReflectionTool.GetTypeOf(m2);
+
+                            retv.Add((m1, m2, mt1, mt2));
                         }
                     }
                 }
@@ -1866,6 +1961,12 @@ namespace Figlotech.Core {
             }
         }
 
+        public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, IEnumerable<TIn> input, int maxParallelism = -1) {
+            return ParallelFlow<TIn>(__selfie, (yield) => {
+                yield.ReturnRange(input);
+                return Fi.Result();
+            }, maxParallelism);
+        }
         public static ParallelFlowStepInOut<TIn, TIn> ParallelFlow<TIn>(this Fi __selfie, Action<FlowYield<TIn>> input, int maxParallelism = -1) {
             return ParallelFlow<TIn>(__selfie, (yield) => {
                 input(yield);
