@@ -325,7 +325,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 retv.Append(
                     new QueryBuilder().Append(
                         $"@r_{i}",
-                        Convert.ChangeType(set[i].RID, ridType)
+                        ReflectionTool.GetMemberValue(FiTechBDadosExtensions.RidColumnOf[typeof(T)], set[i])
                     )
                 );
                 if (i < set.Count - 1)
@@ -333,6 +333,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             return retv;
         }
+
         public static QueryBuilder ListRids2<T>(this Fi _selfie, List<T> set) where T : IDataObject {
             QueryBuilder retv = new QueryBuilder();
             for (int i = 0; i < set.Count; i++) {

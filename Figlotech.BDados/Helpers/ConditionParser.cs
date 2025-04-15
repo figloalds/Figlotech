@@ -367,6 +367,16 @@ namespace Figlotech.BDados.Helpers {
                         return retv;
                     }
                 }
+                if (expr.Method.DeclaringType == typeof(Int32) || expr.Method.DeclaringType == typeof(Int64)) {
+                    if (expr.Method.Name == nameof(Int32.Parse)) {
+                        var retv = Qb.Fmt("CAST(")
+                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                            + Qb.Fmt("AS")
+                            + Qb.Fmt("SIGNED")
+                            + Qb.Fmt(")");
+                        return retv;
+                    }
+                }
 
                 if (expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
                     if(expr.Method.GetParameters().Length == 1) {

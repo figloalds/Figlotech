@@ -221,6 +221,9 @@ namespace Figlotech.Data {
         internal StringBuilder _queryString = new StringBuilder(2048);
         internal Dictionary<String, Object> _objParams = new Dictionary<String, Object>();
 
+        public string QueryString => _queryString.ToString();
+        public IReadOnlyDictionary<String, Object> Parameters => _objParams;
+
         public QueryBuilder() { }
         public QueryBuilder(params object[] args) {
             AppendQuery(args);
