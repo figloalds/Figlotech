@@ -29,11 +29,25 @@ namespace System
             if (me == null) {
                 throw new NullReferenceException("Trying to copy into null");
             }
-            //if (other == null) {
-            //    throw new NullReferenceException("Trying to copy a null value");
-            //}
+
             Fi.Tech.MemberwiseCopy(other, me);
         }
+        public static void CopyFromExcept(this object me, object other, params string[] except) {
+            if (me == null) {
+                throw new NullReferenceException("Trying to copy into null");
+            }
+
+            Fi.Tech.MemberwiseCopyExcept(other, me, except);
+        }
+
+        public static void CopyFromOnly(this object me, object other, params string[] only) {
+            if (me == null) {
+                throw new NullReferenceException("Trying to copy into null");
+            }
+
+            Fi.Tech.MemberwiseCopyOnly(other, me, only);
+        }
+
 
         public static async Task CopyFile(this IFileSystem fs, string relative, IFileSystem other, string relative2, Action<ProgressEvent> onProgress = null) {
             await fs.Read(relative, async input => {

@@ -14,6 +14,9 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
     public sealed class FiAsyncMultiLock : IDictionary<string, FiAsyncLock> {
         ConcurrentDictionary<string, FiAsyncLock> _dmmy;
+
+        public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(600);
+
         public FiAsyncMultiLock() {
             this._dmmy = new ConcurrentDictionary<string, FiAsyncLock>();
         }
@@ -75,7 +78,13 @@ namespace Figlotech.Core {
         }
 
         public async Task<FiAsyncDisposableLock> Lock(string key, TimeSpan? timeout = null) {
-            var retv = await this[key].LockWithTimeout(timeout ?? TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            var retv = await this[key].LockWithTimeout(timeout ?? DefaultTimeout).ConfigureAwait(false);
+            retv._lock = this;
+            retv._key = key;
+            return retv;
+        }
+        public FiAsyncDisposableLock LockSync(string key, TimeSpan? timeout = null) {
+            var retv = this[key].LockWithTimeoutSync(timeout ?? DefaultTimeout);
             retv._lock = this;
             retv._key = key;
             return retv;
@@ -174,6 +183,10 @@ namespace Figlotech.Core {
             await _semaphore.WaitAsync().ConfigureAwait(false);
             return new FiAsyncDisposableLock(_semaphore);
         }
+        public FiAsyncDisposableLock LockSync() {
+            _semaphore.Wait();
+            return new FiAsyncDisposableLock(_semaphore);
+        }
 
         public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
             var timeoutCancellation = new CancellationTokenSource(timeout);
@@ -186,7 +199,19 @@ namespace Figlotech.Core {
             } catch (Exception x) {
                 throw new Exception("Error waiting for Lock", x);
             }
+        }
 
+        public FiAsyncDisposableLock LockWithTimeoutSync(TimeSpan timeout) {
+            var timeoutCancellation = new CancellationTokenSource(timeout);
+
+            try {
+                _semaphore.Wait(timeoutCancellation.Token);
+                return new FiAsyncDisposableLock(_semaphore);
+            } catch (TaskCanceledException x) {
+                throw new TimeoutException("Awaiting for lock timed out", x);
+            } catch (Exception x) {
+                throw new Exception("Error waiting for Lock", x);
+            }
         }
     }
 }

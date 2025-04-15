@@ -1931,13 +1931,26 @@ namespace Figlotech.Core {
             }
         );
 
-        public static void MemberwiseCopy(this Fi _selfie, object origin, object destination) {
+        public static void MemberwiseCopyExcept(this Fi _selfie, object origin, object destination, params string[] Except) {
+            MemberwiseCopy(_selfie, origin, destination, null, Except);
+        }
+        public static void MemberwiseCopyOnly(this Fi _selfie, object origin, object destination, params string[] Only) {
+            MemberwiseCopy(_selfie, origin, destination, Only, null);
+        }
+
+        public static void MemberwiseCopy(this Fi _selfie, object origin, object destination, string[]? Only = null, string[]? Except = null) {
             if (origin == null)
                 return;
             if (destination == null)
                 return;
             var sametype = origin.GetType() == destination.GetType();
             foreach (var rel in mwc_MemberRelationCache[(origin.GetType(), destination.GetType())]) {
+                if(Only != null && !Only.Contains(rel.MemberA.Name)) {
+                    continue;
+                }
+                if (Except != null && Except.Contains(rel.MemberA.Name)) {
+                    continue;
+                }
                 ReflectionTool.SetMemberValue(rel.Item2, destination, ReflectionTool.GetMemberValue(rel.Item1, origin));
             }
         }

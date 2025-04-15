@@ -13,7 +13,7 @@ namespace Figlotech.Core.Extensions {
             }
             var factoryMethodInfo = factory.GetMethodInfo();
             var factoryName = $"{factoryMethodInfo.DeclaringType.FullName}::{factoryMethodInfo.Name}";
-            using(var handle = _getOrAddAsyncLock.Lock(string.Intern(factoryName)).GetAwaiter().GetResult()) {
+            using(var handle = _getOrAddAsyncLock.LockSync(string.Intern(factoryName))) {
                 return self.GetOrAdd(key, factory);
             }
         }
