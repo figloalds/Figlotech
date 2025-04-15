@@ -577,7 +577,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append(@$"ALTER TABLE {table} 
 ALTER COLUMN {member.Name} DROP DEFAULT, 
-ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING(nullif({member.Name}, '')::{GetDatabaseType(member, fieldAttribute)}), 
+ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING(nullif({member.Name}, null)::{GetDatabaseType(member, fieldAttribute)}), 
 ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.DefaultValue, ReflectionTool.GetTypeOf(member))};");
         }
         public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
