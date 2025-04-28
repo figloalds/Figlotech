@@ -587,10 +587,10 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
-            var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
-            var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
+            var id = FiTechBDadosExtensions.IdColumnNameOf[typeof(T)];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
 
-            return Qb.Fmt($"SELECT {id.Name}, {rid.Name} FROM {typeof(T).Name} WHERE") + Qb.In(rid.Name, rs, i => i.RID);
+            return Qb.Fmt($"SELECT {id} AS Id, {rid} AS RID FROM {typeof(T).Name} WHERE") + Qb.In(rid, rs, i => i.RID);
         }
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {

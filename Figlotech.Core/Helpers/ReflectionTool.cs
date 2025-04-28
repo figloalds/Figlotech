@@ -540,10 +540,12 @@ namespace Figlotech.Core.Helpers {
             (var isNullable, type) = ToUnderlying(type);
             if (type == null) return;
 
-            if (
-                (value == null && !type.IsValueType) ||
-                (value != null && type == value.GetType())
-            ) {
+            if (value == null && (isNullable || !type.IsValueType)) {
+                _setterConversionCache[(member, null)] = (t, v) => _setMemberValueInternal(member, t, null);
+                _setMemberValueInternal(member, target, null);
+                return;
+            }
+            if (value != null && type == value.GetType()) {
                 _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, v);
                 _setMemberValueInternal(member, target, value);
                 return;

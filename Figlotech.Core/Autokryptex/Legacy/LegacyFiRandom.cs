@@ -50,12 +50,16 @@ namespace Figlotech.Core.Autokryptex {
                 for (int r = 0; r < chunk.Length; r++) {
                     chunk[r] ^= chunk[chunk[r]];
                 }
-                if (g1 > 8)
+                if (g1 > 8) {
                     for (int i = 0; i < 32; i++) {
                         for (int j = 0; j < Math.Min(g1 - 1, 8); j++) {
+                            if (hashs[j] == null) {
+                                throw new Exception("Hash list had null at " + j);
+                            }
                             chunk[i * j] ^= hashs[j][i];
                         }
                     }
+                }
                 hash = Fi.Tech.ComputeHash(chunk);
             }
             hashs[g1 % 8] = hash;

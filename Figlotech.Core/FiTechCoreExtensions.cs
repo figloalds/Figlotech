@@ -157,9 +157,22 @@ namespace Figlotech.Core {
             return (TRetv)MapIntoDTO(_selfie, typeof(TRetv), other);
         }
 
+        private static bool IsNullableOfAPrimitive(Type t) {
+            return 
+                t.IsGenericType && 
+                t.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                (
+                    t.GenericTypeArguments[0].IsPrimitive ||
+                    t.GenericTypeArguments[0].IsEnum               
+                );
+        }
+
         public static object MapIntoDTO<TInput>(this Fi _selfie, Type TRetv, TInput other) {
             if(other == null) {
                 return null;
+            }
+            if(TRetv.IsGenericType && TRetv.GetGenericTypeDefinition() == typeof(Nullable<>)) {
+                TRetv = Nullable.GetUnderlyingType(TRetv);
             }
             var retv = Activator.CreateInstance(TRetv);
             if(other.GetType().Implements(typeof(IEnumerable<>))) {
@@ -173,18 +186,31 @@ namespace Figlotech.Core {
                 return retv;
             }
 
-            var sametype = other.GetType() == retv.GetType();
             foreach (var rel in mwc_MemberRelationCache[(retv.GetType(), other.GetType())]) {
                 var otherValue = ReflectionTool.GetMemberValue(rel.MemberB, other);
-                if (rel.TypeA != rel.TypeB && !rel.TypeA.IsPrimitive && !rel.TypeB.IsPrimitive) {
+                if(
+                    rel.TypeA == rel.TypeB || 
+                    (rel.TypeA == typeof(string)) || 
+                    (rel.TypeB == typeof(string)) || 
+                    (IsNullableOfAPrimitive(rel.TypeA) || IsNullableOfAPrimitive(rel.TypeB)) ||
+                    (rel.TypeA.IsPrimitive && rel.TypeB.IsPrimitive) || 
+                    (rel.TypeA.IsEnum && rel.TypeB.IsEnum)
+                ) {
+                    ReflectionTool.SetMemberValue(rel.MemberA, retv, otherValue);
+                } else {
                     var objValue = MapIntoDTO(_selfie, rel.TypeA, otherValue);
                     ReflectionTool.SetMemberValue(rel.MemberA, retv, objValue);
-                } else {
-                    ReflectionTool.SetMemberValue(rel.MemberA, retv, otherValue);
                 }
             }
 
             return retv;
+        }
+
+        public static TOutput MapIntoDTO<TOutput>(this Fi _selfie, object other) {
+            if(other == null) {
+                return default(TOutput);
+            }
+            return (TOutput) MapIntoDTO<object>(_selfie, typeof(TOutput), other);
         }
 
         static ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)> EnumerateUnknownListCache = new

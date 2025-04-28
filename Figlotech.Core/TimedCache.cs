@@ -60,16 +60,17 @@ namespace Figlotech.Core {
 
         public T this[TKey key] {
             get {
-                if(!Dictionary.ContainsKey(key) && OnFailOver != null) {
-                    var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
-                    this[key] = ret;
+                TimerCachedObject<TKey, T> item;
+                if (!Dictionary.TryGetValue(key, out item)) {
+                    if (OnFailOver != null) {
+                        var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
+                        this[key] = ret;
+                        return ret;
+                    }
+                    return default(T);
                 }
-                if(Dictionary.ContainsKey(key)) {
-                    var item = Dictionary[key];
-                    item.KeepAlive();
-                    return item.Object;
-                }
-                return default(T);
+                item.KeepAlive();
+                return item.Object;
             }
             set {
                 if(Dictionary.ContainsKey(key)) {
@@ -101,10 +102,21 @@ namespace Figlotech.Core {
         public bool TryGetValue(TKey key, out T value) {
             if(Dictionary.TryGetValue(key, out var val)) {
                 value = val.Object;
+                val.KeepAlive();
                 return true;
             }
             value = default(T);
             return false;
+        }
+
+        public async Task<T> GetOrAddWithLocking(TKey key, Func<TKey, Task<T>> valueFactory) {
+            if (Dictionary.TryGetValue(key, out var val)) {
+                val.KeepAlive();
+                return val.Object;
+            }
+            var newValue = await valueFactory(key);
+            this[key] = newValue;
+            return newValue;
         }
 
         public void Add(KeyValuePair<TKey, T> item) {

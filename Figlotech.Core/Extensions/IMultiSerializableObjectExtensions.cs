@@ -24,7 +24,7 @@ namespace Figlotech.Core.Extensions {
             using (var ms = new MemoryStream()) {
                 var json = JsonConvert.SerializeObject(obj, new JsonSerializerSettings {
                     Formatting = options.Formatted ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None,
-                    NullValueHandling = NullValueHandling.Ignore,
+                    NullValueHandling = NullValueHandling.Include,
                     ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
                 });
 
