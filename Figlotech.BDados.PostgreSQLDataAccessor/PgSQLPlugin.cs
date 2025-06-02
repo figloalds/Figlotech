@@ -27,7 +27,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public bool ContinuousConnection => Config.ContinuousConnection;
 
         public int CommandTimeout => Config.Timeout;
+        public int ConnectTimeout => Config.Timeout;
 
+        public int PoolSize => Config.PoolSize;
         public string SchemaName => Config.Database;
 
         public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {

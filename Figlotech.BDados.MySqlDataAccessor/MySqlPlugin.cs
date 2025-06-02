@@ -28,6 +28,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public bool ContinuousConnection => Config.ContinuousConnection;
 
         public int CommandTimeout => Config.Timeout;
+        public int ConnectTimeout => Config.ConnectTimeout;
+        public int PoolSize => Config.PoolSize;
 
         public string SchemaName => Config.Database;
 

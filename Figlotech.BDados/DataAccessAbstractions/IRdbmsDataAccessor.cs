@@ -37,8 +37,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
 
-        List<IDataObject> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt);
-
         List<T> Query<T>(IQueryBuilder Query = null) where T : new();
 
         DataTable Query(IQueryBuilder Query);
@@ -60,14 +58,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         Task<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
-        void SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
+        Task SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);
-        void SendLocalUpdates(IEnumerable<Type> types, DateTime dt, Stream stream);
+        Task SendLocalUpdates(IEnumerable<Type> types, DateTime dt, Stream stream);
         void ReceiveRemoteUpdatesAndPersist(IEnumerable<Type> types, Stream stream);
 
         IEnumerable<IDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream);
 
-        List<IDataObject> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
+        Task<List<IDataObject>> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
+        Task<List<IDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt);
 
         Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject;
         Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, long Id) where T : IDataObject;

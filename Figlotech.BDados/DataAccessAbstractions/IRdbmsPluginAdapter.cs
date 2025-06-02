@@ -12,6 +12,8 @@ namespace Figlotech.BDados.DataAccessAbstractions
         void SetConfiguration(IDictionary<string, object> a);
         bool ContinuousConnection { get; }
         int CommandTimeout { get; }
+        int ConnectTimeout { get; }
+        int PoolSize { get; }
         string SchemaName { get; }
         string ConnectionString { get; }
         Dictionary<string, string> InfoSchemaColumnsMap { get; }

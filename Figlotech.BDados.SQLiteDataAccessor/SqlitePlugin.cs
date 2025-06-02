@@ -25,7 +25,9 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
         public bool ContinuousConnection => true;
 
+        public int PoolSize => Config.PoolSize;
         public int CommandTimeout => throw new NotImplementedException();
+        public int ConnectTimeout => throw new NotImplementedException();
 
         public string SchemaName => Config.Schema;
 
