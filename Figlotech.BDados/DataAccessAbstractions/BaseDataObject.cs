@@ -80,11 +80,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         // Optional stuff, override it or don't.
         // The save method will attempt to use them though.
 
-        public virtual ValidationErrors Validate() { return new ValidationErrors(); }
-
-        public virtual ValidationErrors ValidateInput() { return new ValidationErrors(); }
-
-        public virtual ValidationErrors ValidateBusiness() { return new ValidationErrors(); }
+        public virtual Task<ValidationErrors> Validate() { return Task.FromResult(new ValidationErrors()); }
+        public virtual Task<ValidationErrors> ValidateInput() { return Task.FromResult(new ValidationErrors()); }
+        public virtual Task<ValidationErrors> ValidateBusiness() { return Task.FromResult(new ValidationErrors()); }
 
         public virtual Task OnBeforePersistAsync() { return Task.CompletedTask;  }
 

@@ -23,7 +23,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
         public bool UsePooling { get; set; } = true;
         public int Timeout { get; set; } = 60000;
         public int ConnectTimeout { get; set; } = 30;
-        public int Lifetime { get; set; } = 3600;
+        public int Lifetime { get; set; } = 300;
         public bool ResetConnection { get; set; } = true;
         public bool ContinuousConnection { get; set; } = false;
         public int DefaultCommandTimeout { get; set; } = 600;

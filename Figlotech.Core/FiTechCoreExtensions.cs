@@ -26,6 +26,7 @@ using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using Newtonsoft.Json.Linq;
+using System.Net.Http.Headers;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -1903,6 +1904,23 @@ namespace Figlotech.Core {
             for (int index = 0; index < 16; ++index)
                 numArray[index] = (byte)random.Next(256);
             return numArray;
+        }
+
+        static ConcurrentDictionary<string, Task> _joinRequests = new ConcurrentDictionary<string, Task>();
+        public static async Task<T> JoinRequests<T>(this Fi selfie, string tag, Func<Task<T>> fn) {
+            var internalTag = $"{tag}::{typeof(T).Name}";
+            if (_joinRequests.TryGetValue(internalTag, out Task existingTask)) {
+                if(existingTask is Task<T> existingTaskT) {
+                    return await existingTaskT.ConfigureAwait(false);
+                } else {
+                    throw new InvalidOperationException($"JoinRequests for {tag}::{typeof(T).Name} was already called with a different type. Expected {typeof(T).Name}, got {existingTask.GetType().Name}");
+                }
+            }
+            var retv = _joinRequests.GetOrAddWithLocking(internalTag, (t) => {
+                return fn();
+            });
+
+            return await (retv as Task<T>);
         }
 
         public static byte[] CramString(this Fi _selfie, String input, int digitCount) {

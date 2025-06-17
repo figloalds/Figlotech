@@ -567,6 +567,11 @@ namespace Figlotech.Core.Helpers {
                 _setMemberValueInternal(member, target, (long)(int)value);
                 return;
             }
+            if (type == typeof(DateTime) && vt == typeof(DateTimeOffset)) {
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, ((DateTimeOffset)v).DateTime);
+                _setMemberValueInternal(member, target, ((DateTimeOffset)value).DateTime);
+                return;
+            }
 
             if (type == typeof(bool) && value is sbyte vb) {
                 _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (sbyte)v != 0);

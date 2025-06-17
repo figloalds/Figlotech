@@ -133,6 +133,9 @@ namespace Figlotech.Core {
                     if (_semaphore.CurrentCount == 0) {
                         _semaphore.Release(1);
                     } else {
+                        if (Debugger.IsAttached) {
+                            Debugger.Break();
+                        }
                         Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
                     }
                     if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {

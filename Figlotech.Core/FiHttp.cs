@@ -60,12 +60,12 @@ namespace Figlotech.Core {
             var retv = new FiHttpResult(caller);
             try {
                 var client = caller.HttpClient;
-                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
-                await retv.Init(response);
+                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None).ConfigureAwait(false);
+                await retv.Init(response).ConfigureAwait(false);
             } catch (WebException ex) {
-                await retv.Init(ex.Response as HttpWebResponse);
+                await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
             } catch (Exception ex) {
-                await retv.Init(null as HttpResponseMessage);
+                await retv.Init(null as HttpResponseMessage).ConfigureAwait(false);
             }
             return retv;
         }
@@ -82,7 +82,7 @@ namespace Figlotech.Core {
                 response.Headers.Add(header, resp.Headers.GetValues(header));
             }
             response.Content = new StreamContent(resp.GetResponseStream());
-            await Init(response);
+            await Init(response).ConfigureAwait(false);
         }
 
         object ToMaybeJsonDynamic(string input) {
@@ -109,10 +109,10 @@ namespace Figlotech.Core {
             ContentType = resp.Content.Headers.ContentType?.MediaType;
             ContentLength = resp.Content.Headers.ContentLength ?? 0;
 
-            if(this.Caller.Logging != null) {
+            if (this.Caller.Logging != null) {
                 try {
-                    var postData = Response.RequestMessage.Content != null ? ToMaybeJsonDynamic(await Response.RequestMessage.Content.ReadAsStringAsync()) : null;
-                    var respData = ToMaybeJsonDynamic(await this.AsString());
+                    var postData = Response.RequestMessage.Content != null ? ToMaybeJsonDynamic(await Response.RequestMessage.Content.ReadAsStringAsync().ConfigureAwait(false)) : null;
+                    var respData = ToMaybeJsonDynamic(await this.AsString().ConfigureAwait(false));
 
                     await this.Caller.Logging.FileSystem.WriteAllTextAsync(
                         $"{this.Caller.Logging.RelativePath}/{DateTime.UtcNow:yyyyMMddHHmmssfff}{IntEx.GenerateShortRid()}-{(int)StatusCode}-{this.Response.RequestMessage.Method}-{this.Response.RequestMessage.RequestUri.PathAndQuery.Replace("/", "-").RegExReplace("\\W", "-")}.json",
@@ -125,8 +125,8 @@ namespace Figlotech.Core {
                             Envio = postData,
                             Retorno = respData
                         }, LoggerSerializerSettings)
-                    );
-                } catch(Exception x) {
+                    ).ConfigureAwait(false);
+                } catch (Exception x) {
                     Fi.Tech.Throw(x);
                 }
             }
@@ -141,14 +141,14 @@ namespace Figlotech.Core {
             if (CachedResponseBody == null) {
                 CachedResponseBody = new MemoryStream();
                 if (Response?.Content != null) {
-                    await Response.Content.CopyToAsync(CachedResponseBody);
+                    await Response.Content.CopyToAsync(CachedResponseBody).ConfigureAwait(false);
                 }
             }
             CachedResponseBody.Seek(0, SeekOrigin.Begin);
         }
 
         public async Task<string> AsString() {
-            await CacheResponseBody();
+            await CacheResponseBody().ConfigureAwait(false);
             if (CachedResponseBody == null) {
                 return null;
             }
@@ -156,16 +156,16 @@ namespace Figlotech.Core {
         }
 
         public async Task<string> AsDecodedString(IEncryptionMethod method) {
-            var retv = Fi.StandardEncoding.GetString(method.Decrypt(await AsBuffer()));
+            var retv = Fi.StandardEncoding.GetString(method.Decrypt(await AsBuffer().ConfigureAwait(false)));
             return retv;
         }
 
         public async Task<Stream> AsStream() {
-            if(CachedResponseBody != null) {
+            if (CachedResponseBody != null) {
                 CachedResponseBody.Seek(0, SeekOrigin.Begin);
                 return CachedResponseBody;
             }
-            return await Response.Content.ReadAsStreamAsync();
+            return await Response.Content.ReadAsStreamAsync().ConfigureAwait(false);
         }
 
         //public Stream AsRawStream() {
@@ -185,20 +185,20 @@ namespace Figlotech.Core {
         //}
 
         public async Task<byte[]> AsBuffer() {
-            await CacheResponseBody();
+            await CacheResponseBody().ConfigureAwait(false);
             return CachedResponseBody.ToArray();
         }
 
         public async Task<byte[]> AsDecodedBuffer(IEncryptionMethod method) {
-            return method.Decrypt(await AsBuffer());
+            return method.Decrypt(await AsBuffer().ConfigureAwait(false));
         }
 
         public async Task<T> As<T>() {
             if (typeof(T) == typeof(String)) {
-                return (T)(object)await AsString();
+                return (T)(object)await AsString().ConfigureAwait(false);
             }
             T retv = default(T);
-            var json = await this.AsString();
+            var json = await this.AsString().ConfigureAwait(false);
             try {
                 T obj = JsonConvert.DeserializeObject<T>(json, Caller.JsonSettings);
                 retv = obj;
@@ -215,7 +215,7 @@ namespace Figlotech.Core {
         }
 
         public async Task SaveToFile(IFileSystem fs, string fileName) {
-            await fs.Write(fileName, async stream => await (await AsStream()).CopyToAsync(stream));
+            await fs.Write(fileName, async stream => await (await AsStream().ConfigureAwait(false)).CopyToAsync(stream).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
         bool isDisposed = false;
@@ -355,7 +355,7 @@ namespace Figlotech.Core {
         }
 
         public async Task<bool> Check(string Url) {
-            var st = (int)(await (Get(Url))).StatusCode;
+            var st = (int)(await (Get(Url)).ConfigureAwait(false)).StatusCode;
             return st >= 200 && st < 300;
         }
 
@@ -366,7 +366,7 @@ namespace Figlotech.Core {
                     bool isFirst = true;
                     var kvpairs = Fi.Tech.EnumerateKvpFromObject(postData);
                     foreach (var item in kvpairs) {
-                        if(item.Value == null) {
+                        if (item.Value == null) {
                             continue;
                         }
                         if (isFirst) {
@@ -388,127 +388,127 @@ namespace Figlotech.Core {
         public const string ContentTypeFormUrlEncoded = "application/x-www-form-urlencoded";
         // GET
         public async Task<FiHttpResult> Get(string Url) {
-            return await SendRequest(HttpMethod.Get, Url);
+            return await SendRequest(HttpMethod.Get, Url).ConfigureAwait(false);
         }
         public async Task<T> Get<T>(string Url) {
-            return await SendRequest<T>(HttpMethod.Get, Url);
+            return await SendRequest<T>(HttpMethod.Get, Url).ConfigureAwait(false);
         }
 
 
         // DELETEdp1
         public async Task<FiHttpResult> Delete(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Delete, url, form);
+            return await SendRequest(HttpMethod.Delete, url, form).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Delete(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Delete, url, streamFunction);
+            return await SendRequest(HttpMethod.Delete, url, streamFunction).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Delete(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Delete, url, stream, contentType);
+            return await SendRequest(HttpMethod.Delete, url, stream, contentType).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Delete(string url, string body) {
-            return await SendRequest(HttpMethod.Delete, url, body);
+            return await SendRequest(HttpMethod.Delete, url, body).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Delete(string url) {
-            return await SendRequest(HttpMethod.Delete, url);
+            return await SendRequest(HttpMethod.Delete, url).ConfigureAwait(false);
         }
         public async Task<T> Delete<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Delete, url);
+            return await SendRequest<T>(HttpMethod.Delete, url).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType);
+            return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType).ConfigureAwait(false);
         }
 
         // POST
         public async Task<FiHttpResult> Post(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Post, url, form);
+            return await SendRequest(HttpMethod.Post, url, form).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Post(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Post, url, streamFunction);
+            return await SendRequest(HttpMethod.Post, url, streamFunction).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Post(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Post, url, stream, contentType);
+            return await SendRequest(HttpMethod.Post, url, stream, contentType).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Post(string url, string body) {
-            return await SendRequest(HttpMethod.Post, url, body);
+            return await SendRequest(HttpMethod.Post, url, body).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Post<T>(string url, IAsyncEnumerable<T> body) {
             return await SendRequest(HttpMethod.Post, url, async stream => {
                 await using var writer = new StreamWriter(stream, Fi.StandardEncoding, 8192, true);
                 var isFirst = true;
-                await writer.WriteLineAsync("[");
-                await foreach (var item in body) {
+                await writer.WriteLineAsync("[").ConfigureAwait(false);
+                await foreach (var item in body.ConfigureAwait(false)) {
                     if (isFirst) {
                         isFirst = false;
                     } else {
-                        await writer.WriteLineAsync(",");
+                        await writer.WriteLineAsync(",").ConfigureAwait(false);
                     }
-                    await writer.WriteLineAsync(JsonConvert.SerializeObject(item, JsonSettings));
+                    await writer.WriteLineAsync(JsonConvert.SerializeObject(item, JsonSettings)).ConfigureAwait(false);
                 }
-                await writer.WriteLineAsync("]");
-            }, "application/json");
+                await writer.WriteLineAsync("]").ConfigureAwait(false);
+            }, "application/json").ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Post(string url) {
-            return await SendRequest(HttpMethod.Post, url);
+            return await SendRequest(HttpMethod.Post, url).ConfigureAwait(false);
         }
 
         public async Task<T> Post<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Post, url);
+            return await SendRequest<T>(HttpMethod.Post, url).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Post<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType);
+            return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType).ConfigureAwait(false);
         }
 
         // Put
         public async Task<FiHttpResult> Put(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Put, url, form);
+            return await SendRequest(HttpMethod.Put, url, form).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Put(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Put, url, streamFunction);
+            return await SendRequest(HttpMethod.Put, url, streamFunction).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Put(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Put, url, stream, contentType);
+            return await SendRequest(HttpMethod.Put, url, stream, contentType).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Put(string url, string body) {
-            return await SendRequest(HttpMethod.Put, url, body);
+            return await SendRequest(HttpMethod.Put, url, body).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Put(string url) {
-            return await SendRequest(HttpMethod.Put, url);
+            return await SendRequest(HttpMethod.Put, url).ConfigureAwait(false);
         }
         public async Task<T> Put<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Put, url);
+            return await SendRequest<T>(HttpMethod.Put, url).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType);
+            return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType).ConfigureAwait(false);
         }
 
         // Patch
         public async Task<FiHttpResult> Patch(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Patch, url, form);
+            return await SendRequest(HttpMethod.Patch, url, form).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> Patch(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Patch, url, streamFunction);
+            return await SendRequest(HttpMethod.Patch, url, streamFunction).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Patch(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Patch, url, stream, contentType);
+            return await SendRequest(HttpMethod.Patch, url, stream, contentType).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Patch(string url, string body) {
-            return await SendRequest(HttpMethod.Patch, url, body);
+            return await SendRequest(HttpMethod.Patch, url, body).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Patch(string url) {
-            return await SendRequest(HttpMethod.Patch, url);
+            return await SendRequest(HttpMethod.Patch, url).ConfigureAwait(false);
         }
         public async Task<T> Patch<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Patch, url);
+            return await SendRequest<T>(HttpMethod.Patch, url).ConfigureAwait(false);
         }
         public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType);
+            return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType).ConfigureAwait(false);
         }
 
         //**
@@ -517,20 +517,20 @@ namespace Figlotech.Core {
             var req = CreateRequest(url);
             req.Method = method;
             req.Content = form;
-            return await FiHttpResult.InitFromRequest(this, req);
+            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = null) {
             var req = CreateRequest(url);
             req.Method = method;
             using (var ms = new MemoryStream()) {
-                await streamFunction(ms);
+                await streamFunction(ms).ConfigureAwait(false);
                 ms.Seek(0, SeekOrigin.Begin);
                 req.Content = new StreamContent(ms);
                 if (!string.IsNullOrEmpty(contentType)) {
                     req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 }
-                return await FiHttpResult.InitFromRequest(this, req);
+                return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
             }
         }
 
@@ -542,28 +542,28 @@ namespace Figlotech.Core {
                     ContentType = new MediaTypeHeaderValue(contentType)
                 }
             };
-            return await FiHttpResult.InitFromRequest(this, req);
+            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, string body) {
             var req = CreateRequest(url);
             req.Method = method;
             req.Content = new StringContent(body);
-            return await FiHttpResult.InitFromRequest(this, req);
+            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
         }
 
         public async Task<FiHttpResult> SendRequest(HttpMethod method, string url) {
             var req = CreateRequest(url);
             req.Method = method;
-            return await FiHttpResult.InitFromRequest(this, req);
+            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
         }
 
         public async Task<T> SendRequest<T>(HttpMethod method, string url) {
 
-            var result = await SendRequest(method, url);
+            var result = await SendRequest(method, url).ConfigureAwait(false);
 
             if (result.IsSuccess) {
-                return await result.As<T>();
+                return await result.As<T>().ConfigureAwait(false);
             } else {
                 throw new NonSuccessResponseException(result.Response);
             }
@@ -571,7 +571,7 @@ namespace Figlotech.Core {
 
         public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = null) {
             if (postData is Stream s) {
-                return await SendRequest(method, url, s, contentType);
+                return await SendRequest(method, url, s, contentType).ConfigureAwait(false);
             }
             contentType = contentType ?? ContentTypeJson;
             var bytes = GetObjectBytes(postData, contentType);
@@ -580,7 +580,7 @@ namespace Figlotech.Core {
             req.Content = new ByteArrayContent(bytes);
             req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             req.Content.Headers.ContentLength = bytes.Length;
-            return await FiHttpResult.InitFromRequest(this, req);
+            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
         }
 
         private void UpdateSyncCode() {
@@ -619,15 +619,24 @@ namespace Figlotech.Core {
         }
 
         public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
-            using (var result = await Get(Url)) {
+            using (var result = await Get(Url).ConfigureAwait(false)) {
                 var code = result.StatusCode;
-                await ActOnResponse?.Invoke(code, await result.AsStream());
+                if(ActOnResponse != null) {
+                    await ActOnResponse(code, await result.AsStream().ConfigureAwait(false)).ConfigureAwait(false);
+                }
                 return code;
             }
         }
 
         public static string DefaultUserAgent = "Figlotech Http Abstraction on netstandard2.1";
         public string UserAgent { get; set; } = DefaultUserAgent;
+
+        public bool AutoRetryOnStatus0 { get; set; } = true;
+        public int MaxTriesStatus0Fails = 10;
+        public Func<int, TimeSpan> AutoRetryFallbackTiming =
+            (rec) => rec <= 15
+                ? TimeSpan.FromMilliseconds(200 * Math.Pow(2, rec))
+                : TimeSpan.FromMilliseconds(3000 * Math.Pow(1.2, rec - 5));
 
         public string this[string k] {
             get {

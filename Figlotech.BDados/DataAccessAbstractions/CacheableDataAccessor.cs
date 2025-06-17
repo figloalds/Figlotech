@@ -50,7 +50,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public T LoadByRid<T>(string RID) where T : IDataObject, new() {
             return DataAccessor.LoadByRid<T>(RID);
         }
-
         public T LoadById<T>(long Id) where T : IDataObject, new() {
             return DataAccessor.LoadById<T>(Id);
         }

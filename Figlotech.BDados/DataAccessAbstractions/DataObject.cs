@@ -44,7 +44,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         protected abstract IEnumerable<IValidationRule<T>> ValidationRules();
 
-        public override ValidationErrors Validate() {
+        public override async Task<ValidationErrors> Validate() {
+            await Task.Yield();
             ValidationErrors ve = new ValidationErrors();
             var myType = this.GetType();
 
@@ -70,7 +71,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ve;
         }
 
-        void CascadingDoForFields<T>(Action<T> process, List<Type> prevList = null) {
+        async Task CascadingDoForFields<T>(Func<T, Task> process, List<Type> prevList = null) {
 
             if (prevList == null)
                 prevList = new List<Type>();
@@ -89,30 +90,31 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             foreach (var field in myValues) {
                 var workingValue = ReflectionTool.GetMemberValue(field, this);
                 if (workingValue is T) {
-                    CascadingDoForFields<T>(process, prevList);
+                    await CascadingDoForFields<T>(process, prevList);
                 }
                 if (!ReflectionTool.GetTypeOf(field).GetInterfaces().Contains(typeof(T)))
                     continue;
                 prevList.Add(ReflectionTool.GetTypeOf(field));
                 try {
                     T workObject = ((T)workingValue);
-                    process(workObject);
+                    await process(workObject);
                 }
                 catch (Exception) { }
             }
         }
+
         InstanceAuthorizer ia = new InstanceAuthorizer();
-        public string RunValidations() {
+        public async Task<string> RunValidations() {
 
             var errors = new ValidationErrors();
 
-            errors.Merge(this.Validate());
-            errors.Merge(this.ValidateInput());
-            errors.Merge(this.ValidateBusiness());
+            errors.Merge(await this.Validate());
+            errors.Merge(await this.ValidateInput());
+            errors.Merge(await this.ValidateBusiness());
 
-            CascadingDoForFields<IBusinessObject>((field) => {
-                errors.Merge(field?.ValidateInput());
-                errors.Merge(field?.ValidateBusiness());
+            await CascadingDoForFields<IBusinessObject>(async (field) => {
+                errors.Merge(await field?.ValidateInput());
+                errors.Merge(await field?.ValidateBusiness());
             });
 
             if (errors.Count > 0) {
@@ -124,7 +126,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public virtual async Task<bool> ValidateAndPersistAsync(String iaToken) {
             if (!ia.CheckAuthorization(iaToken)) {
-                await ValidateAndPersistAsync(RunValidations()).ConfigureAwait(false);
+                await ValidateAndPersistAsync(await RunValidations()).ConfigureAwait(false);
             }
 
             if (null == DataAccessor) {

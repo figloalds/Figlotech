@@ -16,11 +16,10 @@ namespace Figlotech.Core.BusinessModel {
     }
 
     public interface IBusinessObject {
-        ValidationErrors ValidateInput();
+        Task<ValidationErrors> ValidateInput();
+        Task<ValidationErrors> ValidateBusiness();
 
-        ValidationErrors ValidateBusiness();
-
-        string RunValidations();
+        Task<string> RunValidations();
 
         Task<bool> ValidateAndPersistAsync(string iaToken);
 

@@ -634,14 +634,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject, new() {
-            var f = LoadAll<T>(Core.Interfaces.LoadAll.Where<T>(qb));
-            if (f.Any()) {
-                return f.First();
-            } else {
-                T quickSave = Default();
-                SaveItem(quickSave);
-                return quickSave;
-            }
+            return Task.Run(async () => {
+                await using var transaction = await CreateNewTransactionAsync(CancellationToken.None).ConfigureAwait(false);
+                var f = LoadAll<T>(transaction, Core.Interfaces.LoadAll.Where<T>(qb));
+                if (f.Any()) {
+                    return f.First();
+                } else {
+                    T quickSave = Default();
+                    SaveItem(transaction, quickSave);
+                    return quickSave;
+                }
+            }).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         bool isOnline = true;
@@ -899,9 +902,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public bool SaveItem(IDataObject input) {
             try {
-                return Access((transaction) => {
-                    return SaveItem(transaction, input);
-                });
+                return Task.Run(async () => {
+                    await using var transaction = await CreateNewTransactionAsync(CancellationToken.None);
+                    return await SaveItemAsync(transaction, input);
+                }).ConfigureAwait(false).GetAwaiter().GetResult();
             } catch (Exception x) {
                 throw new BDadosException("Error saving item", x);
             }
@@ -937,6 +941,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public T LoadByRid<T>(String RID) where T : IDataObject, new() {
             return Access((transaction) => LoadByRid<T>(transaction, RID), null);
+        }
+
+        public async Task<T> LoadByRidAsync<T>(BDadosTransaction tsn, string RID) where T : IDataObject, new() {
+            return (await LoadAllAsync<T>(tsn, Figlotech.Core.Interfaces.LoadAll.From<T>().Where(x => x.RID == RID).Limit(1))).FirstOrDefault();
         }
 
         public List<T> LoadAll<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
@@ -1190,17 +1198,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         FiAsyncLock ExclusiveOpenConnectionLock = new FiAsyncLock();
         private async ValueTask ExclusiveOpenConnectionAsync(CancellationToken cancellation, IDbConnection connection) {
             await _concurrentConnectionsSemaphoreSlim.WaitAsync(Plugin.CommandTimeout, cancellation);
-            try {
-                await using (var handle = await ExclusiveOpenConnectionLock.Lock().ConfigureAwait(false)) {
+            await using (var handle = await ExclusiveOpenConnectionLock.Lock().ConfigureAwait(false)) {
+                try {
                     if (connection is DbConnection idbconn) {
                         await idbconn.OpenAsync(CancellationToken.None).ConfigureAwait(false);
                     } else {
                         connection.Open();
                     }
+                } catch(Exception) {
+                    _concurrentConnectionsSemaphoreSlim.Release();
+                    throw;
                 }
-            } catch(Exception) {
-                _concurrentConnectionsSemaphoreSlim.Release();
-                throw;
             }
         }
 

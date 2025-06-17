@@ -92,6 +92,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
         T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
+        Task<T> LoadByRidAsync<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();
 
         T ForceExist<T>(BDadosTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
