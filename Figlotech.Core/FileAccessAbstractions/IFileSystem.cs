@@ -63,6 +63,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
         Task<DateTime?> GetLastModifiedAsync(string relative);
         Task<DateTime?> GetLastAccessAsync(string relative);
 
+        IFileSystem Fork(string relative);
+
         Task<long> GetSizeAsync(string relative);
         Task SetLastModifiedAsync(String relative, DateTime dt);
         Task SetLastAccessAsync(String relative, DateTime dt);

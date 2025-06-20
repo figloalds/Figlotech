@@ -96,6 +96,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
             AbsMkDirs(dir);
         }
 
+        public IFileSystem Fork(string relative) {             
+            FixRelative(ref relative);
+            var newAccessor = new AzureBlobsFileAccessor(AccountName, new BlobsCredentials { AccountKey = AccountKey }, ContainerName);
+            newAccessor.SetBaseDirectory(BaseDirectory + relative.Replace(Path.DirectorySeparatorChar, '/'));
+            return newAccessor;
+        }
+
         string FixRelative(ref string relative) {
             if (relative.StartsWith("/")) {
                 relative = relative.Substring(1);

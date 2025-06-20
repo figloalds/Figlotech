@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.ExcelUtil {
@@ -381,8 +382,8 @@ namespace Figlotech.ExcelUtil {
         }
 
         public T Get<T>(int line, int column) {
-            var o = Get(line, column);
             try {
+                var o = Get(line, column);
                 if(o == null) {
                     return default(T);
                 }
@@ -506,7 +507,7 @@ namespace Figlotech.ExcelUtil {
             lineFun(new ExcelatorRowWriter(1 + skipLines, this));
         }
         public async Task Write(Func<ExcelatorRowWriter, Task> lineFun, int skipLines = 0) {
-            await lineFun(new ExcelatorRowWriter(1 + skipLines, this));
+            await lineFun(new ExcelatorRowWriter(1 + skipLines, this)).ConfigureAwait(false);
         }
 
         public ExcelatorRowWriter Row(int r) {
@@ -517,44 +518,42 @@ namespace Figlotech.ExcelUtil {
         }
 
         public async Task WriteAsync(Func<ExcelatorRowWriter, Task> lineFun, int skipLines = 0) {
-            await lineFun(new ExcelatorRowWriter(1 + skipLines, this));
+            await lineFun(new ExcelatorRowWriter(1 + skipLines, this)).ConfigureAwait(false);
         }
 
-        public void ReadAll(Action<ExcelatorLineReader> lineFun, int skipLines = 0, Action<Exception> handler = null) {
+        public async IAsyncEnumerable<ExcelatorLineReader> ReadAllLines(int skipLines = 0) {
+            ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
+            for (var i = 1 + skipLines; i < _currentWorkSheet.Dimension.Rows + 1; i++) {
+                xcl.CurrentRow = i;
+                yield return xcl;
+                if (xcl.stopReadingIssued) {
+                    break;
+                }
+            }
+        }
+
+        public async Task ReadAllAsync(CancellationToken cancellation, Func<CancellationToken, ExcelatorLineReader, Task> lineFun, int skipLines = 0, Func<Exception, Task> handler = null) {
             ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
             for (var i = 1 + skipLines; i < _currentWorkSheet.Dimension.Rows + 1; i++) {
                 try {
                     xcl.CurrentRow = i;
-                    lineFun(xcl);
-                    if(xcl.stopReadingIssued) {
+                    using var tcsFork = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+                    await lineFun(tcsFork.Token, xcl).ConfigureAwait(false);
+                    if(xcl.stopReadingIssued || cancellation.IsCancellationRequested) {
                         break;
                     }
                 } catch (Exception x) {
-                    Console.WriteLine($"Err reading Excel Row {x.Message}");
                     if(x is ReadingStoppedException) {
                         break;
                     }
-                    handler?.Invoke(x);
+                    await handler(x).ConfigureAwait(false);
                 }
             }
         }
         public async Task ReadAllAsync(Func<ExcelatorLineReader, Task> lineFun, int skipLines = 0, Func<Exception, Task> handler = null) {
-            ExcelatorLineReader xcl = new ExcelatorLineReader(0, this);
-            for (var i = 1 + skipLines; i < _currentWorkSheet.Dimension.Rows + 1; i++) {
-                try {
-                    xcl.CurrentRow = i;
-                    await lineFun(xcl);
-                    if(xcl.stopReadingIssued) {
-                        break;
-                    }
-                } catch (Exception x) {
-                    Console.WriteLine($"Err reading Excel Row {x.Message}");
-                    if(x is ReadingStoppedException) {
-                        break;
-                    }
-                    await handler(x);
-                }
-            }
+            await ReadAllAsync(CancellationToken.None, async(cancellation, xcl) => {
+                await lineFun(xcl).ConfigureAwait(false);
+            }, skipLines, handler).ConfigureAwait(false);
         }
     }
 

@@ -213,7 +213,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal DateTime? DisposedTime { get; private set; }
         internal TimeSpan TimeAlive => (DisposedTime ?? DateTime.UtcNow) - CreatedTime; 
         internal StackTrace StackTrace { get; set; }
-        public CancellationToken CancellationToken { get; internal set; } = CancellationToken.None;
+        internal CancellationTokenSource _cancellationTokenSource { get; set; } = new CancellationTokenSource();
+        public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
         private void ApplySuccessActions() {
             Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
@@ -504,6 +505,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     DisposedTime = DateTime.UtcNow;
                     isDisposed = true;
                 }
+                try {
+                    _cancellationTokenSource.Dispose();
+                } catch (Exception) {
+
+                }
             } finally {
                 await DisposeConnectionIfNotYetDisposed().ConfigureAwait(false);
             }
@@ -665,6 +671,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return LoadAll<T>(args).FirstOrDefault();
         }
 
+        public async Task<T> LoadFirstOrDefaultAsync<T>(BDadosTransaction tsn, LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            var list = await LoadAllAsync<T>(tsn, args).ConfigureAwait(false);
+            return list.FirstOrDefault();
+        }
+        public async Task<T> LoadFirstOrDefaultAsync<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            return await AccessAsync(async tsn=> {
+                var list = await LoadAllAsync<T>(tsn, args).ConfigureAwait(false);
+                return list.FirstOrDefault();
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        public async Task<T> LoadFirstOrDefaultAsync<T>(BDadosTransaction tsn, Expression<Func<T, bool>> predicate) where T : IDataObject, new() {
+            var list = await LoadAllAsync<T>(tsn, Figlotech.Core.Interfaces.LoadAll.From<T>().Where(predicate).Limit(1)).ConfigureAwait(false);
+            return list.FirstOrDefault();
+        }
+        public async Task<T> LoadFirstOrDefaultAsync<T>(Expression<Func<T, bool>> predicate) where T : IDataObject, new() {
+            return await AccessAsync(async tsn=> {
+                return await LoadFirstOrDefaultAsync<T>(tsn, predicate).ConfigureAwait(false);
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+
         public async Task<List<FieldAttribute>> GetInfoSchemaColumns() {
             var dbName = this.SchemaName;
             var map = Plugin.InfoSchemaColumnsMap;
@@ -715,7 +741,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if(ilev.HasValue) {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
             }
-            retv.CancellationToken = cancellationToken;
+            cancellationToken.Register(() => {
+                retv._cancellationTokenSource.Cancel();
+            });
             retv.StackTrace = trace;
             retv.Benchmarker = bmark ?? new Benchmarker("Database Access", FiTechCoreExtensions.IsTelemetryLoggingEnabled) {
                 Active = true

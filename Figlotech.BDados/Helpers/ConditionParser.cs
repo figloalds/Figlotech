@@ -414,29 +414,42 @@ namespace Figlotech.BDados.Helpers {
                     strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append(")");
                 }
-                if (expr.Method.Name == "Contains") {
+                if (expr.Method.Name == nameof(String.Contains)) {
                     strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append($" LIKE CONCAT('%', ");
                     strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append(", '%')");
                 }
-                if (expr.Method.Name == "StartsWith") {
+                if (expr.Method.Name == nameof(String.StartsWith)) {
                     strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append($" LIKE CONCAT('%', ");
                     strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append(")");
                 }
-                if (expr.Method.Name == "EndsWith") {
+                if (expr.Method.Name == nameof(String.EndsWith)) {
                     strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append($" LIKE CONCAT('%', ");
                     strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append(", '%')");
                 }
-                if (expr.Method.Name == "ToUpper") {
+                if (expr.Method.Name == nameof(String.ToUpper)) {
                     strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
                 }
-                if (expr.Method.Name == "ToLower") {
+                if (expr.Method.Name == nameof(String.ToLower)) {
                     strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                }
+                if (expr.Method.Name == nameof(String.Trim)) {
+                    strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                }
+                if (expr.Method.Name == nameof(String.Replace)) {
+                    strBuilder
+                        .Append($"REPLACE(")
+                        .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions))
+                        .Append(",")
+                        .Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions))
+                        .Append(",")
+                        .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions))
+                        .Append(")");
                 }
                 if (expr.Method.Name == "Where") {
                     if (expr.Arguments.Count > 1) {

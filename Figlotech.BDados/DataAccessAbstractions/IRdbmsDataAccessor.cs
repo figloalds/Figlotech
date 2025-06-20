@@ -91,6 +91,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
 
         T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
+
+        Task<T> LoadFirstOrDefaultAsync<T>(BDadosTransaction tsn, LoadAllArgs<T> args = null) where T : IDataObject, new();
+        Task<T> LoadFirstOrDefaultAsync<T>(BDadosTransaction tsn, Expression<Func<T, bool>> predicate) where T : IDataObject, new();
+        Task<T> LoadFirstOrDefaultAsync<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
+        Task<T> LoadFirstOrDefaultAsync<T>(Expression<Func<T, bool>> predicate) where T : IDataObject, new();
+
         T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
         Task<T> LoadByRidAsync<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
         T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();

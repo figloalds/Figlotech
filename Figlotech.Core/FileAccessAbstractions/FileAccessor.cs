@@ -92,6 +92,15 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
 
+        public IFileSystem Fork(string relative) {
+            string newPath = AssemblePath(RootDirectory, relative);
+            FixRel(ref newPath);
+            if (!Directory.Exists(newPath)) {
+                absMkDirs(newPath);
+            }
+            return new FileAccessor(newPath);
+        }
+
         private void RenDir(string relative, string newName) {
             FixRel(ref relative);
             foreach (var f in Directory.GetFiles(relative)) {
@@ -235,9 +244,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if(!WorkingDirectory.EndsWith(Path.DirectorySeparatorChar.ToString())) {
                 WorkingDirectory += Path.DirectorySeparatorChar.ToString();
             }
-            return Directory.GetFiles(WorkingDirectory).Select(
-                    ((a) => {
-                        var s = a.Substring(RootDirectory.Length + 1).Replace(Path.DirectorySeparatorChar, '/');
+            return new DirectoryInfo(WorkingDirectory).EnumerateFiles().Select(
+                    ((info) => {
+                        var a = info.FullName.Substring(RootDirectory.Length + 1);
+                        var s = a.Replace(Path.DirectorySeparatorChar, '/');
                         return this.UnFixRel(ref s);
                     }));
         }
@@ -279,11 +289,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
-            return Directory.GetDirectories(WorkingDirectory)
-                .Select((Func<string, string>)((a) => {
-                    a = a.Substring(RootDirectory.Length + 1).Replace(Path.DirectorySeparatorChar, '/');
+            return new DirectoryInfo(WorkingDirectory).EnumerateDirectories()
+                .Select((info) => {
+                    var a = info.FullName.Substring(RootDirectory.Length + 1);
+                    a = a.Replace(Path.DirectorySeparatorChar, '/');
                     return a;
-                }));
+                });
         }
 
         public async Task<bool> Read(String relative, Func<Stream, Task> func) {
@@ -421,6 +432,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             var retv = string.Join(S.ToString(), seg);
             if(segments[0].StartsWith($"{S}")) {
                 retv = S + retv;   
+            }
+            retv = Path.GetFullPath(retv);
+            if(!retv.StartsWith(RootDirectory)) {
+                throw new BusinessValidationException("Relative path must be within the FileSystem's Root Directory");
             }
             return retv;
         }
