@@ -99,12 +99,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void ExecuteWhenSuccess(Action fn, Action<Exception> handler = null) {
             lock (ActionsToExecuteAfterSuccess)
-                ActionsToExecuteAfterSuccess.Add((() => {
-                    fn();
-                    return Task.CompletedTask;
-                }, (x) => {
-                    handler(x);
-                    return Task.CompletedTask;
+                ActionsToExecuteAfterSuccess.Add((async () => {
+                    await Task.Run(() => {
+                        fn();
+                    });
+                }, async (x) => {
+                    await Task.Run(() => {
+                        handler(x);
+                    });
                 }
                 ));
         }
@@ -517,6 +519,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private async Task DisposeConnectionIfNotYetDisposed() {
             if (!isConnectionDisposed) {
+                if(Connection.State == ConnectionState.Open) {
+                    Connection.Close();
+                }
                 if (Connection is DbConnection aconn) {
                     await aconn.DisposeAsync().ConfigureAwait(false);
                     isConnectionDisposed = true;
@@ -524,6 +529,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Connection?.Dispose();
                     isConnectionDisposed = true;
                 }
+                Connection = null;
                 DataAccessor._concurrentConnectionsSemaphoreSlim.Release();
             }
         }
@@ -742,7 +748,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
             }
             cancellationToken.Register(() => {
-                retv._cancellationTokenSource.Cancel();
+                try {
+                    if(!retv.DisposedTime.HasValue && !retv._cancellationTokenSource.IsCancellationRequested) {
+                        retv._cancellationTokenSource?.Cancel();
+                    }
+                } catch(Exception x) {
+
+                }
             });
             retv.StackTrace = trace;
             retv.Benchmarker = bmark ?? new Benchmarker("Database Access", FiTechCoreExtensions.IsTelemetryLoggingEnabled) {

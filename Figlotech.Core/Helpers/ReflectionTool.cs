@@ -517,7 +517,7 @@ namespace Figlotech.Core.Helpers {
         static void TvDoNothing(object t, object v) { }
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
-
+            
             if (_setterConversionCache.TryGetValue((member, value?.GetType()), out var setter)) {
                 setter(target, value);
                 return;
@@ -526,9 +526,6 @@ namespace Figlotech.Core.Helpers {
             var type = GetTypeOf(member);
             if (value != null && value is DBNull) {
                 value = null;
-                if (value is string) {
-                    Debugger.Break();
-                }
                 if(type.IsValueType) {
                     _setterConversionCache[(member, value?.GetType())] = TvDoNothing;
                 } else {

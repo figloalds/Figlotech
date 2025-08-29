@@ -556,8 +556,7 @@ namespace Figlotech.Core {
 
         public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
             if (value == null) {
-                var lockStr = $"{init.Target?.GetHashCode()}_{init.Method.Module.MDStreamVersion}_{init.Method.MetadataToken}".ToString();
-                lock (String.Intern(lockStr)) {
+                lock (init) {
                     if (value == null) {
                         value = init.Invoke();
                     }
@@ -1953,6 +1952,13 @@ namespace Figlotech.Core {
                 retval[i] = IntEx.Base36[pos];
             }
             return new string(retval);
+        }
+        public static byte[] CreateRandomBuffer(this Fi _selfie, int size) {
+            byte[] buffer = new byte[size];
+            using (var rng = new RNGCryptoServiceProvider()) {
+                rng.GetBytes(buffer);
+            }
+            return buffer;
         }
 
         private static SelfInitializerDictionary<(Type TypeA, Type TypeB), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>> mwc_MemberRelationCache =

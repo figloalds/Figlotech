@@ -138,6 +138,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if(existingKeys[i] != null) {
                         try {
                             var o = reader.GetValue(i);
+
                             ReflectionTool.SetValue(obj, existingKeys[i], Fi.Tech.ProperMapValue(o));
                         } catch(Exception x) {
                             Debugger.Break();

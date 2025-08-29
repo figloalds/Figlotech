@@ -25,6 +25,8 @@ namespace Figlotech.Core {
         public Func<TKey,ValueTask> OnFree { get; set; }
         public Func<TKey, T, ValueTask> OnSet { get; set; }
 
+        public Func<T, Task<bool>> CustomCanFinalizeAsync { get; set; } = null;
+
         Timer timer { get; set; }
 
         public TimedCache(TimeSpan duration) {
@@ -33,21 +35,33 @@ namespace Figlotech.Core {
 
             var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, CacheDuration.Seconds / 10));
             timer = new Timer((state) => {
-                var keys = Dictionary.Keys.ToList();
-                var freed = OnFree != null ? new List<TKey>(Dictionary.Count) : null;
-                foreach (var key in keys) {
-                    if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
-                        Dictionary.Remove(key);
-                        freed?.Add(key);
-                    }
-                }
-                if(OnFree != null && freed.Count > 0) {
-                    Fi.Tech.FireAndForget(async () => {
-                        foreach(var key in freed) {
-                            await OnFree(key);
+                Fi.Tech.FireAndForget(async () => {
+                    var keys = Dictionary.Keys.ToList();
+                    var freed = OnFree != null ? new List<TKey>(Dictionary.Count) : null;
+                    foreach (var key in keys) {
+                        if (Dictionary[key] == null) {
+                            Dictionary.Remove(key);
+                            continue;
                         }
-                    });
-                }
+                        if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
+                            if(CustomCanFinalizeAsync != null) {
+                                if (Dictionary[key].Object == null || !await CustomCanFinalizeAsync(Dictionary[key].Object).ConfigureAwait(false)) {
+                                    Dictionary[key].KeepAlive();
+                                    continue; // Don't free this item, it is still in use.
+                                }
+                            }
+                            Dictionary.Remove(key);
+                            freed?.Add(key);
+                        }
+                    }
+                    if(OnFree != null && freed.Count > 0) {
+                        Fi.Tech.FireAndForget(async () => {
+                            foreach(var key in freed) {
+                                await OnFree(key);
+                            }
+                        });
+                    }
+                });
             }, null, CacheDuration, CacheDuration);
         }
 
@@ -73,7 +87,11 @@ namespace Figlotech.Core {
                 return item.Object;
             }
             set {
-                if(Dictionary.ContainsKey(key)) {
+                if(value == null && Dictionary.ContainsKey(key)) {
+                    Dictionary.Remove(key);
+                    return;
+                }
+                if (Dictionary.ContainsKey(key)) {
                     Dictionary[key].Object = value;
                     Dictionary[key].KeepAlive();
                     if (OnSet != null) {
@@ -99,10 +117,30 @@ namespace Figlotech.Core {
             return Dictionary.Remove(key);
         }
 
+        public async Task<(bool Success, T Value)> TryGetValueAsync(TKey key) {
+            TimerCachedObject<TKey, T> item;
+            if (!Dictionary.TryGetValue(key, out item)) {
+                if (OnFailOver != null) {
+                    var ret = await OnFailOver.Invoke(key).ConfigureAwait(false);
+                    this[key] = ret;
+                    return (ret != null, ret);
+                }
+                return (false, default(T));
+            }
+            item.KeepAlive();
+            return (true, item.Object);
+        }
+
         public bool TryGetValue(TKey key, out T value) {
             if(Dictionary.TryGetValue(key, out var val)) {
                 value = val.Object;
                 val.KeepAlive();
+                return true;
+            }
+            if (OnFailOver != null) {
+                var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
+                this[key] = ret;
+                value = ret;
                 return true;
             }
             value = default(T);

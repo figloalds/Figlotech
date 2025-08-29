@@ -22,6 +22,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async Task<List<T>> AggregateAsync() {
             return await Transaction.DataAccessor.AggregateLoadAsync(Transaction, LoadAllArgs).ConfigureAwait(false);
         }
+        public async IAsyncEnumerable<T> AggregateCoroutinelyAsync() {
+            await foreach(var item in Transaction.DataAccessor.AggregateLoadAsyncCoroutinely(Transaction, LoadAllArgs).ConfigureAwait(false)) {
+                yield return item;
+            }
+        }
         public IEnumerable<T> Fetch() {
             return Transaction.DataAccessor.Fetch(Transaction, LoadAllArgs);
         }

@@ -674,7 +674,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             var ona = field.GetCustomAttribute<OldNameAttribute>();
                             if (ona != null) {
                                 var info = field.GetCustomAttribute<FieldAttribute>();
-                                if (ona.Name.ToLower() == colName.ToLower()) {
+                                if (colName.Equals(ona.Name, StringComparison.OrdinalIgnoreCase)) {
                                     oldExists = true;
                                     foreach (var a in EvaluateForColumnDekeyal(type.Name, ona.Name, keys)) {
                                         yield return a;
@@ -691,7 +691,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             }
                         }
 
-                        if (!oldExists && !TablesToCreate.Contains(type.Name.ToLower())) {
+                        if (!oldExists && !TablesToCreate.Any(x=> x.Equals(type.Name, StringComparison.OrdinalIgnoreCase))) {
                             yield return new CreateColumnScAction(
                                 DataAccessor, 
                                 type.Name, 
@@ -767,10 +767,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 var fields = ReflectionTool.FieldsAndPropertiesOf(type)
                     .Where(f => f.GetCustomAttribute<FieldAttribute>() != null);
+
                 if(!
-                    fields.Any(f=> 
-                        f.Name.ToLower() == c.Name.ToLower() ||
-                        f.GetCustomAttribute<OldNameAttribute>()?.Name == c.Name
+                    fields.Any(f=>
+                        f.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase) || c.Name.Equals(f.GetCustomAttribute<OldNameAttribute>()?.Name, StringComparison.OrdinalIgnoreCase)
                     )
                 ) {
                     foreach(var action in EvaluateForColumnDekeyal(c.Table, c.Name, keys)) {
