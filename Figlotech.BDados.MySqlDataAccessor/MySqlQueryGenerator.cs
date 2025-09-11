@@ -420,7 +420,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         );
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
-            
             QueryBuilder Query = new QueryBuilder();
             
             Query.Append(AutoSelectCache[typeof(T)]);

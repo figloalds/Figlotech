@@ -25,7 +25,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private String _linkName;
 
         public string TABLE_NAME { get => Table; set => Table = value; }
-        public string COLUMN_NAME { get => Column; set => Column = value; } 
+        public string COLUMN_NAME { 
+            get => Column; 
+            set => Column = value; 
+        } 
         public int NON_UNIQUE { get => IsUnique ? 1 : 0; set => IsUnique = value != 0; }
         public string INDEX_NAME { get => KeyName; set => KeyName = value; }
 

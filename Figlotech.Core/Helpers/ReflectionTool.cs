@@ -3,9 +3,12 @@ using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
@@ -66,15 +69,10 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
-        static Dictionary<(Type, Type), object> AttributedMembersCache = new Dictionary<(Type, Type), object>();
+        static ConcurrentDictionary<(Type, Type), object> AttributedMembersCache = new ConcurrentDictionary<(Type, Type), object>();
         public static (MemberInfo Member, TAttribute Attribute)[] GetAttributedMemberValues<TAttribute>(Type t) where TAttribute : Attribute {
-            lock (AttributedMembersCache) {
-                if (!AttributedMembersCache.ContainsKey((t, typeof(TAttribute)))) {
-                    AttributedMembersCache[(t, typeof(TAttribute))] = InitAttributedMembersCache<TAttribute>(t);
-                }
-
-                return ((MemberInfo, TAttribute)[])AttributedMembersCache[(t, typeof(TAttribute))];
-            }
+            return AttributedMembersCache.GetOrAdd((t, typeof(TAttribute)), 
+                _ => InitAttributedMembersCache<TAttribute>(t)) as (MemberInfo, TAttribute)[];
         }
 
         private static (MemberInfo, TAttribute)[] InitAttributedMembersCache<TAttribute>(Type t) where TAttribute : Attribute {
@@ -512,17 +510,268 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
+        // ====== CACHES ======
+        private static readonly ConcurrentDictionary<(Type Src, Type Dest), Delegate> _converterCache
+            = new();
+
+        // ====== PUBLIC API ======
+        private static readonly Type[] _dbSourceCandidates = new[] {
+            typeof(string),
+            typeof(int), typeof(long), typeof(short), typeof(byte), typeof(sbyte),
+            typeof(uint), typeof(ulong), typeof(ushort),
+            typeof(decimal), typeof(double), typeof(float),
+            typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan),
+            typeof(Guid),
+            typeof(byte[]) // least likely for user operators, but harmless to keep
+        };
+        private static bool IsProviderNative(Type t) {
+            return t == typeof(bool)
+                || t == typeof(byte) || t == typeof(sbyte)
+                || t == typeof(short) || t == typeof(ushort)
+                || t == typeof(int) || t == typeof(uint)
+                || t == typeof(long) || t == typeof(ulong)
+                || t == typeof(float) || t == typeof(double)
+                || t == typeof(decimal)
+                || t == typeof(string)
+                || t == typeof(DateTime)
+                || t == typeof(DateTimeOffset)
+                || t == typeof(Guid)
+                || t == typeof(byte[])
+                || t == typeof(TimeSpan);
+        }
+        private static readonly ConcurrentDictionary<Type, Type> _bestSourceTypeCache = new();
+        public static Type GetBestSourceTypeFor(Type targetType) {
+            if (targetType == null) throw new ArgumentNullException(nameof(targetType));
+
+            // Unwrap Nullable<T>
+            var underlying = Nullable.GetUnderlyingType(targetType);
+            if (underlying != null) targetType = underlying;
+
+            // Enums: read as underlying integral type
+            if (targetType.IsEnum)
+                return Enum.GetUnderlyingType(targetType);
+
+            // Directly provider-native? Just use it.
+            if (IsProviderNative(targetType))
+                return targetType;
+
+            // User-defined conversion from a provider type?
+            return _bestSourceTypeCache.GetOrAdd(targetType, t =>
+            {
+                // Scan candidates; if an implicit/explicit operator exists from candidate -> t, pick it.
+                foreach (var cand in _dbSourceCandidates) {
+                    if (TryGetUserDefinedConversion(cand, t, out _))
+                        return cand;
+                }
+
+                // Fallback: try exact target (some providers support UDT GetFieldValue<T>)
+                // Otherwise, use string (safest + most broadly supported)
+                return t.IsValueType ? t : typeof(object);
+            });
+        }
+
+        /// <summary>
+        /// Returns a strongly-typed converter Func&lt;TSrc, TDest&gt; implementing
+        /// the same conversion semantics as SetMemberValue. Compiled & cached.
+        /// </summary>
+        public static Delegate GetConverterDelegate(Type srcType, Type destType) {
+            if (srcType == null) throw new ArgumentNullException(nameof(srcType));
+            if (destType == null) throw new ArgumentNullException(nameof(destType));
+
+            // Normalize destination to underlying when Nullable<T>
+            var destUnderlying = Nullable.GetUnderlyingType(destType);
+            var effectiveDest = destUnderlying ?? destType;
+
+            return _converterCache.GetOrAdd((srcType, effectiveDest), key =>
+            {
+                var (src, dest) = key;
+                return BuildStrongConverter(src, dest);
+            });
+        }
+
+        // ====== BUILDER ======
+        private static Delegate BuildStrongConverter(Type src, Type dest) {
+            // Build a Func<TSrc, TDest>
+            var funcType = typeof(Func<,>).MakeGenericType(src, dest);
+            var p = Expression.Parameter(src, "v");
+
+            Expression body = BuildConversionBody(src, dest, p);
+
+            // If dest is value type, body already of dest; otherwise ensure cast
+            var lambda = Expression.Lambda(funcType, body, p);
+            return lambda.Compile();
+        }
+
+        // Cache for discovered user-defined conversions
+        private static readonly ConcurrentDictionary<(Type Src, Type Dest), MethodInfo?> _userOpCache = new();
+
+        private static bool TryGetUserDefinedConversion(Type src, Type dest, out MethodInfo method) {
+            method = _userOpCache.GetOrAdd((src, dest), key => FindUserDefinedConversion(key.Src, key.Dest));
+            return method != null;
+        }
+
+        // Look for op_Implicit/op_Explicit on either side, with return == dest and single parameter assignable from src
+        private static MethodInfo? FindUserDefinedConversion(Type src, Type dest) {
+            const BindingFlags Flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+
+            // scan both types; operators can be declared on either
+            foreach (var t in new[] { src, dest }) {
+                foreach (var m in t.GetMethods(Flags)) {
+                    if ((m.Name == "op_Implicit" || m.Name == "op_Explicit") &&
+                        m.ReturnType == dest) {
+                        var ps = m.GetParameters();
+                        if (ps.Length == 1 && ps[0].ParameterType.IsAssignableFrom(src))
+                            return m;
+                    }
+                }
+            }
+
+            return null;
+        }
+        private static Expression BuildConversionBody(Type src, Type dest, ParameterExpression p) {
+            // Identity
+            if (src == dest) return p;
+
+            // (keep your existing special cases)
+            if (dest.IsEnum) {
+                var u = Enum.GetUnderlyingType(dest);
+                Expression toUnderlying = src == u ? (Expression)p : Expression.Convert(p, u);
+                return Expression.Convert(toUnderlying, dest);
+            }
+            if (dest == typeof(int) && src == typeof(long))  return Expression.Convert(p, typeof(int));
+            if (dest == typeof(long) && src == typeof(int))  return Expression.Convert(p, typeof(long));
+            if (dest == typeof(DateTime) && src == typeof(DateTimeOffset)) {
+                var dtProp = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DateTime))!;
+                return Expression.Property(p, dtProp);
+            }
+            if (dest == typeof(bool) && src == typeof(sbyte)) return Expression.NotEqual(p, Expression.Constant((sbyte)0));
+            if (dest == typeof(ulong) && src == typeof(long)) return Expression.Convert(p, typeof(ulong));
+            if (dest == typeof(bool) && src == typeof(string)) {
+                var cmp = Expression.Constant(StringComparison.OrdinalIgnoreCase);
+                var equals = typeof(string).GetMethod(nameof(string.Equals), new[] { typeof(string), typeof(StringComparison) })!;
+                var isTrue = Expression.Call(p, equals, Expression.Constant("true"), cmp);
+                var isYes  = Expression.Call(p, equals, Expression.Constant("yes"),  cmp);
+                var isOne  = Expression.Equal(p, Expression.Constant("1"));
+                return Expression.OrElse(Expression.OrElse(isTrue, isYes), isOne);
+            }
+            if (dest == typeof(TimeSpan) && src == typeof(string)) {
+                var parse = typeof(TimeSpan).GetMethod(nameof(TimeSpan.Parse), new[] { typeof(string) })!;
+                return Expression.Call(parse, p);
+            }
+
+            // Assignable (reference or boxing)
+            if (dest.IsAssignableFrom(src)) return p;
+
+            // >>> NEW: user-defined implicit/explicit conversions (e.g., TimeField <- string)
+            if (TryGetUserDefinedConversion(src, dest, out var op))
+            {
+                // Use Expression.Convert with MethodInfo to bind the operator
+                return Expression.Convert(p, dest, op);
+            }
+
+            // IConvertible fallback
+            if (typeof(IConvertible).IsAssignableFrom(src) && typeof(IConvertible).IsAssignableFrom(dest))
+            {
+                var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;
+                var asObj = Expression.Convert(p, typeof(object));
+                var call = Expression.Call(changeType, asObj, Expression.Constant(dest, typeof(Type)));
+                return Expression.Convert(call, dest);
+            }
+
+            if(dest == typeof(string)) {
+                var toString = src.GetMethod(nameof(ToString), Type.EmptyTypes);
+                if(toString != null) {
+                    return Expression.Call(p, toString);
+                }
+            }
+
+            // Last resort: explicit cast (may throw if unsupported)
+            return Expression.Convert(p, dest);
+        }
+
+        private static readonly ConcurrentDictionary<Type, MethodInfo> _getFieldValueCache = new();
+
+        private static readonly MethodInfo _openGetFieldValue =
+            typeof(DbDataReader)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Single(m => m.Name == nameof(DbDataReader.GetFieldValue)
+                    && m.IsGenericMethodDefinition
+                    && m.GetParameters().Length == 1); // (int ordinal)
+
+        public static Func<DbDataReader, T> BuildMaterializer<T>((int ordinal, MemberInfo member, Type targetType)[] bindings)
+            where T : new() {
+            var dr = Expression.Parameter(typeof(DbDataReader), "r");
+            var obj = Expression.Variable(typeof(T), "obj");
+            var assignObj = Expression.Assign(obj, Expression.New(typeof(T)));
+
+            var block = new List<Expression> { assignObj };
+
+            foreach (var b in bindings) {
+                if (!(b.member is PropertyInfo) && !(b.member is FieldInfo))
+                    continue;
+                if (b.member is PropertyInfo pi && pi.SetMethod == null)
+                    continue;
+
+                var isDbNull = Expression.Call(
+                    dr,
+                    nameof(DbDataReader.IsDBNull),
+                    null,
+                    Expression.Constant(b.ordinal));
+
+                var srcType = GetBestSourceTypeFor(b.targetType);
+                var method = _getFieldValueCache.GetOrAdd(srcType,
+                    t => _openGetFieldValue.MakeGenericMethod(t));
+
+                var getVal = Expression.Call(
+                    dr,
+                    method,
+                    Expression.Constant(b.ordinal, typeof(int)));
+
+                Expression valueExpr = srcType == b.targetType
+                    ? (Expression)getVal
+                    : Expression.Invoke(
+                        Expression.Constant(GetConverterDelegate(srcType, b.targetType)),
+                        getVal);
+
+                MemberExpression memberExpr = b.member switch {
+                    PropertyInfo p => Expression.Property(obj, p),
+                    FieldInfo f => Expression.Field(obj, f),
+                    _ => throw new NotSupportedException()
+                };
+
+                if (!b.targetType.IsValueType || Nullable.GetUnderlyingType(b.targetType) != null) {
+                    // Nullable or ref type: assign default(null) if DBNull
+                    valueExpr = Expression.Condition(
+                        isDbNull,
+                        Expression.Default(b.targetType),
+                        Expression.Convert(valueExpr, b.targetType));
+
+                    block.Add(Expression.Assign(memberExpr, valueExpr));
+                } else {
+                    // Non-nullable value type: only assign if not DBNull
+                    var assign = Expression.Assign(memberExpr, Expression.Convert(valueExpr, b.targetType));
+                    block.Add(Expression.IfThen(Expression.Not(isDbNull), assign));
+                }
+            }
+
+            block.Add(obj);
+            var body = Expression.Block(new[] { obj }, block);
+
+            var lambda = Expression.Lambda<Func<DbDataReader, T>>(body, dr);
+
+            return lambda.Compile();
+        }
+
         static ConcurrentDictionary<MemberInfo, Action<object, object>?> _setterMethodCache = new ConcurrentDictionary<MemberInfo, Action<object, object>?>();
         static ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>> _setterConversionCache = new ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>>();
         static void TvDoNothing(object t, object v) { }
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
-            
             if (_setterConversionCache.TryGetValue((member, value?.GetType()), out var setter)) {
                 setter(target, value);
                 return;
             }
-
+            
             var type = GetTypeOf(member);
             if (value != null && value is DBNull) {
                 value = null;
@@ -668,6 +917,7 @@ namespace Figlotech.Core.Helpers {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
+                
                 throw new ReflectionException($"Reflection Tool could not set {value} ({value?.GetType()}) into {member.DeclaringType.Name}::{member.Name} ({ReflectionTool.GetTypeOf(member)})");
             }
             // _setMemberValueInternal(pi, fi, member, target, value);

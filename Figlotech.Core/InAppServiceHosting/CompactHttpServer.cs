@@ -111,7 +111,7 @@ namespace Figlotech.Core.InAppServiceHosting
             SendJson(200, "OK", stream, obj);
         }
 
-        WorkQueuer work = new WorkQueuer("EmbededRequestHandler", 32, true) {
+        WorkQueuer work = new WorkQueuer("EmbededRequestHandler", -1, true) {
             MaxParallelTasks = 16
         };
 

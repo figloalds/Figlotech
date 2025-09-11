@@ -74,7 +74,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             return JsonConvert.DeserializeObject<T>(txt);
         }
 
-        WorkQueuer work = new WorkQueuer("EmbededProxyRequestHandler", Int32.MaxValue, true) {};
+        WorkQueuer work = new WorkQueuer("EmbededProxyRequestHandler", -1, true) {};
                 
         TcpListener listener;
         bool started;

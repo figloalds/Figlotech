@@ -6,6 +6,7 @@ using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Figlotech.Data;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -123,60 +124,53 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="valor"></param>
         /// <returns></returns>
         public static IEnumerable<T> MapFromReader<T>(this Fi _selfie, IDataReader reader, bool ignoreCase = false) where T : new() {
-            var existingKeys = new string[reader.FieldCount];
-            for (int i = 0; i < reader.FieldCount; i++) {
-                var name = reader.GetName(i);
-                if(name != null) {
-                    if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
-                        existingKeys[i] = name;
-                    }
-                }
-            }
+            var materializer = FiTechBDadosExtensions.GetSimpleLoadAllMaterializerFor<T>(reader);
             while (reader.Read()) {
-                T obj = new T();
-                for (int i = 0; i < existingKeys.Length; i++) {
-                    if(existingKeys[i] != null) {
-                        try {
-                            var o = reader.GetValue(i);
-
-                            ReflectionTool.SetValue(obj, existingKeys[i], Fi.Tech.ProperMapValue(o));
-                        } catch(Exception x) {
-                            Debugger.Break();
-                            //throw x;
-                        }
-                    }
-                }
+                T obj = materializer(reader as DbDataReader);
                 yield return obj;
             }
             yield break;
         }
 
-        public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
-            var existingKeys = new string[reader.FieldCount];
-            for (int i = 0; i < reader.FieldCount; i++) {
-                var name = reader.GetName(i);
-                if (name != null) {
-                    if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
-                        existingKeys[i] = name;
-                    }
-                }
-            }
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) {
-                if(cancellationToken.IsCancellationRequested) {
-                    break;
-                }
-                T obj = new T();
-                for (int i = 0; i < existingKeys.Length; i++) {
-                    if (existingKeys[i] != null) {
-                        try {
-                            var o = reader.GetValue(i);
-                            ReflectionTool.SetValue(obj, existingKeys[i], Fi.Tech.ProperMapValue(o));
-                        } catch (Exception x) {
-                            Debugger.Break();
-                            //throw x;
+        static ConcurrentDictionary<(Type, string), object> MaterializerCache = new ConcurrentDictionary<(Type, string), object>();
+        public static Func<DbDataReader, T> GetSimpleLoadAllMaterializerFor<T>(IDataReader reader) where T : new() {
+            var fieldNames = Fi.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToArray();
+            var tag = String.Join(";", fieldNames) + $"|{typeof(T).FullName}";
+            return (Func<DbDataReader, T>)MaterializerCache.GetOrAdd((typeof(T), tag), t => {
+                var cols = new string[reader.FieldCount];
+                for (int i = 0; i < cols.Length; i++)
+                    cols[i] = reader.GetName(i);
+
+                var existingKeys = new MemberInfo[reader.FieldCount];
+                for (int i = 0; i < reader.FieldCount; i++) {
+                    var name = cols[i];
+                    if (name != null) {
+                        var m = ReflectionTool.GetMember(typeof(T), name);
+                        if (m != null) {
+                            existingKeys[i] = m;
                         }
                     }
                 }
+                int c = 0;
+                var swBuild = Stopwatch.StartNew();
+
+                var materializer = ReflectionTool.BuildMaterializer<T>(
+                    existingKeys
+                        .Select((member, i) => (i, member, ReflectionTool.GetTypeOf(member)))
+                        .Where(x => x.member != null)
+                        .ToArray()
+                );
+
+                return materializer;
+            });
+        }
+
+        public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
+
+            var materializer = FiTechBDadosExtensions.GetSimpleLoadAllMaterializerFor<T>(reader);
+
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) {
+                T obj = materializer(reader);
                 yield return obj;
             }
             yield break;

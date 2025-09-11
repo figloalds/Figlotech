@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 namespace Figlotech.Core {
 
     public static partial class FiTechCoreExtensions {
-        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut> {
+        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>, IAsyncEnumerable<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
             Func<TIn, Task<TOut>> SimpleAct { get; set; }

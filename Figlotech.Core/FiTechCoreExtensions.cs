@@ -1847,7 +1847,7 @@ namespace Figlotech.Core {
             }
         }
 
-        static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", Int32.MaxValue, true) { };
+        static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", -1, true) { };
 
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             var wj = FiTechFireTaskWorker.Enqueue(new WorkJob(
