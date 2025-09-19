@@ -1,3 +1,4 @@
+using Figlotech.Core.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -148,13 +149,16 @@ namespace Figlotech.Core {
         }
 
         public async Task<T> GetOrAddWithLocking(TKey key, Func<TKey, Task<T>> valueFactory) {
-            if (Dictionary.TryGetValue(key, out var val)) {
-                val.KeepAlive();
-                return val.Object;
-            }
-            var newValue = await valueFactory(key);
-            this[key] = newValue;
-            return newValue;
+            return (await Dictionary._dmmy.GetOrAddWithLocking(
+                key, 
+                async key => new TimerCachedObject<TKey, T>(Dictionary, key, await valueFactory(key), CacheDuration)
+            )).Object;
+        }
+        public T GetOrAddWithLocking(TKey key, Func<TKey, T> valueFactory) {
+            return Dictionary._dmmy.GetOrAddWithLocking(
+                key, 
+                key => new TimerCachedObject<TKey, T>(Dictionary, key, valueFactory(key), CacheDuration)
+            ).Object;
         }
 
         public void Add(KeyValuePair<TKey, T> item) {

@@ -2,6 +2,7 @@
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Figlotech.Data;
@@ -136,18 +137,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static Func<DbDataReader, T> GetSimpleLoadAllMaterializerFor<T>(IDataReader reader) where T : new() {
             var fieldNames = Fi.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToArray();
             var tag = String.Join(";", fieldNames) + $"|{typeof(T).FullName}";
-            return (Func<DbDataReader, T>)MaterializerCache.GetOrAdd((typeof(T), tag), t => {
+            return (Func<DbDataReader, T>)MaterializerCache.GetOrAddWithLocking((typeof(T), tag), t => {
                 var cols = new string[reader.FieldCount];
                 for (int i = 0; i < cols.Length; i++)
                     cols[i] = reader.GetName(i);
-
-                var existingKeys = new MemberInfo[reader.FieldCount];
+                                
+                var existingKeys = new (MemberInfo Member, int Ordinal, Type TypeAtReader)[reader.FieldCount];
                 for (int i = 0; i < reader.FieldCount; i++) {
                     var name = cols[i];
                     if (name != null) {
                         var m = ReflectionTool.GetMember(typeof(T), name);
                         if (m != null) {
-                            existingKeys[i] = m;
+                            var ord = reader.GetOrdinal(name);
+                            existingKeys[i] = (m, ord, reader.GetFieldType(ord));
                         }
                     }
                 }
@@ -156,8 +158,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 var materializer = ReflectionTool.BuildMaterializer<T>(
                     existingKeys
-                        .Select((member, i) => (i, member, ReflectionTool.GetTypeOf(member)))
-                        .Where(x => x.member != null)
+                        .Where(x => x.Member != null)
+                        .Select((tuple, i) => (tuple.Ordinal, tuple.Member, ReflectionTool.GetTypeOf(tuple.Member), tuple.TypeAtReader))
                         .ToArray()
                 );
 

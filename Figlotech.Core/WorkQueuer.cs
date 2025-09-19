@@ -208,7 +208,7 @@ namespace Figlotech.Core {
         public TimeSpan TimeIdle => WentIdle > DateTime.UtcNow ? TimeSpan.Zero : DateTime.UtcNow - WentIdle;
 
         public WorkQueuer(string name, int maxThreads = -1, bool init_started = true) {
-            if (maxThreads <= 0) maxThreads = Math.Max(1, Environment.ProcessorCount - 1);
+            if (maxThreads <= 0) maxThreads = Math.Max(2, Environment.ProcessorCount - 1);
             MaxParallelTasks = Math.Max(1, maxThreads);
             Name = name;
 
