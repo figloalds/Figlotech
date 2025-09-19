@@ -49,6 +49,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<int> ExecuteAsync(BDadosTransaction transaction, IQueryBuilder query);
         ValueTask UpdateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject;
         ValueTask UpdateAndMutateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject;
+        ValueTask UpdateAndMutateIfSuccessAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject;
 
         IRdbmsDataAccessor Fork();
 

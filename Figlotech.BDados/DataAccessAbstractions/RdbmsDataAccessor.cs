@@ -56,9 +56,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private static List<BDadosTransaction> DebugOnlyGlobalTransactions = new List<BDadosTransaction>();
 
         private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateTargets = new List<(MemberInfo Member, IDataObject Target, object Value)>();
+        private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateRollbacks = new List<(MemberInfo Member, IDataObject Target, object Value)>();
 
         public void AddMutateTarget(MemberInfo Member, IDataObject Target, object Value) {
             AutoMutateTargets.Add((Member, Target, Value));
+        }
+        public void AddMutateRollback(MemberInfo Member, IDataObject Target, object Value) {
+            AutoMutateRollbacks.Add((Member, Target, Value));
         }
 
         public BDadosTransaction(RdbmsDataAccessor rda, IDbConnection connection) {
@@ -398,6 +402,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (isDisposed || isTransactionEnded) {
                 Debugger.Break();
                 throw new BDadosException("Trying to rollback a transaction that has already been disposed or ended.");
+            }
+            for (var i = AutoMutateRollbacks.Count - 1; i >= 0; i--) {
+                ReflectionTool.SetMemberValue(AutoMutateRollbacks[i].Member, AutoMutateRollbacks[i].Target, AutoMutateRollbacks[i].Value);
             }
             if (Transaction?.Connection?.State == ConnectionState.Open) {
                 Transaction?.Rollback();
@@ -2555,6 +2562,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             await ExecuteAsync(transaction, query).ConfigureAwait(false);
         }
         public async ValueTask UpdateAndMutateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
+            await UpdateAsync(transaction, input, updates).ConfigureAwait(false);
+            for (int i = 0; i < updates.Length; i++) {
+                var check = updates[i].parameterExpression.Body;
+                if (check is UnaryExpression unaex) {
+                    check = unaex.Operand;
+                }
+                if (check is MemberExpression mex) {
+                    var currentValue = ReflectionTool.GetMemberValue(mex.Member, input);
+                    transaction.AddMutateRollback(mex.Member, input, currentValue);
+                    ReflectionTool.SetMemberValue(mex.Member, input, updates[i].Value);
+                }
+            }
+        }
+        public async ValueTask UpdateAndMutateIfSuccessAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
             await UpdateAsync(transaction, input, updates).ConfigureAwait(false);
             for (int i = 0; i < updates.Length; i++) {
                 var check = updates[i].parameterExpression.Body;
