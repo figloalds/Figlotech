@@ -170,7 +170,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
 
             var materializer = FiTechBDadosExtensions.GetSimpleLoadAllMaterializerFor<T>(reader);
-
+            
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) {
                 T obj = materializer(reader);
                 yield return obj;

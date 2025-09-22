@@ -23,6 +23,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -1158,6 +1159,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 return retv;
             }, cancellationToken, ilev).ConfigureAwait(false);
+        }
+
+        public async IAsyncEnumerable<T> AccessAsyncCoroutinely<T>(Func<BDadosTransaction, ChannelWriter<T>, Task> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
+            Channel<T> channel = Channel.CreateUnbounded<T>();
+            var task = Task.Run(async () => {
+                try {
+                    await AccessAsync(async (transaction) => {
+                        await functions.Invoke(transaction, channel.Writer);
+                    }, cancellationToken, ilev).ConfigureAwait(false);
+                } catch (Exception x) {
+                    throw new BusinessValidationException("Error reading data", x);
+                } finally {
+                    channel.Writer.TryComplete();
+                }
+            });
+
+            while (await channel.Reader.WaitToReadAsync(cancellationToken).AsTask().ConfigureAwait(false)) {
+                while(channel.Reader.TryRead(out var item)) {
+                    yield return item;
+                }
+            }
+            await task;
         }
 
         public T Access<T>(Func<BDadosTransaction, T> functions, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {

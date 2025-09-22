@@ -1,19 +1,20 @@
 ﻿using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Core;
+using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
-using System.Linq.Expressions;
-using Figlotech.Core.Interfaces;
-using System.IO;
-using Figlotech.Core;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.Data;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     
@@ -30,7 +31,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         T Access<T>(Func<BDadosTransaction, T> tryFun, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
         ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> tryFun, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
         Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> tryFun, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
-
+        IAsyncEnumerable<T> AccessAsyncCoroutinely<T>(Func<BDadosTransaction, ChannelWriter<T>, Task> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
         
         IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
