@@ -134,9 +134,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static readonly SelfInitializerDictionary<Type, ConstructorInfo> ConstructorCache = new SelfInitializerDictionary<Type, ConstructorInfo>(
             x => x.GetConstructor(Array.Empty<Type>())
         );
-        static readonly object[] emptyParameters = Array.Empty<object>();
         private object NewInstance(Type t) {
-            return ConstructorCache[t].Invoke(emptyParameters);
+            return ConstructorCache[t].Invoke(Array.Empty<object>());
         }
 
         public sealed class AggregateListCachedMetadata {

@@ -11,13 +11,9 @@ namespace Figlotech.Core
 {
     public sealed class LenientDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> {
         internal ConcurrentDictionary<TKey, TValue> _dmmy = new ConcurrentDictionary<TKey, TValue>();
-        static TimedCache<string, string> _poorMansStringCache = new TimedCache<string, string>(TimeSpan.FromMinutes(30));
         
         public TValue this[TKey key] {
             get {
-                if(key is string) {
-                    key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-                }
                 if (key == null) {
                     return default(TValue);
                 }
@@ -27,9 +23,6 @@ namespace Figlotech.Core
                 return default(TValue);
             }
             set {
-                if (key is string) {
-                    key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-                }
                 _dmmy[key] = value;
             }
         }
@@ -78,9 +71,6 @@ namespace Figlotech.Core
         IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Values;
 
         public void Add(TKey key, TValue value) {
-            if (key is string) {
-                key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-            }
             if (!_dmmy.TryAdd(key, value)) {
                 throw new Exception("Could not add item to dictionary");
             }
@@ -88,9 +78,6 @@ namespace Figlotech.Core
 
         public void Add(KeyValuePair<TKey, TValue> item) {
             var key = item.Key;
-            if (key is string) {
-                key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-            }
             if (!_dmmy.TryAdd(key, item.Value)) {
                 throw new Exception("Could not add item to dictionary");
             }
@@ -105,9 +92,6 @@ namespace Figlotech.Core
         }
 
         public bool ContainsKey(TKey key) {
-            if (key is string) {
-                key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-            }
             return _dmmy.ContainsKey(key);
         }
 
@@ -120,9 +104,6 @@ namespace Figlotech.Core
         }
 
         public bool Remove(TKey key) {
-            if (key is string) {
-                key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-            }
             return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
         }
 
@@ -131,9 +112,6 @@ namespace Figlotech.Core
         }
 
         public bool TryGetValue(TKey key, out TValue value) {
-            if (key is string) {
-                key = (TKey)(object)_poorMansStringCache.GetOrAddWithLocking(key as string, k => k);
-            }
             return _dmmy.TryGetValue(key, out value);
         }
 

@@ -304,7 +304,7 @@ namespace Figlotech.Core.Helpers {
             if (member == null) {
                 return null;
             }
-            if (member is PropertyInfo pi) {
+            if (member is PropertyInfo pi && pi.GetMethod != null) {
                 if (pi.GetIndexParameters().Length == 0) {
                     try {
                         return pi.GetValue(target);

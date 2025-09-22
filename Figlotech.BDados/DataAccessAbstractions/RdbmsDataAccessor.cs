@@ -691,13 +691,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public T ForceExist<T>(Func<T> Default, Conditions<T> qb) where T : IDataObject, new() {
             return Task.Run(async () => {
                 await using var transaction = await CreateNewTransactionAsync(CancellationToken.None).ConfigureAwait(false);
-                var f = LoadAll<T>(transaction, Core.Interfaces.LoadAll.Where<T>(qb));
-                if (f.Any()) {
-                    return f.First();
-                } else {
-                    T quickSave = Default();
-                    SaveItem(transaction, quickSave);
-                    return quickSave;
+                try {
+                    var f = LoadAll<T>(transaction, Core.Interfaces.LoadAll.Where<T>(qb));
+                    if (f.Any()) {
+                        return f.First();
+                    } else {
+                        T quickSave = Default();
+                        SaveItem(transaction, quickSave);
+                        return quickSave;
+                    }
+                } catch (Exception x) {
+                    transaction.Throw(x);
+                    throw;
                 }
             }).ConfigureAwait(false).GetAwaiter().GetResult();
         }
@@ -2655,7 +2660,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 long retvId = 0;
                 var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList())).ConfigureAwait(false);
                 foreach (var dr in queryIds) {
-                    if (input != null && dr.RID == input.RID) {
+                    if (input != null && dr.RID.ToString() == input.RID.ToString()) {
                         input.Id = dr.Id;
                     }
                 }
