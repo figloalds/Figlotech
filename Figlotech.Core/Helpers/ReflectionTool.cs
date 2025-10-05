@@ -633,6 +633,9 @@ namespace Figlotech.Core.Helpers {
             if (src == typeof(object)) {
                 return BuildObjectRuntimeAwareConversion(p, dest);
             }
+            if (dest == typeof(object)) {
+                return Expression.Convert(p, typeof(object));
+            }
 
             // Identidade
             if (src == dest) return p;
