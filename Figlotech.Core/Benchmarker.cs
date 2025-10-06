@@ -14,7 +14,7 @@ namespace System {
             if (self == null) return 0;
             if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 return 0;
-            if (!self.Active)
+            if (!self.Active || self.marks == null)
                 return 0;
             try {
                 if(self.marks.Count > 1)

@@ -1433,8 +1433,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await transaction.EndTransactionAsync().ConfigureAwait(false);
                     await transaction.DisposeAsync().ConfigureAwait(false);
                     try {
-                        if(transaction.Connection.State != ConnectionState.Closed) {
-                            transaction.Connection.Close();
+                        if(transaction.Connection != null && transaction.Connection.State != ConnectionState.Closed) {
+                            transaction.Connection?.Close();
                         }
                     } catch(Exception x) {
                         Console.Error.WriteLine(x.ToString());
