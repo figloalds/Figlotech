@@ -139,6 +139,7 @@ namespace Figlotech.Core {
         public DateTime? StartedAt { get; set; }
         public decimal TimeWaiting { get; set; }
         public decimal TimeInExecution { get; set; }
+        public Dictionary<string, object> AdditionalTelemetryTags { get; set; }
         public StackTrace SchedulingContextStackTrace { get; set; }
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
@@ -147,6 +148,7 @@ namespace Figlotech.Core {
             TimeWaiting = (decimal)((x.DequeuedTime ?? DateTime.UtcNow) - (x.EnqueuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             SchedulingContextStackTrace = x?.StackTrace;
+            AdditionalTelemetryTags = x.WorkJob.AdditionalTelemetryTags;
         }
     }
 
@@ -238,7 +240,7 @@ namespace Figlotech.Core {
             FlushHeldJobsToChannel();
 
             _workers.Clear();
-            for (int i = 0; i < Math.Min(MaxParallelTasks, Environment.ProcessorCount); i++) {
+            for (int i = 0; i < Math.Min(500, Math.Max(MaxParallelTasks, 1)); i++) {
                 _workers.Add(Task.Run(() => WorkerLoop(_runCts.Token)));
             }
         }
