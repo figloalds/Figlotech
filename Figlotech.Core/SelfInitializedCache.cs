@@ -9,13 +9,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class SelfInitializedCache<TKey, T> : IDictionary<TKey, T> {
-        private SelfInitializerDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
+        private TimedCache<TKey, T> Dictionary;
         private Func<TKey, T> GenerationLogic;
-        private TimeSpan CacheDuration { get; set; }
-
+        private TimeSpan CacheDuration { get; }
+        
         public ICollection<TKey> Keys => Dictionary.Keys;
 
-        public ICollection<T> Values => Dictionary.Values.Select(x=> x.Object).ToList();
+        public ICollection<T> Values => Dictionary.Values.ToList();
 
         public int Count => Dictionary.Count;
 
@@ -24,24 +24,19 @@ namespace Figlotech.Core {
         public SelfInitializedCache(Func<TKey, T> generationLogic, TimeSpan duration) {
             this.GenerationLogic = generationLogic;
             this.CacheDuration = duration;
-            Dictionary = new SelfInitializerDictionary<TKey, TimerCachedObject<TKey, T>>(key => {
-                return new TimerCachedObject<TKey, T>(Dictionary!, key, generationLogic(key), duration);
-            });
+            Dictionary = new TimedCache<TKey, T>(duration);
         }
 
         public T this[TKey key] {
             get {
-                var item = Dictionary[key];
-                item.KeepAlive();
-                return item.Object;
+                if (!Dictionary.TryGetValue(key, out var item)) {
+                    item = GenerationLogic(key);
+                    Dictionary[key] = item;
+                }
+                return item;
             }
             set {
-                if(Dictionary.ContainsKey(key)) {
-                    Dictionary[key].Object = value;
-                    Dictionary[key].KeepAlive();
-                } else {
-                    Dictionary[key] = new TimerCachedObject<TKey, T>(Dictionary, key, value, CacheDuration);
-                }
+                Dictionary[key] = value;
             }
         }
 
@@ -58,8 +53,8 @@ namespace Figlotech.Core {
         }
 
         public bool TryGetValue(TKey key, out T value) {
-            if(Dictionary.TryGetValue(key, out var val)) {
-                value = val.Object;
+            if (Dictionary.TryGetValue(key, out var item)) {
+                value = item;
                 return true;
             }
             value = default(T);
@@ -77,7 +72,7 @@ namespace Figlotech.Core {
         }
 
         public bool Contains(KeyValuePair<TKey, T> item) {
-            return Dictionary.Keys.Any(x => x.Equals(item.Key) && Dictionary[item.Key].Object.Equals(item.Value));
+            return Dictionary.Keys.Any(x => x.Equals(item.Key) && Dictionary[item.Key].Equals(item.Value));
         }
 
         public void CopyTo(KeyValuePair<TKey, T>[] array, int arrayIndex) {
@@ -91,11 +86,11 @@ namespace Figlotech.Core {
         }
 
         public IEnumerator<KeyValuePair<TKey, T>> GetEnumerator() {
-            return Dictionary.Select(x => new KeyValuePair<TKey, T>(x.Key, x.Value.Object)).GetEnumerator();
+            return Dictionary.Select(x => new KeyValuePair<TKey, T>(x.Key, x.Value)).GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator() {
-            return Dictionary.Select(x => x.Value.Object).GetEnumerator();
+            return Dictionary.Select(x => x.Value).GetEnumerator();
         }
     }
 }

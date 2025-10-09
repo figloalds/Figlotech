@@ -22,6 +22,7 @@ namespace Figlotech.Core {
 
         public bool IsReadOnly => Dictionary.IsReadOnly;
 
+        public Func<Exception, ValueTask> OnException { get; set; }
         public Func<TKey, Task<T>> OnFailOver { get; set; }
         public Func<TKey,ValueTask> OnFree { get; set; }
         public Func<TKey, T, ValueTask> OnSet { get; set; }
@@ -58,7 +59,30 @@ namespace Figlotech.Core {
                     if(OnFree != null && freed.Count > 0) {
                         Fi.Tech.FireAndForget(async () => {
                             foreach(var key in freed) {
-                                await OnFree(key);
+                                try {
+                                    await OnFree(key);
+                                } catch(Exception x) {
+                                    try {
+                                        OnException?.Invoke(x);
+                                    } catch(Exception y) {
+                                        Fi.Tech.Throw(y);
+                                    }
+                                }
+                                try {
+                                    if(Dictionary.TryGetValue(key, out var value)) {
+                                        if (value is IAsyncDisposable adis) {
+                                            await adis.DisposeAsync();
+                                        } else if (value is IDisposable dis) {
+                                            dis.Dispose();
+                                        }
+                                    }
+                                } catch(Exception x) {
+                                    try {
+                                        OnException?.Invoke(x);
+                                    } catch (Exception y) {
+                                        Fi.Tech.Throw(y);
+                                    }
+                                }
                             }
                         });
                     }

@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
+    <WarningsAsErrors>CS4014,VSTHRD103;CA2000;CA2213;CA1001</WarningsAsErrors>
     <RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
   </PropertyGroup>
 

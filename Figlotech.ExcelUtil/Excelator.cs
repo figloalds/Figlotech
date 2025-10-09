@@ -275,7 +275,7 @@ namespace Figlotech.ExcelUtil {
 
     }
 
-    public sealed class Excelator {
+    public sealed class Excelator : IDisposable {
         ExcelPackage _pack { get; set; }
         ExcelWorksheet _currentWorkSheet { get; set; }
         String _filePath { get; set; }
@@ -301,6 +301,23 @@ namespace Figlotech.ExcelUtil {
 
         public Excelator() {
             _pack = new ExcelPackage();
+        }
+
+        public bool IsDisposed { get; private set; } = false;
+        public void Dispose() {
+            if (!IsDisposed) {
+                _pack?.Dispose();
+                _stream?.Dispose();
+                _currentWorkSheet?.Dispose();
+                for(var i = _workSheets.Count - 1; i >= 0; i--) {
+                    _workSheets[i]?.Dispose();
+                    _workSheets.RemoveAt(i);
+                }
+                _pack = null;
+                _stream = null;
+                _currentWorkSheet = null;
+                IsDisposed = true;
+            }
         }
 
         public int From0Idx(int idx) {

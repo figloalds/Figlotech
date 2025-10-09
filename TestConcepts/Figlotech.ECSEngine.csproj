@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>Figlotech.Core</RootNamespace>
+    <WarningsAsErrors>CS4014,VSTHRD103;CA2000;CA2213;CA1001</WarningsAsErrors>
     <RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
   </PropertyGroup>
 
