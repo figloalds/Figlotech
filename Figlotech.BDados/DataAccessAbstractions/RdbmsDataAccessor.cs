@@ -555,6 +555,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } finally {
                 await DisposeConnectionIfNotYetDisposed().ConfigureAwait(false);
+                this.Benchmarker = null;
+                this.Connection = null;
+                this.AutoMutateTargets = null;
+                this.AutoMutateRollbacks = null;
+                this.DataAccessor = null;
+                this.Transaction = null;
+                this.ObjectsToNotify = null;
+                this.LoggerActivity = null;
+                this.OnTransactionEnding = null;
+                this.ActionsToExecuteAfterSuccess = null;
+                this._commands = null;
+                this._lock = null;
             }
         }
 
@@ -1355,36 +1367,36 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             await using (var transaction = await CreateNewTransactionAsync(cancellationToken, ilev).ConfigureAwait(false)) {
                 var b = transaction.Benchmarker;
-                if (FiTechCoreExtensions.EnableDebug) {
-                    try {
-                        int maxFrames = 6;
-                        var stack = new StackTrace();
-                        foreach (var f in stack.GetFrames()) {
-                            var m = f.GetMethod();
-                            if (m != null) {
-                                var mName = m.Name;
-                                var t = m.DeclaringType;
-                                if (t != null) {
-                                    if (t.IsNested) {
-                                        t = t.DeclaringType;
-                                    }
-                                    var tName = t.Name;
-                                    if (m.DeclaringType.Assembly != GetType().Assembly) {
-                                        b.Mark($" at {tName}->{mName}");
-                                        if (maxFrames-- <= 0) {
-                                            break;
+                try {
+                    if (FiTechCoreExtensions.EnableDebug) {
+                        try {
+                            int maxFrames = 6;
+                            var stack = new StackTrace();
+                            foreach (var f in stack.GetFrames()) {
+                                var m = f.GetMethod();
+                                if (m != null) {
+                                    var mName = m.Name;
+                                    var t = m.DeclaringType;
+                                    if (t != null) {
+                                        if (t.IsNested) {
+                                            t = t.DeclaringType;
+                                        }
+                                        var tName = t.Name;
+                                        if (m.DeclaringType.Assembly != GetType().Assembly) {
+                                            b.Mark($" at {tName}->{mName}");
+                                            if (maxFrames-- <= 0) {
+                                                break;
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    } catch (Exception) {
-                        if (Debugger.IsAttached) {
-                            Debugger.Break();
+                        } catch (Exception) {
+                            if (Debugger.IsAttached) {
+                                Debugger.Break();
+                            }
                         }
                     }
-                }
-                try {
                     b.Mark("Run User Code");
                     var retv = await func.Invoke(transaction).ConfigureAwait(false);
 
@@ -1432,17 +1444,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                     await transaction.EndTransactionAsync().ConfigureAwait(false);
                     await transaction.DisposeAsync().ConfigureAwait(false);
-                    try {
-                        if(transaction.Connection != null && transaction.Connection.State != ConnectionState.Closed) {
-                            transaction.Connection?.Close();
-                        }
-                    } catch(Exception x) {
-                        Console.Error.WriteLine(x.ToString());
-                    }
                 }
-
-                return default(T);
             }
+            return default(T);
         }
 
         private T UseTransaction<T>(Func<BDadosTransaction, T> func, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
