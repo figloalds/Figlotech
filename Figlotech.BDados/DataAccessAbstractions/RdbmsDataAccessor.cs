@@ -565,6 +565,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.LoggerActivity = null;
                 this.OnTransactionEnding = null;
                 this.ActionsToExecuteAfterSuccess = null;
+                this._cancellationTokenSource = null;
                 this._commands = null;
                 this._lock = null;
             }
@@ -808,14 +809,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if(ilev.HasValue) {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
             }
-            cancellationToken.Register(() => {
+            using var reg = cancellationToken.Register(() => {
                 try {
                     if(!retv.DisposedTime.HasValue && !retv._cancellationTokenSource.IsCancellationRequested) {
                         retv._cancellationTokenSource?.Cancel();
                     }
-                } catch(Exception x) {
-
-                }
+                } catch { }
             });
             retv.StackTrace = trace;
             retv.Benchmarker = bmark ?? new Benchmarker("Database Access", FiTechCoreExtensions.IsTelemetryLoggingEnabled) {
@@ -1365,86 +1364,91 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             if (func == null) return default(T);
 
-            await using (var transaction = await CreateNewTransactionAsync(cancellationToken, ilev).ConfigureAwait(false)) {
-                var b = transaction.Benchmarker;
-                try {
-                    if (FiTechCoreExtensions.EnableDebug) {
-                        try {
-                            int maxFrames = 6;
-                            var stack = new StackTrace();
-                            foreach (var f in stack.GetFrames()) {
-                                var m = f.GetMethod();
-                                if (m != null) {
-                                    var mName = m.Name;
-                                    var t = m.DeclaringType;
-                                    if (t != null) {
-                                        if (t.IsNested) {
-                                            t = t.DeclaringType;
-                                        }
-                                        var tName = t.Name;
-                                        if (m.DeclaringType.Assembly != GetType().Assembly) {
-                                            b.Mark($" at {tName}->{mName}");
-                                            if (maxFrames-- <= 0) {
-                                                break;
+            try {
+
+                await using (var transaction = await CreateNewTransactionAsync(cancellationToken, ilev).ConfigureAwait(false)) {
+                    var b = transaction.Benchmarker;
+                    try {
+                        if (FiTechCoreExtensions.EnableDebug) {
+                            try {
+                                int maxFrames = 6;
+                                var stack = new StackTrace();
+                                foreach (var f in stack.GetFrames()) {
+                                    var m = f.GetMethod();
+                                    if (m != null) {
+                                        var mName = m.Name;
+                                        var t = m.DeclaringType;
+                                        if (t != null) {
+                                            if (t.IsNested) {
+                                                t = t.DeclaringType;
+                                            }
+                                            var tName = t.Name;
+                                            if (m.DeclaringType.Assembly != GetType().Assembly) {
+                                                b.Mark($" at {tName}->{mName}");
+                                                if (maxFrames-- <= 0) {
+                                                    break;
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        } catch (Exception) {
-                            if (Debugger.IsAttached) {
-                                Debugger.Break();
+                            } catch (Exception) {
+                                if (Debugger.IsAttached) {
+                                    Debugger.Break();
+                                }
                             }
                         }
-                    }
-                    b.Mark("Run User Code");
-                    var retv = await func.Invoke(transaction).ConfigureAwait(false);
+                        b.Mark("Run User Code");
+                        var retv = await func.Invoke(transaction).ConfigureAwait(false);
 
-                    if (retv is Task awaitable) {
-                        await awaitable.ConfigureAwait(false);
-                    }
+                        if (retv is Task awaitable) {
+                            await awaitable.ConfigureAwait(false);
+                        }
 
-                    if (transaction.CancellationToken.IsCancellationRequested) {
-                        WriteLog($"[{Description}:{transaction.Id}] Transaction was cancelled via token");
+                        if (transaction.CancellationToken.IsCancellationRequested) {
+                            WriteLog($"[{Description}:{transaction.Id}] Transaction was cancelled via token");
+                            b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
+                            await transaction.RollbackAsync().ConfigureAwait(false);
+                            b.Mark($"[{Description}:{transaction.Id}] End Rollback");
+                            WriteLog($"[{Description}:{transaction.Id}] Rollback OK ");
+                        } else {
+                            WriteLog($"[{Description}:{transaction.Id}] Committing");
+                            b.Mark($"[{Description}:{transaction.Id}] Begin Commit");
+                            await transaction.CommitAsync().ConfigureAwait(false);
+                            b.Mark($"[{Description}:{transaction.Id}] End Commit");
+                            WriteLog($"[{Description}:{transaction.Id}] Commited OK ");
+                        }
+                        return retv;
+                    } catch (TaskCanceledException x) {
+                        if(!transaction.IsRolledBack && transaction.IsCommited) {
+                            await transaction.RollbackAsync().ConfigureAwait(false);
+                        }
+                        throw x;
+                    } catch (Exception x) {
+                        if (Debugger.IsAttached && x?.GetType() != typeof(System.OperationCanceledException)) {
+                            Debugger.Break();
+                        }
+                        WriteLog($"[{Description}:{transaction.Id}] Begin Rollback : {x.Message} {x.StackTrace}");
                         b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
-                        await transaction.RollbackAsync().ConfigureAwait(false);
+                        try {
+                            await transaction.RollbackAsync().ConfigureAwait(false);
+                        } catch (Exception rbex) {
+                            Debugger.Break();
+                        }
                         b.Mark($"[{Description}:{transaction.Id}] End Rollback");
-                        WriteLog($"[{Description}:{transaction.Id}] Rollback OK ");
-                    } else {
-                        WriteLog($"[{Description}:{transaction.Id}] Committing");
-                        b.Mark($"[{Description}:{transaction.Id}] Begin Commit");
-                        await transaction.CommitAsync().ConfigureAwait(false);
-                        b.Mark($"[{Description}:{transaction.Id}] End Commit");
-                        WriteLog($"[{Description}:{transaction.Id}] Commited OK ");
+                        WriteLog($"[{Description}:{transaction.Id}] Transaction rolled back ");
+                        transaction?.MarkAsErrored();
+                        throw new BDadosException("Error accessing the database", transaction?.FrameHistory, null, x);
+                    } finally {
+                        if (!(transaction?.usingExternalBenchmarker ?? true)) {
+                            b?.FinalMark();
+                        }
+                        await transaction.EndTransactionAsync().ConfigureAwait(false);
+                        await transaction.DisposeAsync().ConfigureAwait(false);
                     }
-                    return retv;
-                } catch (TaskCanceledException x) {
-                    if(!transaction.IsRolledBack && transaction.IsCommited) {
-                        await transaction.RollbackAsync().ConfigureAwait(false);
-                    }
-                    throw x;
-                } catch (Exception x) {
-                    if (Debugger.IsAttached) {
-                        Debugger.Break();
-                    }
-                    WriteLog($"[{Description}:{transaction.Id}] Begin Rollback : {x.Message} {x.StackTrace}");
-                    b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
-                    try {
-                        await transaction.RollbackAsync().ConfigureAwait(false);
-                    } catch (Exception rbex) {
-                        Debugger.Break();
-                    }
-                    b.Mark($"[{Description}:{transaction.Id}] End Rollback");
-                    WriteLog($"[{Description}:{transaction.Id}] Transaction rolled back ");
-                    transaction?.MarkAsErrored();
-                    throw new BDadosException("Error accessing the database", transaction?.FrameHistory, null, x);
-                } finally {
-                    if (!(transaction?.usingExternalBenchmarker ?? true)) {
-                        b?.FinalMark();
-                    }
-                    await transaction.EndTransactionAsync().ConfigureAwait(false);
-                    await transaction.DisposeAsync().ConfigureAwait(false);
                 }
+            } finally {
+                GC.Collect(0, GCCollectionMode.Default);
             }
             return default(T);
         }

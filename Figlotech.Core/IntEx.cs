@@ -477,15 +477,14 @@ namespace Figlotech.Core {
 
             // Calculate the number of digits needed:
             int length = (int)BigInteger.Log(value, digits.Length) + 1;
-            char[] buffer = new char[length];
+            Span<char> buffer = stackalloc char[length];
             int position = length;
 
             while (value > 0) {
                 buffer[--position] = digits[(int)(value % digits.Length)];
                 value /= digits.Length;
             }
-
-            return new string(buffer, position, length - position);
+            return buffer.Slice(position, length - position).ToString();
         }
 
         public static BigInteger StringToBigInteger(string value, string Base = Decimal) {
