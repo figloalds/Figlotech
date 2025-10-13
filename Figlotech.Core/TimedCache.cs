@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public sealed class TimedCache<TKey, T> : IDictionary<TKey, T> {
+    public sealed class TimedCache<TKey, T> : IDictionary<TKey, T>, IDisposable, IAsyncDisposable {
         private LenientDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
 
@@ -30,6 +30,21 @@ namespace Figlotech.Core {
         public Func<T, Task<bool>> CustomCanFinalizeAsync { get; set; } = null;
 
         Timer timer { get; set; }
+
+        bool isDisposed = false;
+
+        public void Dispose() {
+            timer.Change(Timeout.Infinite, Timeout.Infinite);
+            Fi.Tech.FireAndForget(async () => {
+                await timer.DisposeAsync().ConfigureAwait(false);
+            });
+            isDisposed = true;
+        }
+        public async ValueTask DisposeAsync() {
+            timer.Change(Timeout.Infinite, Timeout.Infinite);
+            await timer.DisposeAsync().ConfigureAwait(false);
+            isDisposed = true;
+        }
 
         public TimedCache(TimeSpan duration) {
             this.CacheDuration = duration;
