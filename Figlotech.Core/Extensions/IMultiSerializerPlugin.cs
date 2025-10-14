@@ -13,6 +13,7 @@ namespace Figlotech.Core.Extensions {
         public bool UseGzip { get; set; }
         public bool Formatted { get; set; }
         public IEncryptionMethod UseEncryption { get; set; }
+        public Newtonsoft.Json.JsonSerializerSettings JsonSettings { get; set; } = null;
     }
     public interface IMultiSerializerPlugin {
         void Serialize(object o, Stream stream, FTHSerializableOptions options);

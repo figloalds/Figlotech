@@ -22,7 +22,7 @@ namespace Figlotech.Core.Extensions {
             if (obj == null)
                 return;
             using (var ms = new MemoryStream()) {
-                var json = JsonConvert.SerializeObject(obj, new JsonSerializerSettings {
+                var json = JsonConvert.SerializeObject(obj, options?.JsonSettings ?? new JsonSerializerSettings {
                     Formatting = options.Formatted ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None,
                     NullValueHandling = NullValueHandling.Include,
                     ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -60,7 +60,7 @@ namespace Figlotech.Core.Extensions {
                     using (var reader = new StreamReader(usableStream, Fi.StandardEncoding)) {
                         var json = await reader.ReadToEndAsync();
                         try {
-                            var parse = JsonConvert.DeserializeObject(json, obj.GetType());
+                            var parse = JsonConvert.DeserializeObject(json, obj.GetType(), options?.JsonSettings);
                             Fi.Tech.MemberwiseCopy(parse, obj);
                         } catch (Exception x) {
                             Fi.Tech.WriteLine("Error parsing JSON File: " + x.Message);
