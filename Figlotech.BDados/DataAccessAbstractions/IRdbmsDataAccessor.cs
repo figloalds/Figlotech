@@ -125,7 +125,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         List<T> AggregateLoad<T>(
             BDadosTransaction transaction, 
             LoadAllArgs<T> args = null) where T : IDataObject, new();
-
+        
         IAsyncEnumerable<T> AggregateLoadAsyncCoroutinely<T>(
             BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new();
