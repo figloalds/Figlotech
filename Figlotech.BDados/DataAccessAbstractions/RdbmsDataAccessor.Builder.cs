@@ -231,7 +231,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                                     object li = ReflectionTool.GetValue(obj, fieldAlias);
                                     if (li == null) {
-                                        li = NewInstance(ulType);
+                                        li = NewInstance(objectType);
                                         ReflectionTool.SetValue(obj, fieldAlias, li);
                                     }
 
