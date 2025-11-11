@@ -118,7 +118,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 await func(stream);
             }
             blob.Properties.ContentType = Fi.Tech.GetMimeType(relative);
-            blob.SetPropertiesAsync().Wait();
+            blob.SetPropertiesAsync().GetAwaiter().GetResult();
         }
 
         private void RenDir(string relative, string newName) {
@@ -328,10 +328,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             FixRelative(ref relative);
             var blob = BlobContainer.GetAppendBlobReference(relative);
             if(!blob.ExistsAsync().Result) {
-                blob.CreateOrReplaceAsync().Wait();
+                blob.CreateOrReplaceAsync().GetAwaiter().GetResult();
             }
 
-            blob.AppendTextAsync(String.Join("\n", content)).Wait();
+            blob.AppendTextAsync(String.Join("\n", content)).GetAwaiter().GetResult();
         }
 
         public async Task AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {

@@ -187,7 +187,7 @@ namespace Figlotech.Core {
             return new FiAsyncDisposableLock(_semaphore);
         }
         public FiAsyncDisposableLock LockSync() {
-            _semaphore.Wait();
+            _semaphore.WaitAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             return new FiAsyncDisposableLock(_semaphore);
         }
 
@@ -208,7 +208,7 @@ namespace Figlotech.Core {
             var timeoutCancellation = new CancellationTokenSource(timeout);
 
             try {
-                _semaphore.Wait(timeoutCancellation.Token);
+                _semaphore.WaitAsync(timeoutCancellation.Token).GetAwaiter().GetResult();
                 return new FiAsyncDisposableLock(_semaphore);
             } catch (TaskCanceledException x) {
                 throw new TimeoutException("Awaiting for lock timed out", x);

@@ -2291,7 +2291,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            objAssembly.Stop(true).Wait();
+            objAssembly.Stop(true).GetAwaiter().GetResult();
         }
 
         public void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream) {
@@ -2334,7 +2334,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             flushAndPersist();
-            persistenceQueue.Stop(true).Wait();
+            persistenceQueue.Stop(true).GetAwaiter().GetResult();
         }
 
         public bool Delete<T>(BDadosTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {
