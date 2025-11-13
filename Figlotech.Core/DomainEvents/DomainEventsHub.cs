@@ -151,12 +151,11 @@ namespace Figlotech.Core.DomainEvents {
             if(FiTechCoreExtensions.StdoutEventHubLogs) {
                 domainEvent.d_RaiseOrigin = Environment.StackTrace;
             }
-            domainEvent.EventsHub = this;
             if(domainEvent is IPreserializableDomainEvent seri) {
                 seri.Serialize();
             }
             lock (EventCache) {
-                if(EventCache.Any(x=> x.RID == domainEvent.RID)) {
+                if(EventCache.Any(x=> x.Id == domainEvent.Id)) {
                     return;
                 }
                 EventCache.RemoveAll(e => (DateTime.UtcNow - e.TimeStamp) > EventCacheDuration);

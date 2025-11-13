@@ -11,7 +11,6 @@ namespace Figlotech.Core.DomainEvents
         bool AllowPropagation { get; set; }
         string d_RaiseOrigin { get; set; }
         DateTime TimeStamp { get; set; }
-        string RID { get; }
         long Id { get; }
     }
 

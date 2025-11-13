@@ -40,25 +40,15 @@ namespace Figlotech.Core.DomainEvents {
         long? created = null;
         static long ProgramStarted = DateTime.UtcNow.Ticks;
 
-        public DateTime TimeStamp { get; set; }
+        public DateTime TimeStamp { get; set; } = DateTime.UtcNow;
         public long Id { get; private set; } = ++_idGen;
         public bool AllowPropagation { get; set; } = true;
 
-        public string RID { get; set; } = new RID().AsBase36;
-        
         [JsonIgnore]
         public string d_RaiseOrigin { get; set; }
         
         [JsonIgnore]
         public DomainEventsHub EventsHub { get; set; }
-
-        static long generateTimeStamp() {
-            var retv = DateTime.UtcNow.Ticks;
-            retv -= Int16.MaxValue;
-                retv += antiCollider++;
-            return retv;
-        }
-
 
     }
 }
