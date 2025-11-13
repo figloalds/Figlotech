@@ -738,6 +738,27 @@ namespace Figlotech.Core {
             }
         }
 
+        public static bool ScheduleExists(this Fi _selfie, string identifier, WorkQueuer wq = null) {
+            lock (GlobalScheduledJobs) {
+                if(wq != null) {
+                    return ScheduleExistsByKey(_selfie, $"{wq.QID}_{identifier}");
+                }
+                foreach (var k in GlobalScheduledJobs.Keys) {
+                    if (GlobalScheduledJobs[k].Identifier != identifier) {
+                        continue;
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public static bool ScheduleExistsByKey(this Fi _selfie, string k) {
+            lock (GlobalScheduledJobs) {
+                return GlobalScheduledJobs.ContainsKey(k);
+            }
+        }
+
         public static void UnscheduleByKey(this Fi _selfie, string k) {
             lock (GlobalScheduledJobs) {
                 if (!GlobalScheduledJobs.ContainsKey(k)) {
