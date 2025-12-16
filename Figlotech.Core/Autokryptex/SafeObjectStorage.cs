@@ -61,24 +61,25 @@ namespace Figlotech.Core.Autokryptex
             );
         }
 
-        public void PreloadAll() {
+        public async Task PreloadAllAsync() {
             List<string> cachedRids;
             lock (Cache)
                 cachedRids = Cache.Select(c => c.RID).ToList();
             var newList = new List<SafeDataPayload>();
-            foreach(var rid in fileSystem.GetFilesIn("")) {
+            var files = fileSystem.GetFilesIn("");
+            foreach(var rid in files) {
                 if (cachedRids.Contains(rid)) {
                     return;
                 }
                 var tries = 3;
                 while(tries-- > 0) {
                     try {
-                        _cachePayload(_getPayloadFromFile(rid));
+                        _cachePayload(await _getPayloadFromFileAsync(rid).ConfigureAwait(false));
                         break;
                     } catch(Exception x) {
                         try {
                             Fi.Tech.FireAndForget(async () => {
-                                await fileSystem.DeleteAsync(rid);
+                                await fileSystem.DeleteAsync(rid).ConfigureAwait(false);
                             });
                         } catch(Exception ex) { 
                         
@@ -162,7 +163,7 @@ namespace Figlotech.Core.Autokryptex
             ), type);
         }
 
-        public List<(string RID, T Data)> Fetch<T>() {
+        public async Task<List<(string RID, T Data)>> FetchAsync<T>() {
             List<(string RID, T Data)> retv = new List<(string RID, T Data)>();
             try {
                 List<string> cachedRids;
@@ -170,15 +171,20 @@ namespace Figlotech.Core.Autokryptex
                     lock(DeletionQueue)
                         cachedRids = Cache.Select(c => c.RID).Where(x=> !DeletionQueue.Contains(x)).ToList();
                 var newList = new List<SafeDataPayload>();
-                fileSystem.ForFilesIn("", rid => {
+                var files = fileSystem.GetFilesIn("");
+                foreach (var rid in files) {
                     if (cachedRids.Contains(rid)) {
-                        return;
+                        continue;
                     }
+                    bool shouldProcess = false;
                     lock (DeletionQueue) 
                         if(!DeletionQueue.Contains(rid)) {
-                            newList.Add(_getPayloadFromFile(rid));
+                            shouldProcess = true;
                         }
-                });
+                    if (shouldProcess) {
+                        newList.Add(await _getPayloadFromFileAsync(rid).ConfigureAwait(false));
+                    }
+                }
 
                 List<SafeDataPayload> localCopyCache;
                 lock (Cache)
@@ -196,22 +202,28 @@ namespace Figlotech.Core.Autokryptex
 
             }
 
-            ExecuteDeleteQueue();
+            await ExecuteDeleteQueueAsync().ConfigureAwait(false);
 
             return retv;
         }
 
-        public void ExecuteDeleteQueue() {
-            lock (DeletionQueue)
-                while (DeletionQueue.Count > 0) {
-                    Delete(DeletionQueue.Dequeue());
+        public async Task ExecuteDeleteQueueAsync() {
+            while (true) {
+                string ridToDelete;
+                lock (DeletionQueue) {
+                    if (DeletionQueue.Count == 0) {
+                        break;
+                    }
+                    ridToDelete = DeletionQueue.Dequeue();
                 }
+                await DeleteAsync(ridToDelete).ConfigureAwait(false);
+            }
         }
 
-        public void Delete(string rid) {
+        public async Task DeleteAsync(string rid) {
             lock (Cache)
                 Cache.RemoveAll(c => c.RID == rid);
-            fileSystem.DeleteAsync(rid);
+            await fileSystem.DeleteAsync(rid).ConfigureAwait(false);
         }
 
         public void QueueDelete(string rid) {
@@ -219,7 +231,7 @@ namespace Figlotech.Core.Autokryptex
                 DeletionQueue.Enqueue(rid);
         }
 
-        public string Put(object item) {
+        public async Task<string> PutAsync(object item) {
             var t = item.GetType();
             if (!KnownTypes.Contains(t)) {
                 AddWorkingTypes(t);
@@ -240,7 +252,7 @@ namespace Figlotech.Core.Autokryptex
             );
             var encBytes = fileEncryptor.Encrypt(bytes);
 
-            fileSystem.WriteAllBytes(objectRID, encBytes);
+            await fileSystem.WriteAllBytesAsync(objectRID, encBytes).ConfigureAwait(false);
 
             return objectRID;
         }
@@ -254,9 +266,8 @@ namespace Figlotech.Core.Autokryptex
             if (needle != null) {
                 return _decryptObject<T>(needle.Data);
             }
-            return _getObjectFromFile<T>(rid);
+            return await _getObjectFromFileAsync<T>(rid).ConfigureAwait(false);
         }
-
 
         public void _cachePayload(SafeDataPayload payload) {
             lock (Cache) Cache.Add(payload);
@@ -279,8 +290,30 @@ namespace Figlotech.Core.Autokryptex
             return retv;
         }
 
+        public async Task<SafeDataPayload> _getPayloadFromFileAsync(string rid) {
+            var buffer = _gunzip(
+                fileEncryptor.Decrypt(
+                    await fileSystem.ReadAllBytesAsync(rid).ConfigureAwait(false)
+                )
+            );
+            var retv = JsonConvert.DeserializeObject<SafeDataPayload>(
+                Fi.StandardEncoding.GetString(buffer)
+            );
+            retv.RID = rid;
+            return retv;
+        }
+
         public T _getObjectFromFile<T>(string rid) {
             var payload = _getPayloadFromFile(rid);
+            _cachePayload(payload);
+            if (typeof(T).Name != payload.Type) {
+                Fi.Tech.WriteLine($"Warning: Type mismatch opening {payload.Type} as {typeof(T).Name} from SafeObjectStorage");
+            }
+            return _decryptObject<T>(payload.Data);
+        }
+
+        public async Task<T> _getObjectFromFileAsync<T>(string rid) {
+            var payload = await _getPayloadFromFileAsync(rid).ConfigureAwait(false);
             _cachePayload(payload);
             if (typeof(T).Name != payload.Type) {
                 Fi.Tech.WriteLine($"Warning: Type mismatch opening {payload.Type} as {typeof(T).Name} from SafeObjectStorage");

@@ -554,8 +554,7 @@ namespace Figlotech.Core {
         //    return (T)o;
         //}
 
-        public static T SyncLazyInit<T>(this Fi __selfi
-            e, ref T value, Func<T> init) {
+        public static T SyncLazyInit<T>(this Fi __selfie, ref T value, Func<T> init) {
             if (value == null) {
                 lock (init) {
                     if (value == null) {
