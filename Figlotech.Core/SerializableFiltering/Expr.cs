@@ -72,6 +72,14 @@ namespace MiniWhere {
         public bool Negated { get; }
     }
 
+    public sealed class UnaryValueExpr : Expr {
+        public UnaryValueExpr(ValueExpr value) {
+            Value = value;
+        }
+
+        public ValueExpr Value { get; }
+    }
+
     public abstract class ValueExpr {
     }
 

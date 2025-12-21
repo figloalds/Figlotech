@@ -30,9 +30,18 @@ namespace MiniWhere {
                 InExpr inExpr => EvalIn(inExpr, row, thisValue),
                 CompareExpr c => EvalCompare(c, row, thisValue),
                 CollectionPredicateExpr cp => EvalCollectionPredicate(cp, row, thisValue),
+                UnaryValueExpr u => IsTruthy(ResolveValue(u.Value, row, thisValue)),
 
                 _ => throw new NotSupportedException($"Unknown Expr: {expr.GetType().Name}")
             };
+        }
+
+        private static bool IsTruthy(object? value) {
+            if (value is null) return false;
+            if (value is bool b) return b;
+            if (value is string s) return !string.IsNullOrEmpty(s);
+            if (TryToDouble(value, out var d)) return Math.Abs(d) > 1e-9;
+            return true;
         }
 
         private static bool EvalCollectionPredicate(CollectionPredicateExpr cp, object row, object? thisValue) {

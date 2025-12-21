@@ -97,9 +97,13 @@ namespace MiniWhere {
             }
 
             // compare operator
-            var op = ParseCompareOp();
-            var rightVal = ParseValue();
-            return new CompareExpr(leftVal, op, rightVal);
+            if (IsCompareOp(_t[_p].Kind)) {
+                var op = ParseCompareOp();
+                var rightVal = ParseValue();
+                return new CompareExpr(leftVal, op, rightVal);
+            }
+
+            return new UnaryValueExpr(leftVal);
         }
 
         private Expr ParseCollectionPredicate() {
@@ -199,9 +203,13 @@ namespace MiniWhere {
             }
 
             // compare operator
-            var op = ParseCompareOp();
-            var rightVal = ParseValue();
-            return new CompareExpr(leftVal, op, rightVal);
+            if (IsCompareOp(_t[_p].Kind)) {
+                var op = ParseCompareOp();
+                var rightVal = ParseValue();
+                return new CompareExpr(leftVal, op, rightVal);
+            }
+
+            return new UnaryValueExpr(leftVal);
         }
 
         private List<ValueExpr> ParseInList() {
@@ -214,6 +222,10 @@ namespace MiniWhere {
             }
             Expect(TokenKind.RParen);
             return items;
+        }
+
+        private bool IsCompareOp(TokenKind k) {
+            return k == TokenKind.Eq || k == TokenKind.Neq || k == TokenKind.Lt || k == TokenKind.Lte || k == TokenKind.Gt || k == TokenKind.Gte;
         }
 
         private CompareOp ParseCompareOp() {
