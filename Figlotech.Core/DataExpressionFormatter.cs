@@ -1,8 +1,10 @@
-﻿using System;
+﻿using Figlotech.Core;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace Figlotech.Core {
@@ -169,13 +171,13 @@ namespace Figlotech.Core {
                 int j2 = IndexOf(tpl, "[[", i);
                 int j3 = IndexOf(tpl, "<<", i);
                 int j4 = IndexOf(tpl, "<?", i);
-                int j5 = IndexOf(tpl, "<#", i);  // NEW: switch opener
+                int j5 = IndexOf(tpl, "<#", i);
 
                 if (j1 >= 0 && (next < 0 || j1 < next)) { next = j1; opener = "{{"; closer = "}}"; }
                 if (j2 >= 0 && (next < 0 || j2 < next)) { next = j2; opener = "[["; closer = "]]"; }
                 if (j3 >= 0 && (next < 0 || j3 < next)) { next = j3; opener = "<<"; closer = ">>"; }
                 if (j4 >= 0 && (next < 0 || j4 < next)) { next = j4; opener = "<?"; closer = "?>"; }
-                if (j5 >= 0 && (next < 0 || j5 < next)) { next = j5; opener = "<#"; closer = "#>"; } // NEW
+                if (j5 >= 0 && (next < 0 || j5 < next)) { next = j5; opener = "<#"; closer = "#>"; }
 
                 if (next < 0) {
                     sb.Append(tpl.Slice(i).ToString());
@@ -211,12 +213,12 @@ namespace Figlotech.Core {
                             mathResult = RunMaths(inside);
                             replacement = mathResult ?? string.Empty;
                         }
-                    } else if (opener == "<<") { // repeat
+                    } else if (opener == "<<") {
                         var inside = inner.ToString();
-                        var sep = inside.IndexOf('|');
-                        if (sep >= 0) {
-                            var path = inside.Substring(0, sep).Trim();
-                            var itemTemplate = inside.Substring(sep + 1);
+                        var parts = SplitPipes(inside);
+                        if (parts.Count >= 2) {
+                            var path = parts[0].Trim();
+                            var itemTemplate = parts[1];
                             var target = SafeRead(context, path);
                             if (target is IEnumerable en && !(target is string)) {
                                 int count = 0;
@@ -224,30 +226,30 @@ namespace Figlotech.Core {
                                     if (++count > _maxCollection) break;
                                     sb.Append(Render(item, itemTemplate.AsSpan(), depth + 1) ?? string.Empty);
                                 }
-                                replacement = string.Empty; // appended directly
+                                replacement = string.Empty;
                             } else {
                                 replacement = Render(target, itemTemplate.AsSpan(), depth + 1) ?? string.Empty;
                             }
                         }
-                    } else if (opener == "<?") { // conditional
+                    } else if (opener == "<?") {
                         var inside = inner.ToString();
-                        var sep = inside.IndexOf('|');
-                        if (sep >= 0) {
-                            var condPath = inside.Substring(0, sep).Trim();
-                            var body = inside.Substring(sep + 1);
-                            var condValue = SafeRead(context, condPath);
-                            if (IsTruthy(condValue)) {
-                                replacement = Render(context, body.AsSpan(), depth + 1) ?? string.Empty;
+                        var parts = SplitPipes(inside);
+                        if (parts.Count >= 2) {
+                            var condExpr = parts[0].Trim();
+                            var thenBody = parts[1];
+                            var elseBody = parts.Count >= 3 ? parts[2] : string.Empty;
+                            if (EvaluateCondition(context, condExpr)) {
+                                replacement = Render(context, thenBody.AsSpan(), depth + 1) ?? string.Empty;
                             } else {
-                                replacement = string.Empty;
+                                replacement = Render(context, elseBody.AsSpan(), depth + 1) ?? string.Empty;
                             }
                         }
-                    } else if (opener == "<#") { // NEW: switch statement
+                    } else if (opener == "<#") {
                         var inside = inner.ToString();
-                        var sep = inside.IndexOf('|');
-                        if (sep >= 0) {
-                            var valuePath = inside.Substring(0, sep).Trim();
-                            var casesStr = inside.Substring(sep + 1).Trim();
+                        var parts = SplitPipes(inside);
+                        if (parts.Count >= 2) {
+                            var valuePath = parts[0].Trim();
+                            var casesStr = parts[1].Trim();
                             var switchValue = SafeRead(context, valuePath);
                             replacement = EvaluateSwitch(context, switchValue, casesStr, depth) ?? string.Empty;
                         }
@@ -256,7 +258,6 @@ namespace Figlotech.Core {
                     replacement = string.Empty;
                 }
 
-                // FIX: was "**" before; repeat is "<<"
                 if (opener != "<<") sb.Append(replacement);
 
                 i = endAfter;
@@ -361,12 +362,30 @@ namespace Figlotech.Core {
             if (string.IsNullOrEmpty(s)) return list;
             var sb = new StringBuilder();
             int paren = 0;
+            int tagDepth = 0;
             for (int i = 0; i < s.Length; i++) {
                 var ch = s[i];
+
                 if (ch == '(') paren++;
                 if (ch == ')') paren = Math.Max(0, paren - 1);
 
-                if (ch == '|' && paren == 0) {
+                if (i + 1 < s.Length) {
+                    var ch2 = s.Substring(i, 2);
+                    if (ch2 is "{{" or "[[" or "<<" or "<?" or "<#") {
+                        tagDepth++;
+                        sb.Append(ch2);
+                        i++;
+                        continue;
+                    }
+                    if (ch2 is "}}" or "]]" or ">>" or "?>" or "#>") {
+                        tagDepth = Math.Max(0, tagDepth - 1);
+                        sb.Append(ch2);
+                        i++;
+                        continue;
+                    }
+                }
+
+                if (ch == '|' && paren == 0 && tagDepth == 0) {
                     list.Add(sb.ToString());
                     sb.Clear();
                 } else sb.Append(ch);
@@ -422,6 +441,81 @@ namespace Figlotech.Core {
         }
 
         #endregion
+        #region Condition parsing (NEW)
+        private bool EvaluateCondition(object context, string expression) {
+            if (string.IsNullOrWhiteSpace(expression)) return false;
+
+            string trimmed = expression.Trim();
+            bool isNot = false;
+
+            if (trimmed.StartsWith("not ", StringComparison.OrdinalIgnoreCase)) {
+                isNot = true;
+                trimmed = trimmed.Substring(4).Trim();
+            }
+
+            string[] operators = { " eq ", " neq ", " gt ", " lt ", " gte ", " lte ", " == ", " != ", " > ", " < ", " >= ", " <= " };
+            string op = null;
+            int opIdx = -1;
+
+            foreach (var o in operators) {
+                int idx = trimmed.IndexOf(o, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0) {
+                    op = o.Trim();
+                    opIdx = idx;
+                    break;
+                }
+            }
+
+            bool result;
+            if (op != null) {
+                object left = ResolveValue(context, trimmed.Substring(0, opIdx).Trim());
+                object right = ResolveValue(context, trimmed.Substring(opIdx + op.Length + 2).Trim());
+
+                result = op.ToLowerInvariant() switch {
+                    "eq" or "==" => Equals(left?.ToString(), right?.ToString()),
+                    "neq" or "!=" => !Equals(left?.ToString(), right?.ToString()),
+                    "gt" or ">" => Compare(left, right) > 0,
+                    "lt" or "<" => Compare(left, right) < 0,
+                    "gte" or ">=" => Compare(left, right) >= 0,
+                    "lte" or "<=" => Compare(left, right) <= 0,
+                    _ => false
+                };
+            } else {
+                object value = ResolveValue(context, trimmed);
+                result = IsTruthy(value);
+            }
+
+            return isNot ? !result : result;
+        }
+
+        private object ResolveValue(object context, string valStr) {
+            if (string.IsNullOrWhiteSpace(valStr)) return null;
+
+            if (valStr == "null") return null;
+            if (valStr == "true") return true;
+            if (valStr == "false") return false;
+
+            if ((valStr.StartsWith("'") && valStr.EndsWith("'")) || (valStr.StartsWith("\"") && valStr.EndsWith("\""))) {
+                return valStr.Substring(1, valStr.Length - 2);
+            }
+
+            if (decimal.TryParse(valStr, NumberStyles.Any, _culture, out decimal d)) return d;
+
+            return SafeRead(context, valStr);
+        }
+
+        private int Compare(object left, object right) {
+            try {
+                decimal d1 = Convert.ToDecimal(left, _culture);
+                decimal d2 = Convert.ToDecimal(right, _culture);
+                return d1.CompareTo(d2);
+            } catch {
+                return string.Compare(left?.ToString(), right?.ToString(), StringComparison.Ordinal);
+            }
+        }
+
+        #endregion
+
         #region Truthiness helper (NEW)
         private bool IsTruthy(object value) {
             try {
@@ -461,34 +555,26 @@ namespace Figlotech.Core {
         #region Switch statement helper (NEW)
         private string EvaluateSwitch(object context, object switchValue, string casesStr, int depth) {
             try {
-                // Parse cases in format: "1:Debit;2:Credit;default" or "1:Debit;2:Credit;"
-                var cases = casesStr.Split(';');
-                string defaultCase = null;
+                // Parse cases in format: "1:Debit;2:Credit;default:Unknown"
+                var cases = casesStr.Split(';').Select(c => c.Trim()).Where(c => !string.IsNullOrEmpty(c));
                 var switchValueStr = switchValue?.ToString() ?? string.Empty;
 
                 foreach (var caseItem in cases) {
-                    var trimmed = caseItem.Trim();
-                    if (string.IsNullOrEmpty(trimmed)) continue;
+                    var colonIdx = caseItem.IndexOf(':');
+                    if (colonIdx < 0) continue;
 
-                    var colonIdx = trimmed.IndexOf(':');
-                    if (colonIdx < 0) {
-                        // No colon means it's a default case
-                        defaultCase = trimmed;
-                        continue;
+                    var caseKey = caseItem.Substring(0, colonIdx).Trim();
+                    var caseOutput = caseItem.Substring(colonIdx + 1).Trim();
+
+                    // Check for default case
+                    if (string.Equals(caseKey, "default", StringComparison.OrdinalIgnoreCase)) {
+                        return Render(context, caseOutput.AsSpan(), depth + 1) ?? string.Empty;
                     }
-
-                    var caseKey = trimmed.Substring(0, colonIdx).Trim();
-                    var caseOutput = trimmed.Substring(colonIdx + 1);
 
                     // Check if the switch value matches this case
                     if (string.Equals(switchValueStr, caseKey, StringComparison.Ordinal)) {
                         return Render(context, caseOutput.AsSpan(), depth + 1) ?? string.Empty;
                     }
-                }
-
-                // No match found, use default case if available
-                if (defaultCase != null) {
-                    return Render(context, defaultCase.AsSpan(), depth + 1) ?? string.Empty;
                 }
 
                 return string.Empty;
