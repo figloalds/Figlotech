@@ -34,6 +34,34 @@ namespace Figlotech.ExcelUtil {
             excelator = parent;
         }
 
+        public static int LettersToNums(string? s) {
+            if (s == null) {
+                return -1;
+            }
+            if (int.TryParse(s, out var ret)) {
+                return ret;
+            }
+            var retv = 0;
+            int len = 0;
+            for (int i = s.Length - 1; i >= 0; i--) {
+                var number = (int)new IntEx(s[i].ToString().ToUpper(), "*" + IntEx.Base26).ToLong();
+                if (i == s.Length - 1) {
+                    retv += number;
+                } else {
+                    retv += 26 * number * (s.Length - 1 - i);
+                }
+            }
+            return retv;
+        }
+
+        public object Get(string column) {
+            return Get(LettersToNums(column));
+        }
+
+        public T Get<T>(string column) {
+            return Get<T>(LettersToNums(column));
+        }
+
         public object Get(int column) {
             return excelator.Get(line, column);
         }

@@ -37,6 +37,10 @@ namespace Figlotech.Core.DomainEvents {
         }
     }
 
+    public sealed class EventRaiseResponse {
+        public List<TaskCompletionSource<int>> CompletionSources { get; internal set; }
+    }
+
     public sealed class DomainEventsHub {
 
         public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
@@ -145,7 +149,7 @@ namespace Figlotech.Core.DomainEvents {
 
         public bool AllowTelemetry { get; set; } = false;
 
-        public void Raise(IDomainEvent domainEvent) {
+        public EventRaiseResponse Raise(IDomainEvent domainEvent) {
             WriteLog($"Raising Event {domainEvent.GetType()}");
             // Cache event
             if(FiTechCoreExtensions.StdoutEventHubLogs) {
@@ -156,7 +160,7 @@ namespace Figlotech.Core.DomainEvents {
             }
             lock (EventCache) {
                 if(EventCache.Any(x=> x.Id == domainEvent.Id)) {
-                    return;
+                    return new EventRaiseResponse();
                 }
                 EventCache.RemoveAll(e => (DateTime.UtcNow - e.TimeStamp) > EventCacheDuration);
             }
@@ -215,6 +219,9 @@ namespace Figlotech.Core.DomainEvents {
                         }
                     });
             }
+            return new EventRaiseResponse() {
+                CompletionSources = tcsList,
+            };
         }
 
         public bool IsTimeInDomainCacheDuration(DateTime dt) {

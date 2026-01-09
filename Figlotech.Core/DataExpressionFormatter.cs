@@ -168,12 +168,14 @@ namespace Figlotech.Core {
                 int j1 = IndexOf(tpl, "{{", i);
                 int j2 = IndexOf(tpl, "[[", i);
                 int j3 = IndexOf(tpl, "<<", i);
-                int j4 = IndexOf(tpl, "<?", i);  // NEW: conditional opener
+                int j4 = IndexOf(tpl, "<?", i);
+                int j5 = IndexOf(tpl, "<#", i);  // NEW: switch opener
 
                 if (j1 >= 0 && (next < 0 || j1 < next)) { next = j1; opener = "{{"; closer = "}}"; }
                 if (j2 >= 0 && (next < 0 || j2 < next)) { next = j2; opener = "[["; closer = "]]"; }
                 if (j3 >= 0 && (next < 0 || j3 < next)) { next = j3; opener = "<<"; closer = ">>"; }
-                if (j4 >= 0 && (next < 0 || j4 < next)) { next = j4; opener = "<?"; closer = "?>"; } // NEW
+                if (j4 >= 0 && (next < 0 || j4 < next)) { next = j4; opener = "<?"; closer = "?>"; }
+                if (j5 >= 0 && (next < 0 || j5 < next)) { next = j5; opener = "<#"; closer = "#>"; } // NEW
 
                 if (next < 0) {
                     sb.Append(tpl.Slice(i).ToString());
@@ -227,7 +229,7 @@ namespace Figlotech.Core {
                                 replacement = Render(target, itemTemplate.AsSpan(), depth + 1) ?? string.Empty;
                             }
                         }
-                    } else if (opener == "<?") { // NEW: conditional
+                    } else if (opener == "<?") { // conditional
                         var inside = inner.ToString();
                         var sep = inside.IndexOf('|');
                         if (sep >= 0) {
@@ -239,6 +241,15 @@ namespace Figlotech.Core {
                             } else {
                                 replacement = string.Empty;
                             }
+                        }
+                    } else if (opener == "<#") { // NEW: switch statement
+                        var inside = inner.ToString();
+                        var sep = inside.IndexOf('|');
+                        if (sep >= 0) {
+                            var valuePath = inside.Substring(0, sep).Trim();
+                            var casesStr = inside.Substring(sep + 1).Trim();
+                            var switchValue = SafeRead(context, valuePath);
+                            replacement = EvaluateSwitch(context, switchValue, casesStr, depth) ?? string.Empty;
                         }
                     }
                 } catch {
@@ -442,6 +453,47 @@ namespace Figlotech.Core {
                 }
             } catch {
                 return false;
+            }
+        }
+
+        #endregion
+
+        #region Switch statement helper (NEW)
+        private string EvaluateSwitch(object context, object switchValue, string casesStr, int depth) {
+            try {
+                // Parse cases in format: "1:Debit;2:Credit;default" or "1:Debit;2:Credit;"
+                var cases = casesStr.Split(';');
+                string defaultCase = null;
+                var switchValueStr = switchValue?.ToString() ?? string.Empty;
+
+                foreach (var caseItem in cases) {
+                    var trimmed = caseItem.Trim();
+                    if (string.IsNullOrEmpty(trimmed)) continue;
+
+                    var colonIdx = trimmed.IndexOf(':');
+                    if (colonIdx < 0) {
+                        // No colon means it's a default case
+                        defaultCase = trimmed;
+                        continue;
+                    }
+
+                    var caseKey = trimmed.Substring(0, colonIdx).Trim();
+                    var caseOutput = trimmed.Substring(colonIdx + 1);
+
+                    // Check if the switch value matches this case
+                    if (string.Equals(switchValueStr, caseKey, StringComparison.Ordinal)) {
+                        return Render(context, caseOutput.AsSpan(), depth + 1) ?? string.Empty;
+                    }
+                }
+
+                // No match found, use default case if available
+                if (defaultCase != null) {
+                    return Render(context, defaultCase.AsSpan(), depth + 1) ?? string.Empty;
+                }
+
+                return string.Empty;
+            } catch {
+                return string.Empty;
             }
         }
 

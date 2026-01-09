@@ -29,6 +29,20 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
     }
 
+    public static class IFileSystemAsyncExtensions {
+        public static async Task RecursiveDeleteDirectoryAsync(this IFileSystem fs, string relative) {
+            var files = fs.GetFilesIn(relative);
+            foreach(var file in files) {
+                await fs.DeleteAsync(file);
+            }
+            var directories = fs.GetDirectoriesIn(relative);
+            foreach(var dir in directories) {
+                await fs.RecursiveDeleteDirectoryAsync(dir);
+            }
+            await fs.DeleteAsync(relative);
+        }
+    }
+
     public interface IFileSystem {
 
         bool IsCaseSensitive { get; }

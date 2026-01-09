@@ -11,7 +11,7 @@ namespace Figlotech.Core.InAppServiceHosting {
         public static ServiceHost Default { get; set; } = new ServiceHost();
 
         private List<IFthService> Services { get; set; } = new List<IFthService>();
-        ConcurrentDictionary<IFthService, Thread> ServiceThreads = new ConcurrentDictionary<IFthService, Thread>();
+        ConcurrentDictionary<IFthService, Task> ServiceTasks = new ConcurrentDictionary<IFthService, Task>();
         ConcurrentDictionary<IFthService, FthServiceInfo> ServiceInfos = new ConcurrentDictionary<IFthService, FthServiceInfo>();
         ConcurrentDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new ConcurrentDictionary<IFthService, CancellationTokenSource>();
 
@@ -33,17 +33,17 @@ namespace Figlotech.Core.InAppServiceHosting {
 
         int idgen = 0;
         public void Start(IFthService service) {
-            if (!ServiceThreads.ContainsKey(service)) {
-                var t = Fi.Tech.SafeCreateThread(() => {
+            if (!ServiceTasks.ContainsKey(service)) {
+                var t = Task.Run(async () => {
                     try {
                         var rt = service.Run();
                         if (rt != null) {
-                            rt.ConfigureAwait(false).GetAwaiter().GetResult();
+                            await rt.ConfigureAwait(false);
                         }
                         if (service is IFthCyclicService cServ) {
                             var rt2 = cServ.MainLoopInit();
                             if (rt2 != null) {
-                                rt2.ConfigureAwait(false).GetAwaiter().GetResult();
+                                await rt2.ConfigureAwait(false);
                             }
 
                             cServ.BreakMainLoop = false;
@@ -55,11 +55,11 @@ namespace Figlotech.Core.InAppServiceHosting {
                                     lt[l] = cServ.MainLoopIteration();
                                     var prev = (l - 1) >= 0 ? l - 1 : lt.Length - 1;
                                     if (lt[prev] != null && !lt[prev].IsCompleted) {
-                                        lt[prev].ConfigureAwait(false).GetAwaiter().GetResult();
+                                        await lt[prev].ConfigureAwait(false);
                                     }
                                     l = (l + 1) % lt.Length;
                                     try {
-                                        Task.Delay(cServ.IterationDelay, CyclicServiceIterationResets[cServ].Token).ConfigureAwait(false).GetAwaiter().GetResult();
+                                        await Task.Delay(cServ.IterationDelay, CyclicServiceIterationResets[cServ].Token).ConfigureAwait(false);
                                     } catch (TaskCanceledException) {
                                     } finally {
                                     }
@@ -72,26 +72,24 @@ namespace Figlotech.Core.InAppServiceHosting {
                         OnServiceError?.Invoke(service, x);
                     }
                 });
-                t.IsBackground = !service.IsCritical;
-                t.Name = $"fthservice_{idgen++}_{service.GetType().Name}";
-                t.Start();
                 Services.Add(service);
-                ServiceThreads[service] = t;
+                ServiceTasks[service] = t;
                 ServiceInfos[service] = new FthServiceInfo(service);
             }
         }
 
         public event Action<IFthService, Exception> OnServiceError;
 
-        public void Stop(IFthService service) {
-            if (ServiceThreads.ContainsKey(service)) {
+        public async Task WaitForAllToExit() {
+            await Task.WhenAll(ServiceTasks.Values).ConfigureAwait(false);
+        }
+
+        public async Task Stop(IFthService service) {
+            if (ServiceTasks.ContainsKey(service)) {
                 service.InterruptIssued = true;
-                ServiceThreads[service].Join(TimeSpan.FromSeconds(12));
+                await Fi.Tech.Timesout(ServiceTasks[service], TimeSpan.FromSeconds(12)).ConfigureAwait(false);
                 if (!service.IsCritical) {
-                    if (ServiceThreads[service].IsAlive) {
-                        ServiceThreads[service].Interrupt();
-                    }
-                    ServiceThreads.TryRemove(service, out _);
+                    ServiceTasks.TryRemove(service, out _);
                     ServiceInfos.TryRemove(service, out _);
                     CyclicServiceIterationResets.TryRemove(service, out _);
                 }
@@ -126,7 +124,7 @@ namespace Figlotech.Core.InAppServiceHosting {
 
         public async Task<string> Exec(string service, string Commands) {
             var svc = Services.FirstOrDefault(s => s.GetType().Name == service);
-            return svc != null ? await svc?.Exec(Commands) : null;
+            return svc != null ? await svc.Exec(Commands).ConfigureAwait(false) : null;
         }
     }
 }

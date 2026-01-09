@@ -33,13 +33,16 @@ namespace Figlotech.BDados {
 
         public int Count => Dictionary.Count;
 
-        public bool IsReadOnly => throw new NotImplementedException();
+        public bool IsReadOnly => Dictionary.IsReadOnly;
 
         private string SelfScheduleId = $"PersistenceCache{RID.GenerateNewAsBase36()}";
 
         public int MaxPersistenceBatchPerInterval = 100;
 
-        public T this[string key] { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public T this[string key] { 
+            get => Dictionary.TryGetValue(key, out var val) ? val.Object : default(T); 
+            set => Add(key, value); 
+        }
 
         public DelayedPersistenceCache(
             IRdbmsDataAccessor dataAccessor, 
