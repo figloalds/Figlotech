@@ -46,56 +46,125 @@ namespace Figlotech.Core
                 AllowNullValueCaching = true
             };
 
+        private enum SegmentType { Property, Index }
+
+        private struct PathSegment {
+            public SegmentType Type;
+            public string Value;
+        }
 
         public static object Read(object input, string path) {
-            var retv = input;
-            if (input != null) {
-                if (path.StartsWith("/"))
-                    path = path.Substring(1);
-                if (path.EndsWith("/"))
-                    path = path.Substring(0, path.Length - 1);
-                do {
-                    var idx = path.IndexOf('/');
-                    string current;
-                    if (idx >= 0) {
-                        current = (path.Substring(0, idx));
-                        path = (path.Substring(idx + 1, path.Length - idx - 1));
-                    } else {
-                        current = path;
-                        path = null;
-                    }
-                    var type = retv.GetType();
+            if (input == null) return null;
+            if (string.IsNullOrWhiteSpace(path)) return input;
+
+            try {
+                var segments = ParsePath(path);
+                var current = input;
+
+                foreach (var segment in segments) {
+                    if (current == null) return null;
+
+                    var type = current.GetType();
+
                     try {
-                        var squareGetterString = SquareMethodsStringCache[type];
-                        var squareGetterInt = SquareMethodsIntCache[type];
-                        if (squareGetterString != null) {
-                            retv = squareGetterString.Invoke(retv, new object[] { current });
-                        } else
-                        if (squareGetterInt != null && Int32.TryParse(current, out var currentI)) {
-                            retv = squareGetterInt.Invoke(retv, new object[] { currentI });
-                        } else {
-                            var prop = PropertyCache[type][current];
+                        if (segment.Type == SegmentType.Property) {
+                            // Try property access first
+                            var prop = PropertyCache[type][segment.Value];
                             if (prop != null) {
-                                retv = prop.GetValue(retv);
+                                current = prop.GetValue(current);
+                            } else {
+                                // Try string indexer
+                                var squareGetterString = SquareMethodsStringCache[type];
+                                if (squareGetterString != null) {
+                                    current = squareGetterString.Invoke(current, new object[] { segment.Value });
+                                } else {
+                                    return null;
+                                }
+                            }
+                        } else if (segment.Type == SegmentType.Index) {
+                            // Try int indexer first
+                            if (Int32.TryParse(segment.Value, out var index)) {
+                                var squareGetterInt = SquareMethodsIntCache[type];
+                                if (squareGetterInt != null) {
+                                    current = squareGetterInt.Invoke(current, new object[] { index });
+                                    continue;
+                                }
+                            }
+
+                            // Fall back to string indexer
+                            var squareGetterString = SquareMethodsStringCache[type];
+                            if (squareGetterString != null) {
+                                current = squareGetterString.Invoke(current, new object[] { segment.Value });
                             } else {
                                 return null;
                             }
                         }
                     }
-                    // The ValuePathReader is meant to be lenient
-                    // If the get-value logic throws a known exception,
-                    // we ignore it and return null
-                    // This is done on purpose and by design
-                    catch(TargetInvocationException) {
+                    catch (TargetInvocationException) {
                         return null;
                     } catch (IndexOutOfRangeException) {
                         return null;
-                    } catch(ArgumentOutOfRangeException) {
+                    } catch (ArgumentOutOfRangeException) {
                         return null;
                     }
-                } while (!string.IsNullOrEmpty(path));
+                }
+                if (current != null && current.GetType().IsEnum) {
+                    return (int)current;
+                }
+
+                return current;
+            } catch {
+                return null;
             }
-            return retv;
+        }
+
+        private static List<PathSegment> ParsePath(string path) {
+            var segments = new List<PathSegment>();
+            var current = new StringBuilder();
+            bool inBracket = false;
+
+            for (int i = 0; i < path.Length; i++) {
+                char ch = path[i];
+
+                if (ch == '[') {
+                    if (current.Length > 0) {
+                        var value = current.ToString().Trim();
+                        if (!string.IsNullOrEmpty(value)) {
+                            segments.Add(new PathSegment { Type = SegmentType.Property, Value = value });
+                        }
+                        current.Clear();
+                    }
+                    inBracket = true;
+                } else if (ch == ']') {
+                    if (inBracket && current.Length > 0) {
+                        var value = current.ToString().Trim();
+                        if (!string.IsNullOrEmpty(value)) {
+                            segments.Add(new PathSegment { Type = SegmentType.Index, Value = value });
+                        }
+                        current.Clear();
+                    }
+                    inBracket = false;
+                } else if (ch == '.' && !inBracket) {
+                    if (current.Length > 0) {
+                        var value = current.ToString().Trim();
+                        if (!string.IsNullOrEmpty(value)) {
+                            segments.Add(new PathSegment { Type = SegmentType.Property, Value = value });
+                        }
+                        current.Clear();
+                    }
+                } else {
+                    current.Append(ch);
+                }
+            }
+
+            if (current.Length > 0) {
+                var value = current.ToString().Trim();
+                if (!string.IsNullOrEmpty(value)) {
+                    segments.Add(new PathSegment { Type = SegmentType.Property, Value = value });
+                }
+            }
+
+            return segments;
         }
     }
 }

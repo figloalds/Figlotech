@@ -265,7 +265,7 @@ namespace Figlotech.Core {
 
             return sb.ToString();
         }
-
+        
         private void FindBalanced(ReadOnlySpan<char> tpl, int start, string opener, string closer, out ReadOnlySpan<char> inner, out int endAfter) {
             int oLen = opener.Length, cLen = closer.Length;
             int i = start + oLen, depth = 1;
@@ -558,6 +558,7 @@ namespace Figlotech.Core {
                 // Parse cases in format: "1:Debit;2:Credit;default:Unknown"
                 var cases = casesStr.Split(';').Select(c => c.Trim()).Where(c => !string.IsNullOrEmpty(c));
                 var switchValueStr = switchValue?.ToString() ?? string.Empty;
+                string defaultCase = null;
 
                 foreach (var caseItem in cases) {
                     var colonIdx = caseItem.IndexOf(':');
@@ -566,15 +567,21 @@ namespace Figlotech.Core {
                     var caseKey = caseItem.Substring(0, colonIdx).Trim();
                     var caseOutput = caseItem.Substring(colonIdx + 1).Trim();
 
-                    // Check for default case
+                    // Store default case for later
                     if (string.Equals(caseKey, "default", StringComparison.OrdinalIgnoreCase)) {
-                        return Render(context, caseOutput.AsSpan(), depth + 1) ?? string.Empty;
+                        defaultCase = caseOutput;
+                        continue;
                     }
 
                     // Check if the switch value matches this case
                     if (string.Equals(switchValueStr, caseKey, StringComparison.Ordinal)) {
                         return Render(context, caseOutput.AsSpan(), depth + 1) ?? string.Empty;
                     }
+                }
+
+                // If no case matched, return default case if available
+                if (defaultCase != null) {
+                    return Render(context, defaultCase.AsSpan(), depth + 1) ?? string.Empty;
                 }
 
                 return string.Empty;
