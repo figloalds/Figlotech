@@ -1775,7 +1775,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     result.Add(new {
                         conn.Connection.State,
                         conn.CreatedTime,
-                        StackTrace = conn.StackTrace.ToString()
+                        StackTrace = conn.StackTrace.ToString(),
+                        conn.FrameHistory,
                     });
                 }
             }
