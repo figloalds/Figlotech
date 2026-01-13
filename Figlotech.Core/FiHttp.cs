@@ -56,11 +56,11 @@ namespace Figlotech.Core {
 
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
-        public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage) {
+        public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage, CancellationToken ct) {
             var retv = new FiHttpResult(caller);
             try {
                 var client = caller.HttpClient;
-                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None).ConfigureAwait(false);
+                var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 await retv.Init(response).ConfigureAwait(false);
             } catch (WebException ex) {
                 await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
@@ -354,8 +354,8 @@ namespace Figlotech.Core {
             return $"{UrlPrefix}/{Url}";
         }
 
-        public async Task<bool> Check(string Url) {
-            var st = (int)(await (Get(Url)).ConfigureAwait(false)).StatusCode;
+        public async Task<bool> Check(string Url, CancellationToken? cancellationToken = null) {
+            var st = (int)(await (Get(Url, cancellationToken)).ConfigureAwait(false)).StatusCode;
             return st >= 200 && st < 300;
         }
 
@@ -387,54 +387,54 @@ namespace Figlotech.Core {
         public const string ContentTypeJson = "application/json";
         public const string ContentTypeFormUrlEncoded = "application/x-www-form-urlencoded";
         // GET
-        public async Task<FiHttpResult> Get(string Url) {
-            return await SendRequest(HttpMethod.Get, Url).ConfigureAwait(false);
+        public async Task<FiHttpResult> Get(string Url, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Get, Url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<T> Get<T>(string Url) {
-            return await SendRequest<T>(HttpMethod.Get, Url).ConfigureAwait(false);
+        public async Task<T> Get<T>(string Url, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Get, Url, cancellationToken).ConfigureAwait(false);
         }
 
 
         // DELETEdp1
-        public async Task<FiHttpResult> Delete(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Delete, url, form).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete(String url, MultipartFormDataContent form, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Delete, url, form, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Delete(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Delete, url, streamFunction).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete(string url, Func<Stream, Task> streamFunction, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Delete, url, streamFunction, null, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Delete(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Delete, url, stream, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete(string url, Stream stream, string contentType, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Delete, url, stream, contentType, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Delete(string url, string body) {
-            return await SendRequest(HttpMethod.Delete, url, body).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete(string url, string body, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Delete, url, body, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Delete(string url) {
-            return await SendRequest(HttpMethod.Delete, url).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Delete, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<T> Delete<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Delete, url).ConfigureAwait(false);
+        public async Task<T> Delete<T>(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Delete, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
         // POST
-        public async Task<FiHttpResult> Post(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Post, url, form).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post(String url, MultipartFormDataContent form, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Post, url, form, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Post(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Post, url, streamFunction).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post(string url, Func<Stream, Task> streamFunction, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Post, url, streamFunction, null, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Post(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Post, url, stream, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post(string url, Stream stream, string contentType, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Post, url, stream, contentType, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Post(string url, string body) {
-            return await SendRequest(HttpMethod.Post, url, body).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post(string url, string body, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Post, url, body, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Post<T>(string url, IAsyncEnumerable<T> body) {
+        public async Task<FiHttpResult> Post<T>(string url, IAsyncEnumerable<T> body, CancellationToken? cancellationToken = null) {
             return await SendRequest(HttpMethod.Post, url, async stream => {
                 await using var writer = new StreamWriter(stream, Fi.StandardEncoding, 8192, true);
                 var isFirst = true;
@@ -448,79 +448,82 @@ namespace Figlotech.Core {
                     await writer.WriteLineAsync(JsonConvert.SerializeObject(item, JsonSettings)).ConfigureAwait(false);
                 }
                 await writer.WriteLineAsync("]").ConfigureAwait(false);
-            }, "application/json").ConfigureAwait(false);
+            }, "application/json", cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Post(string url) {
-            return await SendRequest(HttpMethod.Post, url).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Post, url, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<T> Post<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Post, url).ConfigureAwait(false);
+        public async Task<T> Post<T>(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Post, url, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Post<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Post<T>(String url, T bodyData, string contentType, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Post, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
+        }
+        public async Task<FiHttpResult> Post<T>(String url, T bodyData, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Post, url, bodyData, "application/json", cancellationToken).ConfigureAwait(false);
         }
 
         // Put
-        public async Task<FiHttpResult> Put(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Put, url, form).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put(String url, MultipartFormDataContent form, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Put, url, form, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Put(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Put, url, streamFunction).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put(string url, Func<Stream, Task> streamFunction, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Put, url, streamFunction, null, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Put(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Put, url, stream, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put(string url, Stream stream, string contentType, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Put, url, stream, contentType, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Put(string url, string body) {
-            return await SendRequest(HttpMethod.Put, url, body).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put(string url, string body, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Put, url, body, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Put(string url) {
-            return await SendRequest(HttpMethod.Put, url).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Put, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<T> Put<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Put, url).ConfigureAwait(false);
+        public async Task<T> Put<T>(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Put, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
         // Patch
-        public async Task<FiHttpResult> Patch(String url, MultipartFormDataContent form) {
-            return await SendRequest(HttpMethod.Patch, url, form).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch(String url, MultipartFormDataContent form, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Patch, url, form, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> Patch(string url, Func<Stream, Task> streamFunction) {
-            return await SendRequest(HttpMethod.Patch, url, streamFunction).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch(string url, Func<Stream, Task> streamFunction, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Patch, url, streamFunction, null, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Patch(string url, Stream stream, string contentType) {
-            return await SendRequest(HttpMethod.Patch, url, stream, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch(string url, Stream stream, string contentType, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Patch, url, stream, contentType, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Patch(string url, string body) {
-            return await SendRequest(HttpMethod.Patch, url, body).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch(string url, string body, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Patch, url, body, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Patch(string url) {
-            return await SendRequest(HttpMethod.Patch, url).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest(HttpMethod.Patch, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<T> Patch<T>(string url) {
-            return await SendRequest<T>(HttpMethod.Patch, url).ConfigureAwait(false);
+        public async Task<T> Patch<T>(string url, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Patch, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = null) {
-            return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType).ConfigureAwait(false);
+        public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+            return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
         //**
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, MultipartFormDataContent form) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, MultipartFormDataContent form, CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
             req.Content = form;
-            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+            return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = null) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = null, CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
             using (var ms = new MemoryStream()) {
@@ -530,11 +533,11 @@ namespace Figlotech.Core {
                 if (!string.IsNullOrEmpty(contentType)) {
                     req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 }
-                return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+                return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
             }
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Stream stream, string contentType) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Stream stream, string contentType, CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
             req.Content = new StreamContent(stream) {
@@ -542,25 +545,25 @@ namespace Figlotech.Core {
                     ContentType = new MediaTypeHeaderValue(contentType)
                 }
             };
-            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+            return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, string body) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, string body, CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
             req.Content = new StringContent(body);
-            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+            return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
-            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+            return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
-        public async Task<T> SendRequest<T>(HttpMethod method, string url) {
+        public async Task<T> SendRequest<T>(HttpMethod method, string url, CancellationToken? cancellationToken = null) {
 
-            var result = await SendRequest(method, url).ConfigureAwait(false);
+            var result = await SendRequest(method, url, cancellationToken).ConfigureAwait(false);
 
             if (result.IsSuccess) {
                 return await result.As<T>().ConfigureAwait(false);
@@ -569,9 +572,9 @@ namespace Figlotech.Core {
             }
         }
 
-        public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = null) {
+        public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = null, CancellationToken? cancellationToken = null) {
             if (postData is Stream s) {
-                return await SendRequest(method, url, s, contentType).ConfigureAwait(false);
+                return await SendRequest(method, url, s, contentType, cancellationToken).ConfigureAwait(false);
             }
             contentType = contentType ?? ContentTypeJson;
             var bytes = GetObjectBytes(postData, contentType);
@@ -580,7 +583,7 @@ namespace Figlotech.Core {
             req.Content = new ByteArrayContent(bytes);
             req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             req.Content.Headers.ContentLength = bytes.Length;
-            return await FiHttpResult.InitFromRequest(this, req).ConfigureAwait(false);
+            return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
         private void UpdateSyncCode() {
@@ -615,16 +618,6 @@ namespace Figlotech.Core {
             if (!SyncKeyCodePassword.IsNullOrEmpty()) {
                 var hsc = HourlySyncCode.Generate(SyncKeyCodePassword).ToString();
                 req.Headers.Add("sync-key", hsc);
-            }
-        }
-
-        public async Task<HttpStatusCode> Get(string Url, Func<HttpStatusCode, Stream, Task> ActOnResponse = null) {
-            using (var result = await Get(Url).ConfigureAwait(false)) {
-                var code = result.StatusCode;
-                if(ActOnResponse != null) {
-                    await ActOnResponse(code, await result.AsStream().ConfigureAwait(false)).ConfigureAwait(false);
-                }
-                return code;
             }
         }
 
