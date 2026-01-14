@@ -140,8 +140,15 @@ namespace Figlotech.BDados {
 
         private async Task SaveToPersistentStorage<T>(IEnumerable<T> obj) where T : IDataObject, new() {
             try {
-                await using var tsn = await DataAccessor.CreateNewTransactionAsync(CancellationToken.None);
-                await DataAccessor.SaveListAsync<T>(tsn, obj.ToList());
+                var list = obj.ToList();
+                if(list.Count == 0) {
+                    return;
+                }
+                using var cts = new CancellationTokenSource();
+                cts.CancelAfter(this.PersistenceInterval);
+                await DataAccessor.AccessAsync(async (tsn) => {
+                    await DataAccessor.SaveListAsync(tsn, list);
+                }, cts.Token);
             } catch (Exception ex) {
                 Debug.WriteLine($"Error persisting objects: {ex.Message}");
             }
@@ -149,8 +156,11 @@ namespace Figlotech.BDados {
 
         private async Task SaveToPersistentStorage<T>(T obj) where T: IDataObject, new() {
             try {
-                await using var tsn = await DataAccessor.CreateNewTransactionAsync(CancellationToken.None);
-                await DataAccessor.SaveItemAsync(tsn, obj);
+                using var cts = new CancellationTokenSource();
+                cts.CancelAfter(this.PersistenceInterval);
+                await DataAccessor.AccessAsync(async (tsn) => {
+                    await DataAccessor.SaveItemAsync(tsn, obj);
+                }, cts.Token);
             } catch (Exception ex) {
                 Debug.WriteLine($"Error object: {ex.Message}");
             }
