@@ -1,5 +1,4 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using MySql.Data.MySqlClient;
 using System;
 using System.Data;
 using System.Collections.Generic;
@@ -10,6 +9,7 @@ using System.Reflection;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados;
 using System.Text.RegularExpressions;
+using MySqlConnector;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlPlugin : IRdbmsPluginAdapter {
