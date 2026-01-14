@@ -877,6 +877,10 @@ namespace Figlotech.Core {
             }
         }
 
+        public static async IAsyncEnumerable<T> EmptyAsyncEnumerable<T>(this Fi _selfie) {
+            yield break;
+        }
+
         public static object ProperMapValue(this Fi __selfie, object o) {
             if (o is DateTime dt && dt.Kind != DateTimeKind.Utc) {
                 // I reluctantly admit that I'm using this horrible gimmick
