@@ -30,6 +30,9 @@ namespace Figlotech.Data
                 if (ProcessParameterValue != null) {
                     usableValue = ProcessParameterValue.Invoke(param.Value);
                 }
+                if (usableValue != null && usableValue.GetType().DerivesFromGeneric(typeof(ValueBox<>))) {
+                    usableValue = usableValue.GetType().GetProperty("Value").GetValue(usableValue);
+                }
                 if (usableValue == null) {
                     cmdParam.Value = DBNull.Value;
                 } else if (usableValue is String str) {

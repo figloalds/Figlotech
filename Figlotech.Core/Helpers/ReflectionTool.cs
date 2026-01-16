@@ -143,13 +143,17 @@ namespace Figlotech.Core.Helpers {
                     
                 ) ? t : TypeAsDerivingFromGeneric(t.BaseType, ancestorType);
         }
+
+        private static readonly ConcurrentDictionary<(Type t, Type ancestor), bool> TypeDerivesFromGenericResponseCache = new ConcurrentDictionary<(Type t, Type ancestor), bool>(); 
         public static bool TypeDerivesFromGeneric(Type t, Type ancestorType) {
-            return
-                (t != null && t != typeof(Object)) &&
-                (
-                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType ||
-                    TypeDerivesFromGeneric(t.BaseType, ancestorType)
-                );
+            return TypeDerivesFromGenericResponseCache.GetOrAdd((t, ancestorType), (tup) => {
+                return
+                    (tup.t != null && tup.t != typeof(Object)) &&
+                    (
+                        tup.t.IsGenericType && tup.t.GetGenericTypeDefinition() == tup.ancestor ||
+                        TypeDerivesFromGeneric(tup.t.BaseType, tup.ancestor)
+                    );
+            });
         }
 
         public static IEnumerable<Type> GetLoadableTypesFrom(Assembly assembly) {
