@@ -17,22 +17,24 @@ namespace System {
             if (!self.Active || self.marks == null)
                 return 0;
             try {
-                if(self.marks.Count > 1)
-                    self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
-                self.marks.Add(new TimeMark(self.marks[0].Timestamp, txt) {
-                    Exception = ex
-                });
-                if (self.marks.Count < 2)
-                    return 0;
-                var retv = self.marks[self.marks.Count - 1]
-                    .Timestamp.Subtract(self.marks[self.marks.Count - 2].Timestamp).TotalMilliseconds;
+                lock (self.marks) {
+                    if (self.marks.Count > 1)
+                        self.marks[self.marks.Count - 1].SetDuration(DateTime.UtcNow);
+                    self.marks.Add(new TimeMark(self.marks[0].Timestamp, txt) {
+                        Exception = ex
+                    });
+                    if (self.marks.Count < 2)
+                        return 0;
+                    var retv = self.marks[self.marks.Count - 1]
+                        .Timestamp.Subtract(self.marks[self.marks.Count - 2].Timestamp).TotalMilliseconds;
 
-                if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut) {
-                    var r2 = self.marks[self.marks.Count - 1]
-                        .Timestamp.Subtract(self.marks[0].Timestamp).TotalMilliseconds;
-                    Console.WriteLine($"{r2} {txt}");
+                    if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut) {
+                        var r2 = self.marks[self.marks.Count - 1]
+                            .Timestamp.Subtract(self.marks[0].Timestamp).TotalMilliseconds;
+                        Console.WriteLine($"{r2} {txt}");
+                    }
+                    return retv;
                 }
-                return retv;
             } catch (Exception) {
             }
             return 0;
@@ -109,18 +111,23 @@ namespace System {
             if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
                 yield break;
 
-            var retv = TotalTime(self);
+            TimeMark[] snapshot;
+            lock (self.marks) {
+                snapshot = self.marks.ToArray();
+            }
+            if (snapshot.Length == 0) yield break;
+            var retv = (snapshot[snapshot.Length - 1].Timestamp - snapshot[0].Timestamp).TotalMilliseconds;
             yield return ($"--------------------------");
             yield return ($"{self.myName}");
             yield return ($"--------------------------");
             yield return ($" | 0ms ");
-            for (int i = 0; i < self.marks.Count - 1; i++) {
-                yield return ($" | [{i}] {self.marks[i].Name} +[{self.marks[i].Duration.TotalMilliseconds}ms]");
-                if (self.marks[i].Exception != null) {
-                    var ex = self.marks[i].Exception;
+            for (int i = 0; i < snapshot.Length - 1; i++) {
+                yield return ($" | [{i}] {snapshot[i].Name} +[{snapshot[i].Duration.TotalMilliseconds}ms]");
+                if (snapshot[i].Exception != null) {
+                    var ex = snapshot[i].Exception;
                     do {
-                        yield return ($" | [{i}] => Thrown {self.marks[i].Exception.Message}");
-                        yield return ($" | [{i}] => StackTrace {self.marks[i].Exception.StackTrace}");
+                        yield return ($" | [{i}] => Thrown {ex.Message}");
+                        yield return ($" | [{i}] => StackTrace {ex.StackTrace}");
                         ex = ex.InnerException;
                     } while (ex != null);
                 }
@@ -131,7 +138,10 @@ namespace System {
         }
 
         public static double TotalTime(this Benchmarker self) {
-            return (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+            lock (self.marks) {
+                if (self.marks.Count == 0) return 0;
+                return (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+            }
         }
 
         public static double FinalMark(this Benchmarker self) {
@@ -141,11 +151,14 @@ namespace System {
             if (!self.Active)
                 return 0;
             try {
-                var initMark = self.marks[0];
-                if (self.marks.Count < 2)
-                    self.marks.Add(new TimeMark(initMark.Timestamp, self.myName));
-                self.marks.Add(new TimeMark(DateTime.UtcNow, "--- end"));
-                var retv = (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+                double retv;
+                lock (self.marks) {
+                    var initMark = self.marks[0];
+                    if (self.marks.Count < 2)
+                        self.marks.Add(new TimeMark(initMark.Timestamp, self.myName));
+                    self.marks.Add(new TimeMark(DateTime.UtcNow, "--- end"));
+                    retv = (self.marks[self.marks.Count - 1].Timestamp - self.marks[0].Timestamp).TotalMilliseconds;
+                }
                 if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut || self.WriteToStdout) {
                     lock ("BENCHMARKER BM_WRITE") {
                         foreach(var item in self.VerboseLog()) {
