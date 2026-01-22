@@ -10,6 +10,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Accumulators;
 
 namespace System
 {
@@ -98,6 +99,12 @@ namespace System
                 if(item != null) {
                     yield return item;
                 }
+            }
+        }
+
+        public static async IAsyncEnumerable<T> ToResults<T>(this IEnumerable<Task<T>> promises) {
+            foreach (var promise in promises) {
+                yield return await promise;
             }
         }
 
