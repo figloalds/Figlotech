@@ -1836,7 +1836,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public async Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public async Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
             await transaction.StepAsync().ConfigureAwait(false);
             bool retv = true;
 
@@ -2012,7 +2012,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
             return SaveListAsync<T>(transaction, rs, recoverIds)
                 .ConfigureAwait(false)
                 .GetAwaiter()
@@ -2067,7 +2067,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return true;
         }
 
-        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
             return Access((transaction) => {
                 return SaveList<T>(transaction, rs, recoverIds);
             });

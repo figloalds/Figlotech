@@ -324,7 +324,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         );
 
         static int gid = 0;
-        public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : IDataObject {
+        public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : ILegacyDataObject {
             QueryBuilder retv = new QueryBuilder();
 
             int x = 0;
@@ -344,7 +344,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public static QueryBuilder ListRids2<T>(this Fi _selfie, List<T> set) where T : IDataObject {
+        public static QueryBuilder ListRids2<T>(this Fi _selfie, List<T> set) where T : ILegacyDataObject {
             QueryBuilder retv = new QueryBuilder();
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(

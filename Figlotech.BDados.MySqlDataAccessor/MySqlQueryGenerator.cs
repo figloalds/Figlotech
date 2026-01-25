@@ -33,23 +33,24 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
         }
 
-        public IQueryBuilder CheckExistsById<T>(long Id) where T : IDataObject {
+        public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
         }
-        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : ILegacyDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
         }
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
+            var omitPk = ShouldOmmitPrimaryKey(inputObject);
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
-            query.Append(GenerateFieldsString(inputObject.GetType(), true));
+            query.Append(GenerateFieldsString(inputObject.GetType(), omitPk));
             query.Append(")");
             query.Append("VALUES (");
             var members = GetMembers(inputObject.GetType());
             bool isFirst = true;
             for (int i = 0; i < members.Length; i++) {
-                if (members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null) {
+                if (omitPk && members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null) {
                     continue;
                 }
                 var val = ReflectionTool.GetMemberValue(members[i], inputObject);
@@ -87,6 +88,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             //    }
             //}
             return query;
+        }
+
+        private static bool ShouldOmmitPrimaryKey(IDataObject inputObject) {
+            if (inputObject == null) {
+                return true;
+            }
+            var type = inputObject.GetType();
+            return !type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IApplicationGeneratedId<>));
         }
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {
             var dataLen = fields.Max(f => f.Value.Length);
@@ -435,11 +444,18 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
-            var rid = FiTechBDadosExtensions.RidColumnNameOf[tabelaInput.GetType()];
-            QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
+            var type = tabelaInput.GetType();
+            var usesLegacyKey = typeof(ILegacyDataObject).IsAssignableFrom(type);
+            var keyColumn = usesLegacyKey
+                ? FiTechBDadosExtensions.RidColumnNameOf[type]
+                : FiTechBDadosExtensions.IdColumnNameOf[type];
+            var keyValue = usesLegacyKey
+                ? ((ILegacyDataObject)tabelaInput).RID
+                : tabelaInput.Id;
+            QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", type.Name));
             Query.Append("SET");
             Query.Append(GenerateUpdateValueParams(tabelaInput, true));
-            Query.Append($" WHERE {rid} = @rid;", tabelaInput.RID);
+            Query.Append($" WHERE {keyColumn} = @key;", keyValue);
             return Query;
         }
 
@@ -472,7 +488,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 Query.Append(",");
             }
             Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", input.RID);
+            if (typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", ((ILegacyDataObject)input).RID);
+            } else {
+                Query.Append($"WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", input.Id);
+            }
 
             return Query;
         }
@@ -517,7 +537,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         static int gid = 0;
 
-        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
+        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : ILegacyDataObject {
             // -- 
             var t = inputRecordset?.FirstOrDefault()?.GetType();
             if(t == null) {
@@ -574,7 +594,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : ILegacyDataObject {
 
             var t = inputRecordset.FirstOrDefault()?.GetType();
             if(t == null) {
@@ -770,7 +790,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QbFmt(creationCommand);
         }
 
-        public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
+        public IQueryBuilder QueryIds<T>(List<T> rs) where T : ILegacyDataObject {
             if(!rs.Any()) {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }

@@ -70,11 +70,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<List<IDataObject>> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
         Task<List<IDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt);
 
-        Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject;
-        Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, long Id) where T : IDataObject;
+        Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : ILegacyDataObject;
+        Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, object Id) where T : IDataObject;
 
-        Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject;
-        Task<bool> ExistsByIdAsync<T>(long Id) where T : IDataObject;
+        Task<bool> ExistsByRIDAsync<T>(string RID) where T : ILegacyDataObject;
+        Task<bool> ExistsByIdAsync<T>(object Id) where T : IDataObject;
 
         DataTable Query(BDadosTransaction transaction, IQueryBuilder Query);
         ValueTask QueryToJsonAsync<T>(BDadosTransaction transaction, IQueryBuilder query, TextWriter writer) where T : new();
@@ -89,8 +89,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         bool SaveItem(BDadosTransaction transaction, IDataObject input);
         Task<bool> SaveItemAsync(BDadosTransaction transaction, IDataObject input);
-        bool SaveList<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
-        Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : IDataObject;
+        bool SaveList<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : ILegacyDataObject;
+        Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> target, bool recoverIds = false) where T : ILegacyDataObject;
 
         T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
 
@@ -99,9 +99,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<T> LoadFirstOrDefaultAsync<T>(LoadAllArgs<T> args = null) where T : IDataObject, new();
         Task<T> LoadFirstOrDefaultAsync<T>(Expression<Func<T, bool>> predicate) where T : IDataObject, new();
 
-        T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
-        Task<T> LoadByRidAsync<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new();
-        T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new();
+        T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : ILegacyDataObject, new();
+        Task<T> LoadByRidAsync<T>(BDadosTransaction transaction, String RID) where T : ILegacyDataObject, new();
+        T LoadById<T>(BDadosTransaction transaction, object Id) where T : IDataObject, new();
 
         T ForceExist<T>(BDadosTransaction transaction, Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
         Task<List<T>> LoadAllAsync<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
@@ -110,13 +110,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IEnumerable<T> Fetch<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new();
 
         bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new();
-        bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new();
+        bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : ILegacyDataObject, new();
         bool Delete<T>(BDadosTransaction transaction, Expression<Func<T, bool>> condition) where T : IDataObject, new();
-        bool Delete(BDadosTransaction transaction, IDataObject obj);
+        bool Delete(BDadosTransaction transaction, ILegacyDataObject obj);
         bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new();
-        Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new();
+        Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> rids) where T : ILegacyDataObject, new();
         Task<bool> DeleteAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> condition) where T : IDataObject, new();
-        Task<bool> DeleteAsync(BDadosTransaction transaction, IDataObject obj);
+        Task<bool> DeleteAsync(BDadosTransaction transaction, ILegacyDataObject obj);
         Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new();
 
         Task<List<T>> AggregateLoadAsync<T>(
