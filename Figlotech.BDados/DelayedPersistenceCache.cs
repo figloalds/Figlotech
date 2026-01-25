@@ -12,14 +12,14 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados {
 
-    public class PersistenceCacheObject<T> where T : IDataObject, new() {
+    public class PersistenceCacheObject<T> where T : ILegacyDataObject, new() {
         public bool IsDirty { get; set; } = false;
         public DateTime LastSetDirty { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
         public T Object { get; set; }
     }
 
-    public sealed class DelayedPersistenceCache<T> : IAsyncDisposable, IDictionary<string, T> where T : IDataObject, new() {
+    public sealed class DelayedPersistenceCache<T> : IAsyncDisposable, IDictionary<string, T> where T : ILegacyDataObject, new() {
         private TimedCache<string, PersistenceCacheObject<T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
         private TimeSpan PersistenceInterval { get; set; }
@@ -138,7 +138,7 @@ namespace Figlotech.BDados {
             Dictionary.Clear();
         }
 
-        private async Task SaveToPersistentStorage<T>(IEnumerable<T> obj) where T : IDataObject, new() {
+        private async Task SaveToPersistentStorage<T>(IEnumerable<T> obj) where T : ILegacyDataObject, new() {
             try {
                 var list = obj.ToList();
                 if(list.Count == 0) {
@@ -154,7 +154,7 @@ namespace Figlotech.BDados {
             }
         }
 
-        private async Task SaveToPersistentStorage<T>(T obj) where T: IDataObject, new() {
+        private async Task SaveToPersistentStorage<T>(T obj) where T: ILegacyDataObject, new() {
             try {
                 using var cts = new CancellationTokenSource();
                 cts.CancelAfter(this.PersistenceInterval);

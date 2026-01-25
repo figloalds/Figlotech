@@ -46,12 +46,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static MemberInfo GetRidColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
 
-            var retv = fields
+            var reliable = fields
                 .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
                 .FirstOrDefault();
-            return retv;
+            if (reliable != null) {
+                return reliable;
+            }
+
+            var primaryKey = fields
+                .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
+                .FirstOrDefault();
+            return primaryKey;
         }
-        public static SelfInitializerDictionary<Type, string> UpdateColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetUpdateColumn(t)?.Name ?? "UpdatedTime");
+        public static SelfInitializerDictionary<Type, string> UpdateColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => {
+            var explicitColumn = Fi.Tech.GetUpdateColumn(t)?.Name;
+            if (explicitColumn != null) {
+                return explicitColumn;
+            }
+            return typeof(ILegacyDataObject).IsAssignableFrom(t) ? "UpdatedTime" : "UpdatedAt";
+        });
         public static SelfInitializerDictionary<Type, MemberInfo> UpdateColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetUpdateColumn(t));
         
         public static SelfInitializerDictionary<Type, String> RidColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t)?.Name ?? "RID");

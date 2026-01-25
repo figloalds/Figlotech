@@ -7,7 +7,7 @@ using System;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public abstract class BaseDataObject : IDataObject {
+    public abstract class BaseDataObject : ILegacyDataObject {
 
         public BaseDataObject(IDataAccessor dataAccessor, IContextProvider ctxProvider) {
             DataAccessor = dataAccessor;
@@ -71,6 +71,37 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void ForceRID(String newRid) {
             RID = newRid;
+        }
+
+        object IDataObject.Id {
+            get {
+                return Id;
+            }
+            set {
+                if (value == null) {
+                    Id = 0;
+                    return;
+                }
+                Id = (long)Convert.ChangeType(value, typeof(long));
+            }
+        }
+
+        DateTime IDataObject.CreatedAt {
+            get {
+                return CreatedTime;
+            }
+            set {
+                CreatedTime = value;
+            }
+        }
+
+        DateTime? IDataObject.UpdatedAt {
+            get {
+                return UpdatedTime;
+            }
+            set {
+                UpdatedTime = value;
+            }
         }
 
         public void Delete(ConditionParametrizer conditions = null) {

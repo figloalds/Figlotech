@@ -10,13 +10,13 @@ namespace Figlotech.Core.Interfaces {
     public static class IDataObjectExtensions {
         public static ulong localInstanceId { get; private set; } = RID.MachineRID2.AsULong;
 
-        public static bool WasCreatedLocally (this IDataObject o) => o.CreatedBy == localInstanceId;
-        public static bool WasAlteredLocally (this IDataObject o) => o.AlteredBy == localInstanceId;
+        public static bool WasCreatedLocally(this ILegacyDataObject o) => o.CreatedBy == localInstanceId;
+        public static bool WasAlteredLocally(this ILegacyDataObject o) => o.AlteredBy == localInstanceId;
 
         static SelfInitializerDictionary<Type, MemberInfo[]> membersList = new SelfInitializerDictionary<Type, MemberInfo[]>(
-            (t) => ReflectionTool.FieldsAndPropertiesOf(t).Where(f=> f.Name != "PersistedHash").ToArray()
+            (t) => ReflectionTool.FieldsAndPropertiesOf(t).Where(f => f.Name != "PersistedHash").ToArray()
         );
-        public static int SpFthComputeDataFieldsHash(this IDataObject self) {
+        public static int SpFthComputeDataFieldsHash(this ILegacyDataObject self) {
             if (self == null) {
                 return 0;
             }
@@ -28,8 +28,8 @@ namespace Figlotech.Core.Interfaces {
             return retv;
         }
 
-        public static T CloneIntoNewDataObject<T>(this T self) where T : IDataObject, new() {
-            if(self == null) {
+        public static T CloneIntoNewDataObject<T>(this T self) where T : ILegacyDataObject, new() {
+            if (self == null) {
                 return default(T);
             }
             var retv = new T();
@@ -38,18 +38,28 @@ namespace Figlotech.Core.Interfaces {
             retv.UpdatedTime = DateTime.UtcNow;
             retv.CreatedTime = DateTime.UtcNow;
             retv.RID = null;
-            if(retv.RID == null) {
+            if (retv.RID == null) {
                 retv.RID = new RID().AsBase36;
             }
             return retv;
         }
     }
 
-    public interface IDataObject 
-    {
-        //void ForceId(long novoId);
-        //void ForceRID(String novoRid);
+    public interface IDataObject {
+        object Id { get; set; }
+        DateTime CreatedAt { get; set; }
+        DateTime? UpdatedAt { get; set; }
+    }
 
+    public interface IDataObject<TId> : IDataObject {
+        new TId Id { get; set; }
+    }
+
+    public interface IApplicationGeneratedId<TId> {
+        TId GenerateId();
+    }
+
+    public interface ILegacyDataObject : IDataObject<long> {
         long Id { get; set; }
         DateTime? UpdatedTime { get; set; }
         DateTime CreatedTime { get; set; }

@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public abstract class DataObject<T> : BaseDataObject, IDataObject, IBusinessObject where T: IDataObject, IBusinessObject, new() {
+    public abstract class DataObject<T> : BaseDataObject, IBusinessObject where T: ILegacyDataObject, IBusinessObject, new() {
 
         [Field()]
         [PrimaryKey]
