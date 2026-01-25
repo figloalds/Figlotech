@@ -18,8 +18,7 @@ using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     
-    public class RecordSet<T> : List<T>, IEnumerable<T>
-        where T : IDataObject, new() {
+    public class RecordSet<T> : List<T>, IEnumerable<T> where T : ILegacyDataObject, new() {
 
 
         internal IDataAccessor dataAccessor;

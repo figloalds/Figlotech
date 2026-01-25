@@ -27,7 +27,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static bool LinearLoad = false;
 
         static uint upseq = 0;
-        public static Qb ListRids<T>(this List<T> me) where T: IDataObject, new() {
+        public static Qb ListRids<T>(this List<T> me) where T: ILegacyDataObject, new() {
             Qb retv = new Qb();
             for (int i = 0; i < me.Count; i++) {
                 retv.Append($"@{++upseq}_{i}", me[i].RID);
@@ -50,7 +50,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             agl.Clear();
         }
 
-        public static bool Save<T>(this List<T> me, IDataAccessor DataAccessor) where T : IDataObject, new() {
+        public static bool Save<T>(this List<T> me, IDataAccessor DataAccessor) where T : ILegacyDataObject, new() {
             return DataAccessor?.SaveList(me) ?? false;
         }
 
@@ -80,7 +80,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return rs;
         }
                 
-        public static void MakeUnique(this IDataObject self) {
+        public static void MakeUnique(this ILegacyDataObject self) {
             self.Id = 0;
             self.RID = null;
             self.IsPersisted = false;
