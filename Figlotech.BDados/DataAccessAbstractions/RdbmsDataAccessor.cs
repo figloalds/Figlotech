@@ -262,7 +262,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
                 if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
                     MutatedObjects.Add(AutoMutateTargets[i].Target, true);
-                    AutoMutateTargets[i].Target.UpdatedTime = DateTime.UtcNow;
+                    if (AutoMutateTargets[i].Target is ILegacyDataObject legacy) {
+                        legacy.UpdatedTime = DateTime.UtcNow;
+                    } else {
+                        AutoMutateTargets[i].Target.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
             }
             AutoMutateTargets.Clear();
@@ -297,7 +301,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
                 if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
                     MutatedObjects.Add(AutoMutateTargets[i].Target, true);
-                    AutoMutateTargets[i].Target.UpdatedTime = DateTime.UtcNow;
+                    if (AutoMutateTargets[i].Target is ILegacyDataObject legacy) {
+                        legacy.UpdatedTime = DateTime.UtcNow;
+                    } else {
+                        AutoMutateTargets[i].Target.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
             }
             AutoMutateTargets.Clear();
@@ -1038,15 +1046,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public T LoadById<T>(long Id) where T : IDataObject, new() {
+        public T LoadById<T>(object Id) where T : IDataObject, new() {
             return Access((transaction) => LoadById<T>(transaction, Id), null);
         }
 
-        public T LoadByRid<T>(String RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(String RID) where T : ILegacyDataObject, new() {
             return Access((transaction) => LoadByRid<T>(transaction, RID), null);
         }
 
-        public async Task<T> LoadByRidAsync<T>(BDadosTransaction tsn, string RID) where T : IDataObject, new() {
+        public async Task<T> LoadByRidAsync<T>(BDadosTransaction tsn, string RID) where T : ILegacyDataObject, new() {
             return (await LoadAllAsync<T>(tsn, Figlotech.Core.Interfaces.LoadAll.From<T>().Where(x => x.RID == RID).Limit(1))).FirstOrDefault();
         }
 
@@ -1087,11 +1095,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return target;
         }
 
-        public bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new() {
+        public bool Delete<T>(IEnumerable<T> obj) where T : ILegacyDataObject, new() {
             return Access((transaction) => Delete(transaction, obj), null);
         }
 
-        public bool Delete(IDataObject obj) {
+        public bool Delete(ILegacyDataObject obj) {
             return Access((transaction) => Delete(transaction, obj), null);
         }
 
@@ -1783,7 +1791,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return result;
         }
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
             return Access((transaction) => DeleteWhereRidNotIn(transaction, cnd, list));
         }
 
@@ -1899,8 +1907,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 temp = rs;
             }
             List<Exception> failedSaves = new List<Exception>();
-            List<IDataObject> successfulSaves = new List<IDataObject>();
-            List<IDataObject> failedObjects = new List<IDataObject>();
+            List<ILegacyDataObject> successfulSaves = new List<ILegacyDataObject>();
+            List<ILegacyDataObject> failedObjects = new List<ILegacyDataObject>();
             transaction?.Benchmarker.Mark($"Begin SaveList<{typeof(T).Name}> process");
             //WorkQueuer wq = rs.Count > cut ? new WorkQueuer("SaveList_Annonymous_Queuer", 1, true) : null;
 
@@ -1918,7 +1926,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
                         lock (successfulSaves)
-                            successfulSaves.AddRange(inserts.Select(a => (IDataObject)a));
+                            successfulSaves.AddRange(inserts.Select(a => (ILegacyDataObject)a));
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
@@ -1948,7 +1956,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
                         lock (successfulSaves)
-                            successfulSaves.AddRange(updates.Select(a => (IDataObject)a));
+                            successfulSaves.AddRange(updates.Select(a => (ILegacyDataObject)a));
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
@@ -1997,10 +2005,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark($"SaveList all done");
             if (failedSaves.Any()) {
                 transaction?.MarkAsErrored();
-                throw new BDadosException($"Not everything could be saved list of type {typeof(T).Name}", transaction.FrameHistory, failedObjects, new AggregateException(failedSaves));
+                throw new BDadosException($"Not everything could be saved list of type {typeof(T).Name}", transaction.FrameHistory, failedObjects.Cast<IDataObject>().ToList(), new AggregateException(failedSaves));
             }
             if (failedObjects.Any()) {
-                var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects, null);
+                var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects.Cast<IDataObject>().ToList(), null);
                 if (OnFailedSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
@@ -2025,13 +2033,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             retv = Query(transaction, qb).Rows[0][0];
             return retv;
         }
-        public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
             return DeleteWhereRidNotInAsync(transaction, cnd, list)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
-        public async Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+        public async Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
             int retv = 0;
             if (list == null)
                 return true;
@@ -2297,13 +2305,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream) {
 
-            var cache = new List<IDataObject>();
+            var cache = new List<ILegacyDataObject>();
             int maxCacheLenBeforeFlush = 5000;
             var persistenceQueue = new WorkQueuer("rcv_updates_persist", 1, true);
 
             Action flushAndPersist = () => {
                 lock (cache) {
-                    var persistenceBatch = new List<IDataObject>(cache);
+                    var persistenceBatch = new List<ILegacyDataObject>(cache);
                     cache.Clear();
                     persistenceQueue.Enqueue(async () => {
                         await Task.Yield();
@@ -2547,13 +2555,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering, contextObject).ToList();
         }
-        public bool Delete(BDadosTransaction transaction, IDataObject obj) {
+        public bool Delete(BDadosTransaction transaction, ILegacyDataObject obj) {
             return DeleteAsync(transaction, obj)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
-        public async Task<bool> DeleteAsync(BDadosTransaction transaction, IDataObject obj) {
+        public async Task<bool> DeleteAsync(BDadosTransaction transaction, ILegacyDataObject obj) {
             await transaction.StepAsync().ConfigureAwait(false);
 
             bool retv = false;
@@ -2571,14 +2579,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
+        public bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : ILegacyDataObject, new() {
             return DeleteAsync(transaction, obj)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
 
-        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
+        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : ILegacyDataObject, new() {
             await transaction.StepAsync().ConfigureAwait(false);
 
             bool retv = false;
@@ -2639,14 +2647,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.MarkAsErrored();
                 throw new BDadosException("Error saving item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
             }
+            if (input is ILegacyDataObject legacy) {
+                return await SaveLegacyItemAsync(transaction, legacy).ConfigureAwait(false);
+            }
 
+            return await SaveGenericItemAsync(transaction, input).ConfigureAwait(false);
+        }
+
+        private async Task<bool> SaveLegacyItemAsync(BDadosTransaction transaction, ILegacyDataObject input) {
             var t = input.GetType();
             bool retv = false;
 
             int rs = -33;
-
-            var id = GetIdColumn(t);
-            var rid = GetRidColumn(t);
 
             if (!input.IsReceivedFromSync) {
                 input.UpdatedTime = Fi.Tech.GetUtcTime();
@@ -2696,7 +2708,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             if (input.Id <= 0) {
-                long retvId = 0;
                 var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, Plugin.QueryGenerator.QueryIds(input.ToSingleElementList())).ConfigureAwait(false);
                 foreach (var dr in queryIds) {
                     if (input != null && dr.RID.ToString() == input.RID.ToString()) {
@@ -2728,6 +2739,121 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             };
 
             return rs > 0;
+        }
+
+        private async Task<bool> SaveGenericItemAsync(BDadosTransaction transaction, IDataObject input) {
+            var t = input.GetType();
+            var now = Fi.Tech.GetUtcTime();
+            if (input.CreatedAt == default(DateTime)) {
+                input.CreatedAt = now;
+            }
+            input.UpdatedAt = now;
+
+            EnsureApplicationGeneratedId(input);
+            var exists = await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
+
+            try {
+                if (exists) {
+                    var query = Plugin.QueryGenerator.GenerateUpdateQuery(input);
+                    await ExecuteAsync(transaction, query).ConfigureAwait(false);
+                } else {
+                    var query = Plugin.QueryGenerator.GenerateInsertQuery(input);
+                    await ExecuteAsync(transaction, query).ConfigureAwait(false);
+                }
+            } catch (Exception x) {
+                if (OnFailedSave != null) {
+                    Fi.Tech.FireAndForget(async () => {
+                        await Task.Yield();
+                        OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                    }, async (xe) => {
+                        await Task.Yield();
+                        Fi.Tech.Throw(xe);
+                    });
+                }
+                transaction?.MarkAsErrored();
+                throw new BDadosException("Error Saving Item", x);
+            }
+
+            if (IsDefaultId(input.Id)) {
+                await TryLoadLastInsertIdAsync(transaction, input).ConfigureAwait(false);
+            }
+
+            transaction.OnTransactionEnding += () => {
+                transaction.NotifyChange(new[] { input });
+
+                if (OnSuccessfulSave != null) {
+                    Fi.Tech.FireAndForget(async () => {
+                        await Task.Yield();
+                        OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
+                    }, async (xe) => {
+                        await Task.Yield();
+                        Fi.Tech.Throw(xe);
+                    });
+                }
+            };
+
+            return true;
+        }
+
+        private static bool IsDefaultId(object id) {
+            if (id == null) {
+                return true;
+            }
+            var idType = id.GetType();
+            if (!idType.IsValueType) {
+                return false;
+            }
+            var defaultValue = Activator.CreateInstance(idType);
+            return id.Equals(defaultValue);
+        }
+
+        private static void EnsureApplicationGeneratedId(IDataObject input) {
+            if (!IsDefaultId(input.Id)) {
+                return;
+            }
+            var type = input.GetType();
+            var interfaceType = type.GetInterfaces()
+                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IApplicationGeneratedId<>));
+            if (interfaceType == null) {
+                return;
+            }
+            var method = interfaceType.GetMethod("GenerateId");
+            if (method == null) {
+                return;
+            }
+            var generatedId = method.Invoke(input, null);
+            input.Id = generatedId;
+        }
+
+        private async Task<bool> ExistsByIdAsync(BDadosTransaction transaction, Type type, object id) {
+            var method = Plugin.QueryGenerator.GetType().GetMethod("CheckExistsById");
+            var typed = method?.MakeGenericMethod(type);
+            var query = typed?.Invoke(Plugin.QueryGenerator, new[] { id }) as IQueryBuilder;
+            if (query == null) {
+                return false;
+            }
+            return ((await QueryAsync<ValueBox<int>>(transaction, query)).FirstOrDefault()?.Value ?? 0) > 0;
+        }
+
+        private async Task TryLoadLastInsertIdAsync(BDadosTransaction transaction, IDataObject input) {
+            var type = input.GetType();
+            var method = Plugin.QueryGenerator.GetType().GetMethod("GetLastInsertId");
+            var typed = method?.MakeGenericMethod(type);
+            var query = typed?.Invoke(Plugin.QueryGenerator, null) as IQueryBuilder;
+            if (query == null) {
+                return;
+            }
+            var result = (await QueryAsync<ValueBox<long>>(transaction, query)).FirstOrDefault();
+            if (result == null) {
+                return;
+            }
+            var idMember = FiTechBDadosExtensions.IdColumnOf[type];
+            if (idMember == null) {
+                input.Id = result.Value;
+                return;
+            }
+            var idType = ReflectionTool.GetTypeOf(idMember);
+            input.Id = Convert.ChangeType(result.Value, idType);
         }
 
         public bool SaveItem(BDadosTransaction transaction, IDataObject input) {
