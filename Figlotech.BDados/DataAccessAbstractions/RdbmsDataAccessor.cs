@@ -2331,8 +2331,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             };
 
             foreach (var instance in ReceiveRemoteUpdates(types, stream)) {
-                lock (cache) {
-                    cache.Add(instance);
+                if (instance is ILegacyDataObject legacy) {
+                    lock (cache) {
+                        cache.Add(legacy);
+                    }
                 }
                 if (persistenceQueue.TotalWork - persistenceQueue.WorkDone > 2) {
                     Thread.Sleep(100);
@@ -2524,14 +2526,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return QueryAsync<T>(transaction, query).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        public T LoadById<T>(BDadosTransaction transaction, long Id) where T : IDataObject, new() {
+        public T LoadById<T>(BDadosTransaction transaction, object Id) where T : IDataObject, new() {
             transaction.StepAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
             var id = GetIdColumn(typeof(T));
             return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id), null, 1).FirstOrDefault();
         }
 
-        public T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : ILegacyDataObject, new() {
             transaction.StepAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
             var rid = GetRidColumn(typeof(T));
@@ -2890,18 +2892,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         );
 
-        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : ILegacyDataObject{
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsByRID<T>(RID))).FirstOrDefault()?.Value ?? 0) > 0;
         }
-        public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, long Id) where T : IDataObject{
+        public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, object Id) where T : IDataObject{
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsById<T>(Id))).FirstOrDefault()?.Value ?? 0) > 0;
         }
-        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : ILegacyDataObject{
             return await AccessAsync(async (tsn) => {
                 return await ExistsByRIDAsync<T>(tsn, RID);
             }, CancellationToken.None);
         }
-        public async Task<bool> ExistsByIdAsync<T>(long Id) where T : IDataObject {
+        public async Task<bool> ExistsByIdAsync<T>(object Id) where T : IDataObject {
             return await AccessAsync(async (tsn) => {
                 return await ExistsByIdAsync<T>(tsn, Id);
             }, CancellationToken.None);

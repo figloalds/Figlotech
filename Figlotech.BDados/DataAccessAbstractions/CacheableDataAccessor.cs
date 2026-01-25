@@ -47,14 +47,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return DataAccessor.LoadFirstOrDefault(args);
         }
 
-        public T LoadByRid<T>(string RID) where T : IDataObject, new() {
+        public T LoadByRid<T>(string RID) where T : ILegacyDataObject, new() {
             return DataAccessor.LoadByRid<T>(RID);
         }
-        public T LoadById<T>(long Id) where T : IDataObject, new() {
+        public T LoadById<T>(object Id) where T : IDataObject, new() {
             return DataAccessor.LoadById<T>(Id);
         }
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> rids) where T : ILegacyDataObject, new() {
             return DataAccessor.DeleteWhereRidNotIn(cnd, rids);
         }
 
@@ -62,11 +62,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return DataAccessor.Delete(condition);
         }
 
-        public bool Delete(IDataObject obj) {
+        public bool Delete(ILegacyDataObject obj) {
             return DataAccessor.Delete(obj);
         }
 
-        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
+        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
             return DataAccessor.SaveList(rs, recoverIds);
         }
 

@@ -33,21 +33,24 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
         }
 
-        public IQueryBuilder CheckExistsById<T>(long Id) where T : IDataObject {
+        public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
         }
-        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : ILegacyDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
         }
 
         public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
+            var omitPk = ShouldOmmitPrimaryKey(inputObject);
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
-            query.Append(GenerateFieldsString(inputObject.GetType(), true));
+            query.Append(GenerateFieldsString(inputObject.GetType(), omitPk));
             query.Append(")");
             query.Append("VALUES (");
             var members = GetMembers(inputObject.GetType());
-            members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            if (omitPk) {
+                members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+            }
             for (int i = 0; i < members.Count; i++) {
                 query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
                 if (i < members.Count - 1) {
@@ -65,6 +68,14 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 }
             }
             return query;
+        }
+
+        private static bool ShouldOmmitPrimaryKey(IDataObject inputObject) {
+            if (inputObject == null) {
+                return true;
+            }
+            var type = inputObject.GetType();
+            return !type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IApplicationGeneratedId<>));
         }
 
         public IQueryBuilder GetCreationCommand(Type t) {
