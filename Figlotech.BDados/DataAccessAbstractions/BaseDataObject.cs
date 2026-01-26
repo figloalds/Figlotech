@@ -23,8 +23,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public abstract long Id { get; set; }
-        public abstract DateTime? UpdatedTime { get; set; }
-        public abstract DateTime CreatedTime { get; set; }
+        public abstract DateTime? UpdatedAt { get; set; }
+        public abstract DateTime CreatedAt { get; set; }
         public abstract bool IsActive { get; set; }
         public abstract String RID { get; set; }
 
@@ -65,43 +65,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        object IDataObject.Id {
+            get => this.Id; set {
+                if (value is long l) {
+                    this.Id = l;
+                } else if (value is int i) {
+                    this.Id = i;
+                } else if (value is string str && long.TryParse(str, out long parsed)) {
+                    this.Id = parsed;
+                } else {
+                    throw new InvalidCastException("Cannot cast value to long for Id property.");
+                }
+            }
+        }
+
         public void ForceId(long newId) {
             this.Id = newId;
         }
 
         public void ForceRID(String newRid) {
             RID = newRid;
-        }
-
-        object IDataObject.Id {
-            get {
-                return Id;
-            }
-            set {
-                if (value == null) {
-                    Id = 0;
-                    return;
-                }
-                Id = (long)Convert.ChangeType(value, typeof(long));
-            }
-        }
-
-        DateTime IDataObject.CreatedAt {
-            get {
-                return CreatedTime;
-            }
-            set {
-                CreatedTime = value;
-            }
-        }
-
-        DateTime? IDataObject.UpdatedAt {
-            get {
-                return UpdatedTime;
-            }
-            set {
-                UpdatedTime = value;
-            }
         }
 
         public void Delete(ConditionParametrizer conditions = null) {

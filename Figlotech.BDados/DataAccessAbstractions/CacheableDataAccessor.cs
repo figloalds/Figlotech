@@ -11,7 +11,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public sealed class CacheableDataAccessor : IDataAccessor {
         private IDataAccessor DataAccessor { get; set; }
         bool CacheEverything { get; set; }
-        private SelfInitializerDictionary<Type, LenientDictionary<String, IDataObject>> Cache { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, IDataObject>>((type)=> new LenientDictionary<string, IDataObject>());
+        private SelfInitializerDictionary<Type, LenientDictionary<String, ILegacyDataObject>> Cache { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, ILegacyDataObject>>((type)=> new LenientDictionary<string, ILegacyDataObject>());
         private List<Type> CacheableTypes { get; set; } = new List<Type>();
         public CacheableDataAccessor(IDataAccessor da, bool cacheEverything) {
             throw new Exception("THIS IS A WORK IN PROGRESS");
@@ -47,14 +47,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return DataAccessor.LoadFirstOrDefault(args);
         }
 
-        public T LoadByRid<T>(string RID) where T : ILegacyDataObject, new() {
+        public T LoadByRid<T>(string RID) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return default(T);
+            }
             return DataAccessor.LoadByRid<T>(RID);
         }
         public T LoadById<T>(object Id) where T : IDataObject, new() {
             return DataAccessor.LoadById<T>(Id);
         }
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> rids) where T : ILegacyDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> rids) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return false;
+            }
             return DataAccessor.DeleteWhereRidNotIn(cnd, rids);
         }
 
@@ -62,11 +68,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return DataAccessor.Delete(condition);
         }
 
-        public bool Delete(ILegacyDataObject obj) {
+        public bool Delete(IDataObject obj) {
             return DataAccessor.Delete(obj);
         }
 
-        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
+        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
             return DataAccessor.SaveList(rs, recoverIds);
         }
 

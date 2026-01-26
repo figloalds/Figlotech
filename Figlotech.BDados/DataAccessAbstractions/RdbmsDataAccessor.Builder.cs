@@ -385,7 +385,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public async Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+        public async Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : ILegacyDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
@@ -483,7 +483,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterListAggregateLoadAsync").DeclaringType == t
         );
 
-        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : ILegacyDataObject, new() {
             List<T> retv = new List<T>();
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
@@ -564,8 +564,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        private List<IDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
-            var retv = new List<IDataObject>();
+        private List<ILegacyDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
+            var retv = new List<ILegacyDataObject>();
             transaction?.Benchmarker?.Mark("Init Build Result");
             while (reader.Read()) {
                 var typename = reader["TypeName"] as String;
@@ -579,7 +579,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 for (int i = 0; i < tFields.Length; i++) {
                     ReflectionTool.SetMemberValue(tFields[i], instance, reader[$"data_{i}"]);
                 }
-                retv.Add((IDataObject) instance);
+                retv.Add((ILegacyDataObject) instance);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");

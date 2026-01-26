@@ -35,8 +35,8 @@ namespace Figlotech.Core.Interfaces {
             var retv = new T();
             retv.CopyFrom(self);
             retv.Id = 0;
-            retv.UpdatedTime = DateTime.UtcNow;
-            retv.CreatedTime = DateTime.UtcNow;
+            retv.UpdatedAt = DateTime.UtcNow;
+            retv.CreatedAt = DateTime.UtcNow;
             retv.RID = null;
             if (retv.RID == null) {
                 retv.RID = new RID().AsBase36;
@@ -60,9 +60,7 @@ namespace Figlotech.Core.Interfaces {
     }
 
     public interface ILegacyDataObject : IDataObject<long> {
-        long Id { get; set; }
-        DateTime? UpdatedTime { get; set; }
-        DateTime CreatedTime { get; set; }
+
         String RID { get; set; }
         bool IsPersisted { get; set; }
 

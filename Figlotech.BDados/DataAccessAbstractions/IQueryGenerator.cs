@@ -23,8 +23,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
         IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, int? skip, int? limit, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();
         IQueryBuilder GenerateJoinQuery(JoinDefinition juncaoInput, IQueryBuilder condicoes, int? p = 0, int? limit = 100, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder condicoesRoot = null);
-        IQueryBuilder GenerateMultiInsert<T>(List<T> conjuntoInput, bool OmmitPk = true) where T : ILegacyDataObject;
-        IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : ILegacyDataObject;
+        IQueryBuilder GenerateMultiInsert<T>(List<T> conjuntoInput, bool OmmitPk = true) where T : IDataObject;
+        IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject;
         IQueryBuilder GenerateCallProcedure(string name, object[] args);
         IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment);
         IQueryBuilder InformationSchemaQueryTables(string schema);
@@ -50,9 +50,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
         IQueryBuilder GetCreationCommand(Type t);
         IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd);
-        IQueryBuilder QueryIds<T>(List<T> rs) where T : ILegacyDataObject;
+        IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject;
         IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject;
-        IQueryBuilder CheckExistsByRID<T>(string RID) where T : ILegacyDataObject;
+        IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject;
         IQueryBuilder DisableForeignKeys();
         IQueryBuilder EnableForeignKeys();
         string GetDatabaseType(MemberInfo field, FieldAttribute fieldAtt);

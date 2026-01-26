@@ -36,7 +36,10 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
         }
-        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : ILegacyDataObject {
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 0 Value WHERE FALSE");
+            }
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
         }
 
@@ -460,7 +463,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T: IDataObject {
-            QueryBuilder Query = new QueryBuilder($"UPDATE {typeof(T).Name} SET");
+            var type = input.GetType();
+            QueryBuilder Query = new QueryBuilder($"UPDATE {type.Name} SET");
             var addComma = false;
             var prefix = IntEx.GenerateShortRid();
             int c = 0;
@@ -487,11 +491,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if(addComma) {
                 Query.Append(",");
             }
-            Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            if (typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
-                Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", ((ILegacyDataObject)input).RID);
+            Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[type]}=@dt", DateTime.UtcNow);
+            if (input is ILegacyDataObject legdo) {
+                Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[type]}=@rid", legdo.RID);
             } else {
-                Query.Append($"WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", input.Id);
+                Query.Append($"WHERE {FiTechBDadosExtensions.IdColumnNameOf[type]}=@id", input.Id);
             }
 
             return Query;
@@ -521,6 +525,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
+            if (!(tabelaInput is ILegacyDataObject)) {
+                return null;
+            }
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
             for (int i = 0; i < fields.Length; i++) {
@@ -537,19 +544,23 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         static int gid = 0;
 
-        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : ILegacyDataObject {
+        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return null;
+            }
             // -- 
-            var t = inputRecordset?.FirstOrDefault()?.GetType();
+            var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
+            var t = legacySet?.FirstOrDefault()?.GetType();
             if(t == null) {
                 return Qb.Fmt("SELECT 1");
             }
 
-            List<T> workingSet = new List<T>();
+            List<ILegacyDataObject> workingSet = new List<ILegacyDataObject>();
 
             var rid = FiTechBDadosExtensions.RidColumnNameOf[t];
             var upd = FiTechBDadosExtensions.UpdateColumnNameOf[t];
 
-            workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
+            workingSet.AddRange(legacySet.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
                 return null;
             }
@@ -576,12 +587,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     Query.Append(",\r\n");
                 }
                 Query.Append($"\t{members[i].Name}=(CASE ");
-                for(int ridx = 0; ridx < inputRecordset.Count; ridx++) {
-                    Query.Append($"WHEN {rid}=@r_{ridx}", inputRecordset[ridx].RID);
-                    if(inputRecordset[ridx].IsReceivedFromSync) {
-                        Query.Append($"AND {upd}<@u_{ridx}", inputRecordset[ridx].UpdatedTime);
+                for(int ridx = 0; ridx < legacySet.Count; ridx++) {
+                    Query.Append($"WHEN {rid}=@r_{ridx}", legacySet[ridx].RID);
+                    if(legacySet[ridx].IsReceivedFromSync) {
+                        Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
                     }
-                    var val = ReflectionTool.GetMemberValue(members[i], inputRecordset[ridx]);
+                    var val = ReflectionTool.GetMemberValue(members[i], legacySet[ridx]);
                     Query.Append($"THEN @{ggid}_{++x}", val);
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
@@ -594,15 +605,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : ILegacyDataObject {
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = true) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return null;
+            }
 
-            var t = inputRecordset.FirstOrDefault()?.GetType();
+            var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
+            var t = legacySet?.FirstOrDefault()?.GetType();
             if(t == null) {
                 return Qb.Fmt("SELECT 1");
             }
 
-            List<T> workingSet = new List<T>();
-            workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
+            List<ILegacyDataObject> workingSet = new List<ILegacyDataObject>();
+            workingSet.AddRange(legacySet.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
@@ -779,6 +794,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 1 WHERE FALSE");
+            }
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
             return new QueryBuilder().Append($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
@@ -790,15 +808,22 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QbFmt(creationCommand);
         }
 
-        public IQueryBuilder QueryIds<T>(List<T> rs) where T : ILegacyDataObject {
+        public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
+            }
             if(!rs.Any()) {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }
-            var t = rs.First().GetType();
+            var legacySet = rs.OfType<ILegacyDataObject>().ToList();
+            if (legacySet.Count == 0) {
+                return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
+            }
+            var t = legacySet.First().GetType();
             var id = FiTechBDadosExtensions.IdColumnNameOf[t];
             var rid = FiTechBDadosExtensions.RidColumnNameOf[t];
 
-            var retv = Qb.Fmt($"SELECT {id}, {rid} FROM {t.Name} WHERE") + Qb.In(rid, rs, i => i.RID);
+            var retv = Qb.Fmt($"SELECT {id}, {rid} FROM {t.Name} WHERE") + Qb.In(rid, legacySet, i => i.RID);
 
             //if(rs.Any(i=> i.Id>0)) {
             //    var existingIds = rs.Where(i => i.Id > 0).ToList();

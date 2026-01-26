@@ -33,7 +33,10 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", Id);
         }
-        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : ILegacyDataObject {
+        public IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 0 Value WHERE FALSE");
+            }
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
         }
 
@@ -130,7 +133,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 foreach (var att in field.GetCustomAttributes())
                     if (att is PrimaryKeyAttribute) {
                         options = " PRIMARY KEY";
-                        tipo = "SERIAL";
+                        if(typeOfField != typeof(Guid) && typeOfField != typeof(string)) {
+                            tipo = "SERIAL";
+                        }
                     }
             }
 
@@ -140,6 +145,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public string ConvertDefaultOption(object input, Type type) {
             if (input == null) {
                 return "NULL";
+            }
+            if (type == typeof(Guid)) {
+                return "gen_random_uuid()";
             }
             if (type == typeof(string)) {
                 return Fi.Tech.CheapSanitize(input);
@@ -230,6 +238,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                         break;
                     case "datetime":
                         type = $"TIMESTAMP";
+                        break;
+                    case "guid":
+                        type = "UUID";
                         break;
                 }
             }
@@ -393,7 +404,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder GenerateUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
-            QueryBuilder Query = new QueryBuilder($"UPDATE {typeof(T).Name} SET");
+            var type = input.GetType();
+            QueryBuilder Query = new QueryBuilder($"UPDATE {type.Name} SET");
             var addComma = false;
             var prefix = IntEx.GenerateShortRid();
             int c = 0;
@@ -410,11 +422,11 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (addComma) {
                 Query.Append(",");
             }
-            Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[typeof(T)]}=@dt", DateTime.UtcNow);
-            if (typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
-                Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", ((ILegacyDataObject)input).RID);
+            Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[type]}=@dt", DateTime.UtcNow);
+            if (input is ILegacyDataObject legacyInput) {
+                Query.Append($"WHERE {FiTechBDadosExtensions.RidColumnNameOf[type]}=@rid", legacyInput.RID);
             } else {
-                Query.Append($"WHERE {FiTechBDadosExtensions.IdColumnNameOf[typeof(T)]}=@id", input.Id);
+                Query.Append($"WHERE {FiTechBDadosExtensions.IdColumnNameOf[type]}=@id", input.Id);
             }
 
             return Query;
@@ -440,6 +452,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
         uint gvIdGen = 0;
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
+            if (!(tabelaInput is ILegacyDataObject)) {
+                return null;
+            }
             var cod = $"_gv{++gvIdGen}_";
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
@@ -456,29 +471,38 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
 
         }
 
-        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : ILegacyDataObject {
+        public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return null;
+            }
             // -- 
-            List<T> workingSet = new List<T>();
+            var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
+            var type = legacySet?.FirstOrDefault()?.GetType();
+            if (type == null) {
+                return null;
+            }
+            List<ILegacyDataObject> workingSet = new List<ILegacyDataObject>();
 
-            var rid = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
+            var rid = FiTechBDadosExtensions.RidColumnNameOf[type];
+            var ridFieldType = FiTechBDadosExtensions.RidFieldType[type];
 
-            workingSet.AddRange(inputRecordset.Where((record) => record.IsPersisted));
+            workingSet.AddRange(legacySet.Where((record) => record.IsPersisted));
             if (workingSet.Count < 1) {
                 return null;
             }
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"UPDATE {typeof(T).Name} ");
+            Query.Append($"UPDATE {type.Name} ");
             Query.Append("SET ");
 
             // -- 
-            var members = GetMembers(typeof(T));
+            var members = GetMembers(type);
             members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             int x = 0;
             for (var i = 0; i < members.Count; i++) {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
-                foreach (var a in inputRecordset) {
-                    Query.Append($"WHEN {rid}=@_mu{x++} THEN @_mu{x++}", Convert.ChangeType(a.RID, FiTechBDadosExtensions.RidFieldType[a.GetType()]), ReflectionTool.GetMemberValue(members[i], a));
+                foreach (var a in legacySet) {
+                    Query.Append($"WHEN {rid}=@_mu{x++} THEN @_mu{x++}", Convert.ChangeType(a.RID, ridFieldType), ReflectionTool.GetMemberValue(members[i], a));
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {
@@ -493,14 +517,22 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = false) where T : ILegacyDataObject {
-            List<T> workingSet = new List<T>();
-            workingSet.AddRange(inputRecordset.Where((r) => !r.IsPersisted));
+        public IQueryBuilder GenerateMultiInsert<T>(List<T> inputRecordset, bool OmmitPk = false) where T : IDataObject {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return null;
+            }
+            var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
+            var type = legacySet?.FirstOrDefault()?.GetType();
+            if (type == null) {
+                return null;
+            }
+            List<ILegacyDataObject> workingSet = new List<ILegacyDataObject>();
+            workingSet.AddRange(legacySet.Where((r) => !r.IsPersisted));
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT INTO {typeof(T).Name} (");
-            Query.Append(GenerateFieldsString(typeof(T), OmmitPk));
+            Query.Append($"INSERT INTO {type.Name} (");
+            Query.Append(GenerateFieldsString(type, OmmitPk));
             Query.Append(") VALUES");
             // -- 
             for (int i = 0; i < workingSet.Count; i++) {
@@ -597,7 +629,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
             return new QueryBuilder().Append(@$"ALTER TABLE {table} 
 ALTER COLUMN {member.Name} DROP DEFAULT, 
-ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING(nullif({member.Name}, null)::{GetDatabaseType(member, fieldAttribute)}), 
+ALTER COLUMN {member.Name} TYPE {GetDatabaseTypeWithLength(member, fieldAttribute)} USING(nullif({member.Name}, null)::{GetDatabaseType(member, fieldAttribute)}),
 ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.DefaultValue, ReflectionTool.GetTypeOf(member))};");
         }
         public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
@@ -675,6 +707,9 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
         }
 
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 1 WHERE FALSE");
+            }
             var id = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             var rid = ReflectionTool.FieldsAndPropertiesOf(typeof(T)).FirstOrDefault(f => f.GetCustomAttribute<ReliableIdAttribute>() != null);
             return new QueryBuilder().Append($"SELECT {id.Name} FROM {typeof(T).Name} WHERE {rid.Name}=@???", Rid);
@@ -687,12 +722,19 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
         }
 
         public IQueryBuilder QueryIds<T>(List<T> rs) where T : IDataObject {
-            var type = rs.FirstOrDefault()?.GetType()??typeof(T);
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
+            }
+            var legacySet = rs.OfType<ILegacyDataObject>().ToList();
+            if (legacySet.Count == 0) {
+                return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
+            }
+            var type = legacySet.FirstOrDefault()?.GetType()??typeof(T);
             var id = FiTechBDadosExtensions.IdColumnNameOf[type];
             var rid = FiTechBDadosExtensions.RidColumnNameOf[type];
             var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));
 
-            return Qb.Fmt($"SELECT {id} AS Id, {rid} AS RID FROM {type.Name} WHERE") + Qb.In(rid, rs, i => Convert.ChangeType(i.RID, ridType));
+            return Qb.Fmt($"SELECT {id} AS Id, {rid} AS RID FROM {type.Name} WHERE") + Qb.In(rid, legacySet, i => Convert.ChangeType(i.RID, ridType));
         }
 
         public IQueryBuilder GenerateGetStateChangesQuery(List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields, DateTime moment) {

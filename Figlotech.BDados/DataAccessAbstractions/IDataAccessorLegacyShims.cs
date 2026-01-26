@@ -14,16 +14,16 @@ using System.Threading.Tasks;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public static class ILegacyLoadAllOptionsShimExtensions {
 
-        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : IDataObject, new() {
+        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : ILegacyDataObject, new() {
             return self.LoadAll((IQueryBuilder)Qb.Fmt(query, args), (int?)null, (int?)null, (Expression<Func<T, object>>)null, OrderingType.Asc, (object)null);
         }
-        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : IDataObject, new() {
+        public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : ILegacyDataObject, new() {
             return self.LoadAll(transaction, (IQueryBuilder)Qb.Fmt(query, args), (int?)null, (int?)null, (Expression<Func<T, object>>)null, OrderingType.Asc, (object)null);
         }
-        public static List<T> Query<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : IDataObject, new() {
+        public static List<T> Query<T>(this IRdbmsDataAccessor self, string query, params object[] args) where T : ILegacyDataObject, new() {
             return self.Query<T>((IQueryBuilder)Qb.Fmt(query, args));
         }
-        public static List<T> Query<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : IDataObject, new() {
+        public static List<T> Query<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, string query, params object[] args) where T : ILegacyDataObject, new() {
             return self.Query<T>(transaction, (IQueryBuilder)Qb.Fmt(query, args));
         }
         public static DataTable Query(this IRdbmsDataAccessor self, string query, params object[] args) {
@@ -40,7 +40,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static List<T> LoadAll<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return self.LoadAll<T>(
                 Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
@@ -50,7 +50,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static T LoadFirstOrDefault<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.LoadFirstOrDefault<T>(
                 Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
@@ -60,7 +60,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static IEnumerable<T> Fetch<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.LoadAll<T>(
                 Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
@@ -70,7 +70,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static List<T> AggregateLoad<T>(this IDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.AggregateLoad<T>(
                 Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
@@ -84,7 +84,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public static class ILegacyRecordsetShimExtensions {
         public static RecordSet<T> LoadAll<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return self.LoadAll(
                 Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
@@ -93,7 +93,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             );
         }
         public static RecordSet<T> LoadAllLinear<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.LoadAllLinear(
                 Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
@@ -103,7 +103,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static IEnumerable<T> Fetch<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return self.Fetch(
                 Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
@@ -113,7 +113,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static IEnumerable<T> FetchLinear<T>(this RecordSet<T> self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.FetchLinear(
                 Core.Interfaces.LoadAll.Where(conditions)
                     .Skip(skip)
@@ -125,7 +125,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public static class ILegacyRdbmsLoadAllOptionsShimExtensions {
         public static List<T> LoadAll<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return self.LoadAll<T>(
                 transaction,
                 Core.Interfaces.LoadAll.Where<T>(conditions)
@@ -135,7 +135,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             );
         }
         public static async Task<List<T>> LoadAllAsync<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return await Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
                     .Limit(limit)
@@ -152,7 +152,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static async Task<List<T>> LoadAllAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-            where T : IDataObject, new() {
+            where T : ILegacyDataObject, new() {
             return await self.AccessAsync(async transaction => {
                 return await Core.Interfaces.LoadAll.Where<T>(conditions)
                     .Skip(skip)
@@ -164,7 +164,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static T LoadFirstOrDefault<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.LoadFirstOrDefault<T>(
                 transaction,
                 Core.Interfaces.LoadAll.Where<T>(conditions)
@@ -175,7 +175,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static IEnumerable<T> Fetch<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.LoadAll<T>(
                 transaction,
                 Core.Interfaces.LoadAll.Where<T>(conditions)
@@ -186,7 +186,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public static List<T> AggregateLoad<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return self.AggregateLoad<T>(
                 transaction,
                 Core.Interfaces.LoadAll.Where<T>(conditions)
@@ -198,7 +198,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             );
         }
         public static async Task<List<T>> AggregateLoadAsync<T>(this IRdbmsDataAccessor self, BDadosTransaction transaction, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return await self.AggregateLoadAsync<T>(
                 transaction,
                 Core.Interfaces.LoadAll.Where<T>(conditions)
@@ -210,7 +210,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ).ConfigureAwait(false);
         }
         public static async Task<List<T>> AggregateLoadAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
-           where T : IDataObject, new() {
+           where T : ILegacyDataObject, new() {
             return await self.AccessAsync(async transaction=> {
                 return await self.AggregateLoadAsync<T>(
                     transaction,

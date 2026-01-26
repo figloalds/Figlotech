@@ -38,13 +38,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         
         public static void LoadAll<T>(this List<T> me, IDataAccessor DataAccessor,
-            LoadAllArgs<T> args = null) where T : IDataObject, new() {
+            LoadAllArgs<T> args = null) where T : ILegacyDataObject, new() {
             var agl = DataAccessor.AggregateLoad<T>(args);
             agl.ForEach(a=> me.Add(a));
             agl.Clear();
         }
 
-        public static void LoadAllLinear<T>(this List<T> me, IDataAccessor DataAccessor, LoadAllArgs<T> args = null) where T : IDataObject, new() {
+        public static void LoadAllLinear<T>(this List<T> me, IDataAccessor DataAccessor, LoadAllArgs<T> args = null) where T : ILegacyDataObject, new() {
             var agl = DataAccessor.AggregateLoad<T>(args.NoLists());
             agl.ForEach(a => me.Add(a));
             agl.Clear();
@@ -74,7 +74,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public static class BDadosExtensions {
-        public static RecordSet<T> ToRecordSet<T>(this IEnumerable<T> me) where T : IDataObject, new() {
+        public static RecordSet<T> ToRecordSet<T>(this IEnumerable<T> me) where T : ILegacyDataObject, new() {
             var rs = new RecordSet<T>();
             rs.AddRange(me);
             return rs;

@@ -27,8 +27,11 @@ public sealed class ResultCache {
         if(o is DateTime dt) {
             return dt.Ticks.ToString();
         }
-        if(o is IDataObject ido) {
-            return $"[{o.GetType().Name}::{ido.RID}]";
+        if (o is ILegacyDataObject legacy) {
+            return $"[{o.GetType().Name}::{legacy.RID}]";
+        }
+        if (o is ILegacyDataObject ido) {
+            return $"[{o.GetType().Name}::{ido.Id}]";
         }
         if(o is IQueryBuilder qb) {
             return $"{{{qb.GetCommandText()}}}({JsonConvert.SerializeObject(qb.GetParameters(), Formatting.None)})";

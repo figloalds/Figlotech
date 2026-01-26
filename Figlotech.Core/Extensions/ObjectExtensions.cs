@@ -114,8 +114,8 @@ namespace System
             var addMethod = destinationList.GetType().GetMethod("Add");
             var containsMethod = destinationList.GetType().GetMethod("Contains");
             var listsHaveSameType = elementType == ReflectionTool.GetListElementType(destinationList.GetType());
-            var originListElementTypeIsDataObject = ReflectionTool.GetListElementType(originList).Implements(typeof(IDataObject));
-            var destinationListElementTypeIsDataObject = listsHaveSameType || ReflectionTool.GetListElementType(destinationList).Implements(typeof(IDataObject));
+            var originListElementTypeIsDataObject = ReflectionTool.GetListElementType(originList).Implements(typeof(ILegacyDataObject));
+            var destinationListElementTypeIsDataObject = listsHaveSameType || ReflectionTool.GetListElementType(destinationList).Implements(typeof(ILegacyDataObject));
 
             foreach (var item in (IEnumerable)originList) {
                 // Handle the merging of complex elements if necessary, e.g., if the lists contain objects that themselves have properties to merge
@@ -124,7 +124,7 @@ namespace System
                     var existingItem = FindDataObjectInList(destinationList, item);
                     if (existingItem != null) {
                         // Optionally handle deep merging here
-                        CopyFromAndMergeLists((IDataObject) item, existingItem);
+                        CopyFromAndMergeLists((ILegacyDataObject) item, existingItem);
                     } else {
                         addMethod.Invoke(destinationList, new[] { item });
                     }
@@ -137,11 +137,21 @@ namespace System
         }
         static object FindDataObjectInList(object list, object item) {
             foreach(var i in ReflectionTool.EnumerateList(list)) {
-                if(((IDataObject) i).RID == ((IDataObject) item).RID) {
+                if (AreSameDataObject((ILegacyDataObject)i, (ILegacyDataObject)item)) {
                     return i;
                 }
             }
             return null;
+        }
+
+        static bool AreSameDataObject(ILegacyDataObject left, ILegacyDataObject right) {
+            if (left == null || right == null) {
+                return false;
+            }
+            if (left is ILegacyDataObject leftLegacy && right is ILegacyDataObject rightLegacy) {
+                return leftLegacy.RID == rightLegacy.RID;
+            }
+            return Equals(left.Id, right.Id);
         }
 
         public static T InvokeGenericMethod<T>(this Object me, string GenericMethodName, Type genericType, params object[] args) {

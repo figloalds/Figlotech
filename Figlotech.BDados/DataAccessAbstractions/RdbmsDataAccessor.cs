@@ -90,7 +90,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public List<string[]> FrameHistory { get; private set; } = new List<string[]>(200);
 
-        private List<IDataObject> ObjectsToNotify { get; set; } = new List<IDataObject>();
+        private List<ILegacyDataObject> ObjectsToNotify { get; set; } = new List<ILegacyDataObject>();
         public Action OnTransactionEnding { get; internal set; }
         private List<(Func<Task> Action, Func<Exception, Task> Handler)> ActionsToExecuteAfterSuccess { get; set; } = new List<(Func<Task> Action, Func<Exception, Task> Handler)>();
 
@@ -121,7 +121,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ActionsToExecuteAfterSuccess.Add((fn, handler));
         }
 
-        public void NotifyChange(IDataObject[] ido) {
+        public void NotifyChange(ILegacyDataObject[] ido) {
             if (Transaction == null) {
                 DataAccessor.RaiseForChangeIn(ido);
             } else {
@@ -263,7 +263,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
                     MutatedObjects.Add(AutoMutateTargets[i].Target, true);
                     if (AutoMutateTargets[i].Target is ILegacyDataObject legacy) {
-                        legacy.UpdatedTime = DateTime.UtcNow;
+                        legacy.UpdatedAt = DateTime.UtcNow;
                     } else {
                         AutoMutateTargets[i].Target.UpdatedAt = DateTime.UtcNow;
                     }
@@ -302,7 +302,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
                     MutatedObjects.Add(AutoMutateTargets[i].Target, true);
                     if (AutoMutateTargets[i].Target is ILegacyDataObject legacy) {
-                        legacy.UpdatedTime = DateTime.UtcNow;
+                        legacy.UpdatedAt = DateTime.UtcNow;
                     } else {
                         AutoMutateTargets[i].Target.UpdatedAt = DateTime.UtcNow;
                     }
@@ -618,13 +618,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Type[] WorkingTypes {
             get { return _workingTypes; }
             set {
-                _workingTypes = value.Where(t => t.GetInterfaces().Contains(typeof(IDataObject))).ToArray();
+                _workingTypes = value.Where(t => t.GetInterfaces().Contains(typeof(ILegacyDataObject))).ToArray();
             }
         }
 
         public Dictionary<string, object> AdditionalTelemetryTags = new Dictionary<string, object>();
 
-        internal void RaiseForChangeIn(IDataObject[] ido) {
+        internal void RaiseForChangeIn(ILegacyDataObject[] ido) {
             if (!ido.Any()) {
                 return;
             }
@@ -1038,24 +1038,35 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private static String GetRidColumn<T>() where T : IDataObject, new() { return GetRidColumn(typeof(T)); }
         private static String GetRidColumn(Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
-            var retv = fields
+            var reliable = fields
                 .Where((f) => f.GetCustomAttribute<ReliableIdAttribute>() != null)
-                .FirstOrDefault()
-                ?.Name
-                ?? "RID";
-            return retv;
+                .FirstOrDefault();
+            if (reliable != null) {
+                return reliable.Name;
+            }
+            var primaryKey = fields
+                .Where((f) => f.GetCustomAttribute<PrimaryKeyAttribute>() != null)
+                .FirstOrDefault();
+            return primaryKey?.Name ?? "RID";
         }
 
         public T LoadById<T>(object Id) where T : IDataObject, new() {
             return Access((transaction) => LoadById<T>(transaction, Id), null);
         }
 
-        public T LoadByRid<T>(String RID) where T : ILegacyDataObject, new() {
+        public T LoadByRid<T>(String RID) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return default(T);
+            }
             return Access((transaction) => LoadByRid<T>(transaction, RID), null);
         }
 
-        public async Task<T> LoadByRidAsync<T>(BDadosTransaction tsn, string RID) where T : ILegacyDataObject, new() {
-            return (await LoadAllAsync<T>(tsn, Figlotech.Core.Interfaces.LoadAll.From<T>().Where(x => x.RID == RID).Limit(1))).FirstOrDefault();
+        public async Task<T> LoadByRidAsync<T>(BDadosTransaction tsn, string RID) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return default(T);
+            }
+            var rid = GetRidColumn(typeof(T));
+            return (await LoadAllAsync<T>(tsn, new Qb().Append($"{rid}=@rid", RID), null, 1)).FirstOrDefault();
         }
 
         public List<T> LoadAll<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
@@ -1095,11 +1106,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return target;
         }
 
-        public bool Delete<T>(IEnumerable<T> obj) where T : ILegacyDataObject, new() {
+        public bool Delete<T>(IEnumerable<T> obj) where T : IDataObject, new() {
             return Access((transaction) => Delete(transaction, obj), null);
         }
 
-        public bool Delete(ILegacyDataObject obj) {
+        public bool Delete(IDataObject obj) {
             return Access((transaction) => Delete(transaction, obj), null);
         }
 
@@ -1136,10 +1147,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public IQueryGenerator QueryGenerator => Plugin.QueryGenerator;
 
-        public event Action<Type, IDataObject[]> OnSuccessfulSave;
-        public event Action<Type, IDataObject[], Exception> OnFailedSave;
-        public event Action<Type, IDataObject[]> OnDataObjectAltered;
-        public event Action<Type, IDataObject[]> OnObjectsDeleted;
+        public event Action<Type, ILegacyDataObject[]> OnSuccessfulSave;
+        public event Action<Type, ILegacyDataObject[], Exception> OnFailedSave;
+        public event Action<Type, ILegacyDataObject[]> OnDataObjectAltered;
+        public event Action<Type, ILegacyDataObject[]> OnObjectsDeleted;
 
         public void Access(Action<BDadosTransaction> functions, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
             var i = Access<int>((transaction) => {
@@ -1622,7 +1633,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     tname,
                     pkey);
 
-                String OnClause = $"{thisAlias}.{key}={childAlias}.RID";
+                var childRidColumn = FiTechBDadosExtensions.RidColumnNameOf[type];
+                String OnClause = $"{thisAlias}.{key}={childAlias}.{childRidColumn}";
 
                 if (!ReflectionTool.TypeContains(theType, key)) {
                     OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
@@ -1663,10 +1675,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
 
+                var childRidColumn = FiTechBDadosExtensions.RidColumnNameOf[info.RemoteObjectType];
                 String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.{selfRIDColumn}";
                 // Yuck
                 if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
-                    OnClause = $"{childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.RemoteObjectType]}={thisAlias}.{info.RemoteField}";
+                    OnClause = $"{childAlias}.{childRidColumn}={thisAlias}.{info.RemoteField}";
                 }
                 var joh = query.Join(info.RemoteObjectType, childAlias, OnClause, JoinType.RIGHT);
                 // The ultra supreme gimmick mode reigns supreme here.
@@ -1791,7 +1804,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return result;
         }
 
-        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
             return Access((transaction) => DeleteWhereRidNotIn(transaction, cnd, list));
         }
 
@@ -1844,42 +1857,51 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public async Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
+        public async Task<bool> SaveListAsync<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
             await transaction.StepAsync().ConfigureAwait(false);
             bool retv = true;
+
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                foreach (var item in rs) {
+                    await SaveItemAsync(transaction, item).ConfigureAwait(false);
+                }
+                return true;
+            }
 
             if (rs.Count == 0)
                 return true;
             //if (rs.Count == 1) {
             //    return SaveItem(transaction, rs.First());
             //}
-            for (int it = 0; it < rs.Count; it++) {
-                if (rs[it].RID == null) {
-                    rs[it].RID = new RID().ToString();
+            var legacyItems = rs.OfType<ILegacyDataObject>().ToList();
+            for (int it = 0; it < legacyItems.Count; it++) {
+                if (legacyItems[it].RID == null) {
+                    legacyItems[it].RID = new RID().ToString();
                 }
             }
 
-            rs.ForEach(item => {
+            legacyItems.ForEach(item => {
                 item.IsPersisted = false;
                 if (!item.IsReceivedFromSync) {
-                    item.UpdatedTime = Fi.Tech.GetUtcTime();
+                    item.UpdatedAt = Fi.Tech.GetUtcTime();
                 }
             });
             DateTime d1 = DateTime.UtcNow;
             List<T> conflicts = new List<T>();
 
             var chunkSz = 5000;
-            var chunks = rs.Fracture(chunkSz);
+            var chunks = legacyItems.Fracture(chunkSz);
             foreach (var x in chunks) {
                 var xlist = new List<T>(Math.Min(rs.Count, chunkSz));
-                xlist.AddRange(x);
-                await QueryReaderAsync(transaction, Plugin.QueryGenerator.QueryIds(xlist), async reader => {
+                var legacyChunk = x.ToList();
+                xlist.AddRange(x.Cast<T>());
+                await QueryReaderAsync(transaction, Plugin.QueryGenerator.QueryIds(legacyChunk), async reader => {
                     var areader = reader as DbDataReader;
                     while (await areader.ReadAsync().ConfigureAwait(false)) {
                         var vId = (long?)Convert.ChangeType(reader[0], typeof(long));
                         var vRid = (string)Convert.ChangeType(reader[1], typeof(string));
-                        for (int i = 0; i < xlist.Count; i++) {
-                            var item = xlist[i];
+                        for (int i = 0; i < legacyChunk.Count; i++) {
+                            var item = legacyChunk[i];
                             if (item.Id == vId || item.RID == vRid) {
                                 item.Id = vId ?? item.Id;
                                 item.RID = vRid ?? item.RID;
@@ -1898,13 +1920,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int cut = Math.Min(500, 63999 / ((members.Length + 1) * 3));
 
             int rst = 0;
-            List<T> temp;
+            List<ILegacyDataObject> temp;
 
-            if (rs.Count > cut) {
-                temp = new List<T>(rs.Count);
-                temp.AddRange(rs);
+            if (legacyItems.Count > cut) {
+                temp = new List<ILegacyDataObject>(legacyItems.Count);
+                temp.AddRange(legacyItems);
             } else {
-                temp = rs;
+                temp = legacyItems.ToList();
             }
             List<Exception> failedSaves = new List<Exception>();
             List<ILegacyDataObject> successfulSaves = new List<ILegacyDataObject>();
@@ -1912,26 +1934,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark($"Begin SaveList<{typeof(T).Name}> process");
             //WorkQueuer wq = rs.Count > cut ? new WorkQueuer("SaveList_Annonymous_Queuer", 1, true) : null;
 
-            while (i2 * cut < rs.Count) {
+            while (i2 * cut < legacyItems.Count) {
                 int i = i2;
-                List<T> sub;
+                List<ILegacyDataObject> sub;
                 lock (temp)
-                    sub = temp.Skip(i * cut).Take(Math.Min(rs.Count - (i * cut), cut)).ToList();
-                var inserts = sub.Where(it => !it.IsPersisted).ToList();
-                var updates = sub.Where(it => it.IsPersisted).ToList();
-                if (inserts.Count > 0) {
+                    sub = temp.Skip(i * cut).Take(Math.Min(legacyItems.Count - (i * cut), cut)).ToList();
+                var insertsLegacy = sub.Where(it => !it.IsPersisted).ToList();
+                var updatesLegacy = sub.Where(it => it.IsPersisted).ToList();
+                var inserts = insertsLegacy.Cast<T>().ToList();
+                var updates = updatesLegacy.Cast<T>().ToList();
+                if (insertsLegacy.Count > 0) {
                     try {
-                        transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {inserts.Count} {typeof(T).Name}");
+                        transaction?.Benchmarker.Mark($"Generate MultiInsert Query for {insertsLegacy.Count} {typeof(T).Name}");
                         var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
-                        transaction?.Benchmarker.Mark($"Execute MultiInsert Query {inserts.Count} {typeof(T).Name}");
+                        transaction?.Benchmarker.Mark($"Execute MultiInsert Query {insertsLegacy.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
                         lock (successfulSaves)
-                            successfulSaves.AddRange(inserts.Select(a => (ILegacyDataObject)a));
+                            successfulSaves.AddRange(insertsLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
                                 await Task.Yield();
-                                OnFailedSave?.Invoke(typeof(T), inserts.Select(a => (IDataObject)a).ToArray(), x);
+                                OnFailedSave?.Invoke(typeof(T), insertsLegacy.ToArray(), x);
                             });
                         }
 
@@ -1941,7 +1965,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (recoverIds) {
                         var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, QueryGenerator.QueryIds(inserts)).ConfigureAwait(false);
                         foreach (var dr in queryIds) {
-                            var psave = inserts.FirstOrDefault(it => it.RID == dr.RID);
+                            var psave = insertsLegacy.FirstOrDefault(it => it.RID == dr.RID);
                             if (psave != null) {
                                 psave.Id = dr.Id;
                             }
@@ -1949,19 +1973,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
 
-                if (updates.Count > 0) {
+                if (updatesLegacy.Count > 0) {
                     try {
-                        transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updates.Count} {typeof(T).Name}");
+                        transaction?.Benchmarker.Mark($"Generate MultiUpdate Query for {updatesLegacy.Count} {typeof(T).Name}");
                         var query = Plugin.QueryGenerator.GenerateMultiUpdate(updates);
-                        transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updates.Count} {typeof(T).Name}");
+                        transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updatesLegacy.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
                         lock (successfulSaves)
-                            successfulSaves.AddRange(updates.Select(a => (ILegacyDataObject)a));
+                            successfulSaves.AddRange(updatesLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
                                 await Task.Yield();
-                                OnFailedSave?.Invoke(typeof(T), updates.Select(a => (IDataObject)a).ToArray(), x);
+                                OnFailedSave?.Invoke(typeof(T), updatesLegacy.ToArray(), x);
                             });
                         }
                         lock (failedSaves)
@@ -2012,7 +2036,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (OnFailedSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (IDataObject)a).ToArray(), ex);
+                        OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (ILegacyDataObject)a).ToArray(), ex);
                     });
                 }
             }
@@ -2020,7 +2044,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
+        public bool SaveList<T>(BDadosTransaction transaction, List<T> rs, bool recoverIds = false) where T : IDataObject {
             return SaveListAsync<T>(transaction, rs, recoverIds)
                 .ConfigureAwait(false)
                 .GetAwaiter()
@@ -2033,18 +2057,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             retv = Query(transaction, qb).Rows[0][0];
             return retv;
         }
-        public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
+        public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return false;
+            }
             return DeleteWhereRidNotInAsync(transaction, cnd, list)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
-        public async Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : ILegacyDataObject, new() {
+        public async Task<bool> DeleteWhereRidNotInAsync<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return false;
+            }
             int retv = 0;
             if (list == null)
                 return true;
 
-            var id = GetIdColumn<T>();
             var rid = GetRidColumn<T>();
             IQueryBuilder query = QueryGenerator.GenerateSelectAll<T>().Append("WHERE");
             if (cnd != null) {
@@ -2056,7 +2085,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (list.Count > 0) {
 
                 query.Append("AND");
-                query.Append(Qb.NotIn(rid, list, l => l.RID));
+                var legacyList = list.OfType<ILegacyDataObject>().ToList();
+                query.Append(Qb.NotIn(rid, legacyList, l => l.RID));
                 //for (var i = 0; i < list.Count; i++) {
                 //    query.Append($"@{IntEx.GenerateShortRid()}", list[i].RID);
                 //    if (i < list.Count - 1)
@@ -2067,28 +2097,29 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             var results = await QueryAsync<T>(transaction, query).ConfigureAwait(false);
             if (results.Any()) {
-                OnObjectsDeleted?.Invoke(typeof(T), results.Select(t => t as IDataObject).ToArray());
-                var query2 = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(rid, results, r => r.RID);
+                var legacyResults = results.OfType<ILegacyDataObject>().ToList();
+                OnObjectsDeleted?.Invoke(typeof(T), legacyResults.ToArray());
+                var query2 = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(rid, legacyResults, r => r.RID);
                 retv = await ExecuteAsync(transaction, query2).ConfigureAwait(false);
                 return retv > 0;
             }
             return true;
         }
 
-        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : ILegacyDataObject {
+        public bool SaveList<T>(List<T> rs, bool recoverIds = false) where T : IDataObject {
             return Access((transaction) => {
                 return SaveList<T>(transaction, rs, recoverIds);
             });
         }
 
-        public async Task<List<IDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt) {
+        public async Task<List<ILegacyDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt) {
             return await AccessAsync (async (transaction) => {
                 return await LoadUpdatedItemsSince(transaction, types, dt);
             }, CancellationToken.None, null);
         }
 
-        public async Task<List<IDataObject>> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt) {
-            var workingTypes = types.Where(t => t.Implements(typeof(IDataObject))).ToList();
+        public async Task<List<ILegacyDataObject>> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt) {
+            var workingTypes = types.Where(t => t.Implements(typeof(ILegacyDataObject))).ToList();
             var fields = new Dictionary<Type, MemberInfo[]>();
             foreach (var type in workingTypes) {
                 fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
@@ -2156,7 +2187,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream) {
-            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(IDataObject))).ToList();
+            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(ILegacyDataObject))).ToList();
 
             SortTypesByDep(workingTypes);
 
@@ -2230,8 +2261,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public IEnumerable<IDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream) {
-            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(IDataObject))).ToList();
+        public IEnumerable<ILegacyDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream) {
+            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(ILegacyDataObject))).ToList();
             var fields = new Dictionary<Type, MemberInfo[]>();
             foreach (var type in workingTypes) {
                 fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
@@ -2245,7 +2276,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
 
-            var cache = new Queue<IDataObject>();
+            var cache = new Queue<ILegacyDataObject>();
             var objAssembly = new WorkQueuer("rcv_updates_objasm", -1, true);
 
             using (var reader = new StreamReader(stream, new UTF8Encoding(false), false, 1024 * 1024 * 8)) {
@@ -2263,7 +2294,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         for (int i = 0; i < fields[type].Length; i++) {
                             ReflectionTool.SetMemberValue(ft[i], instance, v[i + 1]);
                         }
-                        var add = instance as IDataObject;
+                        var add = instance as ILegacyDataObject;
                         if (add != null) {
                             lock (cache) {
                                 cache.Enqueue(add);
@@ -2533,9 +2564,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return LoadAll<T>(transaction, new Qb().Append($"{id}=@id", Id), null, 1).FirstOrDefault();
         }
 
-        public T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : ILegacyDataObject, new() {
+        public T LoadByRid<T>(BDadosTransaction transaction, String RID) where T : IDataObject, new() {
             transaction.StepAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return default(T);
+            }
             var rid = GetRidColumn(typeof(T));
             return LoadAll<T>(transaction, new Qb().Append($"{rid}=@rid", RID), null, 1).FirstOrDefault();
         }
@@ -2557,50 +2591,74 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return Fetch<T>(transaction, conditions, skip, limit, orderingMember, ordering, contextObject).ToList();
         }
-        public bool Delete(BDadosTransaction transaction, ILegacyDataObject obj) {
+        public bool Delete(BDadosTransaction transaction, IDataObject obj) {
             return DeleteAsync(transaction, obj)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
-        public async Task<bool> DeleteAsync(BDadosTransaction transaction, ILegacyDataObject obj) {
+        public async Task<bool> DeleteAsync(BDadosTransaction transaction, IDataObject obj) {
             await transaction.StepAsync().ConfigureAwait(false);
 
             bool retv = false;
 
-            //var id = GetIdColumn(obj.GetType());
-            var rid = obj.RID;
-            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[obj.GetType()];
-            string ridname = "RID";
-            if (ridcol != null) {
-                ridname = ridcol;
+            if (obj is ILegacyDataObject legacy) {
+                var ridcol = FiTechBDadosExtensions.RidColumnNameOf[obj.GetType()];
+                string ridname = "RID";
+                if (ridcol != null) {
+                    ridname = ridcol;
+                }
+                OnObjectsDeleted?.Invoke(obj.GetType(), legacy.ToSingleElementList().ToArray());
+                var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", legacy.RID);
+                retv = (await ExecuteAsync(transaction, query).ConfigureAwait(false)) > 0;
+                return retv;
             }
-            OnObjectsDeleted?.Invoke(obj.GetType(), obj.ToSingleElementList().ToArray());
-            var query = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {ridname}=@rid", obj.RID);
-            retv = (await ExecuteAsync(transaction, query).ConfigureAwait(false)) > 0;
+
+            var idcol = FiTechBDadosExtensions.IdColumnNameOf[obj.GetType()];
+            if (string.IsNullOrEmpty(idcol)) {
+                return false;
+            }
+            OnObjectsDeleted?.Invoke(obj.GetType(), new ILegacyDataObject[0]);
+            var idQuery = new Qb().Append($"DELETE FROM {obj.GetType().Name} WHERE {idcol}=@id", obj.Id);
+            retv = (await ExecuteAsync(transaction, idQuery).ConfigureAwait(false)) > 0;
             return retv;
         }
 
-        public bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : ILegacyDataObject, new() {
+        public bool Delete<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
             return DeleteAsync(transaction, obj)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
 
-        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : ILegacyDataObject, new() {
+        public async Task<bool> DeleteAsync<T>(BDadosTransaction transaction, IEnumerable<T> obj) where T : IDataObject, new() {
             await transaction.StepAsync().ConfigureAwait(false);
 
             bool retv = false;
 
-            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
-            string ridname = "RID";
-            if (ridcol != null) {
-                ridname = ridcol;
+            if (typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                var legacySet = obj.OfType<ILegacyDataObject>().ToList();
+                if (legacySet.Count == 0) {
+                    return false;
+                }
+                var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
+                string ridname = "RID";
+                if (ridcol != null) {
+                    ridname = ridcol;
+                }
+                OnObjectsDeleted?.Invoke(typeof(T), legacySet.ToArray());
+                var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, legacySet, o => o.RID);
+                retv = (await ExecuteAsync(transaction, query).ConfigureAwait(false)) > 0;
+                return retv;
             }
-            OnObjectsDeleted?.Invoke(typeof(T), obj.Select(t => t as IDataObject).ToArray());
-            var query = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(ridname, obj.ToList(), o => o.RID);
-            retv = (await ExecuteAsync(transaction, query).ConfigureAwait(false)) > 0;
+
+            var idcol = FiTechBDadosExtensions.IdColumnNameOf[typeof(T)];
+            if (string.IsNullOrEmpty(idcol)) {
+                return false;
+            }
+            OnObjectsDeleted?.Invoke(typeof(T), new ILegacyDataObject[0]);
+            var idQuery = Qb.Fmt($"DELETE FROM {typeof(T).Name} WHERE ") + Qb.In(idcol, obj.ToList(), o => o.Id);
+            retv = (await ExecuteAsync(transaction, idQuery).ConfigureAwait(false)) > 0;
             return retv;
         }
 
@@ -2663,7 +2721,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int rs = -33;
 
             if (!input.IsReceivedFromSync) {
-                input.UpdatedTime = Fi.Tech.GetUtcTime();
+                input.UpdatedAt = Fi.Tech.GetUtcTime();
             }
 
             transaction?.Benchmarker.Mark($"SaveItem<{t.Name}> check persistence");
@@ -2699,7 +2757,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (OnFailedSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                        OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray(), x);
                     }, async (xe) => {
                         await Task.Yield();
                         Fi.Tech.Throw(xe);
@@ -2730,7 +2788,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (OnSuccessfulSave != null) {
                         Fi.Tech.FireAndForget(async () => {
                             await Task.Yield();
-                            OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
+                            OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray());
                         }, async (xe) => {
                             await Task.Yield();
                             Fi.Tech.Throw(xe);
@@ -2751,9 +2809,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             input.UpdatedAt = now;
 
+            var initialId = input.Id;
+            var exists = !IsDefaultId(input.Id) && await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
             EnsureApplicationGeneratedId(input);
-            var exists = await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
-
+            transaction.AddMutateRollback(ReflectionTool.GetMember(t, FiTechBDadosExtensions.RidColumnNameOf[t]), input, initialId);
+            
             try {
                 if (exists) {
                     var query = Plugin.QueryGenerator.GenerateUpdateQuery(input);
@@ -2763,16 +2823,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await ExecuteAsync(transaction, query).ConfigureAwait(false);
                 }
             } catch (Exception x) {
-                if (OnFailedSave != null) {
+                if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        OnFailedSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray(), x);
+                        OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray(), x);
                     }, async (xe) => {
                         await Task.Yield();
                         Fi.Tech.Throw(xe);
                     });
                 }
                 transaction?.MarkAsErrored();
+                if(!exists) {
+                }
                 throw new BDadosException("Error Saving Item", x);
             }
 
@@ -2781,12 +2843,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             transaction.OnTransactionEnding += () => {
-                transaction.NotifyChange(new[] { input });
+                if (input is ILegacyDataObject legacyInput) {
+                    transaction.NotifyChange(new[] { legacyInput });
 
-                if (OnSuccessfulSave != null) {
                     Fi.Tech.FireAndForget(async () => {
                         await Task.Yield();
-                        OnSuccessfulSave?.Invoke(input.GetType(), new List<IDataObject> { input }.ToArray());
+                        OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray());
                     }, async (xe) => {
                         await Task.Yield();
                         Fi.Tech.Throw(xe);
@@ -2798,6 +2860,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private static bool IsDefaultId(object id) {
+            if(id is Guid guid) {
+                return guid == Guid.Empty;
+            }
             if (id == null) {
                 return true;
             }
@@ -2824,6 +2889,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return;
             }
             var generatedId = method.Invoke(input, null);
+            if (generatedId == null) {
+                return;
+            }
             input.Id = generatedId;
         }
 
@@ -2892,13 +2960,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         );
 
-        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : ILegacyDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject{
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return false;
+            }
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsByRID<T>(RID))).FirstOrDefault()?.Value ?? 0) > 0;
         }
         public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, object Id) where T : IDataObject{
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsById<T>(Id))).FirstOrDefault()?.Value ?? 0) > 0;
         }
-        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : ILegacyDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject{
+            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+                return false;
+            }
             return await AccessAsync(async (tsn) => {
                 return await ExistsByRIDAsync<T>(tsn, RID);
             }, CancellationToken.None);

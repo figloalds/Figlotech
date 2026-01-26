@@ -496,10 +496,23 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (t == null) return false;
             if (t == typeof(Object)) return false;
             var ifaces = t.GetTypeInfo().GetInterfaces();
-            var isDo = ifaces.Any(a => a == typeof(IDataObject));
+            var isDo = ifaces.Any(a => a == typeof(IDataObject) || a == typeof(ILegacyDataObject));
             return
                 isDo
                 || IsDataObject(t.BaseType);
+        }
+
+        private static bool IsLegacyDataObject(Type type) {
+            return type != null && typeof(ILegacyDataObject).IsAssignableFrom(type);
+        }
+
+        private static string GetReferenceColumn(Type type) {
+            if (type == null) {
+                return null;
+            }
+            return IsLegacyDataObject(type)
+                ? FiTechBDadosExtensions.RidColumnNameOf[type]
+                : FiTechBDadosExtensions.IdColumnNameOf[type];
         }
 
         private bool CheckMatch(ScStructuralLink a, ScStructuralLink n) {
@@ -881,10 +894,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
                     if (fk != null) {
                         if (fk.RefColumn == null) {
-                            fk.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[fk.RefType];
+                            fk.RefColumn = GetReferenceColumn(fk.RefType);
                         }
-                        if(fk.RefColumn == null) {
-                            throw new Exception($"Trying to create relation {fk.ToString()} but the target type {fk.RefType.Name} does not have a [ReliableId]");
+                        if (string.IsNullOrEmpty(fk.RefColumn)) {
+                            var keyName = IsLegacyDataObject(fk.RefType) ? "ReliableId" : "Id";
+                            throw new Exception($"Trying to create relation {fk.ToString()} but the target type {fk.RefType.Name} does not have a [{keyName}] column");
                         }
                         constraint = ScStructuralLink.FromFkAttribute(fk);
                         constraint.Table = t.Name;
@@ -906,13 +920,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.Table = agf.RemoteObjectType.Name;
                             constraint.Column = agf.ObjectKey;
                             constraint.RefTable = t.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[t];
+                            constraint.RefColumn = GetReferenceColumn(t);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
                             constraint.Table = t.Name;
                             constraint.Column = agf.ObjectKey;
                             constraint.RefTable = agf.RemoteObjectType.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[agf.RemoteObjectType];
+                            constraint.RefColumn = GetReferenceColumn(agf.RemoteObjectType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
                         yield return GetIndexForFk(constraint);
@@ -928,13 +942,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.Table = agff.ImediateType.Name;
                             constraint.Column = agff.ImediateKey;
                             constraint.RefTable = t.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[t];
+                            constraint.RefColumn = GetReferenceColumn(t);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
                             constraint.Table = t.Name;
                             constraint.Column = agff.ImediateKey;
                             constraint.RefTable = agff.ImediateType.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[agff.ImediateType];
+                            constraint.RefColumn = GetReferenceColumn(agff.ImediateType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
                         yield return GetIndexForFk(constraint);
@@ -947,13 +961,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.Table = agff.FarType.Name;
                             constraint.Column = agff.FarKey;
                             constraint.RefTable = t.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[t];
+                            constraint.RefColumn = GetReferenceColumn(t);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
                             constraint.Table = t.Name;
                             constraint.Column = agff.FarKey;
                             constraint.RefTable = agff.FarType.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[agff.FarType];
+                            constraint.RefColumn = GetReferenceColumn(agff.FarType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
                         yield return GetIndexForFk(constraint);
@@ -970,13 +984,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.Table = type.Name;
                             constraint.Column = ago.ObjectKey;
                             constraint.RefTable = t.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[t];
+                            constraint.RefColumn = GetReferenceColumn(t);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
                             constraint.Table = t.Name;
                             constraint.Column = ago.ObjectKey;
                             constraint.RefTable = type.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[type];
+                            constraint.RefColumn = GetReferenceColumn(type);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
                         yield return GetIndexForFk(constraint);
@@ -991,13 +1005,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.Table = agl.RemoteObjectType.Name;
                             constraint.Column = agl.RemoteField;
                             constraint.RefTable = t.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[t];
+                            constraint.RefColumn = GetReferenceColumn(t);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         } else {
                             constraint.Table = t.Name;
                             constraint.Column = agl.RemoteField;
                             constraint.RefTable = agl.RemoteObjectType.Name;
-                            constraint.RefColumn = FiTechBDadosExtensions.RidColumnNameOf[agl.RemoteObjectType];
+                            constraint.RefColumn = GetReferenceColumn(agl.RemoteObjectType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
                         yield return GetIndexForFk(constraint);

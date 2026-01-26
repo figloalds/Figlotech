@@ -42,7 +42,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        public static MemberInfo GetRidColumn<T>(this Fi _selfie) where T : IDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
+        public static MemberInfo GetRidColumn<T>(this Fi _selfie) where T : ILegacyDataObject { return Fi.Tech.GetRidColumn(typeof(T)); }
         public static MemberInfo GetRidColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
 
@@ -73,7 +73,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static SelfInitializerDictionary<Type, String> IdColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetIdColumn(t)?.Name ?? "Id");
         public static SelfInitializerDictionary<Type, MemberInfo> IdColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetIdColumn(t));
 
-        public static MemberInfo GetIdColumn<T>(this Fi _selfie) where T : IDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
+        public static MemberInfo GetIdColumn<T>(this Fi _selfie) where T : ILegacyDataObject, new() { return Fi.Tech.GetIdColumn(typeof(T)); }
         public static MemberInfo GetIdColumn(this Fi _selfie, Type type) {
             var fields = ReflectionTool.FieldsAndPropertiesOf(type);
             var retv = fields
@@ -273,7 +273,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return null;
         }
 
-        public static RecordSet<T> FindOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : IDataObject, new() {
+        public static RecordSet<T> FindOfByUpdateTime<T>(IDataAccessor da, long lastUpdate, int p, int? limit) where T : ILegacyDataObject, new() {
             return new RecordSet<T>(da);
         }
 
@@ -320,7 +320,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         //            int current = 0;
         //        }
         public static SelfInitializerDictionary<Type, Type> RidFieldType { get; private set; } = new SelfInitializerDictionary<Type, Type>(
-            t => ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(t).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null))
+            t => {
+                var field = ReflectionTool.FieldsAndPropertiesOf(t)
+                    .FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null)
+                    ?? ReflectionTool.FieldsAndPropertiesOf(t)
+                        .FirstOrDefault(x => x.GetCustomAttribute<PrimaryKeyAttribute>() != null);
+                return ReflectionTool.GetTypeOf(field);
+            }
         );
 
         static int gid = 0;
@@ -358,7 +364,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         static uint upseq = 0;
-        public static QueryBuilder ListIds<T>(this Fi _selfie, RecordSet<T> set) where T : IDataObject, new() {
+        public static QueryBuilder ListIds<T>(this Fi _selfie, RecordSet<T> set) where T : ILegacyDataObject, new() {
             QueryBuilder retv = new QueryBuilder();
             uint seq = 0;
             for (int i = 0; i < set.Count; i++) {

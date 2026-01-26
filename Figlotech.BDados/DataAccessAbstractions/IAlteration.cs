@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public interface IAlteration : IDataObject {
+    public interface IAlteration : ILegacyDataObject {
         String Origin { get; set; }
         String Field { get; set; }
         String FieldType { get; set; }

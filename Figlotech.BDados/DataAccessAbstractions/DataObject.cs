@@ -17,11 +17,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public override long Id { get; set; } = 0;
 
         [Field(AllowNull = true, DefaultValue = null)]
-        public override DateTime? UpdatedTime { get; set; } = Fi.Tech.GetUtcTime();
+        public override DateTime? UpdatedAt { get; set; } = Fi.Tech.GetUtcTime();
 
         [NoUpdate]
         [Field(Type = "TIMESTAMP", AllowNull = false, DefaultValue = "CURRENT_TIMESTAMP")]
-        public override DateTime CreatedTime { get; set; } = Fi.Tech.GetUtcTime();
+        public override DateTime CreatedAt { get; set; } = Fi.Tech.GetUtcTime();
 
         private String _rid = null;
 

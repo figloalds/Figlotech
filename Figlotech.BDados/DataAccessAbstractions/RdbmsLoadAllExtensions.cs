@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
-    public sealed class IntermediateRdbmsLoadAllArgs<T> where T : IDataObject, new() {
+    public sealed class IntermediateRdbmsLoadAllArgs<T> where T : ILegacyDataObject, new() {
 
         public IntermediateRdbmsLoadAllArgs(BDadosTransaction transaction, LoadAllArgs<T> largs) {
             Transaction = transaction;
@@ -39,7 +39,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public static class RdbmsLoadAllExtensions {
-        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, BDadosTransaction transaction) where T: IDataObject, new() {
+        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, BDadosTransaction transaction) where T: ILegacyDataObject, new() {
             return new IntermediateRdbmsLoadAllArgs<T>(transaction, me);
         }
     }

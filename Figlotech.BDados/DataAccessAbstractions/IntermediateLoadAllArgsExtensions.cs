@@ -7,13 +7,13 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
-    public static class LoadAllArgsExtensions<T> where T : IDataObject, new() {
+    public static class LoadAllArgsExtensions<T> where T : ILegacyDataObject, new() {
         public static IntermediateLoadAllArgsRdbms<T> UsingRdbmsAccessor(LoadAllArgs<T> self, IRdbmsDataAccessor dataAccessor)  {
             return new IntermediateLoadAllArgsRdbms<T>(dataAccessor, self);
         }
     }
 
-    public sealed class IntermediateLoadAllArgsRdbms<T> : IntermediateLoadAllArgs<T> where T : IDataObject, new() {
+    public sealed class IntermediateLoadAllArgsRdbms<T> : IntermediateLoadAllArgs<T> where T : ILegacyDataObject, new() {
         public IntermediateLoadAllArgsRdbms(IRdbmsDataAccessor dataAccessor, LoadAllArgs<T> largs) : base(dataAccessor, largs) {
             DataAccessor = dataAccessor;
             LoadAllArgs = largs;

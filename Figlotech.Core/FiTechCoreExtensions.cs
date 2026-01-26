@@ -275,7 +275,7 @@ namespace Figlotech.Core {
             retv.CopyFrom(other);
             return retv;
         }
-        public static T CloneDataObject<T>(this Fi _selfie, T other) where T : IDataObject, new() {
+        public static T CloneDataObject<T>(this Fi _selfie, T other) where T : ILegacyDataObject, new() {
             T retv = new T();
             Fi.Tech.CloneDataObject(other, retv);
             return retv;
@@ -2112,8 +2112,12 @@ namespace Figlotech.Core {
                 }
             }
 
-            ReflectionTool.SetValue(destination, "Id", 0);
-            ReflectionTool.SetValue(destination, "RID", null);
+            if (ReflectionTool.GetMember(destination.GetType(), "Id") != null) {
+                ReflectionTool.SetValue(destination, "Id", 0);
+            }
+            if (ReflectionTool.GetMember(destination.GetType(), "RID") != null) {
+                ReflectionTool.SetValue(destination, "RID", null);
+            }
         }
 
         static Random rng = new Random();
