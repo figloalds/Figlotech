@@ -10,7 +10,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public string Type { get; set; }
         [Field(Size = 128)]
         public string Field { get; set; }
-        [Field()]
+        [Field(Type="BLOB", AllowNull = true)]
         public byte[] Value { get; set; }
         [Field(Size = 64)]
         public string ReferenceRID { get; set; }

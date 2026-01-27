@@ -2670,7 +2670,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw new BDadosException("Error updating item", transaction.FrameHistory, new List<IDataObject>(), new ArgumentNullException("Input to SaveItem must be not-null"));
             }
             transaction.Benchmarker?.Mark($"[{Description}:{transaction.Id}] UpdateAsync<{typeof(T).Name}>");
-            var query = QueryGenerator.GenerateUpdateQuery(input, updates);
+            var query = QueryGenerator.GeneratePrecisionUpdateQuery(input, updates);
             await ExecuteAsync(transaction, query).ConfigureAwait(false);
         }
         public async ValueTask UpdateAndMutateAsync<T>(BDadosTransaction transaction, T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
@@ -2738,7 +2738,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 if (input.IsPersisted) {
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> generating UPDATE query");
-                    var query = Plugin.QueryGenerator.GenerateUpdateQuery(input);
+                    var query = Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> executing query");
                     rs = await ExecuteAsync(transaction, query).ConfigureAwait(false);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> query executed OK");
@@ -2747,7 +2747,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     return retv;
                 } else {
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> generating INSERT query");
-                    var query = Plugin.QueryGenerator.GenerateInsertQuery(input);
+                    var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
                     transaction?.Benchmarker.Mark($"SaveItem<{input.GetType().Name}> executing query");
                     retv = true;
                     rs = await ExecuteAsync(transaction, query).ConfigureAwait(false);
@@ -2816,10 +2816,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             
             try {
                 if (exists) {
-                    var query = Plugin.QueryGenerator.GenerateUpdateQuery(input);
+                    var query = Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
                     await ExecuteAsync(transaction, query).ConfigureAwait(false);
                 } else {
-                    var query = Plugin.QueryGenerator.GenerateInsertQuery(input);
+                    var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
                     await ExecuteAsync(transaction, query).ConfigureAwait(false);
                 }
             } catch (Exception x) {

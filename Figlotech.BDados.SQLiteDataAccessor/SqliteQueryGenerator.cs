@@ -43,7 +43,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return Qb.Fmt(@$"SELECT COUNT(*) Value FROM {typeof(T).Name} WHERE {FiTechBDadosExtensions.RidColumnNameOf[typeof(T)]}=@rid", RID);
         }
 
-        public IQueryBuilder GenerateInsertQuery(IDataObject inputObject) {
+        public IQueryBuilder GenerateSingleInsertQuery(IDataObject inputObject) {
             var omitPk = ShouldOmmitPrimaryKey(inputObject);
             QueryBuilder query = new QbFmt($"INSERT INTO {inputObject.GetType().Name}");
             query.Append("(");
@@ -340,7 +340,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateUpdateQuery(IDataObject tabelaInput) {
+        public IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject tabelaInput) {
             var type = tabelaInput.GetType();
             var usesLegacyKey = typeof(ILegacyDataObject).IsAssignableFrom(type);
             var keyColumn = usesLegacyKey
@@ -356,7 +356,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
+        public IQueryBuilder GeneratePrecisionUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
             var type = input.GetType();
             QueryBuilder Query = new QueryBuilder($"UPDATE {type.Name} SET");
             var addComma = false;

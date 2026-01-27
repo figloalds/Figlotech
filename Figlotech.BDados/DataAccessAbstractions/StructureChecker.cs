@@ -481,7 +481,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private void Init(IRdbmsDataAccessor dataAccessor, IEnumerable<Type> types) {
             DataAccessor = dataAccessor;
             workingTypes = new List<Type>();
-            workingTypes.Add(typeof(_ResidualScData));
+            //workingTypes.Add(typeof(_ResidualScData));
             workingTypes.AddRange(
                 types
                     .Where((t) =>
