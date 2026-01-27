@@ -116,13 +116,14 @@ var orders = dataAccessor.AggregateLoad<Order>(
 
 Streaming aggregation:
 ```csharp
-await using var tsn = await dataAccessor.CreateNewTransactionAsync(ct);
-await foreach (var item in dataAccessor.AggregateLoadAsyncCoroutinely(
-    tsn,
-    LoadAll.From<Order>().Where(o => o.Status == "Open")
-)) {
-    // consume item
-}
+await dataAccessor.AccessAsync(async tsn => {
+    await foreach (var item in dataAccessor.AggregateLoadAsyncCoroutinely(
+        tsn,
+        LoadAll.From<Order>().Where(o => o.Status == "Open")
+    )) {
+        // consume item
+    }
+}, ct);
 ```
 
 ### Raw SQL (Execute / Query)
@@ -151,13 +152,14 @@ var affected = dataAccessor.Execute(
 - `UpdateAndMutateIfSuccessAsync`: defers mutation until the transaction commits successfully, keeping rollback semantics consistent.
 
 ```csharp
-await using var tsn = await dataAccessor.CreateNewTransactionAsync(ct);
-await dataAccessor.UpdateAndMutateAsync(
-    tsn,
-    item,
-    (x => x.Status, "Approved"),
-    (x => x.UpdatedAt, DateTime.UtcNow)
-);
+await dataAccessor.AccessAsync(async tsn => {
+    await dataAccessor.UpdateAndMutateAsync(
+        tsn,
+        item,
+        (x => x.Status, "Approved"),
+        (x => x.UpdatedAt, DateTime.UtcNow)
+    );
+}, ct);
 ```
 
 ### Existence Checks
