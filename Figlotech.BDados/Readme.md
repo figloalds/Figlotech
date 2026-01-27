@@ -163,7 +163,7 @@ await dataAccessor.AccessAsync(async tsn => {
 ```
 
 ### Existence Checks
-Use `ExistsByRIDAsync` / `ExistsByIdAsync` to verify existence without loading an object.
+Use `ExistsByRIDAsync` / `ExistsByIdAsync` to verify existence without loading an object. For most persistence flows, this is unnecessary because `SaveItem` and `SaveList` already handle existence checks internally and behave like upsert operations.
 
 ### Schema / Metadata
 - `EnsureDatabaseExistsAsync` creates the database when missing.
