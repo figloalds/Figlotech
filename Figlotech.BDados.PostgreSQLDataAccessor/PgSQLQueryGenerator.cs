@@ -386,19 +386,19 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject tabelaInput) {
-            var type = tabelaInput.GetType();
+        public IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject inputObject) {
+            var type = inputObject.GetType();
             var usesLegacyKey = typeof(ILegacyDataObject).IsAssignableFrom(type);
             var keyColumn = usesLegacyKey
                 ? FiTechBDadosExtensions.RidColumnNameOf[type]
                 : FiTechBDadosExtensions.IdColumnNameOf[type];
             var keyValue = usesLegacyKey
-                ? ((ILegacyDataObject)tabelaInput).RID
-                : tabelaInput.Id;
+                ? ReflectionTool.GetMemberValue(FiTechBDadosExtensions.RidColumnOf[type], inputObject)
+                : ReflectionTool.GetMemberValue(FiTechBDadosExtensions.IdColumnOf[type], inputObject);
 
-            QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", tabelaInput.GetType().Name));
+            QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", inputObject.GetType().Name));
             Query.Append("SET");
-            Query.Append(GenerateUpdateValueParams(tabelaInput, false));
+            Query.Append(GenerateUpdateValueParams(inputObject, false));
             Query.Append($" WHERE {keyColumn} = @key;", keyValue);
             return Query;
         }
@@ -452,23 +452,20 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
         uint gvIdGen = 0;
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
-            if (!(tabelaInput is ILegacyDataObject)) {
-                return null;
-            }
-            var cod = $"_gv{++gvIdGen}_";
-            QueryBuilder Query = new QueryBuilder();
-            var fields = GetMembers(tabelaInput.GetType());
-            if (OmmitPK) {
-                fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null && m.GetCustomAttribute<ReliableIdAttribute>() == null);
-            }
+            var type = tabelaInput.GetType();
+            QueryBuilder sb = new QueryBuilder();
+            var fields = GetMembers(type);
+            int c = 0;
+            var objPrefix = IntEx.GenerateShortRid();
             for (int i = 0; i < fields.Count; i++) {
+                if (OmmitPK && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null)
+                    continue;
+                if (!sb.IsEmpty)
+                    sb.Append(", ");
                 Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
-                if (!Query.IsEmpty)
-                    Query.Append(", ");
-                Query.Append($"@{cod}{i + 1}", val);
+                sb.Append($"@{objPrefix}_{++c}", val);
             }
-            return Query;
-
+            return sb;
         }
 
         public IQueryBuilder GenerateMultiUpdate<T>(List<T> inputRecordset) where T : IDataObject {
@@ -574,7 +571,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             QueryBuilder sb = new QueryBuilder();
             var fields = GetMembers(type);
             for (int i = 0; i < fields.Count; i++) {
-                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null && fields[i].GetCustomAttribute<ReliableIdAttribute>() == null)
+                if (ommitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(fields[i]) != null)
                     continue;
                 if (!sb.IsEmpty)
                     sb.Append(", ");

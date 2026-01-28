@@ -446,18 +446,19 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject tabelaInput) {
-            var type = tabelaInput.GetType();
+        public IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject inputObject) {
+            var type = inputObject.GetType();
             var usesLegacyKey = typeof(ILegacyDataObject).IsAssignableFrom(type);
             var keyColumn = usesLegacyKey
                 ? FiTechBDadosExtensions.RidColumnNameOf[type]
                 : FiTechBDadosExtensions.IdColumnNameOf[type];
             var keyValue = usesLegacyKey
-                ? ((ILegacyDataObject)tabelaInput).RID
-                : tabelaInput.Id;
+                ? ReflectionTool.GetMemberValue(FiTechBDadosExtensions.RidColumnOf[type], inputObject)
+                : ReflectionTool.GetMemberValue(FiTechBDadosExtensions.IdColumnOf[type], inputObject);
+
             QueryBuilder Query = new QbFmt(String.Format("UPDATE {0} ", type.Name));
             Query.Append("SET");
-            Query.Append(GenerateUpdateValueParams(tabelaInput, true));
+            Query.Append(GenerateUpdateValueParams(inputObject, true));
             Query.Append($" WHERE {keyColumn} = @key;", keyValue);
             return Query;
         }
