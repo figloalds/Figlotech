@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Reflection;
@@ -107,9 +107,16 @@ namespace Figlotech.Core {
         public DateTime Created { get; set; } = DateTime.UtcNow;
 
         ~ScheduledWorkJob() {
+        }
+        
+        public void Dispose() {
             try {
-                Cancellation.Dispose();
-            } catch (Exception) { }
+                Timer?.Dispose();
+            } catch { }
+            try {
+                Cancellation?.Dispose();
+            } catch { }
+            IsActive = false;
         }
     }
 
@@ -571,13 +578,19 @@ namespace Figlotech.Core {
             lock (sched) {
                 if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
                     var nextRun = sched.ScheduledTime;
-                    var now = DateTime.UtcNow + TimeSpan.FromMilliseconds(100);
-                    if(now >= nextRun) {
-                        var diff = now - nextRun;
+                    var now = DateTime.UtcNow;
+                    
+                    // Calculate next occurrence based on the original scheduled time
+                    // This prevents drift by using the original anchor point
+                    if (now >= nextRun) {
                         var interval = sched.RecurrenceInterval.Value;
-                        var times = (int)(diff.TotalMilliseconds / interval.TotalMilliseconds);
-                        nextRun = nextRun.AddMilliseconds(interval.TotalMilliseconds * (times + 1));
+                        // Keep adding intervals until we get a future time
+                        // This handles cases where the system was suspended or clock changed
+                        do {
+                            nextRun = nextRun.Add(interval);
+                        } while (nextRun <= now);
                     }
+                    
                     sched.ScheduledTime = nextRun;
                     ResetTimer(sched);
                 }
@@ -604,21 +617,37 @@ namespace Figlotech.Core {
             //}
             var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
             WorkJobExecutionRequest request = null;
-            if (millisDiff < 100) {
+            // Use precision window to determine if task should fire now
+            // If we're within the precision window OR past the scheduled time, fire the task
+            if (millisDiff <= TimerPrecisionMs) {
+                // IMPORTANT: Reset timer immediately to prevent duplicate firing
+                // while the job is executing. The timer will be properly set when
+                // the job completes via OnCompleted.
+                if (sched.Timer != null) {
+                    sched.Timer.Dispose();
+                    sched.Timer = null;
+                }
+                
+                // Capture values locally to avoid closure capturing sched reference
+                var schedKey = sched.Key;
+                var schedRecurrence = sched.RecurrenceInterval;
+                var schedCancellation = sched.Cancellation;
+                
                 request = sched.Queuer.Enqueue(
-                    sched.WorkJob, sched.Cancellation.Token
+                    sched.WorkJob, schedCancellation.Token
                 );
                 request.GetAwaiter().OnCompleted(() => {
-                    if (sched.RecurrenceInterval.HasValue) {
+                    if (schedRecurrence.HasValue) {
                         Reschedule(sched);
                     } else {
-                        try {
-                            sched.Timer?.Dispose();
-                        } catch (Exception x) {
-                        }
+                        // Clean up timer and remove from dictionary for non-recurring tasks
                         lock (GlobalScheduledJobs) {
-                            GlobalScheduledJobs.Remove(sched.Key);
+                            GlobalScheduledJobs.Remove(schedKey);
                         }
+                        // Dispose the scheduled job to free resources
+                        try {
+                            sched.Dispose();
+                        } catch { }
                     }
                 });
             } else {
@@ -657,10 +686,16 @@ namespace Figlotech.Core {
             }
         }
 
+        // Maximum timer interval to prevent drift and handle long-running schedules
+        // Timer will wake up periodically to recalculate for long waits
+        private static readonly int MaxTimerIntervalMs = 60000; // 1 minute max wait
+        private static readonly int TimerPrecisionMs = 50; // 50ms precision window
+
         private static void ResetTimer(ScheduledWorkJob sched) {
-            var longRunningCheckEvery = DebugSchedules ? 5000 : 120000;
             var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
-            var timeToFire = Math.Max(0, ms > longRunningCheckEvery ? longRunningCheckEvery : ms);
+            // For long waits, wake up periodically to recalculate (handles clock changes)
+            // For short waits, use exact time
+            var timeToFire = Math.Max(0, Math.Min((int)ms, MaxTimerIntervalMs));
             if (sched.Timer != null) {
                 sched.Timer.Dispose();
             }
@@ -764,7 +799,7 @@ namespace Figlotech.Core {
                 if (!GlobalScheduledJobs.ContainsKey(k)) {
                     return;
                 }
-                GlobalScheduledJobs[k].Timer.Dispose();
+                GlobalScheduledJobs[k].Timer?.Dispose();
                 GlobalScheduledJobs[k].IsActive = false;
                 GlobalScheduledJobs.Remove(k);
             }
@@ -1597,9 +1632,7 @@ namespace Figlotech.Core {
         }
 
         public static void Throw(this Fi _selfie, Exception x) {
-            if (Debugger.IsAttached) {
-                Debugger.Break();
-            }
+            
             try {
                 OnUltimatelyUnhandledException?.Invoke(x);
             } catch (Exception y) {

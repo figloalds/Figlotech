@@ -90,13 +90,13 @@ namespace Figlotech.Core {
 
         public void Dispose() {
             if (!_disposed) {
-                Cancellation.Dispose();
+                Cancellation?.Dispose();
                 LoggingActivity?.Dispose();
                 _disposed = true;
             }
         }
         ~WorkJobExecutionRequest() {
-            Dispose();
+            _disposed = true;
         }
     }
 
@@ -188,7 +188,9 @@ namespace Figlotech.Core {
         private SemaphoreSlim _dispatchSignal = new SemaphoreSlim(0);
         private Task _dispatcherTask;
 
-        private DateTime WentIdle = DateTime.UtcNow;
+        // Use long for thread-safe DateTime storage (DateTime.Ticks)
+        private long _wentIdleTicks = DateTime.UtcNow.Ticks;
+        public DateTime WentIdle => new DateTime(Interlocked.Read(ref _wentIdleTicks), DateTimeKind.Utc);
 
         // Metrics
         private int _cancelledInternal;
@@ -204,8 +206,10 @@ namespace Figlotech.Core {
         public int WorkDone => _workDoneInternal;
         public int Cancelled => _cancelledInternal;
 
-        public decimal TotalTaskResolutionTime { get; private set; } = 0m;
-        public decimal AverageTaskResolutionTime => WorkDone > 0 ? TotalTaskResolutionTime / WorkDone : 0m;
+        // Use long for thread-safe atomic operations (stores milliseconds as ticks)
+        private long _totalTaskResolutionTimeTicks;
+        public TimeSpan TotalTaskResolutionTime => TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks));
+        public TimeSpan AverageTaskResolutionTime => WorkDone > 0 ? TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks) / WorkDone) : TimeSpan.Zero;
 
         public TimeSpan TimeIdle => WentIdle > DateTime.UtcNow ? TimeSpan.Zero : DateTime.UtcNow - WentIdle;
 
@@ -306,6 +310,8 @@ namespace Figlotech.Core {
                 _dispatchSignal.Release();
             } catch (SemaphoreFullException) {
                 // ignore spuriously high release counts
+            } catch (ObjectDisposedException) {
+                // semaphore was disposed, ignore
             }
         }
 
@@ -348,7 +354,7 @@ namespace Figlotech.Core {
                 return;
             }
 
-            WentIdle = DateTime.UtcNow;
+            Interlocked.Exchange(ref _wentIdleTicks, DateTime.UtcNow.Ticks);
 
             ActiveJobs.TryAdd(job.id, job);
             Interlocked.Increment(ref _executingInternal);
@@ -386,7 +392,10 @@ namespace Figlotech.Core {
             return running + reserved < EffectiveParallelLimit();
         }
 
-        private int EffectiveParallelLimit() => Math.Min(500, Math.Max(MaxParallelTasks, 1));
+        // Maximum absolute parallel limit to prevent resource exhaustion
+        public static int AbsoluteMaxParallelLimit { get; set; } = 500;
+
+        private int EffectiveParallelLimit() => Math.Min(AbsoluteMaxParallelLimit, Math.Max(MaxParallelTasks, 1));
 
         public async Task AccompanyJob(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var wj = EnqueueTask(a, exceptionHandler, finished);
@@ -401,9 +410,6 @@ namespace Figlotech.Core {
             };
             if (FiTechCoreExtensions.DebugTasks) {
                 request.StackTrace = new StackTrace();
-            }
-            if (job.Name is null && Debugger.IsAttached) {
-                Debugger.Break();
             }
 
             Interlocked.Increment(ref _totalWorkInternal);
@@ -458,10 +464,14 @@ namespace Figlotech.Core {
                 job.Status = WorkJobRequestStatus.Running;
 
                 if (job.WorkJob.action != null) {
-                    using (var ctsLinked = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation)) {
+                    CancellationTokenSource ctsLinked = null;
+                    try {
+                        ctsLinked = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation);
                         job.WorkJob.ActionTask = job.WorkJob.action(ctsLinked.Token);
+                        await job.WorkJob.ActionTask.ConfigureAwait(false);
+                    } finally {
+                        ctsLinked?.Dispose();
                     }
-                    await job.WorkJob.ActionTask.ConfigureAwait(false);
                     job.Status = WorkJobRequestStatus.Finished;
                     job.LoggingActivity?.SetStatus(ActivityStatusCode.Ok);
                 }
@@ -494,25 +504,40 @@ namespace Figlotech.Core {
                             var t = OnExceptionInHandler?.Invoke(job, execEx, ex);
                             if (t is Task) await t.ConfigureAwait(false);
                         } catch (Exception exx) {
-                            Fi.Tech.Throw(new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx));
+                            // Capture the exception for TCS instead of throwing
+                            terminalException = new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx);
+                            try {
+                                Fi.Tech.Throw(new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx));
+                            } catch { }
                         }
                     }
                 } else {
-                    Fi.Tech.Throw(wrapped);
+                    // Capture the exception for TCS instead of throwing
+                    terminalException = wrapped;
+                    try {
+                        Fi.Tech.Throw(wrapped);
+                    } catch { }
                 }
 
-                if (job.WorkJob.finished != null) {
+                // Only call finished callback if we haven't already set terminalException
+                if (job.WorkJob.finished != null && terminalException == null) {
                     try {
                         await job.WorkJob.finished(false).ConfigureAwait(false);
                     } catch (Exception ex2) {
                         var wrapped2 = new WorkJobException("Error Executing WorkJob", job, new AggregateException(execEx, ex2));
-                        Fi.Tech.Throw(wrapped2);
+                        terminalException = wrapped2;
+                        try {
+                            Fi.Tech.Throw(wrapped2);
+                        } catch { }
                     }
                 }
 
-                terminalException = handlerEx != null
-                    ? new AggregateException("Job failed and handler threw", execEx, handlerEx)
-                    : execEx;
+                // Set terminalException if not already set
+                if (terminalException == null) {
+                    terminalException = handlerEx != null
+                        ? new AggregateException("Job failed and handler threw", execEx, handlerEx)
+                        : execEx;
+                }
 
                 Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} thrown an Exception: {execEx.Message}");
             } finally {
@@ -548,8 +573,8 @@ namespace Figlotech.Core {
                         job.TaskCompletionSource.TrySetResult(0);
                     }
 
-                    TotalTaskResolutionTime += (decimal)sw.Elapsed.TotalMilliseconds;
-                    WentIdle = DateTime.UtcNow;
+                    Interlocked.Add(ref _totalTaskResolutionTimeTicks, sw.Elapsed.Ticks);
+                    Interlocked.Exchange(ref _wentIdleTicks, DateTime.UtcNow.Ticks);
                 } catch (Exception cleanupEx) {
                     if (Debugger.IsAttached) Debugger.Break();
                     Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker cleanup error: {cleanupEx.Message}");
@@ -577,7 +602,17 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
-            Stop(true).GetAwaiter().GetResult();
+            // Use a synchronous wait with timeout to avoid deadlocks
+            // when Dispose() is called from a sync context
+            try {
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30))) {
+                    Stop(true).Wait(cts.Token);
+                }
+            } catch (OperationCanceledException) {
+                // Timeout - force shutdown
+            } catch (Exception) {
+                // Ignore other exceptions during dispose
+            }
             _runCts?.Dispose();
             _dispatchSignal?.Dispose();
             _dispatchSignal = null;
