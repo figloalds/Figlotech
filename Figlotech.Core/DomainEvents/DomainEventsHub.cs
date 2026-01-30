@@ -188,7 +188,7 @@ namespace Figlotech.Core.DomainEvents {
                         try {
                             await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
                         } catch (Exception y) {
-                            Fi.Tech.Throw(x);
+                            Fi.Tech.SwallowException(x);
                         }
                     }, (b)=> {
                         return Fi.Result();

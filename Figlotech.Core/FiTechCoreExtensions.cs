@@ -91,35 +91,6 @@ namespace Figlotech.Core {
         }
     }
 
-    public sealed class ScheduledWorkJob
-    {
-        public string Key => Queuer != null ? $"{Queuer.QID}_{Identifier}" : Identifier;
-        public WorkQueuer Queuer { get; set; }
-        public WorkJob WorkJob { get; set; }
-        public DateTime ScheduledTime { get; set; }
-        public DateTime LastExecuted { get; set; }
-        public TimeSpan? RecurrenceInterval { get; set; }
-        public string Identifier { get; set; }
-        public Timer Timer { get; set; }
-        public bool IsActive { get; internal set; } = true;
-        public StackTrace SchedulingStackTrace { get; internal set; }
-        public CancellationTokenSource Cancellation { get; internal set; }
-        public DateTime Created { get; set; } = DateTime.UtcNow;
-
-        ~ScheduledWorkJob() {
-        }
-        
-        public void Dispose() {
-            try {
-                Timer?.Dispose();
-            } catch { }
-            try {
-                Cancellation?.Dispose();
-            } catch { }
-            IsActive = false;
-        }
-    }
-
     public delegate dynamic ComputeField(dynamic o);
     public static class BDadosActivator<T> {
         public static readonly Func<T> Activate =
@@ -572,237 +543,79 @@ namespace Figlotech.Core {
             return value;
         }
 
-        static Dictionary<string, ScheduledWorkJob> GlobalScheduledJobs { get; set; } = new Dictionary<string, ScheduledWorkJob>();
-
-        private static void Reschedule(ScheduledWorkJob sched) {
-            lock (sched) {
-                if (sched.IsActive && sched.RecurrenceInterval.HasValue) {
-                    var nextRun = sched.ScheduledTime;
-                    var now = DateTime.UtcNow;
-                    
-                    // Calculate next occurrence based on the original scheduled time
-                    // This prevents drift by using the original anchor point
-                    if (now >= nextRun) {
-                        var interval = sched.RecurrenceInterval.Value;
-                        // Keep adding intervals until we get a future time
-                        // This handles cases where the system was suspended or clock changed
-                        do {
-                            nextRun = nextRun.Add(interval);
-                        } while (nextRun <= now);
-                    }
-                    
-                    sched.ScheduledTime = nextRun;
-                    ResetTimer(sched);
-                }
-            }
-        }
-
-        private static void _timerFn(object a) {
-            var sched = a as ScheduledWorkJob;
-            if (sched.Cancellation.IsCancellationRequested) {
-                return;
-            }
-            if(!sched.Queuer.Active) {
-                return;
-            }
-            //lock(sched) {
-            //    if(sched.RecurrenceInterval.HasValue) {
-            //        var ela = DateTime.UtcNow - sched.LastExecuted;
-            //        if (ela < sched.RecurrenceInterval.Value) {
-            //            Reschedule(sched);
-            //            return;
-            //        }
-            //    }
-            //    sched.LastExecuted = DateTime.UtcNow;
-            //}
-            var millisDiff = (sched.ScheduledTime - DateTime.UtcNow).TotalMilliseconds;
-            WorkJobExecutionRequest request = null;
-            // Use precision window to determine if task should fire now
-            // If we're within the precision window OR past the scheduled time, fire the task
-            if (millisDiff <= TimerPrecisionMs) {
-                // IMPORTANT: Reset timer immediately to prevent duplicate firing
-                // while the job is executing. The timer will be properly set when
-                // the job completes via OnCompleted.
-                if (sched.Timer != null) {
-                    sched.Timer.Dispose();
-                    sched.Timer = null;
-                }
-                
-                // Capture values locally to avoid closure capturing sched reference
-                var schedKey = sched.Key;
-                var schedRecurrence = sched.RecurrenceInterval;
-                var schedCancellation = sched.Cancellation;
-                
-                request = sched.Queuer.Enqueue(
-                    sched.WorkJob, schedCancellation.Token
-                );
-                request.GetAwaiter().OnCompleted(() => {
-                    if (schedRecurrence.HasValue) {
-                        Reschedule(sched);
-                    } else {
-                        // Clean up timer and remove from dictionary for non-recurring tasks
-                        lock (GlobalScheduledJobs) {
-                            GlobalScheduledJobs.Remove(schedKey);
-                        }
-                        // Dispose the scheduled job to free resources
-                        try {
-                            sched.Dispose();
-                        } catch { }
-                    }
-                });
-            } else {
-                ResetTimer(sched);
-            }
-        }
-
-        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
-            ScheduleTask(_selfie, identifier, FiTechFireTaskWorker, when, job, RecurrenceInterval);
-        }
         public static bool DebugSchedules { get; set; } = false;
         public static bool DebugTasks { get; set; } = false;
 
         public sealed class FiTechSchedulerStats {
             public string Key { get; set; }
-            public DateTime Created { get; set; } 
+            public DateTime Created { get; set; }
             public DateTime Next { get; set; }
             public TimeSpan? Recurrence { get; set; }
+            public bool FireIfMissed { get; set; }
+            public bool IsExecuting { get; set; }
             public int QueuerId { get; set; }
         }
         public static FiTechSchedulerStats[] GetSchedulerStats(this Fi _selfie) {
-            lock(GlobalScheduledJobs) {
-                var retv = new FiTechSchedulerStats[GlobalScheduledJobs.Count];
-                var keys = GlobalScheduledJobs.Keys.ToList();
-                for(int i = 0; i < keys.Count; i++) {
-                    retv[i] = new FiTechSchedulerStats {
-                        Key = keys[i],
-                        Created = GlobalScheduledJobs[keys[i]].Created,
-                        Next = GlobalScheduledJobs[keys[i]].ScheduledTime,
-                        Recurrence = GlobalScheduledJobs[keys[i]].RecurrenceInterval,
-                        QueuerId = GlobalScheduledJobs[keys[i]].Queuer.QID,
-                    };
-                }
-                
-                return retv;
+            // Get stats from GlobalQueuer
+            var schedules = FiTechFireTaskWorker.GetAllScheduleInfo();
+            var retv = new FiTechSchedulerStats[schedules.Length];
+            for(int i = 0; i < schedules.Length; i++) {
+                retv[i] = new FiTechSchedulerStats {
+                    Key = schedules[i].Identifier,
+                    Created = schedules[i].Created,
+                    Next = schedules[i].NextScheduledTime,
+                    Recurrence = schedules[i].RecurrenceInterval,
+                    FireIfMissed = schedules[i].FireIfMissed,
+                    IsExecuting = schedules[i].IsExecuting,
+                    QueuerId = FiTechFireTaskWorker.QID,
+                };
             }
+            return retv;
         }
 
-        // Maximum timer interval to prevent drift and handle long-running schedules
-        // Timer will wake up periodically to recalculate for long waits
-        private static readonly int MaxTimerIntervalMs = 60000; // 1 minute max wait
-        private static readonly int TimerPrecisionMs = 50; // 50ms precision window
-
-        private static void ResetTimer(ScheduledWorkJob sched) {
-            var ms = (long)(sched.ScheduledTime - Fi.Tech.GetUtcTime()).TotalMilliseconds;
-            // For long waits, wake up periodically to recalculate (handles clock changes)
-            // For short waits, use exact time
-            var timeToFire = Math.Max(0, Math.Min((int)ms, MaxTimerIntervalMs));
-            if (sched.Timer != null) {
-                sched.Timer.Dispose();
-            }
-            sched.Timer = new Timer(_timerFn, sched, timeToFire, System.Threading.Timeout.Infinite);
-        }
-
-        public static void ScheduleTask(this Fi _selfie, ScheduledWorkJob sched) {
-            if (sched.Cancellation.IsCancellationRequested) {
-                return;
-            }
-            if (!sched.Queuer.Active) {
-                return;
-            }
-            if(sched.WorkJob.Name == null) {
-                sched.WorkJob.Name = sched.Identifier;
-            }
-            lock (GlobalScheduledJobs) {
-                if (GlobalScheduledJobs.ContainsKey(sched.Key) && GlobalScheduledJobs[sched.Key] != sched) {
-                    UnscheduleByKey(_selfie, sched.Key);
-                }
-                if (sched.SchedulingStackTrace == null && DebugSchedules) {
-                    sched.SchedulingStackTrace = new StackTrace();
-                }
-                ResetTimer(sched);
-                GlobalScheduledJobs[sched.Key] = sched;
-            }
+        public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
+            var options = new ScheduledTaskOptions {
+                ScheduledTime = when,
+                RecurrenceInterval = RecurrenceInterval
+            };
+            FiTechFireTaskWorker.ScheduleTask(identifier, job, options);
         }
         public static void ScheduleTask(this Fi _selfie, string identifier, WorkQueuer queuer, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null, CancellationToken? cancellation = null) {
-            var sched = new ScheduledWorkJob {
-                Queuer = queuer,
-                Identifier = identifier,
-                WorkJob = job,
+            var options = new ScheduledTaskOptions {
                 ScheduledTime = when,
                 RecurrenceInterval = RecurrenceInterval,
-                Cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation ?? CancellationToken.None)
+                CancellationToken = cancellation
             };
-            ScheduleTask(_selfie, sched);
+            queuer.ScheduleTask(identifier, job, options);
         }
         public static void ClearSchedulesByWorker(this Fi _selfie, WorkQueuer instance, bool cancelRunning) {
-            lock (GlobalScheduledJobs) {
-                foreach(var k in GlobalScheduledJobs.Keys) {
-                    if (GlobalScheduledJobs[k].Queuer != instance) {
-                        continue;
-                    }
-                    if (cancelRunning) {
-                        GlobalScheduledJobs[k].Cancellation.Cancel();
-                    }
-                    UnscheduleByKey(_selfie, k);
+            foreach (var identifier in instance.GetScheduledIdentifiers()) {
+                if (cancelRunning) {
+                    // Cancellation is handled internally by WorkQueuer.Unschedule
                 }
+                instance.Unschedule(identifier);
             }
         }
         public static void ClearSchedules(this Fi _selfie, bool cancelRunning = false) {
-            lock (GlobalScheduledJobs) {
-                foreach (var k in GlobalScheduledJobs.Keys) {
-                    if (cancelRunning) {
-                        GlobalScheduledJobs[k].Cancellation.Cancel();
-                    }
-                    UnscheduleByKey(_selfie, k);
-                }
+            // Clear schedules from GlobalQueuer
+            foreach (var identifier in FiTechFireTaskWorker.GetScheduledIdentifiers()) {
+                FiTechFireTaskWorker.Unschedule(identifier);
             }
         }
 
         public static void Unschedule(this Fi _selfie, string identifier, WorkQueuer wq = null) {
-            lock (GlobalScheduledJobs) {
-                if(wq != null) {
-                    UnscheduleByKey(_selfie, $"{wq.QID}_{identifier}");
-                    return;
-                }
-                foreach (var k in GlobalScheduledJobs.Keys) {
-                    if (GlobalScheduledJobs[k].Identifier != identifier) {
-                        continue;
-                    }
-                    UnscheduleByKey(_selfie, k);
-                }
+            if (wq != null) {
+                wq.Unschedule(identifier);
+            } else {
+                FiTechFireTaskWorker.Unschedule(identifier);
             }
         }
 
         public static bool ScheduleExists(this Fi _selfie, string identifier, WorkQueuer wq = null) {
-            lock (GlobalScheduledJobs) {
-                if(wq != null) {
-                    return ScheduleExistsByKey(_selfie, $"{wq.QID}_{identifier}");
-                }
-                foreach (var k in GlobalScheduledJobs.Keys) {
-                    if (GlobalScheduledJobs[k].Identifier != identifier) {
-                        continue;
-                    }
-                    return true;
-                }
-                return false;
+            if (wq != null) {
+                return wq.IsScheduled(identifier);
             }
-        }
-
-        public static bool ScheduleExistsByKey(this Fi _selfie, string k) {
-            lock (GlobalScheduledJobs) {
-                return GlobalScheduledJobs.ContainsKey(k);
-            }
-        }
-
-        public static void UnscheduleByKey(this Fi _selfie, string k) {
-            lock (GlobalScheduledJobs) {
-                if (!GlobalScheduledJobs.ContainsKey(k)) {
-                    return;
-                }
-                GlobalScheduledJobs[k].Timer?.Dispose();
-                GlobalScheduledJobs[k].IsActive = false;
-                GlobalScheduledJobs.Remove(k);
-            }
+            return FiTechFireTaskWorker.IsScheduled(identifier);
         }
 
         public static byte[] ComputeHash(this Fi _selfie, string str) {
@@ -1631,8 +1444,11 @@ namespace Figlotech.Core {
             MainThreadHandler = Thread.CurrentThread;
         }
 
-        public static void Throw(this Fi _selfie, Exception x) {
-            
+        private static bool AnnoyDevAboutSwallowedExceptions = true;
+        public static void SwallowException(this Fi _selfie, Exception x) {
+            if (Debugger.IsAttached && AnnoyDevAboutSwallowedExceptions) {
+                Debugger.Break();
+            }
             try {
                 OnUltimatelyUnhandledException?.Invoke(x);
             } catch (Exception y) {
@@ -1674,8 +1490,8 @@ namespace Figlotech.Core {
         }
 
         public static void Error(this Fi _selfie, Exception x) {
-            Console.WriteLine($"Uncaught exception: {x.Message}");
-            Console.WriteLine(x.StackTrace);
+            Console.WriteLine($"Uncaught exception: {x?.Message}");
+            Console.WriteLine(x?.StackTrace);
         }
 
         public static IEnumerable<Exception> ToExceptionArray(this Exception ex) {
@@ -1857,7 +1673,7 @@ namespace Figlotech.Core {
                 await wq.Stop(true);
             }, async x => {
                 await Task.Yield();
-                Throw(_selfie, x);
+                SwallowException(_selfie, x);
             });
         }
         public static bool InlineFireTask { get; set; }

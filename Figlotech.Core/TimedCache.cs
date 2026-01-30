@@ -80,7 +80,7 @@ namespace Figlotech.Core {
                                     try {
                                         OnException?.Invoke(x);
                                     } catch(Exception y) {
-                                        Fi.Tech.Throw(y);
+                                        Fi.Tech.SwallowException(y);
                                     }
                                 }
                                 try {
@@ -95,7 +95,7 @@ namespace Figlotech.Core {
                                     try {
                                         OnException?.Invoke(x);
                                     } catch (Exception y) {
-                                        Fi.Tech.Throw(y);
+                                        Fi.Tech.SwallowException(y);
                                     }
                                 }
                             }

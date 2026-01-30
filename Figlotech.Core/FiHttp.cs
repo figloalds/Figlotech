@@ -127,7 +127,7 @@ namespace Figlotech.Core {
                         }, LoggerSerializerSettings)
                     ).ConfigureAwait(false);
                 } catch (Exception x) {
-                    Fi.Tech.Throw(x);
+                    Fi.Tech.SwallowException(x);
                 }
             }
 

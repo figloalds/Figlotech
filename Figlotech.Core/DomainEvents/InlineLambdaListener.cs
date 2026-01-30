@@ -26,7 +26,7 @@ namespace Figlotech.Core.DomainEvents {
 
         public override async Task OnEventHandlingError(T evt, Exception x) {
             if(OnHandle == null) {
-                Fi.Tech.Throw(x);
+                Fi.Tech.SwallowException(x);
             }
             await OnHandle?.Invoke(evt, x);
         }

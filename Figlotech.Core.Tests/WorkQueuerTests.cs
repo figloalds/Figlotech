@@ -346,5 +346,185 @@ namespace Figlotech.Core.Tests {
             Assert.False(Fi.Tech.ScheduleExists("test_unschedule", queuer));
             queuer.Dispose();
         }
+        
+        [Fact]
+        public void GetScheduleInfo_ReturnsCorrectInfo() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            var scheduledTime = DateTime.UtcNow.AddMinutes(5);
+            var recurrence = TimeSpan.FromMinutes(10);
+            var beforeCreate = DateTime.UtcNow;
+            
+            // Act
+            queuer.ScheduleTask("test_info", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = scheduledTime,
+                RecurrenceInterval = recurrence,
+                FireIfMissed = true
+            });
+            
+            var afterCreate = DateTime.UtcNow;
+            var info = queuer.GetScheduleInfo("test_info");
+            
+            // Assert
+            Assert.NotNull(info);
+            Assert.Equal("test_info", info.Identifier);
+            Assert.True(info.Created >= beforeCreate && info.Created <= afterCreate, "Created should be within expected time range");
+            Assert.Equal(scheduledTime, info.NextScheduledTime);
+            Assert.Equal(recurrence, info.RecurrenceInterval);
+            Assert.True(info.FireIfMissed);
+            Assert.False(info.IsExecuting);
+            
+            queuer.Unschedule("test_info");
+            queuer.Dispose();
+        }
+        
+        [Fact]
+        public void GetScheduleInfo_ReturnsNull_WhenNotFound() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            
+            // Act
+            var info = queuer.GetScheduleInfo("nonexistent");
+            
+            // Assert
+            Assert.Null(info);
+            queuer.Dispose();
+        }
+        
+        [Fact]
+        public void GetAllScheduleInfo_ReturnsAllSchedules() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            var scheduledTime1 = DateTime.UtcNow.AddMinutes(5);
+            var scheduledTime2 = DateTime.UtcNow.AddMinutes(10);
+            
+            // Act
+            queuer.ScheduleTask("task1", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = scheduledTime1,
+                RecurrenceInterval = TimeSpan.FromMinutes(1)
+            });
+            queuer.ScheduleTask("task2", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = scheduledTime2,
+                FireIfMissed = true
+            });
+            
+            var allInfo = queuer.GetAllScheduleInfo();
+            
+            // Assert
+            Assert.Equal(2, allInfo.Length);
+            Assert.Contains(allInfo, i => i.Identifier == "task1");
+            Assert.Contains(allInfo, i => i.Identifier == "task2");
+            
+            var task1Info = Array.Find(allInfo, i => i.Identifier == "task1");
+            Assert.NotNull(task1Info);
+            Assert.Equal(TimeSpan.FromMinutes(1), task1Info.RecurrenceInterval);
+            
+            var task2Info = Array.Find(allInfo, i => i.Identifier == "task2");
+            Assert.NotNull(task2Info);
+            Assert.True(task2Info.FireIfMissed);
+            Assert.Null(task2Info.RecurrenceInterval);
+            
+            queuer.Unschedule("task1");
+            queuer.Unschedule("task2");
+            queuer.Dispose();
+        }
+        
+        [Fact]
+        public void GetScheduledIdentifiers_ReturnsAllIdentifiers() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            
+            // Act
+            queuer.ScheduleTask("alpha", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMinutes(5)
+            });
+            queuer.ScheduleTask("beta", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMinutes(10)
+            });
+            queuer.ScheduleTask("gamma", new WorkJob(async () => { }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMinutes(15)
+            });
+            
+            var identifiers = queuer.GetScheduledIdentifiers();
+            
+            // Assert
+            Assert.Equal(3, identifiers.Length);
+            Assert.Contains("alpha", identifiers);
+            Assert.Contains("beta", identifiers);
+            Assert.Contains("gamma", identifiers);
+            
+            queuer.Unschedule("alpha");
+            queuer.Unschedule("beta");
+            queuer.Unschedule("gamma");
+            queuer.Dispose();
+        }
+        
+        [Fact]
+        public async Task ScheduleTask_ReplacesExistingSchedule() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            var firstFired = false;
+            var secondFired = false;
+            
+            // Act - Schedule first task
+            queuer.ScheduleTask("replaceable", new WorkJob(async () => {
+                firstFired = true;
+            }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMinutes(10)
+            });
+            
+            // Replace with second task that fires sooner
+            queuer.ScheduleTask("replaceable", new WorkJob(async () => {
+                secondFired = true;
+            }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMilliseconds(100)
+            });
+            
+            await Task.Delay(300);
+            
+            // Assert - Only second task should have fired
+            Assert.False(firstFired);
+            Assert.True(secondFired);
+            
+            queuer.Dispose();
+        }
+        
+        [Fact]
+        public async Task GetScheduleInfo_ShowsIsExecuting_DuringExecution() {
+            // Arrange
+            var queuer = new WorkQueuer("Test", 2);
+            var executionStarted = new TaskCompletionSource<bool>();
+            var canFinish = new TaskCompletionSource<bool>();
+            
+            // Act
+            queuer.ScheduleTask("long_running", new WorkJob(async () => {
+                executionStarted.SetResult(true);
+                await canFinish.Task;
+            }), new ScheduledTaskOptions {
+                ScheduledTime = DateTime.UtcNow.AddMilliseconds(50),
+                RecurrenceInterval = TimeSpan.FromHours(1) // Recurring so it stays in dictionary
+            });
+            
+            // Wait for execution to start
+            await executionStarted.Task;
+            
+            var infoWhileRunning = queuer.GetScheduleInfo("long_running");
+            
+            // Let it finish
+            canFinish.SetResult(true);
+            await Task.Delay(100);
+            
+            var infoAfterRunning = queuer.GetScheduleInfo("long_running");
+            
+            // Assert
+            Assert.NotNull(infoWhileRunning);
+            Assert.True(infoWhileRunning.IsExecuting);
+            
+            Assert.NotNull(infoAfterRunning);
+            Assert.False(infoAfterRunning.IsExecuting);
+            
+            queuer.Unschedule("long_running");
+            queuer.Dispose();
+        }
     }
 }

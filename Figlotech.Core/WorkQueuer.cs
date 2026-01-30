@@ -25,6 +25,22 @@ namespace Figlotech.Core {
         public int CompletedSteps;
     }
 
+    public sealed class ScheduledTaskOptions {
+        public TimeSpan? RecurrenceInterval { get; set; }
+        public bool FireIfMissed { get; set; } = false;
+        public DateTime? ScheduledTime { get; set; }
+        public CancellationToken? CancellationToken { get; set; }
+    }
+
+    public sealed class ScheduleInfo {
+        public string Identifier { get; set; }
+        public DateTime Created { get; set; }
+        public DateTime NextScheduledTime { get; set; }
+        public TimeSpan? RecurrenceInterval { get; set; }
+        public bool FireIfMissed { get; set; }
+        public bool IsExecuting { get; set; }
+    }
+
     public sealed class WorkJobException : Exception {
         public string EnqueuingContextStackTrace { get; private set; }
         public WorkJobExecutionStat WorkJobDetails { get; private set; }
@@ -213,6 +229,22 @@ namespace Figlotech.Core {
 
         public TimeSpan TimeIdle => WentIdle > DateTime.UtcNow ? TimeSpan.Zero : DateTime.UtcNow - WentIdle;
 
+        // Scheduling infrastructure
+        private readonly Dictionary<string, ScheduledTaskEntry> _scheduledTasks = new Dictionary<string, ScheduledTaskEntry>();
+        private readonly object _scheduledTasksLock = new object();
+        private readonly List<ScheduledTaskEntry> _missedSchedules = new List<ScheduledTaskEntry>();
+
+        private sealed class ScheduledTaskEntry {
+            public string Identifier { get; set; }
+            public DateTime Created { get; set; }
+            public WorkJob Job { get; set; }
+            public ScheduledTaskOptions Options { get; set; }
+            public Timer Timer { get; set; }
+            public CancellationTokenSource Cancellation { get; set; }
+            public DateTime ScheduledTime { get; set; }
+            public bool IsExecuting { get; set; }
+        }
+
         public WorkQueuer(string name, int maxThreads = -1, bool init_started = true) {
             if (maxThreads <= 0) maxThreads = Math.Max(2, Environment.ProcessorCount - 1);
             MaxParallelTasks = Math.Max(1, maxThreads);
@@ -234,6 +266,7 @@ namespace Figlotech.Core {
             _dispatcherTask = Task.Run(() => DispatchLoop(_runCts.Token));
             
             FlushHeldJobsToQueue();
+            ProcessMissedSchedules();
             SignalDispatcher();
         }
 
@@ -481,7 +514,7 @@ namespace Figlotech.Core {
                         await job.WorkJob.finished(true).ConfigureAwait(false);
                     } catch (Exception ex) {
                         var wrapped = new WorkJobException("Error Executing WorkJob", job, ex);
-                        Fi.Tech.Throw(wrapped);
+                        Fi.Tech.SwallowException(wrapped);
                     }
                 }
 
@@ -507,7 +540,7 @@ namespace Figlotech.Core {
                             // Capture the exception for TCS instead of throwing
                             terminalException = new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx);
                             try {
-                                Fi.Tech.Throw(new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx));
+                                Fi.Tech.SwallowException(new AggregateException("User code generated exception in the handler AND in the handler of the handler.", execEx, ex, exx));
                             } catch { }
                         }
                     }
@@ -515,7 +548,7 @@ namespace Figlotech.Core {
                     // Capture the exception for TCS instead of throwing
                     terminalException = wrapped;
                     try {
-                        Fi.Tech.Throw(wrapped);
+                        Fi.Tech.SwallowException(wrapped);
                     } catch { }
                 }
 
@@ -527,7 +560,7 @@ namespace Figlotech.Core {
                         var wrapped2 = new WorkJobException("Error Executing WorkJob", job, new AggregateException(execEx, ex2));
                         terminalException = wrapped2;
                         try {
-                            Fi.Tech.Throw(wrapped2);
+                            Fi.Tech.SwallowException(wrapped2);
                         } catch { }
                     }
                 }
@@ -551,11 +584,7 @@ namespace Figlotech.Core {
                         job.Status = WorkJobRequestStatus.Finished;
                     }
 
-                    try {
-                        await SafeInvoke(OnWorkComplete, job).ConfigureAwait(false);
-                    } catch (Exception x) {
-                        Fi.Tech.Throw(x);
-                    }
+                    await SafeInvoke(OnWorkComplete, job).ConfigureAwait(false);
 
                     Interlocked.Increment(ref _workDoneInternal);
                     if (job.Cancellation.IsCancellationRequested) {
@@ -585,11 +614,20 @@ namespace Figlotech.Core {
 
         private static async Task SafeInvoke(Func<WorkJobExecutionRequest, Task> ev, WorkJobExecutionRequest r) {
             if (ev == null) return;
-            try { await ev(r).ConfigureAwait(false); } catch { /* swallow user event exceptions, already surfaced via Fi.Tech.Throw elsewhere if needed */ }
+            try {
+                await ev(r).ConfigureAwait(false);
+            } catch (Exception ex) {
+                Fi.Tech.SwallowException(ex);
+            }
         }
+
         private static async Task SafeInvoke(Func<WorkJobExecutionRequest, Exception, Exception, Task> ev, WorkJobExecutionRequest r, Exception a, Exception b) {
             if (ev == null) return;
-            try { await ev(r, a, b).ConfigureAwait(false); } catch { /* swallow */ }
+            try {
+                await ev(r, a, b).ConfigureAwait(false);
+            } catch (Exception ex) {
+                Fi.Tech.SwallowException(ex);
+            }
         }
 
         public static async Task Live(Action<WorkQueuer> act, int parallelSize = -1) {
@@ -598,6 +636,231 @@ namespace Figlotech.Core {
                 queuer.Start();
                 act(queuer);
                 await queuer.Stop(true).ConfigureAwait(false);
+            }
+        }
+
+        #region Scheduling
+
+        public void ScheduleTask(string identifier, WorkJob job, ScheduledTaskOptions options) {
+            if (string.IsNullOrEmpty(identifier)) throw new ArgumentNullException(nameof(identifier));
+            if (job == null) throw new ArgumentNullException(nameof(job));
+            if (options == null) throw new ArgumentNullException(nameof(options));
+
+            lock (_scheduledTasksLock) {
+                // Unschedule existing if present
+                UnscheduleInternal(identifier);
+
+                var scheduledTime = options.ScheduledTime ?? DateTime.UtcNow;
+                var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                    options.CancellationToken ?? CancellationToken.None
+                );
+
+                var entry = new ScheduledTaskEntry {
+                    Identifier = identifier,
+                    Created = DateTime.UtcNow,
+                    Job = job,
+                    Options = options,
+                    Cancellation = cts,
+                    ScheduledTime = scheduledTime
+                };
+
+                _scheduledTasks[identifier] = entry;
+                SetupTimer(entry);
+            }
+        }
+
+        private void SetupTimer(ScheduledTaskEntry entry) {
+            // Dispose existing timer before creating new one
+            entry.Timer?.Dispose();
+            
+            var now = DateTime.UtcNow;
+            var delay = entry.ScheduledTime - now;
+            var delayMs = Math.Max(0, (long)delay.TotalMilliseconds);
+
+            // Cap timer at 1 minute to handle clock changes and long waits
+            const int maxTimerIntervalMs = 60000;
+            var timerDelay = (int)Math.Min(delayMs, maxTimerIntervalMs);
+
+            entry.Timer = new Timer(
+                state => OnTimerFired((ScheduledTaskEntry)state),
+                entry,
+                timerDelay,
+                Timeout.Infinite
+            );
+        }
+
+        private void OnTimerFired(ScheduledTaskEntry entry) {
+            if (entry.Cancellation.IsCancellationRequested) {
+                CleanupSchedule(entry);
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            var timeUntilScheduled = entry.ScheduledTime - now;
+            const int timerPrecisionMs = 50;
+
+            // If not yet time (within precision window), reschedule
+            if (timeUntilScheduled.TotalMilliseconds > timerPrecisionMs) {
+                SetupTimer(entry);
+                return;
+            }
+
+            // Check if WorkQueuer is active
+            if (!IsRunning || !Active) {
+                if (entry.Options.FireIfMissed) {
+                    lock (_scheduledTasksLock) {
+                        _missedSchedules.Add(entry);
+                    }
+                }
+                // For recurring tasks, calculate next occurrence
+                if (entry.Options.RecurrenceInterval.HasValue) {
+                    RescheduleEntry(entry);
+                } else {
+                    CleanupSchedule(entry);
+                }
+                return;
+            }
+
+            // Execute the job
+            ExecuteScheduledJob(entry);
+        }
+
+        private void ExecuteScheduledJob(ScheduledTaskEntry entry) {
+            lock (_scheduledTasksLock) {
+                if (entry.IsExecuting) {
+                    // Already running, skip this occurrence
+                    if (entry.Options.RecurrenceInterval.HasValue) {
+                        RescheduleEntry(entry);
+                    }
+                    return;
+                }
+                entry.IsExecuting = true;
+            }
+
+            // Dispose timer to prevent duplicate firing
+            entry.Timer?.Dispose();
+            entry.Timer = null;
+
+            var request = Enqueue(entry.Job, entry.Cancellation.Token);
+            
+            request.GetAwaiter().OnCompleted(() => {
+                lock (_scheduledTasksLock) {
+                    entry.IsExecuting = false;
+
+                    if (entry.Options.RecurrenceInterval.HasValue && !entry.Cancellation.IsCancellationRequested) {
+                        RescheduleEntry(entry);
+                    } else {
+                        CleanupSchedule(entry);
+                    }
+                }
+            });
+        }
+
+        private void RescheduleEntry(ScheduledTaskEntry entry) {
+            if (!entry.Options.RecurrenceInterval.HasValue) return;
+
+            var now = DateTime.UtcNow;
+            var nextRun = entry.ScheduledTime;
+            var interval = entry.Options.RecurrenceInterval.Value;
+
+            // Calculate next occurrence using loop to prevent drift
+            do {
+                nextRun = nextRun.Add(interval);
+            } while (nextRun <= now);
+
+            entry.ScheduledTime = nextRun;
+            SetupTimer(entry);
+        }
+
+        private void CleanupSchedule(ScheduledTaskEntry entry) {
+            lock (_scheduledTasksLock) {
+                entry.Timer?.Dispose();
+                entry.Cancellation?.Dispose();
+                _scheduledTasks.Remove(entry.Identifier);
+            }
+        }
+
+        private void UnscheduleInternal(string identifier) {
+            if (_scheduledTasks.TryGetValue(identifier, out var entry)) {
+                entry.Cancellation?.Cancel();
+                entry.Timer?.Dispose();
+                entry.Cancellation?.Dispose();
+                _scheduledTasks.Remove(identifier);
+            }
+        }
+
+        public void Unschedule(string identifier) {
+            lock (_scheduledTasksLock) {
+                UnscheduleInternal(identifier);
+            }
+        }
+
+        public bool IsScheduled(string identifier) {
+            lock (_scheduledTasksLock) {
+                return _scheduledTasks.ContainsKey(identifier);
+            }
+        }
+
+        public string[] GetScheduledIdentifiers() {
+            lock (_scheduledTasksLock) {
+                return _scheduledTasks.Keys.ToArray();
+            }
+        }
+
+        public ScheduleInfo GetScheduleInfo(string identifier) {
+            lock (_scheduledTasksLock) {
+                if (!_scheduledTasks.TryGetValue(identifier, out var entry)) {
+                    return null;
+                }
+                return new ScheduleInfo {
+                    Identifier = entry.Identifier,
+                    Created = entry.Created,
+                    NextScheduledTime = entry.ScheduledTime,
+                    RecurrenceInterval = entry.Options.RecurrenceInterval,
+                    FireIfMissed = entry.Options.FireIfMissed,
+                    IsExecuting = entry.IsExecuting
+                };
+            }
+        }
+
+        public ScheduleInfo[] GetAllScheduleInfo() {
+            lock (_scheduledTasksLock) {
+                return _scheduledTasks.Values.Select(entry => new ScheduleInfo {
+                    Identifier = entry.Identifier,
+                    Created = entry.Created,
+                    NextScheduledTime = entry.ScheduledTime,
+                    RecurrenceInterval = entry.Options.RecurrenceInterval,
+                    FireIfMissed = entry.Options.FireIfMissed,
+                    IsExecuting = entry.IsExecuting
+                }).ToArray();
+            }
+        }
+
+        private void ProcessMissedSchedules() {
+            List<ScheduledTaskEntry> missed;
+            lock (_scheduledTasksLock) {
+                missed = new List<ScheduledTaskEntry>(_missedSchedules);
+                _missedSchedules.Clear();
+            }
+
+            foreach (var entry in missed) {
+                if (entry.Options.FireIfMissed && !entry.Cancellation.IsCancellationRequested) {
+                    ExecuteScheduledJob(entry);
+                }
+            }
+        }
+
+        #endregion
+
+        private void DisposeScheduledTasks() {
+            lock (_scheduledTasksLock) {
+                foreach (var entry in _scheduledTasks.Values) {
+                    entry.Cancellation?.Cancel();
+                    entry.Timer?.Dispose();
+                    entry.Cancellation?.Dispose();
+                }
+                _scheduledTasks.Clear();
+                _missedSchedules.Clear();
             }
         }
 
@@ -613,12 +876,14 @@ namespace Figlotech.Core {
             } catch (Exception) {
                 // Ignore other exceptions during dispose
             }
+            DisposeScheduledTasks();
             _runCts?.Dispose();
             _dispatchSignal?.Dispose();
             _dispatchSignal = null;
         }
         public async ValueTask DisposeAsync() {
             await Stop(true).ConfigureAwait(false);
+            DisposeScheduledTasks();
             _runCts?.Dispose();
             _dispatchSignal?.Dispose();
             _dispatchSignal = null;
