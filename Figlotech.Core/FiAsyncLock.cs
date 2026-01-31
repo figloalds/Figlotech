@@ -120,60 +120,52 @@ namespace Figlotech.Core {
             this._semaphore = semaphore;
         }
 
-        ~FiAsyncDisposableLock() {
-            Dispose();
-        }
-
         public void Dispose() {
-            lock (this) {
-                if (isDisposed) {
-                    return;
-                }
-                try {
-                    if (_semaphore.CurrentCount == 0) {
-                        _semaphore.Release(1);
-                    } else {
-                        if (Debugger.IsAttached) {
-                            Debugger.Break();
-                        }
-                        Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
-                    }
-                    if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
-                        _lock.Remove(_key);
-                    }
-                } catch (Exception x) {
+            if (isDisposed) {
+                return;
+            }
+            try {
+                if (_semaphore.CurrentCount == 0) {
+                    _semaphore.Release(1);
+                } else {
                     if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
-                    Fi.Tech.Error(x);
-                } finally {
-                    isDisposed = true;
+                    Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
                 }
+                if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
+                    _lock.Remove(_key);
+                }
+            } catch (Exception x) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                Fi.Tech.Error(x);
+            } finally {
+                isDisposed = true;
             }
         }
 
         public ValueTask DisposeAsync() {
-            lock (this) {
-                if (isDisposed) {
-                    return Fi.CompletedValueTask;
+            if (isDisposed) {
+                return Fi.CompletedValueTask;
+            }
+            try {
+                if (_semaphore.CurrentCount == 0) {
+                    _semaphore.Release(1);
+                } else {
+                    Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
                 }
-                try {
-                    if (_semaphore.CurrentCount == 0) {
-                        _semaphore.Release(1);
-                    } else {
-                        Fi.Tech.Error(new Exception("FiAsyncLock had an exception during WaitAsync"));
-                    }
-                    if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
-                        _lock.Remove(_key);
-                    }
-                } catch (Exception x) {
-                    if (Debugger.IsAttached) {
-                        Debugger.Break();
-                    }
-                    Fi.Tech.Error(x);
-                } finally {
-                    isDisposed = true;
+                if (_lock != null && _lock.AutoRemoveLocks && _semaphore.CurrentCount == 1) {
+                    _lock.Remove(_key);
                 }
+            } catch (Exception x) {
+                if (Debugger.IsAttached) {
+                    Debugger.Break();
+                }
+                Fi.Tech.Error(x);
+            } finally {
+                isDisposed = true;
             }
             return Fi.CompletedValueTask;
         }
@@ -187,7 +179,7 @@ namespace Figlotech.Core {
             return new FiAsyncDisposableLock(_semaphore);
         }
         public FiAsyncDisposableLock LockSync() {
-            _semaphore.WaitAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            _semaphore.Wait();
             return new FiAsyncDisposableLock(_semaphore);
         }
 
@@ -208,7 +200,7 @@ namespace Figlotech.Core {
             var timeoutCancellation = new CancellationTokenSource(timeout);
 
             try {
-                _semaphore.WaitAsync(timeoutCancellation.Token).GetAwaiter().GetResult();
+                _semaphore.Wait(timeoutCancellation.Token);
                 return new FiAsyncDisposableLock(_semaphore);
             } catch (TaskCanceledException x) {
                 throw new TimeoutException("Awaiting for lock timed out", x);

@@ -1,4 +1,4 @@
-﻿
+
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
@@ -534,7 +534,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         );
                     case ScStructuralKeyType.ForeignKey:
                         return
-                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
                                 a.Table.ToLower() == n.Table.ToLower() &&
                                 a.Column.ToLower() == n.Column.ToLower() &&
                                 a.RefTable.ToLower() == n.RefTable.ToLower() &&
@@ -542,13 +542,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             );
                     case ScStructuralKeyType.PrimaryKey:
                         return
-                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName == n.KeyName) || (
+                            (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
                                 a.Table.ToLower() == n.Table.ToLower() &&
                                 a.Column.ToLower() == n.Column.ToLower()
                             );
                 }
             } catch(Exception x) {
-                Debugger.Break();
+                if(Debugger.IsAttached) {
+                    Debugger.Break();
+                }
                 throw new Exception($"Error comparing Key Definitions {a.ToString()} | {n.ToString()}", x);
             }
             throw new Exception("Something supposedly impossible happened within StructureChecker internal logic.");
@@ -595,8 +597,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             for (int i = keys.Count - 1; i >= 0; i--) {
                 var refTableName = keys[i].RefTable;
                 if (refTableName == tableName.ToLower() && columnName.ToLower() == keys[i].RefColumn.ToLower()) {
-                    keys.RemoveAt(i);
                     yield return new DropFkScAction(DataAccessor, keys[i], $"Key {keys[i].KeyName} needs to be removed to alter column {tableName}::{columnName}");
+                    keys.RemoveAt(i);
                 }
             }
         }
@@ -854,12 +856,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private ScStructuralLink GetIndexForFk(ScStructuralLink fk) {
-            return new ScStructuralLink {
+            var index = new ScStructuralLink {
+                Type = ScStructuralKeyType.Index,
                 Table = fk.Table,
                 Column = fk.Column,
-                KeyName = $"idx_{fk.Table.ToLower()}_{fk.Column.ToLower()}",
-                Type = ScStructuralKeyType.Index
             };
+            index.KeyName = index.FiTechKeyName.ToLower();
+            return index;
         }
 
         private IEnumerable<ScStructuralLink> GetNecessaryLinks() {
@@ -873,21 +876,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var constraint = new ScStructuralLink();
 
                     if (uk != null && (uk.Unique || uk.Index)) {
-                        yield return new ScStructuralLink {
+                        var indexLink = new ScStructuralLink {
                             Table = t.Name,
                             Column = f.Name,
                             IsUnique = uk.Unique,
                             Type = ScStructuralKeyType.Index,
                         };
+                        indexLink.KeyName = indexLink.FiTechKeyName.ToLower();
+                        yield return indexLink;
                     }
 
                     var pri = f.GetCustomAttribute<PrimaryKeyAttribute>();
                     if (pri != null) {
-                        yield return new ScStructuralLink {
+                        var pkLink = new ScStructuralLink {
                             Table = t.Name,
                             Column = f.Name,
                             Type = ScStructuralKeyType.PrimaryKey,
                         };
+                        pkLink.KeyName = pkLink.FiTechKeyName.ToLower();
+                        yield return pkLink;
                     }
 
 
@@ -903,7 +910,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         constraint = ScStructuralLink.FromFkAttribute(fk);
                         constraint.Table = t.Name;
                         constraint.Column = f.Name;
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForFk = GetIndexForFk(constraint);
+                        indexForFk.KeyName = indexForFk.FiTechKeyName.ToLower();
+                        yield return indexForFk;
                         yield return constraint;
                         continue;
                     }
@@ -929,7 +939,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.RefColumn = GetReferenceColumn(agf.RemoteObjectType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForAgf = GetIndexForFk(constraint);
+                        indexForAgf.KeyName = indexForAgf.FiTechKeyName.ToLower();
+                        yield return indexForAgf;
                         yield return constraint;
                         continue;
                     }
@@ -951,7 +964,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.RefColumn = GetReferenceColumn(agff.ImediateType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForAgff1 = GetIndexForFk(constraint);
+                        indexForAgff1.KeyName = indexForAgff1.FiTechKeyName.ToLower();
+                        yield return indexForAgff1;
                         yield return constraint;
                         constraint = new ScStructuralLink();
 
@@ -970,7 +986,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.RefColumn = GetReferenceColumn(agff.FarType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForAgff2 = GetIndexForFk(constraint);
+                        indexForAgff2.KeyName = indexForAgff2.FiTechKeyName.ToLower();
+                        yield return indexForAgff2;
                         yield return constraint;
                         continue;
                     }
@@ -993,7 +1012,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.RefColumn = GetReferenceColumn(type);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForAgo = GetIndexForFk(constraint);
+                        indexForAgo.KeyName = indexForAgo.FiTechKeyName.ToLower();
+                        yield return indexForAgo;
                         yield return constraint;
                         continue;
                     }
@@ -1014,7 +1036,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             constraint.RefColumn = GetReferenceColumn(agl.RemoteObjectType);
                             constraint.Type = ScStructuralKeyType.ForeignKey;
                         }
-                        yield return GetIndexForFk(constraint);
+                        constraint.KeyName = constraint.FiTechKeyName.ToLower();
+                        var indexForAgl = GetIndexForFk(constraint);
+                        indexForAgl.KeyName = indexForAgl.FiTechKeyName.ToLower();
+                        yield return indexForAgl;
                         yield return constraint;
                         continue;
                     }

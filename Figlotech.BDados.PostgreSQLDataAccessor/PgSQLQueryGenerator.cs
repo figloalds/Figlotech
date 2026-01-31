@@ -1,4 +1,4 @@
-﻿
+
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
@@ -134,7 +134,12 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     if (att is PrimaryKeyAttribute) {
                         options = " PRIMARY KEY";
                         if(typeOfField != typeof(Guid) && typeOfField != typeof(string)) {
-                            tipo = "SERIAL";
+                            // Use BIGSERIAL for long/Int64, SERIAL for int/Int32
+                            if(typeOfField == typeof(long) || typeOfField == typeof(Int64)) {
+                                tipo = "BIGSERIAL";
+                            } else {
+                                tipo = "SERIAL";
+                            }
                         }
                     }
             }
