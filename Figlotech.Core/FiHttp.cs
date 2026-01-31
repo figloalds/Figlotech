@@ -1,4 +1,4 @@
-﻿using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Autokryptex;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
@@ -44,12 +44,18 @@ namespace Figlotech.Core {
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
 
         FiHttp Caller;
+        HttpRequestMessage RequestMessage;
+        List<IDisposable> Disposables = new List<IDisposable>();
 
-        internal FiHttpResult(FiHttp caller) {
+        internal FiHttpResult(FiHttp caller, HttpRequestMessage requestMessage) {
             this.Caller = caller;
+            this.RequestMessage = requestMessage;
+            if (requestMessage != null) {
+                Disposables.Add(requestMessage);
+            }
         }
         ~FiHttpResult() {
-            Dispose();
+            Dispose(false);
         }
 
         public string PostData { get; set; }
@@ -57,7 +63,7 @@ namespace Figlotech.Core {
         public bool IsSuccess => (int)StatusCode >= 200 && (int)StatusCode < 300;
 
         public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage, CancellationToken ct) {
-            var retv = new FiHttpResult(caller);
+            var retv = new FiHttpResult(caller, httpRequestMessage);
             try {
                 var client = caller.HttpClient;
                 var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
@@ -220,11 +226,23 @@ namespace Figlotech.Core {
 
         bool isDisposed = false;
         public void Dispose() {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        void Dispose(bool disposing) {
             if (isDisposed) {
                 return;
             }
-            Response?.Dispose();
-            CachedResponseBody?.Dispose();
+            if (disposing) {
+                Response?.Dispose();
+                CachedResponseBody?.Dispose();
+                foreach (var disposable in Disposables) {
+                    disposable?.Dispose();
+                }
+                Disposables.Clear();
+            }
+            isDisposed = true;
         }
     }
 
