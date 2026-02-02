@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -340,10 +341,13 @@ namespace Figlotech.Data {
                         matches.Add(match);
                     }
                 }
-
+                
                 var args2 = args.Where(a => !a?.GetType()?.Name.Contains("PythonFunction") ?? true).ToArray();
+                matches.RemoveAll(match => {
+                    var pname = match.Groups["tagname"].Value;
+                    return _objParams.ContainsKey(pname);
+                });
                 if (args2.Length > 0 && args2.Length != matches.Count) {
-
                     throw new Exception($@"Parameter count mismatch on QueryBuilder.Append\r\n
                         Text Parameters: {string.Join(", ", matches.Select(x=> $"@{x.Groups["tagname"].Value}"))}\r\n
                         Parameters: {string.Join(", ", args)}\r\n
@@ -352,11 +356,11 @@ namespace Figlotech.Data {
 
                 foreach (Match match in matches) {
                     var pname = match.Groups["tagname"].Value;
-                    if (++iterator > args.Length - 1)
-                        break;
                     if (_objParams.ContainsKey(pname)) {
                         continue;
                     }
+                    if (++iterator > args.Length - 1)
+                        break;
                     var item = args[iterator];
                     if (item is IQueryBuilder iqb) {
                         fragment = fragment.Replace($"@{match.Groups["tagname"].Value}", iqb.GetCommandText());

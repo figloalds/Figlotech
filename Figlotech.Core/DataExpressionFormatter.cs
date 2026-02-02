@@ -70,18 +70,42 @@ namespace Figlotech.Core {
     }
 
     public sealed class DateFormatter : IDataFormatter {
+        private readonly TimeZoneInfo _timeZone;
+        
+        public DateFormatter(TimeZoneInfo timeZone = null) {
+            _timeZone = timeZone;
+        }
+        
         public string Name => "Date";
         public object Apply(object value, string[] args, CultureInfo culture) {
             if (!TemplatingHelpers.TryToDateTime(value, culture, out var dt)) return string.Empty;
+            if (_timeZone != null) {
+                if (dt.Kind == DateTimeKind.Unspecified) {
+                    dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                }
+                dt = TimeZoneInfo.ConvertTime(dt.ToUniversalTime(), _timeZone);
+            }
             var fmt = args.Length > 0 ? TemplatingHelpers.Unquote(args[0]) : "d";
             return dt.ToString(fmt, culture);
         }
     }
 
     public sealed class DateTimeFormatter : IDataFormatter {
+        private readonly TimeZoneInfo _timeZone;
+        
+        public DateTimeFormatter(TimeZoneInfo timeZone = null) {
+            _timeZone = timeZone;
+        }
+        
         public string Name => "DateTime";
         public object Apply(object value, string[] args, CultureInfo culture) {
             if (!TemplatingHelpers.TryToDateTime(value, culture, out var dt)) return string.Empty;
+            if (_timeZone != null) {
+                if (dt.Kind == DateTimeKind.Unspecified) {
+                    dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                }
+                dt = TimeZoneInfo.ConvertTime(dt.ToUniversalTime(), _timeZone);
+            }
             var fmt = args.Length > 0 ? TemplatingHelpers.Unquote(args[0]) : "g";
             return dt.ToString(fmt, culture);
         }
@@ -109,6 +133,7 @@ namespace Figlotech.Core {
         private readonly Dictionary<string, IExpressionFilter> _filterDictionary;
         private readonly Dictionary<string, IDataFormatter> _formatterRegistry;
         private readonly CultureInfo _culture;
+        private readonly TimeZoneInfo _timeZone;
         private readonly int _maxDepth;
         private readonly int _maxCollection;
 
@@ -116,10 +141,12 @@ namespace Figlotech.Core {
             IEnumerable<IExpressionFilter> filters = null,
             IEnumerable<IDataFormatter> formatters = null,
             CultureInfo culture = null,
+            TimeZoneInfo timeZone = null,
             int maxDepth = 64,
             int maxCollection = 10000
         ) {
             _culture = culture ?? CultureInfo.InvariantCulture;
+            _timeZone = timeZone;
             _maxDepth = Math.Max(8, maxDepth);
             _maxCollection = Math.Max(100, maxCollection);
 
@@ -139,8 +166,8 @@ namespace Figlotech.Core {
             void add(IDataFormatter df) { if (df != null) _formatterRegistry[df.Name] = df; }
 
             add(new NumberFormatter());
-            add(new DateFormatter());
-            add(new DateTimeFormatter());
+            add(new DateFormatter(_timeZone));
+            add(new DateTimeFormatter(_timeZone));
 
             if (formatters != null)
                 foreach (var df in formatters) add(df);

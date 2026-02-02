@@ -589,8 +589,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 Query.Append($"\t{members[i].Name}=(CASE ");
                 for(int ridx = 0; ridx < legacySet.Count; ridx++) {
-                    Query.Append($"WHEN {rid}=@r_{ridx}", legacySet[ridx].RID);
-                    if(legacySet[ridx].IsReceivedFromSync) {
+                    if(i == 0) {
+                        Query.Append($"WHEN {rid}=@r_{ridx}", legacySet[ridx].RID);
+                    } else {
+                        Query.Append($"WHEN {rid}=@r_{ridx}");
+                    }
+                    if (legacySet[ridx].IsReceivedFromSync) {
                         Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
                     }
                     var val = ReflectionTool.GetMemberValue(members[i], legacySet[ridx]);

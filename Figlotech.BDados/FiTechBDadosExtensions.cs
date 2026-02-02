@@ -333,15 +333,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static QueryBuilder ListRids<T>(this Fi _selfie, List<T> set) where T : ILegacyDataObject {
             QueryBuilder retv = new QueryBuilder();
 
+            var type = set.FirstOrDefault()?.GetType() ?? typeof(T);
+
             int x = 0;
-            var ridType = RidFieldType[typeof(T)];
+            var ridType = RidFieldType[type];
 
             int ggid = ++gid;
             for (int i = 0; i < set.Count; i++) {
                 retv.Append(
                     new QueryBuilder().Append(
                         $"@r_{i}",
-                        ReflectionTool.GetMemberValue(FiTechBDadosExtensions.RidColumnOf[typeof(T)], set[i])
+                        ReflectionTool.GetMemberValue(FiTechBDadosExtensions.RidColumnOf[type], set[i])
                     )
                 );
                 if (i < set.Count - 1)

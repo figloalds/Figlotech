@@ -503,15 +503,20 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             for (var i = 0; i < members.Count; i++) {
                 var memberType = ReflectionTool.GetTypeOf(members[i]);
                 Query.Append($"{members[i].Name}=(CASE ");
-                foreach (var a in legacySet) {
-                    Query.Append($"WHEN {rid}=@_mu{x++} THEN @_mu{x++}", Convert.ChangeType(a.RID, ridFieldType), ReflectionTool.GetMemberValue(members[i], a));
+                for (var v = 0; v < legacySet.Count; v++) {
+                    var a = legacySet[v];
+                    if(i == 0) {
+                        Query.Append($"WHEN {rid}=@_id{v} THEN @_mu{x++}", Convert.ChangeType(a.RID, ridFieldType), ReflectionTool.GetMemberValue(members[i], a));
+                    } else {
+                        Query.Append($"WHEN {rid}=@_id{v} THEN @_mu{x++}", ReflectionTool.GetMemberValue(members[i], a));
+                    }
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
                 if (i < members.Count - 1) {
                     Query.Append(",");
                 }
             }
-
+            
             Query.Append($"WHERE {rid} IN (")
                 .Append(Fi.Tech.ListRids(workingSet))
                 .Append(");");
