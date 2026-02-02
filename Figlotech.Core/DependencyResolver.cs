@@ -111,7 +111,6 @@ namespace Figlotech.Core {
                     }
                 }
             }
-
         }
 
         internal object Resolve(Type t, bool ignoreErrors) {
