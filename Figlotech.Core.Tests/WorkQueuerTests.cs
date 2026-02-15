@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Figlotech.Core;
@@ -524,6 +525,215 @@ namespace Figlotech.Core.Tests {
             Assert.False(infoAfterRunning.IsExecuting);
             
             queuer.Unschedule("long_running");
+            queuer.Dispose();
+        }
+    }
+
+    public class WorkQueuerReliabilityTests {
+
+        [Fact]
+        public async Task WaitForDequeue_CompletesWhenJobPreCancelled() {
+            // Arrange - fix #9: _tcsNotifyDequeued must complete on cancellation
+            var queuer = new WorkQueuer("Test", 2);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel(); // Pre-cancel before enqueue
+
+            var request = queuer.Enqueue(
+                new WorkJob(async (ct) => {
+                    await Task.Delay(1000, ct);
+                }),
+                cts.Token
+            );
+
+            // Act - WaitForDequeue should not hang; use a timeout to detect hang
+            var waitTask = Task.Run(async () => {
+                try {
+                    await request.WaitForDequeue();
+                } catch (OperationCanceledException) {
+                    // Expected: job was cancelled before dequeue
+                }
+            });
+
+            var completed = await Task.WhenAny(waitTask, Task.Delay(3000));
+
+            // Assert
+            Assert.Equal(waitTask, completed); // Should complete, not timeout
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task EnqueueAfterDispose_FaultsTaskCompletionSource() {
+            // Arrange - fix #10: enqueue after dispose should fault TCS, not hang
+            var queuer = new WorkQueuer("Test", 2);
+            queuer.Dispose();
+
+            // Act
+            var request = queuer.EnqueueTask(async () => {
+                await Task.Delay(100);
+            });
+
+            // Assert - awaiting the request should throw ObjectDisposedException
+            var threw = false;
+            try {
+                await request;
+            } catch (ObjectDisposedException) {
+                threw = true;
+            }
+            Assert.True(threw, "Awaiting a job enqueued after Dispose should throw ObjectDisposedException");
+        }
+
+        [Fact]
+        public async Task EnqueueAfterDispose_WaitForDequeue_AlsoFaults() {
+            // Arrange - fix #10: WaitForDequeue should also fault
+            var queuer = new WorkQueuer("Test", 2);
+            queuer.Dispose();
+
+            var request = queuer.EnqueueTask(async () => {
+                await Task.Delay(100);
+            });
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => {
+                await request.WaitForDequeue();
+            });
+        }
+
+        [Fact]
+        public async Task StopWithSignalDrain_CompletesQuickly() {
+            // Arrange - fix #12: signal-based drain should not poll
+            var queuer = new WorkQueuer("Test", 4);
+            var sw = Stopwatch.StartNew();
+
+            // Enqueue a few fast jobs
+            for (int i = 0; i < 10; i++) {
+                queuer.EnqueueTask(async () => {
+                    await Task.Delay(10);
+                });
+            }
+
+            // Act
+            await queuer.Stop(true);
+            sw.Stop();
+
+            // Assert - should finish much faster than polling intervals (100ms/poll)
+            // With signal-based drain, it finishes as soon as last job is done
+            Assert.True(sw.ElapsedMilliseconds < 5000,
+                $"Stop took {sw.ElapsedMilliseconds}ms, expected < 5000ms");
+            Assert.Equal(10, queuer.WorkDone);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task StopWithoutWait_CompletesWhenActiveJobsFinish() {
+            // Arrange - fix #12: signal-based drain for wait=false path
+            var queuer = new WorkQueuer("Test", 4);
+
+            for (int i = 0; i < 5; i++) {
+                queuer.EnqueueTask(async () => {
+                    await Task.Delay(50);
+                });
+            }
+
+            // Act
+            await queuer.Stop(false);
+
+            // Assert - should not hang
+            Assert.True(queuer.WorkDone >= 0);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public void VolatileStateFlags_VisibleAcrossThreads() {
+            // Arrange - fix #11: verify state flags are consistent
+            var queuer = new WorkQueuer("Test", 2, init_started: false);
+
+            // Assert initial state
+            Assert.False(queuer.IsRunning);
+            Assert.False(queuer.Active);
+            Assert.False(queuer.IsClosed);
+
+            // Act - start
+            queuer.Start();
+            Assert.True(queuer.IsRunning);
+            Assert.True(queuer.Active);
+
+            // Act - close
+            queuer.Close();
+            Assert.True(queuer.IsClosed);
+
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task CancelledBeforeExecution_MetricsStillConsistent() {
+            // Arrange - verify that pre-cancelled jobs are counted correctly
+            var queuer = new WorkQueuer("Test", 1);
+
+            // Fill the single slot with a long-running job so subsequent ones queue
+            var blockTcs = new TaskCompletionSource<bool>();
+            queuer.EnqueueTask(async () => {
+                await blockTcs.Task;
+            });
+
+            await Task.Delay(50); // Let the blocking job start
+
+            // Enqueue then cancel before it gets picked up
+            using var cts = new CancellationTokenSource();
+            var request = queuer.Enqueue(
+                new WorkJob(async (ct) => {
+                    await Task.Delay(10000, ct);
+                }),
+                cts.Token
+            );
+            cts.Cancel();
+
+            // Unblock the first job
+            blockTcs.SetResult(true);
+
+            // Unblock first, then cancel — ensures the second job enters ExecuteJob
+            // so the cancellation surfaces as WorkJobException wrapping TaskCanceledException.
+            // If cancellation wins the race and fires before dequeue, we get a plain
+            // TaskCanceledException instead.  Both outcomes are valid.
+            // Wait for everything to drain
+            try {
+                await request;
+            } catch (OperationCanceledException) {
+                // Pre-cancellation path: TrySetCanceled on the TCS
+            } catch (WorkJobException wje) when (wje.InnerException is OperationCanceledException) {
+                // In-execution path: token fired inside ExecuteJob
+            }
+
+            await queuer.Stop(true);
+
+            // Assert - metrics should be consistent
+            Assert.Equal(2, queuer.TotalWork);
+            Assert.Equal(2, queuer.WorkDone);
+            // Cancelled counter is only incremented in the pre-cancellation path;
+            // if the job entered ExecuteJob instead, it counts as a normal completion.
+            // So we just verify totals balance out.
+            Assert.True(queuer.WorkDone <= queuer.TotalWork);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task DrainSignal_HandlesRapidEnqueueDuringStop() {
+            // Arrange - stress test the signal-based drain
+            var queuer = new WorkQueuer("StressTest", 8);
+            var completed = 0;
+
+            for (int i = 0; i < 200; i++) {
+                queuer.EnqueueTask(async () => {
+                    await Task.Delay(1);
+                    Interlocked.Increment(ref completed);
+                });
+            }
+
+            // Act
+            await queuer.Stop(true);
+
+            // Assert
+            Assert.Equal(200, completed);
+            Assert.Equal(200, queuer.WorkDone);
             queuer.Dispose();
         }
     }

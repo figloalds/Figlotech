@@ -1,11 +1,9 @@
 using Figlotech.Core.Extensions;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -128,7 +126,11 @@ namespace Figlotech.Core {
         public String Description { get; set; } = null;
         public bool AllowTelemetry { get; set; } = true;
 
-        public Dictionary<string, object> AdditionalTelemetryTags { get; private set; } = new Dictionary<string, object>();
+        internal Dictionary<string, object> _additionalTelemetryTags;
+        public Dictionary<string, object> AdditionalTelemetryTags {
+            get => _additionalTelemetryTags ??= new Dictionary<string, object>();
+            private set => _additionalTelemetryTags = value;
+        }
 
         public ValueTask ActionTask { get; internal set; }
 
@@ -143,9 +145,6 @@ namespace Figlotech.Core {
             handling = errorHandling;
         }
 
-        ~WorkJob() {
-
-        }
     }
 
     public sealed class WorkJobExecutionStat {
@@ -179,7 +178,8 @@ namespace Figlotech.Core {
         public event Func<WorkJobExecutionRequest, Task> OnWorkComplete;
         public event Func<WorkJobExecutionRequest, Exception, Exception, Task> OnExceptionInHandler;
 
-        public Dictionary<string, object> DefaultLoggingTags { get; } = new Dictionary<string, object>();
+        private Dictionary<string, object> _defaultLoggingTags;
+        public Dictionary<string, object> DefaultLoggingTags => _defaultLoggingTags ??= new Dictionary<string, object>();
 
         // Overflow queue kept in strict FIFO order
         private readonly Queue<WorkJobExecutionRequest> _overflowQueue = new Queue<WorkJobExecutionRequest>();
@@ -196,13 +196,21 @@ namespace Figlotech.Core {
         public int MaxParallelTasks { get; set; } = 0;
         public static int DefaultSleepInterval = 25;
 
-        public bool IsClosed { get; private set; } = false;
-        public bool IsRunning { get; private set; } = false;
-        public bool Active { get; private set; } = false;
+        // Volatile-backed state flags for cross-thread visibility
+        private volatile bool _isClosed;
+        private volatile bool _isRunning;
+        private volatile bool _active;
+
+        public bool IsClosed { get => _isClosed; private set => _isClosed = value; }
+        public bool IsRunning { get => _isRunning; private set => _isRunning = value; }
+        public bool Active { get => _active; private set => _active = value; }
 
         private CancellationTokenSource _runCts;
         private SemaphoreSlim _dispatchSignal = new SemaphoreSlim(0);
         private Task _dispatcherTask;
+
+        // Signaled when all queued and active work has drained (used by Stop)
+        private volatile TaskCompletionSource<bool> _drainTcs;
 
         // Use long for thread-safe DateTime storage (DateTime.Ticks)
         private long _wentIdleTicks = DateTime.UtcNow.Ticks;
@@ -277,13 +285,26 @@ namespace Figlotech.Core {
             Active = false;
 
             if (wait) {
-                // Wait for drain: no queued items and no active items
-                while (Volatile.Read(ref _inQueueInternal) > 0 || !ActiveJobs.IsEmpty) {
-                    await Task.Delay(100).ConfigureAwait(false);
+                // Signal-based drain: wait for all queued and active jobs to complete
+                if (Volatile.Read(ref _inQueueInternal) > 0 || !ActiveJobs.IsEmpty) {
+                    var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _drainTcs = tcs;
+                    // Double-check after publishing tcs (job may have finished between check and assignment)
+                    if (Volatile.Read(ref _inQueueInternal) <= 0 && ActiveJobs.IsEmpty) {
+                        tcs.TrySetResult(true);
+                    }
+                    await tcs.Task.ConfigureAwait(false);
+                    _drainTcs = null;
                 }
             } else {
-                while (!ActiveJobs.IsEmpty) {
-                    await Task.Delay(50).ConfigureAwait(false);
+                if (!ActiveJobs.IsEmpty) {
+                    var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _drainTcs = tcs;
+                    if (ActiveJobs.IsEmpty) {
+                        tcs.TrySetResult(true);
+                    }
+                    await tcs.Task.ConfigureAwait(false);
+                    _drainTcs = null;
                 }
             }
 
@@ -381,8 +402,10 @@ namespace Figlotech.Core {
             if (job.Cancellation.IsCancellationRequested) {
                 Interlocked.Increment(ref _cancelledInternal);
                 Interlocked.Increment(ref _workDoneInternal);
+                job._tcsNotifyDequeued.TrySetCanceled(job.Cancellation.Token);
                 job.TaskCompletionSource.TrySetCanceled(job.Cancellation.Token);
                 job.Cancellation.Dispose();
+                SignalDrainIfComplete();
                 SignalDispatcher();
                 return;
             }
@@ -405,15 +428,17 @@ namespace Figlotech.Core {
                 } finally {
                     ActiveJobs.TryRemove(job.id, out _);
                     Interlocked.Decrement(ref _executingInternal);
+                    SignalDrainIfComplete();
                     SignalDispatcher();
                 }
             });
+        }
 
-            _ = executionTask.ContinueWith(t => {
-                if (t.IsFaulted) {
-                    _ = t.Exception;
-                }
-            }, TaskScheduler.Default);
+        private void SignalDrainIfComplete() {
+            var tcs = _drainTcs;
+            if (tcs != null && Volatile.Read(ref _inQueueInternal) <= 0 && ActiveJobs.IsEmpty) {
+                tcs.TrySetResult(true);
+            }
         }
 
         private bool CanStartNewJobUnsafe() {
@@ -447,6 +472,17 @@ namespace Figlotech.Core {
 
             Interlocked.Increment(ref _totalWorkInternal);
 
+            if (IsClosed) {
+                // WorkQueuer has been disposed; fault the TCS so awaiters
+                // receive an error instead of hanging forever.
+                request.Status = WorkJobRequestStatus.Failed;
+                request._tcsNotifyDequeued.TrySetException(
+                    new ObjectDisposedException(nameof(WorkQueuer), $"WorkQueuer \"{Name}\" has been disposed."));
+                request.TaskCompletionSource.TrySetException(
+                    new ObjectDisposedException(nameof(WorkQueuer), $"WorkQueuer \"{Name}\" has been disposed."));
+                return request;
+            }
+
             if (Active) {
                 ScheduleActiveJob(request, alreadyCounted: false);
             } else {
@@ -473,7 +509,8 @@ namespace Figlotech.Core {
         }
 
         private async Task ExecuteJob(WorkJobExecutionRequest job, int workerId) {
-            job.TimeInQueue = DateTime.UtcNow - (job.EnqueuedTime ?? DateTime.UtcNow);
+            var now = DateTime.UtcNow;
+            job.TimeInQueue = now - (job.EnqueuedTime ?? now);
             await SafeInvoke(OnWorkDequeued, job).ConfigureAwait(false);
 
             var sw = Stopwatch.StartNew();
@@ -484,15 +521,19 @@ namespace Figlotech.Core {
                 if (job.WorkJob.AllowTelemetry) {
                     job.LoggingActivity = Fi.Tech.CreateTelemetryActivity(job.WorkJob?.Name ?? "Unnamed Task", ActivityKind.Internal);
                     if (job.LoggingActivity != null) {
-                        foreach (var kv in DefaultLoggingTags) job.LoggingActivity.AddTag(kv.Key, kv.Value);
-                        foreach (var kv in job.WorkJob.AdditionalTelemetryTags) job.LoggingActivity.AddTag(kv.Key, kv.Value);
+                        if (_defaultLoggingTags != null) {
+                            foreach (var kv in _defaultLoggingTags) job.LoggingActivity.AddTag(kv.Key, kv.Value);
+                        }
+                        if (job.WorkJob._additionalTelemetryTags != null) {
+                            foreach (var kv in job.WorkJob._additionalTelemetryTags) job.LoggingActivity.AddTag(kv.Key, kv.Value);
+                        }
                         job.LoggingActivity.AddTag("WorkQueuer", Name);
                         job.LoggingActivity.Start();
-                        job.LoggingActivity.SetStartTime(DateTime.UtcNow);
+                        job.LoggingActivity.SetStartTime(now);
                     }
                 }
 
-                job.DequeuedTime = DateTime.UtcNow;
+                job.DequeuedTime = now;
                 job._tcsNotifyDequeued.TrySetResult(0);
                 job.Status = WorkJobRequestStatus.Running;
 
@@ -521,9 +562,10 @@ namespace Figlotech.Core {
                 Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} executed OK");
             } catch (Exception execEx) {
                 job.Status = WorkJobRequestStatus.Failed;
-                job.LoggingActivity?.AddTag("Exception",
-                    JsonConvert.SerializeObject(ExceptionExtensions.ToRecursiveInnerExceptions(execEx)));
-                job.LoggingActivity?.SetStatus(ActivityStatusCode.Error);
+                if (job.WorkJob.AllowTelemetry && job.LoggingActivity != null) {
+                    job.LoggingActivity.AddTag("Exception", execEx.ToString());
+                    job.LoggingActivity.SetStatus(ActivityStatusCode.Error);
+                }
 
                 var wrapped = new WorkJobException("Error Executing WorkJob", job, execEx);
                 Exception handlerEx = null;
@@ -576,7 +618,8 @@ namespace Figlotech.Core {
             } finally {
                 try {
                     sw.Stop();
-                    job.CompletedTime = DateTime.UtcNow;
+                    var completedTime = now + sw.Elapsed;
+                    job.CompletedTime = completedTime;
                     job.TimeToComplete = sw.Elapsed;
 
                     // Only set Finished if we didn't fail earlier
@@ -592,7 +635,7 @@ namespace Figlotech.Core {
                     }
                     job.Cancellation.Dispose();
 
-                    job.LoggingActivity?.SetEndTime(DateTime.UtcNow);
+                    job.LoggingActivity?.SetEndTime(completedTime);
                     job.LoggingActivity?.Dispose();
 
                     if (terminalException != null) {
@@ -603,7 +646,7 @@ namespace Figlotech.Core {
                     }
 
                     Interlocked.Add(ref _totalTaskResolutionTimeTicks, sw.Elapsed.Ticks);
-                    Interlocked.Exchange(ref _wentIdleTicks, DateTime.UtcNow.Ticks);
+                    Interlocked.Exchange(ref _wentIdleTicks, completedTime.Ticks);
                 } catch (Exception cleanupEx) {
                     if (Debugger.IsAttached) Debugger.Break();
                     Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker cleanup error: {cleanupEx.Message}");
@@ -844,8 +887,13 @@ namespace Figlotech.Core {
             }
 
             foreach (var entry in missed) {
-                if (entry.Options.FireIfMissed && !entry.Cancellation.IsCancellationRequested) {
-                    ExecuteScheduledJob(entry);
+                try {
+                    if (entry.Options.FireIfMissed && !entry.Cancellation.IsCancellationRequested) {
+                        ExecuteScheduledJob(entry);
+                    }
+                } catch (ObjectDisposedException) {
+                    // CTS was disposed between being added to _missedSchedules
+                    // and ProcessMissedSchedules running; safe to skip.
                 }
             }
         }
@@ -865,6 +913,7 @@ namespace Figlotech.Core {
         }
 
         public void Dispose() {
+            IsClosed = true;
             // Use a synchronous wait with timeout to avoid deadlocks
             // when Dispose() is called from a sync context
             try {
@@ -872,7 +921,8 @@ namespace Figlotech.Core {
                     Stop(true).Wait(cts.Token);
                 }
             } catch (OperationCanceledException) {
-                // Timeout - force shutdown
+                // Timeout - force shutdown: cancel remaining work
+                try { _runCts?.Cancel(); } catch { }
             } catch (Exception) {
                 // Ignore other exceptions during dispose
             }
@@ -882,6 +932,7 @@ namespace Figlotech.Core {
             _dispatchSignal = null;
         }
         public async ValueTask DisposeAsync() {
+            IsClosed = true;
             await Stop(true).ConfigureAwait(false);
             DisposeScheduledTasks();
             _runCts?.Dispose();
