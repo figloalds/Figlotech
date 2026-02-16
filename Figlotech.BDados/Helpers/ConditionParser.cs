@@ -1,9 +1,10 @@
-﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -20,11 +21,60 @@ namespace Figlotech.BDados.Helpers {
         private Type rootType;
 
         private PrefixMaker prefixer = new PrefixMaker();
+        
+        // Static caches for performance optimization
+        private static readonly ConcurrentDictionary<Expression, Func<object>> _compiledExpressionCache = new ConcurrentDictionary<Expression, Func<object>>();
+        private static readonly ConcurrentDictionary<MemberInfo, object> _attributeCache = new ConcurrentDictionary<MemberInfo, object>();
+        private static readonly ConcurrentDictionary<Type, MemberInfo[]> _attributedMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
+        private static readonly ConcurrentDictionary<(string methodName, int paramCount), MethodInfo> _qhMethodCache = new ConcurrentDictionary<(string, int), MethodInfo>();
+        private static readonly HashSet<Type> _supportedConstantTypes = new HashSet<Type>
+        {
+            typeof(string), typeof(int), typeof(long), typeof(short), typeof(byte),
+            typeof(uint), typeof(ulong), typeof(ushort), typeof(sbyte),
+            typeof(float), typeof(double), typeof(decimal), typeof(bool),
+            typeof(DateTime), typeof(Guid), typeof(char), typeof(TimeSpan)
+        };
+        
         public ConditionParser() {
 
         }
         public ConditionParser(PrefixMaker prefixMaker) {
             prefixer = prefixMaker;
+        }
+
+        // Cached attribute retrieval helper
+        private T GetCachedAttribute<T>(MemberInfo member) where T : Attribute {
+            if (member == null) return null;
+            
+            var key = (member, typeof(T));
+            if (_attributeCache.TryGetValue(member, out var cached)) {
+                return cached as T;
+            }
+            
+            var attr = member.GetCustomAttribute<T>();
+            _attributeCache.TryAdd(member, attr);
+            return attr;
+        }
+        
+        // Cached attributed members retrieval
+        private MemberInfo[] GetCachedAttributedMembers(Type type, string memberName) {
+            return _attributedMembersCache.GetOrAdd(type, t => {
+                return ReflectionTool.GetAttributedMemberValues<FieldAttribute>(t)
+                    .Select(x => x.Member)
+                    .ToArray();
+            }).Where(m => m.Name == memberName).ToArray();
+        }
+        
+        // Cached member retrieval
+        private MemberInfo GetCachedMember(Type type, string memberName) {
+            // Use a simple caching strategy based on type members
+            var members = _attributedMembersCache.GetOrAdd(type, t => {
+                return t.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                    .Where(m => m.MemberType == MemberTypes.Property || m.MemberType == MemberTypes.Field)
+                    .ToArray();
+            });
+            
+            return members.FirstOrDefault(m => m.Name == memberName);
         }
 
         private String GetPrefixOfExpression(Expression expression) {
@@ -158,28 +208,72 @@ namespace Figlotech.BDados.Helpers {
         }
 
         private bool CanGetValue(Expression member) {
-            try {
-                GetValue(member);
-                return true;
-            } catch (Exception) {
-                return false;
+            // Validation-based approach instead of exception-based
+            if (member == null) return false;
+            
+            // Check if it's a constant expression
+            if (member is ConstantExpression) return true;
+            
+            // Check if it's a member expression with a valid constant base
+            if (member is MemberExpression memEx) {
+                return CanGetValue(memEx.Expression);
             }
+            
+            // Check if it's a method call expression with constant arguments
+            if (member is MethodCallExpression methodEx) {
+                // Check if object can be resolved (if not static)
+                if (methodEx.Object != null && !CanGetValue(methodEx.Object)) {
+                    return false;
+                }
+                // Check all arguments
+                foreach (var arg in methodEx.Arguments) {
+                    if (!CanGetValue(arg)) return false;
+                }
+                return true;
+            }
+            
+            // Check if it's a unary expression (like Convert)
+            if (member is UnaryExpression unaryEx) {
+                return CanGetValue(unaryEx.Operand);
+            }
+            
+            // New expressions can be evaluated
+            if (member is NewExpression newEx) {
+                foreach (var arg in newEx.Arguments) {
+                    if (!CanGetValue(arg)) return false;
+                }
+                return true;
+            }
+            
+            return false;
         }
 
         private object GetValue(Expression member) {
-            //if (member is MemberExpression memex) {
-            //    return GetValue(memex.Expression);
-            //}
+            if (member == null) return null;
+            
+            // Try to get from cache first
+            if (_compiledExpressionCache.TryGetValue(member, out var cachedGetter)) {
+                try {
+                    return cachedGetter();
+                } catch (NullReferenceException) {
+                    Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for cached member {member?.ToString()}");
+                    return null;
+                }
+            }
+            
             try {
                 var objectMember = Expression.Convert(member, typeof(object));
-
                 var getterLambda = Expression.Lambda<Func<object>>(objectMember);
-
                 var getter = getterLambda.Compile();
-
+                
+                // Cache the compiled delegate
+                _compiledExpressionCache.TryAdd(member, getter);
+                
                 return getter();
-            } catch(NullReferenceException nref) {
+            } catch (NullReferenceException) {
                 Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for member {member?.ToString()}");
+                return null;
+            } catch {
                 return null;
             }
         }
@@ -191,17 +285,17 @@ namespace Figlotech.BDados.Helpers {
             //if(strBuilder == null)
             strBuilder = new QueryBuilder();
 
-            if (foofun is BinaryExpression) {
-                var expr = foofun as BinaryExpression;
+            if (foofun is BinaryExpression bexpr) {
+                var expr = bexpr;
                 if (expr.NodeType == ExpressionType.Equal &&
-                    expr.Right is ConstantExpression && (expr.Right as ConstantExpression).Value == null) {
+                    expr.Right is ConstantExpression rightConst && rightConst.Value == null) {
                     strBuilder.Append("(");
                     strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append("IS NULL");
                     strBuilder.Append(")");
                 } else
                 if (expr.NodeType == ExpressionType.NotEqual &&
-                    expr.Right is ConstantExpression && (expr.Right as ConstantExpression).Value == null) {
+                    expr.Right is ConstantExpression rightConst2 && rightConst2.Value == null) {
                     strBuilder.Append("(");
                     strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
                     strBuilder.Append("IS NOT NULL");
@@ -209,38 +303,23 @@ namespace Figlotech.BDados.Helpers {
                 } else
                 if (expr.NodeType == ExpressionType.Equal &&
                     CanGetValue(expr.Right) &&
-                    GetValue(expr.Right)?.GetType() == typeof(string) &&
+                    GetValue(expr.Right) is string rightValue &&
                     (expr.Left is MemberExpression)
                 ) {
                     var member = (expr.Left as MemberExpression).Member;
-                    var comparisonType = member.GetCustomAttribute<QueryComparisonAttribute>()?.Type;
-                    //if (Debugger.IsAttached) {
-                    //    Debugger.Break();
-                    //}
-                    if (GetValue(expr.Right)?.GetType() == typeof(string)) {
-                        strBuilder.Append("(");
-                        strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
-                        var appendFragment = String.Empty;
-                        switch (comparisonType) {
-                            case DataStringComparisonType.Containing:
-                                appendFragment = $"LIKE CONCAT('%', @{GenerateParameterId}, '%')";
-                                break;
-                            case DataStringComparisonType.EndingWith:
-                                appendFragment = $"LIKE CONCAT('%', @{GenerateParameterId})";
-                                break;
-                            case DataStringComparisonType.StartingWith:
-                                appendFragment = $"LIKE CONCAT(@{GenerateParameterId}, '%')";
-                                break;
-                            case DataStringComparisonType.ExactValue:
-                                appendFragment = $"=@{GenerateParameterId}";
-                                break;
-                            default:
-                                appendFragment = $"=@{GenerateParameterId}";
-                                break;
-                        }
-                        strBuilder.Append(appendFragment, GetValue(expr.Right));
-                        strBuilder.Append(")");
-                    }
+                    var comparisonType = GetCachedAttribute<QueryComparisonAttribute>(member)?.Type;
+                    
+                    strBuilder.Append("(");
+                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                    var appendFragment = comparisonType switch {
+                        DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%')",
+                        DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId})",
+                        DataStringComparisonType.StartingWith => $"LIKE CONCAT(@{GenerateParameterId}, '%')",
+                        DataStringComparisonType.ExactValue => $"=@{GenerateParameterId}",
+                        _ => $"=@{GenerateParameterId}"
+                    };
+                    strBuilder.Append(appendFragment, rightValue);
+                    strBuilder.Append(")");
                 } else {
                     strBuilder.Append("(");
                     strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
@@ -262,46 +341,47 @@ namespace Figlotech.BDados.Helpers {
             if (foofun is MemberExpression) {
                 var expr = foofun as MemberExpression;
                 Expression subexp = expr;
-                while (subexp is MemberExpression && (subexp as MemberExpression).Expression != null)
-                    subexp = (subexp as MemberExpression).Expression;
-                if(subexp is UnaryExpression) {
-                    subexp = (subexp as UnaryExpression).Operand;
+                while (subexp is MemberExpression sme && sme.Expression != null)
+                    subexp = sme.Expression;
+                if(subexp is UnaryExpression uex) {
+                    subexp = uex.Operand;
                 }
-                if (subexp is ParameterExpression) {
+                if (subexp is ParameterExpression pex) {
                     // If this member belongs to an AggregateField, then problems problems...
-                    var aList = new List<MemberInfo>();
-                    aList.AddRange(ReflectionTool.GetAttributedMemberValues<FieldAttribute>(subexp.Type).Where((t) => t.Member.Name == expr.Member.Name.Replace("_","")).Select(x=> x.Member));
-                    if (!fullConditions && ((subexp as ParameterExpression).Type != typeOfT || !aList.Any())) {
+                    var aList = GetCachedAttributedMembers(subexp.Type, expr.Member.Name.Replace("_",""));
+                    if (!fullConditions && (pex.Type != typeOfT || aList.Length == 0)) {
                         return new QbFmt("1");
                     }
-                    if (aList.Any()) {
+                    if (aList.Length > 0) {
                         strBuilder.Append($"{ForceAlias ?? GetPrefixOfExpression(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
                     } else {
                         // oh hell.
                         MemberInfo member;
-                        if(expr.Expression is ParameterExpression) {
-                            member = (expr.Expression as ParameterExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name);
+                        if(expr.Expression is ParameterExpression pexpr) {
+                            member = GetCachedMember(pexpr.Type, expr.Member.Name);
+                        } else if (expr.Expression is MemberExpression memex) {
+                            member = GetCachedMember(memex.Type, expr.Member.Name);
                         } else {
-                            member = (expr.Expression as MemberExpression).Type.GetMembers().FirstOrDefault(m => m.Name == expr.Member.Name);
+                            member = null;
                         }
-                        var info = ReflectionTool.GetAttributeFrom<AggregateFieldAttribute>(member);
+                        var info = GetCachedAttribute<AggregateFieldAttribute>(member);
                         if (info != null) {
                             var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                             strBuilder.Append($"{prefix}.{info.RemoteField}");
                         } else {
-                            var info2 = ReflectionTool.GetAttributeFrom<AggregateFarFieldAttribute>(expr.Member);
+                            var info2 = GetCachedAttribute<AggregateFarFieldAttribute>(expr.Member);
                             if (info2 != null) {
                                 var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                                                                              //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                 strBuilder.Append($"{prefix}.{info2.FarField}");
                             } else {
-                                var mem = (expr.Expression).Type.GetMembers().FirstOrDefault(m=>m.Name == expr.Member.Name);
+                                var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name);
                                 if(mem == null) {
                                     throw new BDadosException($"Fatal runtime inconsistency error: Cannot find member {expr.Member.Name} in type {(expr.Expression).Type}!");
                                 }
-                                var info3 = ReflectionTool.GetAttributeFrom<AggregateObjectAttribute>(mem);
-                                var altName = ReflectionTool.GetAttributeFrom<OverrideColumnNameOnWhere>(mem);
+                                var info3 = GetCachedAttribute<AggregateObjectAttribute>(mem);
+                                var altName = GetCachedAttribute<OverrideColumnNameOnWhere>(mem);
                                 var memberName = altName?.Name ?? member.Name;
                                 if (info3 != null) {
                                     var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
@@ -321,12 +401,11 @@ namespace Figlotech.BDados.Helpers {
                     strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
                 }
             } else
-            if (foofun is ConstantExpression) {
-                var expr = foofun as ConstantExpression;
-                strBuilder.Append($"@{GenerateParameterId}", expr.Value);
+            if (foofun is ConstantExpression cexpr) {
+                strBuilder.Append($"@{GenerateParameterId}", cexpr.Value);
             } else
-            if (foofun is UnaryExpression) {
-                var expr = foofun as UnaryExpression;
+            if (foofun is UnaryExpression uexpr) {
+                var expr = uexpr;
                 if (expr.NodeType == ExpressionType.Not) {
                     strBuilder.Append("!(");
                     strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
@@ -340,8 +419,8 @@ namespace Figlotech.BDados.Helpers {
             if (!fullConditions) {
                 return new QbFmt("");
             } else
-            if (foofun is MethodCallExpression) {
-                var expr = foofun as MethodCallExpression;
+            if (foofun is MethodCallExpression mcexpr) {
+                var expr = mcexpr;
 
                 if (expr.Method.DeclaringType == typeof(StringExtensions)) {
                     if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
@@ -386,11 +465,19 @@ namespace Figlotech.BDados.Helpers {
 
                 if(expr.Method.DeclaringType == typeof(Qh)) {
                     var tq = typeof(Qb);
-                    var equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == expr.Method.GetParameters().Length - 1);
+                    var paramCount = expr.Method.GetParameters().Length - 1;
+                    var cacheKey = (expr.Method.Name, paramCount);
+                    
+                    if (!_qhMethodCache.TryGetValue(cacheKey, out var equivalent)) {
+                        equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == paramCount);
+                        if (equivalent != null) {
+                            _qhMethodCache.TryAdd(cacheKey, equivalent);
+                        }
+                    }
+                    
                     if(equivalent != null) {
                         if(equivalent.ContainsGenericParameters) {
                             var gmdefTypeArgs = expr.Method.GetGenericArguments();
-                            //var gmdefTypeArgs = gmdef;
                             equivalent = equivalent.MakeGenericMethod(gmdefTypeArgs);
                         }
                         return (QueryBuilder) equivalent.Invoke(null, expr.Arguments.Skip(1).Select(a=> GetValue(a)).ToArray());

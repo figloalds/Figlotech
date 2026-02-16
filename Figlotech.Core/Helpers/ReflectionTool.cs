@@ -1,4 +1,4 @@
-﻿using Figlotech.Core.Extensions;
+using Figlotech.Core.Extensions;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
@@ -791,31 +791,11 @@ namespace Figlotech.Core.Helpers {
 
         public static Func<DbDataReader, T> BuildMaterializer<T>((int ordinal, MemberInfo member, Type targetType, Type typeAtReader)[] bindings)
             where T : new() {
-            // Plano:
-            // - Criar variável 'vals' como object[] e preencher com r.GetValues(vals)
-            // - Para cada binding:
-            //   - Ler vals[ordinal]
-            //   - Checar DBNull comparando com DBNull.Value
-            //   - Converter usando GetConverterDelegate(typeof(object), targetType) quando necessário
-            //   - Atribuir respeitando nulabilidade do destino
             var dr = Expression.Parameter(typeof(DbDataReader), "r");
             var obj = Expression.Variable(typeof(T), "obj");
-            var vals = Expression.Variable(typeof(object[]), "vals");
 
             var assignObj = Expression.Assign(obj, Expression.New(typeof(T)));
-
             var block = new List<Expression> { assignObj };
-
-            // vals = new object[r.FieldCount];
-            var fieldCountProp = typeof(DbDataReader).GetProperty(nameof(DbDataReader.FieldCount))!;
-            var newArray = Expression.NewArrayBounds(typeof(object), Expression.Property(dr, fieldCountProp));
-            var assignVals = Expression.Assign(vals, newArray);
-            block.Add(assignVals);
-
-            // r.GetValues(vals);
-            var getValuesMethod = typeof(DbDataReader).GetMethod(nameof(IDataRecord.GetValues), new[] { typeof(object[]) })!;
-            var callGetValues = Expression.Call(dr, getValuesMethod, vals);
-            block.Add(callGetValues);
 
             foreach (var b in bindings) {
                 if (!(b.member is PropertyInfo) && !(b.member is FieldInfo))
@@ -824,89 +804,175 @@ namespace Figlotech.Core.Helpers {
                     continue;
 
                 if (FiTechCoreExtensions.EnableDebug) {
-                    var exprs = DebugModeConvertAndAssign(dr, obj, vals, b);
+                    var exprs = DebugModeConvertAndAssignOptimized(dr, obj, b);
                     block.AddRange(exprs);
                 } else {
-                    var exprs = ReleaseModeConvertAndAssign(dr, obj, vals, b);
+                    var exprs = ReleaseModeConvertAndAssignOptimized(dr, obj, b);
                     block.AddRange(exprs);
                 }
             }
 
             block.Add(obj);
-            var body = Expression.Block(new[] { obj, vals }, block);
+            var body = Expression.Block(new[] { obj }, block);
 
             var lambda = Expression.Lambda<Func<DbDataReader, T>>(body, dr);
             return lambda.Compile();
         }
 
-        // Função que gera as expressões para ler, converter e atribuir sem tratamento adicional (modo release)
-        private static readonly MethodInfo _dbReaderGetFieldTypeMethod = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldType), new[] { typeof(int) })!;
-        private static readonly MethodInfo _getConverterDelegateMethod = typeof(ReflectionTool).GetMethod(nameof(GetConverterDelegate), BindingFlags.Public | BindingFlags.Static)!;
-        private static readonly MethodInfo _delegateDynamicInvokeMethod = typeof(Delegate).GetMethod(nameof(Delegate.DynamicInvoke), new[] { typeof(object[]) })!;
+        // OPTIMIZED: Fast path converters - pre-built and cached to avoid DynamicInvoke
+        private static readonly ConcurrentDictionary<(Type Source, Type Target), Delegate> _typedConverterCache = new();
+        
+        /// <summary>
+        /// Gets or creates a strongly-typed converter Func<TSource, TTarget> for the given types.
+        /// This avoids boxing and DynamicInvoke overhead.
+        /// </summary>
+        private static Delegate GetOrCreateTypedConverter(Type sourceType, Type targetType) {
+            return _typedConverterCache.GetOrAdd((sourceType, targetType), key => {
+                var (src, dest) = key;
+                
+                // Handle ValueBox<T> wrapper - unwrap to get inner type
+                Type effectiveDest = dest;
+                bool isValueBox = false;
+                if (dest.IsGenericType && dest.GetGenericTypeDefinition() == typeof(ValueBox<>)) {
+                    effectiveDest = dest.GetGenericArguments()[0];
+                    isValueBox = true;
+                }
+                
+                // Handle nullable - check if effectiveDest is nullable
+                var underlyingDest = Nullable.GetUnderlyingType(effectiveDest);
+                bool isNullable = underlyingDest != null;
+                if (!isNullable) {
+                    underlyingDest = effectiveDest;
+                }
+                
+                // Build Func<src, dest>
+                var funcType = typeof(Func<,>).MakeGenericType(src, dest);
+                var p = Expression.Parameter(src, "v");
+                
+                Expression body;
+                
+                // Fast path: direct assignment when types match exactly
+                if (src == dest && !isValueBox) {
+                    body = p;
+                }
+                // Fast path: source matches underlying type of nullable destination
+                else if (src == underlyingDest && isNullable) {
+                    // Wrap in nullable constructor: new Nullable<T>(value)
+                    var ctor = effectiveDest.GetConstructor(new[] { underlyingDest });
+                    body = Expression.New(ctor, p);
+                }
+                // Fast path: enum from int
+                else if (underlyingDest.IsEnum && src == typeof(int)) {
+                    var enumVal = Expression.Convert(p, underlyingDest);
+                    Expression result;
+                    if (isNullable) {
+                        // Wrap enum in nullable
+                        var nullableCtor = effectiveDest.GetConstructor(new[] { underlyingDest });
+                        result = Expression.New(nullableCtor, enumVal);
+                    } else {
+                        result = enumVal;
+                    }
+                    
+                    if (isValueBox) {
+                        body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
+                    } else {
+                        body = result;
+                    }
+                }
+                // Fast path: bool from sbyte
+                else if (underlyingDest == typeof(bool) && src == typeof(sbyte)) {
+                    var boolVal = Expression.NotEqual(p, Expression.Constant((sbyte)0));
+                    Expression result;
+                    if (isNullable) {
+                        var nullableCtor = effectiveDest.GetConstructor(new[] { typeof(bool) });
+                        result = Expression.New(nullableCtor, boolVal);
+                    } else {
+                        result = boolVal;
+                    }
+                    
+                    if (isValueBox) {
+                        body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
+                    } else {
+                        body = result;
+                    }
+                }
+                // Fast path: DateTime from DateTimeOffset
+                else if (underlyingDest == typeof(DateTime) && src == typeof(DateTimeOffset)) {
+                    var dtProp = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DateTime));
+                    var dtVal = Expression.Property(p, dtProp);
+                    Expression result;
+                    if (isNullable) {
+                        var nullableCtor = effectiveDest.GetConstructor(new[] { typeof(DateTime) });
+                        result = Expression.New(nullableCtor, dtVal);
+                    } else {
+                        result = dtVal;
+                    }
+                    
+                    if (isValueBox) {
+                        body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
+                    } else {
+                        body = result;
+                    }
+                }
+                // Fast path: numeric widening/narrowing
+                else if (IsNumeric(src) && IsNumeric(underlyingDest)) {
+                    var converted = Expression.Convert(p, underlyingDest);
+                    Expression result;
+                    if (isNullable) {
+                        var nullableCtor = effectiveDest.GetConstructor(new[] { underlyingDest });
+                        result = Expression.New(nullableCtor, converted);
+                    } else {
+                        result = converted;
+                    }
+                    
+                    if (isValueBox) {
+                        body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
+                    } else {
+                        body = result;
+                    }
+                }
+                // Generic conversion path using BuildConversionBody
+                else {
+                    var innerBody = BuildConversionBody(src, underlyingDest, p);
+                    Expression result;
+                    if (isNullable) {
+                        var nullableCtor = effectiveDest.GetConstructor(new[] { underlyingDest });
+                        result = Expression.New(nullableCtor, innerBody);
+                    } else {
+                        result = innerBody;
+                    }
+                    
+                    if (isValueBox) {
+                        body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
+                    } else {
+                        body = result;
+                    }
+                }
+                
+                var lambda = Expression.Lambda(funcType, body, p);
+                return lambda.Compile();
+            });
+        }
+        
+        private static bool IsNumeric(Type t) {
+            return t == typeof(byte) || t == typeof(sbyte) ||
+                   t == typeof(short) || t == typeof(ushort) ||
+                   t == typeof(int) || t == typeof(uint) ||
+                   t == typeof(long) || t == typeof(ulong) ||
+                   t == typeof(float) || t == typeof(double) ||
+                   t == typeof(decimal);
+        }
 
-        private static IEnumerable<Expression> ReleaseModeConvertAndAssign(ParameterExpression dr, ParameterExpression obj, ParameterExpression vals, (int ordinal, MemberInfo member, Type targetType, Type typeAtReader) b) {
+        // Função que gera as expressões para ler, converter e atribuir sem tratamento adicional (modo release)
+        private static readonly MethodInfo _dbReaderIsDbNullMethod = typeof(DbDataReader).GetMethod(nameof(DbDataReader.IsDBNull), new[] { typeof(int) })!;
+
+        private static IEnumerable<Expression> ReleaseModeConvertAndAssignOptimized(ParameterExpression dr, ParameterExpression obj, (int ordinal, MemberInfo member, Type targetType, Type typeAtReader) b) {
             var expressions = new List<Expression>();
 
-            // var value = vals[ordinal];
             var ordinalExpression = Expression.Constant(b.ordinal, typeof(int));
-            var value = Expression.ArrayIndex(vals, ordinalExpression);
-
-            // var isDbNull = ReferenceEquals(value, DBNull.Value);
-            var dbNullField = typeof(DBNull).GetField(nameof(DBNull.Value))!;
-            var dbNullValue = Expression.Field(null, dbNullField);
-            var isDbNull = Expression.ReferenceEqual(value, dbNullValue);
-
-            // Convert the incoming reader type to the target member type
-            Expression valueExpr;
-            var ulTarget = Nullable.GetUnderlyingType(b.targetType) ?? b.targetType;
-
-            var sourceTypeExpr = Expression.Call(dr, _dbReaderGetFieldTypeMethod, ordinalExpression);
-            var converterDelegateExpr = Expression.Call(
-                _getConverterDelegateMethod,
-                sourceTypeExpr,
-                Expression.Constant(b.targetType, typeof(Type)));
-
-            valueExpr = Expression.Call(
-                converterDelegateExpr,
-                _delegateDynamicInvokeMethod,
-                Expression.NewArrayInit(typeof(object), value));
-            //if (b.targetType == typeof(object)) {
-            //    valueExpr = value;
-            //} else if (b.typeAtReader == b.targetType || (ulTarget == b.typeAtReader)) {
-            //    valueExpr = value;
-            //} else if (ulTarget.IsEnum && b.typeAtReader == typeof(Int32)) {
-            //    valueExpr = Expression.Convert(value, typeof(Int32));
-            //} else if (ulTarget == typeof(Boolean) && b.typeAtReader == typeof(sbyte)) {
-            //    valueExpr = Expression.NotEqual(Expression.Convert(value, typeof(sbyte)), Expression.Constant((sbyte)0));
-            //} else if (ulTarget == typeof(sbyte) && b.typeAtReader == typeof(Boolean)) {
-            //    valueExpr = Expression.Condition(
-            //        Expression.Convert(value, typeof(bool)),
-            //        Expression.Constant((sbyte)1),
-            //        Expression.Constant((sbyte)0));
-            //} else if (ulTarget == typeof(UInt64) && b.typeAtReader == typeof(Int64)) {
-            //    valueExpr = Expression.Convert(value, typeof(Int64));
-            //} else if (ulTarget == typeof(decimal) && b.typeAtReader == typeof(double)) {
-            //    valueExpr = Expression.Convert(value, typeof(decimal));
-            //} else if (ulTarget == typeof(double) && b.typeAtReader == typeof(decimal)) {
-            //    valueExpr = Expression.Convert(value, typeof(double));
-            //} else {
-            //    valueExpr = Expression.Invoke(
-            //            Expression.Constant(GetConverterDelegate(b.typeAtReader, b.targetType)),
-            //            Expression.Convert(value, b.typeAtReader));
-            //}
             
-            //else {
-            //    var sourceTypeExpr = Expression.Call(dr, _dbReaderGetFieldTypeMethod, ordinalExpression);
-            //    var converterDelegateExpr = Expression.Call(
-            //        _getConverterDelegateMethod,
-            //        sourceTypeExpr,
-            //        Expression.Constant(b.targetType, typeof(Type)));
-
-            //    valueExpr = Expression.Call(
-            //        converterDelegateExpr,
-            //        _delegateDynamicInvokeMethod,
-            //        Expression.NewArrayInit(typeof(object), value));
-            //}
+            // r.IsDBNull(ordinal)
+            var isDbNull = Expression.Call(dr, _dbReaderIsDbNullMethod, ordinalExpression);
 
             MemberExpression memberExpr = b.member switch {
                 PropertyInfo p => Expression.Property(obj, p),
@@ -914,18 +980,32 @@ namespace Figlotech.Core.Helpers {
                 _ => throw new NotSupportedException()
             };
 
+            // Pre-resolve the converter at build time - no per-row reflection!
+            var converter = GetOrCreateTypedConverter(b.typeAtReader, b.targetType);
+            var converterFuncType = converter.GetType();
+            
+            // Get the Invoke method from the delegate type
+            var invokeMethod = converterFuncType.GetMethod("Invoke");
+            
+            // r.GetFieldValue<typeAtReader>(ordinal)
+            var getFieldValueMethod = _openGetFieldValue.MakeGenericMethod(b.typeAtReader);
+            var rawValue = Expression.Call(dr, getFieldValueMethod, ordinalExpression);
+            
+            // converter.Invoke(rawValue) - direct call, no DynamicInvoke!
+            var converterConstant = Expression.Constant(converter, converterFuncType);
+            var convertedValue = Expression.Call(converterConstant, invokeMethod, rawValue);
+
             if (!b.targetType.IsValueType || Nullable.GetUnderlyingType(b.targetType) != null) {
-                // Nullable ou ref type: atribuir default(null) se DBNull
-                var assignableExpr = b.targetType == typeof(object) ? valueExpr : Expression.Convert(valueExpr, b.targetType);
+                // Nullable or ref type: assign default(null) if DBNull
                 var conditionalExpr = Expression.Condition(
                     isDbNull,
                     Expression.Default(b.targetType),
-                    assignableExpr);
+                    convertedValue);
 
                 expressions.Add(Expression.Assign(memberExpr, conditionalExpr));
             } else {
-                // Value type não-nullable: só atribui se não for DBNull
-                var assign = Expression.Assign(memberExpr, Expression.Convert(valueExpr, b.targetType));
+                // Non-nullable value type: only assign if not DBNull
+                var assign = Expression.Assign(memberExpr, convertedValue);
                 expressions.Add(Expression.IfThen(Expression.Not(isDbNull), assign));
             }
 
@@ -933,9 +1013,9 @@ namespace Figlotech.Core.Helpers {
         }
 
         // Versão com try/catch que envolve leitura/conversão/atribuição e lança uma ReflectionException informando o membro que falhou
-        private static IEnumerable<Expression> DebugModeConvertAndAssign(ParameterExpression dr, ParameterExpression obj, ParameterExpression vals, (int ordinal, MemberInfo member, Type targetType, Type typeAtReader) b) {
-            // Reutiliza a lógica para obter as expressões internas
-            var inner = ReleaseModeConvertAndAssign(dr, obj, vals, b).ToArray();
+        private static IEnumerable<Expression> DebugModeConvertAndAssignOptimized(ParameterExpression dr, ParameterExpression obj, (int ordinal, MemberInfo member, Type targetType, Type typeAtReader) b) {
+            // Reutiliza a lógica otimizada para obter as expressões internas
+            var inner = ReleaseModeConvertAndAssignOptimized(dr, obj, b).ToArray();
 
             // Força o bloco try a ser do tipo void para casar com o tipo do catch (void)
             var tryBlock = Expression.Block(typeof(void), inner);
@@ -945,7 +1025,7 @@ namespace Figlotech.Core.Helpers {
             string msgText = $"Materialization error binding {b.ordinal} '{b.member.Name}' on '{b.member.DeclaringType?.FullName}'";
             var messageConst = Expression.Constant(msgText);
 
-            // Monta a mensagem: preâmbulo (o valor bruto já está em 'vals', mas não incluímos no texto por simplicidade aqui)
+            // Monta a mensagem
             var concatParamsMethod = typeof(string).GetMethod(nameof(string.Concat), new[] { typeof(object[]) })!;
             var concatArray = Expression.NewArrayInit(typeof(object), messageConst);
             var appendedMessage = Expression.Call(concatParamsMethod, concatArray);
