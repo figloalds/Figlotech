@@ -17,6 +17,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public sealed class Settings : Dictionary<String, Object> { }
@@ -178,6 +179,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 return materializer;
             });
+        }
+
+        public static async Task<T> RetryUntilNotNull<T>(this Fi _selfie, Func<Task<T>> func, int maxRetries = int.MaxValue, TimeSpan? delay = null) where T : class {
+            T retv = null;
+            int attempt = 0;
+            var retryDelay = delay ?? TimeSpan.FromMilliseconds(1500);  
+            while (retv == null && attempt < maxRetries) {
+                retv = await func().ConfigureAwait(false);
+                if (retv == null)
+                    await Task.Delay(retryDelay).ConfigureAwait(false);
+                attempt++;
+            }
+            return retv;
         }
 
         public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
