@@ -24,16 +24,11 @@ namespace Figlotech.BDados.Helpers {
         
         // Static caches for performance optimization
         private static readonly ConcurrentDictionary<Expression, Func<object>> _compiledExpressionCache = new ConcurrentDictionary<Expression, Func<object>>();
-        private static readonly ConcurrentDictionary<MemberInfo, object> _attributeCache = new ConcurrentDictionary<MemberInfo, object>();
+        private static readonly ConcurrentDictionary<(MemberInfo member, Type attributeType), object> _attributeCache = new ConcurrentDictionary<(MemberInfo member, Type attributeType), object>();
         private static readonly ConcurrentDictionary<Type, MemberInfo[]> _attributedMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
+        private static readonly ConcurrentDictionary<Type, MemberInfo[]> _allMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
         private static readonly ConcurrentDictionary<(string methodName, int paramCount), MethodInfo> _qhMethodCache = new ConcurrentDictionary<(string, int), MethodInfo>();
-        private static readonly HashSet<Type> _supportedConstantTypes = new HashSet<Type>
-        {
-            typeof(string), typeof(int), typeof(long), typeof(short), typeof(byte),
-            typeof(uint), typeof(ulong), typeof(ushort), typeof(sbyte),
-            typeof(float), typeof(double), typeof(decimal), typeof(bool),
-            typeof(DateTime), typeof(Guid), typeof(char), typeof(TimeSpan)
-        };
+        private static readonly object _missingAttribute = new object();
         
         public ConditionParser() {
 
@@ -44,15 +39,17 @@ namespace Figlotech.BDados.Helpers {
 
         // Cached attribute retrieval helper
         private T GetCachedAttribute<T>(MemberInfo member) where T : Attribute {
-            if (member == null) return null;
-            
-            var key = (member, typeof(T));
-            if (_attributeCache.TryGetValue(member, out var cached)) {
-                return cached as T;
+            if (member == null) {
+                return null;
             }
-            
+
+            var key = (member, typeof(T));
+            if (_attributeCache.TryGetValue(key, out var cached)) {
+                return ReferenceEquals(cached, _missingAttribute) ? null : cached as T;
+            }
+
             var attr = member.GetCustomAttribute<T>();
-            _attributeCache.TryAdd(member, attr);
+            _attributeCache.TryAdd(key, (object)attr ?? _missingAttribute);
             return attr;
         }
         
@@ -67,9 +64,8 @@ namespace Figlotech.BDados.Helpers {
         
         // Cached member retrieval
         private MemberInfo GetCachedMember(Type type, string memberName) {
-            // Use a simple caching strategy based on type members
-            var members = _attributedMembersCache.GetOrAdd(type, t => {
-                return t.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            var members = _allMembersCache.GetOrAdd(type, t => {
+                return t.GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
                     .Where(m => m.MemberType == MemberTypes.Property || m.MemberType == MemberTypes.Field)
                     .ToArray();
             });
@@ -258,6 +254,13 @@ namespace Figlotech.BDados.Helpers {
                 } catch (NullReferenceException) {
                     Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for cached member {member?.ToString()}");
                     return null;
+                } catch (InvalidOperationException ioex) {
+                    if (ioex.Message == "Nullable object must have a value.") {
+                        return null;
+                    }
+                    return null;
+                } catch {
+                    return null;
                 }
             }
             
@@ -376,13 +379,10 @@ namespace Figlotech.BDados.Helpers {
                                                                                              //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
                                 strBuilder.Append($"{prefix}.{info2.FarField}");
                             } else {
-                                var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name);
-                                if(mem == null) {
-                                    throw new BDadosException($"Fatal runtime inconsistency error: Cannot find member {expr.Member.Name} in type {(expr.Expression).Type}!");
-                                }
+                                var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name) ?? expr.Member;
                                 var info3 = GetCachedAttribute<AggregateObjectAttribute>(mem);
                                 var altName = GetCachedAttribute<OverrideColumnNameOnWhere>(mem);
-                                var memberName = altName?.Name ?? member.Name;
+                                var memberName = altName?.Name ?? member?.Name ?? expr.Member.Name;
                                 if (info3 != null) {
                                     var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
                                     //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);

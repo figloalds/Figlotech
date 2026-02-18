@@ -595,7 +595,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                         Query.Append($"WHEN {rid}=@r_{ridx}");
                     }
                     if (legacySet[ridx].IsReceivedFromSync) {
-                        Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
+                        if(i == 0) {
+                            Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
+                        } else {
+                            Query.Append($"AND {upd}<@u_{ridx}");
+                        }
                     }
                     var val = ReflectionTool.GetMemberValue(members[i], legacySet[ridx]);
                     Query.Append($"THEN @{ggid}_{++x}", val);
