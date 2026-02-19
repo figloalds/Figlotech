@@ -110,7 +110,7 @@ namespace Figlotech.Core {
             }
         }
         ~WorkJobExecutionRequest() {
-            _disposed = true;
+
         }
     }
 

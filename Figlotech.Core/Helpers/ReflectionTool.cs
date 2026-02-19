@@ -965,12 +965,33 @@ namespace Figlotech.Core.Helpers {
 
         // Função que gera as expressões para ler, converter e atribuir sem tratamento adicional (modo release)
         private static readonly MethodInfo _dbReaderIsDbNullMethod = typeof(DbDataReader).GetMethod(nameof(DbDataReader.IsDBNull), new[] { typeof(int) })!;
+        private static readonly MethodInfo _dbReaderGetValueMethod = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue), new[] { typeof(int) })!;
+
+        /// <summary>
+        /// Determines if the reader value should be read as object (via GetValue) instead of
+        /// GetFieldValue&lt;T&gt; to avoid InvalidCastException when SQL drivers return unexpected
+        /// numeric types (e.g., GetFieldType reports Int64 but actual value is Double).
+        /// SQL drivers cannot be trusted to return consistent types - computed columns,
+        /// aggregates, and different engines may return different numeric types than what
+        /// GetFieldType reports. Always use GetValue for numeric columns.
+        /// </summary>
+        private static bool ShouldReadAsObject(Type typeAtReader, Type targetType) {
+            var effectiveTarget = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            if (effectiveTarget.IsGenericType && effectiveTarget.GetGenericTypeDefinition() == typeof(ValueBox<>)) {
+                effectiveTarget = effectiveTarget.GetGenericArguments()[0];
+                effectiveTarget = Nullable.GetUnderlyingType(effectiveTarget) ?? effectiveTarget;
+            }
+            // SQL drivers can lie about the actual runtime type of numeric columns.
+            // GetFieldType may report Int64 but the actual value could be Double at runtime.
+            // Always use GetValue (returns object) for numeric types to avoid InvalidCastException.
+            return IsNumeric(typeAtReader) || IsNumeric(effectiveTarget);
+        }
 
         private static IEnumerable<Expression> ReleaseModeConvertAndAssignOptimized(ParameterExpression dr, ParameterExpression obj, (int ordinal, MemberInfo member, Type targetType, Type typeAtReader) b) {
             var expressions = new List<Expression>();
 
             var ordinalExpression = Expression.Constant(b.ordinal, typeof(int));
-            
+
             // r.IsDBNull(ordinal)
             var isDbNull = Expression.Call(dr, _dbReaderIsDbNullMethod, ordinalExpression);
 
@@ -980,20 +1001,33 @@ namespace Figlotech.Core.Helpers {
                 _ => throw new NotSupportedException()
             };
 
-            // Pre-resolve the converter at build time - no per-row reflection!
-            var converter = GetOrCreateTypedConverter(b.typeAtReader, b.targetType);
-            var converterFuncType = converter.GetType();
-            
-            // Get the Invoke method from the delegate type
-            var invokeMethod = converterFuncType.GetMethod("Invoke");
-            
-            // r.GetFieldValue<typeAtReader>(ordinal)
-            var getFieldValueMethod = _openGetFieldValue.MakeGenericMethod(b.typeAtReader);
-            var rawValue = Expression.Call(dr, getFieldValueMethod, ordinalExpression);
-            
-            // converter.Invoke(rawValue) - direct call, no DynamicInvoke!
-            var converterConstant = Expression.Constant(converter, converterFuncType);
-            var convertedValue = Expression.Call(converterConstant, invokeMethod, rawValue);
+            Expression convertedValue;
+            if (ShouldReadAsObject(b.typeAtReader, b.targetType)) {
+                // Safe path for cross-numeric conversions: read as object, convert via object->target converter.
+                // This avoids InvalidCastException when GetFieldType lies about the actual runtime type
+                // (e.g., computed columns returning Double when schema says Int64).
+                var converter = GetOrCreateTypedConverter(typeof(object), b.targetType);
+                var converterFuncType = converter.GetType();
+                var invokeMethod = converterFuncType.GetMethod("Invoke");
+
+                // r.GetValue(ordinal) - returns object, safe for any type
+                var rawValue = Expression.Call(dr, _dbReaderGetValueMethod, ordinalExpression);
+
+                var converterConstant = Expression.Constant(converter, converterFuncType);
+                convertedValue = Expression.Call(converterConstant, invokeMethod, rawValue);
+            } else {
+                // Fast path: types match or non-numeric conversion, use GetFieldValue<T> for zero-boxing
+                var converter = GetOrCreateTypedConverter(b.typeAtReader, b.targetType);
+                var converterFuncType = converter.GetType();
+                var invokeMethod = converterFuncType.GetMethod("Invoke");
+
+                // r.GetFieldValue<typeAtReader>(ordinal)
+                var getFieldValueMethod = _openGetFieldValue.MakeGenericMethod(b.typeAtReader);
+                var rawValue = Expression.Call(dr, getFieldValueMethod, ordinalExpression);
+
+                var converterConstant = Expression.Constant(converter, converterFuncType);
+                convertedValue = Expression.Call(converterConstant, invokeMethod, rawValue);
+            }
 
             if (!b.targetType.IsValueType || Nullable.GetUnderlyingType(b.targetType) != null) {
                 // Nullable or ref type: assign default(null) if DBNull

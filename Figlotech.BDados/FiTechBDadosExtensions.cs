@@ -150,7 +150,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         static ConcurrentDictionary<(Type, string), object> MaterializerCache = new ConcurrentDictionary<(Type, string), object>();
         public static Func<DbDataReader, T> GetSimpleLoadAllMaterializerFor<T>(IDataReader reader) where T : new() {
             var fieldNames = Fi.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToArray();
-            var tag = String.Join(";", fieldNames) + $"|{typeof(T).FullName}";
+            var fieldTypes = Fi.Range(0, reader.FieldCount).Select(i => reader.GetFieldType(i).Name).ToArray();
+            var tag = String.Join(";", fieldNames.Zip(fieldTypes, (n, t) => $"{n}:{t}")) + $"|{typeof(T).FullName}";
             return (Func<DbDataReader, T>)MaterializerCache.GetOrAddWithLocking((typeof(T), tag), t => {
                 var cols = new string[reader.FieldCount];
                 for (int i = 0; i < cols.Length; i++)
