@@ -1789,10 +1789,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return Access((transaction) => AggregateLoad(transaction, args), null);
         }
 
-        public List<object> ActiveConnectionStatus() {
-            List<object> result = new List<object>();
+        public List<object?> ActiveConnectionStatus() {
+            List<object> result = new List<object?>();
             lock (ActiveConnections) {
                 foreach (var conn in ActiveConnections.Values) {
+                    if(conn?.Connection == null) {
+                        continue;
+                    }
                     result.Add(new {
                         conn.Connection.State,
                         conn.CreatedTime,
