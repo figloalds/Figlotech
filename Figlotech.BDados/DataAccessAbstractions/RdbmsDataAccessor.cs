@@ -548,6 +548,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             DebugOnlyGlobalTransactions.Remove(this);
                     }
                 } catch (Exception ex) {
+                    if (!isTransactionEnded) {
+                        if(!IsCommited && !IsRolledBack) {
+                            await RollbackAsync();
+                        }
+                        await EndTransactionAsync();
+                    }
                     Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
                     if(Debugger.IsAttached) {
                         Debugger.Break();
