@@ -60,14 +60,18 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                     query.Append(",");
                 }
             }
-            query.Append(") ON DUPLICATE KEY UPDATE ");
-            var Fields = GetMembers(inputObject.GetType());
-            for (int i = 0; i < Fields.Count; ++i) {
-                if (ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(Fields[i]) != null)
-                    continue;
-                query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
-                if (i < Fields.Count - 1) {
-                    query.Append(",");
+            var updatableFields = GetMembers(inputObject.GetType())
+                .Where(m => ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(m) == null)
+                .ToList();
+            if (updatableFields.Count < 1) {
+                query.Append(") ON CONFLICT DO NOTHING");
+            } else {
+                query.Append(") ON CONFLICT DO UPDATE SET");
+                for (int i = 0; i < updatableFields.Count; ++i) {
+                    query.Append($"{updatableFields[i].Name} = excluded.{updatableFields[i].Name}");
+                    if (i < updatableFields.Count - 1) {
+                        query.Append(",");
+                    }
                 }
             }
             return query;
@@ -133,8 +137,10 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 if ((info.AllowNull && info.DefaultValue == null) || info.DefaultValue != null)
                     options += $" DEFAULT {Fi.Tech.CheapSanitize(info.DefaultValue)}";
                 foreach (var att in field.GetCustomAttributes())
-                    if (att is PrimaryKeyAttribute)
-                        options += " AUTO_INCREMENT PRIMARY KEY";
+                    if (att is PrimaryKeyAttribute) {
+                        tipo = "INTEGER";
+                        options += " PRIMARY KEY AUTOINCREMENT";
+                    }
             }
 
             return $"{nome} {tipo} {options}";
@@ -443,7 +449,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                 return null;
             }
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"UPDATE IGNORE {type.Name} ");
+            Query.Append($"UPDATE {type.Name} ");
             Query.Append("SET ");
 
             // -- 
@@ -483,7 +489,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT IGNORE INTO {type.Name} (");
+            Query.Append($"INSERT OR IGNORE INTO {type.Name} (");
             Query.Append(GenerateFieldsString(type, OmmitPk));
             Query.Append(") VALUES");
             // -- 
@@ -495,14 +501,18 @@ namespace Figlotech.BDados.SqliteDataAccessor {
                     Query.Append(",");
             }
             // -- 
-            Query.Append("ON DUPLICATE KEY UPDATE ");
-            var Fields = GetMembers(typeof(T));
-            for (int i = 0; i < Fields.Count; ++i) {
-                if (OmmitPk && ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(Fields[i]) != null)
-                    continue;
-                Query.Append(String.Format("{0} = VALUES({0})", Fields[i].Name));
-                if (i < Fields.Count - 1) {
-                    Query.Append(",");
+            var updatableFields = GetMembers(typeof(T))
+                .Where(m => !OmmitPk || ReflectionTool.GetAttributeFrom<PrimaryKeyAttribute>(m) == null)
+                .ToList();
+            if (updatableFields.Count < 1) {
+                Query.Append("ON CONFLICT DO NOTHING");
+            } else {
+                Query.Append("ON CONFLICT DO UPDATE SET");
+                for (int i = 0; i < updatableFields.Count; ++i) {
+                    Query.Append($"{updatableFields[i].Name} = excluded.{updatableFields[i].Name}");
+                    if (i < updatableFields.Count - 1) {
+                        Query.Append(",");
+                    }
                 }
             }
             // -- 
@@ -619,7 +629,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new() {
-            return new QbFmt("SELECT last_insert_id()");
+            return new QbFmt("SELECT last_insert_rowid()");
         }
 
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {
@@ -660,10 +670,10 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder DisableForeignKeys() {
-            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
+            return Qb.Fmt("PRAGMA foreign_keys = OFF;");
         }
         public IQueryBuilder EnableForeignKeys() {
-            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
+            return Qb.Fmt("PRAGMA foreign_keys = ON;");
         }
     }
 }
