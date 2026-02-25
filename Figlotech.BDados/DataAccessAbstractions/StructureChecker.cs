@@ -50,7 +50,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     case ScStructuralKeyType.ForeignKey:
                         return $"fk_{Table}_{Column}".ToLower();
                     case ScStructuralKeyType.Index:
-                        return $"{(IsUnique ? "uk_" : "idx_")}{Table}_{Column}".ToLower();
+                        var colPart = Column?.Replace(",", "_") ?? "";
+                        return $"{(IsUnique ? "uk_" : "idx_")}{Table}_{colPart}".ToLower();
                     case ScStructuralKeyType.PrimaryKey:
                         return $"pk_{Table.ToLower()}";
                 }
@@ -528,10 +529,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 switch(a.Type) {
                     case ScStructuralKeyType.Index:
-                        return (a.Table.Equals(n.Table, cmp) && a.KeyName.Equals(n.KeyName, cmp)) && (
-                            a.Table.ToLower() == n.Table.ToLower() &&
-                            a.Column.ToLower() == n.Column.ToLower()
-                        );
+                        return (a.Table.Equals(n.Table, cmp) && a.KeyName.Equals(n.KeyName, cmp));
                     case ScStructuralKeyType.ForeignKey:
                         return
                             (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
@@ -883,6 +881,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             Type = ScStructuralKeyType.Index,
                         };
                         indexLink.KeyName = indexLink.FiTechKeyName.ToLower();
+                        yield return indexLink;
+                    }
+
+                    var indexAttrs = f.GetCustomAttributes<IndexAttribute>();
+                    foreach (var idxAttr in indexAttrs) {
+                        var columns = new List<string> { f.Name };
+                        if (idxAttr.CompositeWith != null && idxAttr.CompositeWith.Length > 0) {
+                            columns.AddRange(idxAttr.CompositeWith);
+                        }
+                        var sortedColumns = columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
+                        var columnStr = string.Join(",", columns);
+                        var indexLink = new ScStructuralLink {
+                            Table = t.Name,
+                            Column = columnStr,
+                            IsUnique = idxAttr.IsUnique,
+                            Type = ScStructuralKeyType.Index,
+                        };
+                        if (!string.IsNullOrEmpty(idxAttr.Name)) {
+                            indexLink.KeyName = idxAttr.Name.ToLower();
+                        } else {
+                            var prefix = idxAttr.IsUnique ? "uk" : "idx";
+                            var sortedPart = string.Join("_", sortedColumns).ToLower();
+                            indexLink.KeyName = $"{prefix}_{t.Name}_{sortedPart}".ToLower();
+                        }
                         yield return indexLink;
                     }
 
