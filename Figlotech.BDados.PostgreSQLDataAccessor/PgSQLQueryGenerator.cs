@@ -25,7 +25,27 @@ using System.Reflection;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
     public sealed class PgSQLQueryGenerator : IQueryGenerator {
+        private static readonly HashSet<string> ReservedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            "USER", "GROUP", "ORDER", "SELECT", "INSERT", "UPDATE", "DELETE",
+            "TABLE", "INDEX", "PRIMARY", "FOREIGN", "KEY", "REFERENCES", "UNIQUE",
+            "WHERE", "FROM", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "FULL",
+            "ON", "BY", "ASC", "DESC", "LIMIT", "OFFSET", "AS", "AND", "OR",
+            "NOT", "NULL", "IS", "IN", "EXISTS", "BETWEEN", "LIKE", "ILIKE",
+            "CAST", "TYPE", "DEFAULT", "CONSTRAINT", "CHECK", "UNION", "ALL",
+            "HAVING", "DISTINCT", "CREATE", "ALTER", "DROP", "ADD", "COLUMN"
+        };
 
+        private string QuoteIdent(string identifier) {
+            if (string.IsNullOrEmpty(identifier))
+                return identifier;
+            if (ReservedKeywords.Contains(identifier))
+                return $"\"{identifier}\"";
+            return identifier;
+        }
+
+        public IQueryBuilder GenerateCreateSchema(string schemaName) {
+            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
+        }
         public IQueryBuilder CreateDatabase(string schemaName) {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
         }
@@ -600,20 +620,19 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return new QueryBuilder().Append(
                 @"SELECT
 	                tc.*,
-                    kcu.COLUMN_NAME, 
-                    kcu.table_schema AS REFERENCED_TABLE_SCHEMA,
-                    kcu.table_name AS REFERENCED_TABLE_NAME,
-                    kcu.column_name AS REFERENCED_COLUMN_NAME
-                FROM 
-                    information_schema.table_constraints AS tc 
+                    kcu.COLUMN_NAME,
+                    ccu.table_schema AS REFERENCED_TABLE_SCHEMA,
+                    ccu.table_name AS REFERENCED_TABLE_NAME,
+                    ccu.column_name AS REFERENCED_COLUMN_NAME
+                FROM
+                    information_schema.table_constraints AS tc
                     LEFT JOIN information_schema.key_column_usage AS kcu
                       ON tc.constraint_name = kcu.constraint_name
                       AND tc.table_schema = kcu.table_schema
+                      AND tc.table_name = kcu.table_name
                     LEFT JOIN information_schema.constraint_column_usage AS ccu
-                      ON ccu.constraint_name = tc.constraint_name AND
-                        ccu.table_name = tc.table_name
-                        AND ccu.table_schema = tc.table_schema AND tc.CONSTRAINT_TYPE='FOREIGN KEY'
-  
+                      ON ccu.constraint_name = tc.constraint_name
+                      AND ccu.table_schema = tc.table_schema
                 WHERE tc.CONSTRAINT_CATALOG=@1 AND tc.CONSTRAINT_SCHEMA='public' AND tc.CONSTRAINT_TYPE!='CHECK';", schema);
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
@@ -724,7 +743,7 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
 
         public IQueryBuilder GetCreationCommand(ForeignKeyAttribute fkd) {
             var cname = $"fk_{fkd.Column}_{fkd.RefTable}_{fkd.RefColumn}";
-            String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable} ({fkd.RefColumn});";
+            String creationCommand = $"ALTER TABLE {fkd.Table} ADD CONSTRAINT {cname} FOREIGN KEY ({fkd.Column}) REFERENCES {fkd.RefTable}({fkd.RefColumn});";
             return new QbFmt(creationCommand);
         }
 

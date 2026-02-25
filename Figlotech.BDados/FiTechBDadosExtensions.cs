@@ -163,8 +163,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (name != null) {
                         var m = ReflectionTool.GetMember(typeof(T), name);
                         if (m != null) {
-                            var ord = reader.GetOrdinal(name);
-                            existingKeys[i] = (m, ord, reader.GetFieldType(ord));
+                            existingKeys[i] = (m, i, reader.GetFieldType(i));
                         }
                     }
                 }

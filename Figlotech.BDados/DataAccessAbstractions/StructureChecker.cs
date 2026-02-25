@@ -900,6 +900,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     var fk = f.GetCustomAttribute<ForeignKeyAttribute>();
                     if (fk != null) {
+                        if (string.IsNullOrEmpty(fk.RefTable) && fk.RefType != null) {
+                            fk.RefTable = fk.RefType.Name;
+                        }
                         if (fk.RefColumn == null) {
                             fk.RefColumn = GetReferenceColumn(fk.RefType);
                         }
