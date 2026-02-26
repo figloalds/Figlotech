@@ -173,6 +173,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var materializer = ReflectionTool.BuildMaterializer<T>(
                     existingKeys
                         .Where(x => x.Member != null)
+                        .OrderBy(x => x.Ordinal)
                         .Select((tuple, i) => (tuple.Ordinal, tuple.Member, ReflectionTool.GetTypeOf(tuple.Member), tuple.TypeAtReader))
                         .ToArray()
                 );
