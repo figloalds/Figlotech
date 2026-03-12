@@ -105,6 +105,9 @@ namespace System
 
         public static async IAsyncEnumerable<T> ToResults<T>(this IEnumerable<Task<T>> promises) {
             foreach (var promise in promises) {
+                if(promise == null) {
+                    yield return default(T);
+                }
                 yield return await promise;
             }
         }
