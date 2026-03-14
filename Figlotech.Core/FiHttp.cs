@@ -46,6 +46,9 @@ namespace Figlotech.Core {
         FiHttp Caller;
         HttpRequestMessage RequestMessage;
         List<IDisposable> Disposables = new List<IDisposable>();
+        Stopwatch RequestStopwatch;
+
+        public TimeSpan Elapsed => RequestStopwatch?.Elapsed ?? TimeSpan.Zero;
 
         internal FiHttpResult(FiHttp caller, HttpRequestMessage requestMessage) {
             this.Caller = caller;
@@ -64,6 +67,7 @@ namespace Figlotech.Core {
 
         public static async Task<FiHttpResult> InitFromRequest(FiHttp caller, HttpRequestMessage httpRequestMessage, CancellationToken ct) {
             var retv = new FiHttpResult(caller, httpRequestMessage);
+            retv.RequestStopwatch = Stopwatch.StartNew();
             try {
                 var client = caller.HttpClient;
                 var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
@@ -72,6 +76,8 @@ namespace Figlotech.Core {
                 await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
             } catch (Exception ex) {
                 await retv.Init(null as HttpResponseMessage).ConfigureAwait(false);
+            } finally {
+                retv.RequestStopwatch?.Stop();
             }
             return retv;
         }
@@ -126,10 +132,11 @@ namespace Figlotech.Core {
                             Method = Response.RequestMessage.Method.ToString(),
                             Uri = Response.RequestMessage.RequestUri.ToString(),
                             StatusCode = (int)StatusCode,
+                            ElapsedMilliseconds = Elapsed.TotalMilliseconds,
                             RequestHeaders = Caller.Logging.IncludeRequestHeaders ? Response.RequestMessage.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
                             ResponseHeaders = Caller.Logging.IncludeResponseHeaders ? Response.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
-                            Envio = postData,
-                            Retorno = respData
+                            RequestBody = postData,
+                            ResponseBody = respData
                         }, LoggerSerializerSettings)
                     ).ConfigureAwait(false);
                 } catch (Exception x) {
