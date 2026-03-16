@@ -28,11 +28,6 @@ namespace System {
                     var retv = self.marks[self.marks.Count - 1]
                         .Timestamp.Subtract(self.marks[self.marks.Count - 2].Timestamp).TotalMilliseconds;
 
-                    if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut) {
-                        var r2 = self.marks[self.marks.Count - 1]
-                            .Timestamp.Subtract(self.marks[0].Timestamp).TotalMilliseconds;
-                        Console.WriteLine($"{r2} {txt}");
-                    }
                     return retv;
                 }
             } catch (Exception) {

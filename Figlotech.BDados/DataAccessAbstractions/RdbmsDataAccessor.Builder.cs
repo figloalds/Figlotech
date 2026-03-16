@@ -352,30 +352,29 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
-            lock (command) {
-                transaction?.Benchmarker.Mark("- Starting Execute Query");
-                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo)) {
-                    transaction?.Benchmarker.Mark("- Starting build");
-                    return Fi.Tech.MapFromReader<T>(reader).ToList();
-                }
+            using var handle = transaction.Lock();
+            transaction?.Benchmarker.Mark("- Starting Execute Query");
+            using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo)) {
+                transaction?.Benchmarker.Mark("- Starting build");
+                return Fi.Tech.MapFromReader<T>(reader).ToList();
             }
         }
 
         FiAsyncMultiLock _lock = new FiAsyncMultiLock();
         public async Task<List<T>> GetObjectListAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
-            using (await _lock.Lock($"TRANSACTION_{transaction.Id}").ConfigureAwait(false)) {
-                transaction?.Benchmarker.Mark("- Starting Execute Query");
-                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
-                    transaction?.Benchmarker.Mark("- Starting build");
-                    if(!transaction.CancellationToken.IsCancellationRequested) {
-                        return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
-                    } else {
-                        return new List<T>();
-                    }
+            await using var handle = await transaction.LockAsync().ConfigureAwait(false);
+            transaction?.Benchmarker.Mark("- Starting Execute Query");
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
+                transaction?.Benchmarker.Mark("- Starting build");
+                if(!transaction.CancellationToken.IsCancellationRequested) {
+                    return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
+                } else {
+                    return new List<T>();
                 }
             }
         }
+
         public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
             transaction?.Benchmarker.Mark("- Starting Execute Query");
@@ -440,32 +439,31 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public DataSet GetDataSet(IDbCommand command) {
-            lock (command) {
-                using (var reader = command.ExecuteReader()) {
-                    DataTable dt = new DataTable();
-                    for (int i = 0; i < reader.FieldCount; i++) {
-                        dt.Columns.Add(new DataColumn(reader.GetName(i)));
-                    }
-
-                    while (reader.Read()) {
-                        var dr = dt.NewRow();
-                        for (int i = 0; i < reader.FieldCount; i++) {
-                            var type = reader.GetFieldType(i);
-                            if (reader.IsDBNull(i)) {
-                                dr[i] = null;
-                            } else {
-                                var val = reader.GetValue(i);
-                                dr[i] = Convert.ChangeType(val, type);
-                            }
-                        }
-                        dt.Rows.Add(dr);
-                    }
-
-                    var ds = new DataSet();
-                    ds.Tables.Add(dt);
-                    return ds;
+        public DataSet GetDataSet(BDadosTransaction transaction, IDbCommand command) {
+            using var handle = transaction.Lock();
+            using (var reader = command.ExecuteReader()) {
+                DataTable dt = new DataTable();
+                for (int i = 0; i < reader.FieldCount; i++) {
+                    dt.Columns.Add(new DataColumn(reader.GetName(i)));
                 }
+
+                while (reader.Read()) {
+                    var dr = dt.NewRow();
+                    for (int i = 0; i < reader.FieldCount; i++) {
+                        var type = reader.GetFieldType(i);
+                        if (reader.IsDBNull(i)) {
+                            dr[i] = null;
+                        } else {
+                            var val = reader.GetValue(i);
+                            dr[i] = Convert.ChangeType(val, type);
+                        }
+                    }
+                    dt.Rows.Add(dr);
+                }
+
+                var ds = new DataSet();
+                ds.Tables.Add(dt);
+                return ds;
             }
         }
 
@@ -643,9 +641,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     yield return currentObject;
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {objs} / {row} rows");
-                if (transaction?.Benchmarker != null) {
-                    transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)objs).ToString("0.00")}ms/obj | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-                }
+                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)objs).ToString("0.00")}ms/obj | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 constructionCache.Clear();
@@ -728,9 +724,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await afterLoads.Stop(true).ConfigureAwait(false);
                 }
                 var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
-                if (transaction?.Benchmarker != null) {
-                    transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-                }
+                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 constructionCache.Clear();
@@ -807,9 +801,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         row++;
                     }
                     var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
-                    if (transaction?.Benchmarker != null) {
-                        transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-                    }
+                    transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                     transaction?.Benchmarker?.Mark("Clear cache");
                     constructionCache.Clear();

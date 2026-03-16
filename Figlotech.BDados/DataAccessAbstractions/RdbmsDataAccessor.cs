@@ -168,9 +168,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (CancellationToken.IsCancellationRequested) {
                 throw new OperationCanceledException("The transaction was cancelled");
             }
-            if (Connection.State != ConnectionState.Open) {
-                await DataAccessor.OpenConnectionAsync(this.CancellationToken, Connection).ConfigureAwait(false);
-            }
             if (!FiTechCoreExtensions.EnableDebug)
                 return;
             try {
@@ -1946,8 +1943,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             while (i2 * cut < legacyItems.Count) {
                 int i = i2;
                 List<ILegacyDataObject> sub;
-                lock (temp)
-                    sub = temp.Skip(i * cut).Take(Math.Min(legacyItems.Count - (i * cut), cut)).ToList();
+                sub = temp.Skip(i * cut).Take(Math.Min(legacyItems.Count - (i * cut), cut)).ToList();
                 var insertsLegacy = sub.Where(it => !it.IsPersisted).ToList();
                 var updatesLegacy = sub.Where(it => it.IsPersisted).ToList();
                 var inserts = insertsLegacy.Cast<T>().ToList();
@@ -1958,8 +1954,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var query = Plugin.QueryGenerator.GenerateMultiInsert<T>(inserts, false);
                         transaction?.Benchmarker.Mark($"Execute MultiInsert Query {insertsLegacy.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
-                        lock (successfulSaves)
-                            successfulSaves.AddRange(insertsLegacy);
+                        successfulSaves.AddRange(insertsLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
@@ -1968,8 +1963,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             });
                         }
 
-                        lock (failedSaves)
-                            failedSaves.Add(x);
+                        failedSaves.Add(x);
                     }
                     if (recoverIds) {
                         var queryIds = await QueryAsync<QueryIdsReturnValueModel>(transaction, QueryGenerator.QueryIds(inserts)).ConfigureAwait(false);
@@ -1988,8 +1982,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         var query = Plugin.QueryGenerator.GenerateMultiUpdate(updates);
                         transaction?.Benchmarker.Mark($"Execute MultiUpdate Query for {updatesLegacy.Count} {typeof(T).Name}");
                         rst += await ExecuteAsync(transaction, query).ConfigureAwait(false);
-                        lock (successfulSaves)
-                            successfulSaves.AddRange(updatesLegacy);
+                        successfulSaves.AddRange(updatesLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
                             Fi.Tech.FireAndForget(async () => {
@@ -1997,8 +1990,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 OnFailedSave?.Invoke(typeof(T), updatesLegacy.ToArray(), x);
                             });
                         }
-                        lock (failedSaves)
-                            failedSaves.Add(x);
+                        failedSaves.Add(x);
                     }
                 }
                 i2++;
@@ -2142,7 +2134,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 transaction?.Benchmarker?.Mark($"Execute Query <{query.Id}>");
-                lock (transaction) {
+                await using(var lh = await transaction.LockAsync()) {
                     command.Prepare();
                     using (var reader = command.ExecuteReader()) {
                         return BuildStateUpdateQueryResult(transaction, reader, workingTypes, fields);
@@ -2223,7 +2215,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 transaction?.Benchmarker?.Mark($"@SendLocalUpdates Execute Query <{query.Id}>");
-                lock (transaction) {
+                await using (var lh = await transaction.LockAsync()) {
                     command.Prepare();
                     using (var reader = command.ExecuteReader()) {
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024 * 64, true)) {
@@ -3446,9 +3438,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 // --
                 transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build Dataset");
                 DataSet ds;
-                lock (transaction) {
-                    ds = GetDataSet(command);
-                }
+                ds = GetDataSet(transaction, command);
                 var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] --");
 
                 try {
