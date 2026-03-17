@@ -11,6 +11,7 @@ namespace Figlotech.Core {
         public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>, IAsyncEnumerable<TOut> {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
+            readonly object _valueQueueLock = new object();
             Func<TIn, Task<TOut>> SimpleAct { get; set; }
             Func<TIn, FlowYield<TOut>, ValueTask> YieldAct { get; set; }
             Func<Exception, Task> ExceptionHandler { get; set; }
@@ -37,13 +38,14 @@ namespace Figlotech.Core {
                         var output = await SimpleAct(input).ConfigureAwait(false);
                         if (this.ConnectTo != null) {
                             this.ConnectTo.Put(output);
+                            enumerator.Publish(output);
                         } else {
                             if (!IgnoreOutput) {
-                                lock (ValueQueue)
+                                lock (_valueQueueLock)
                                     ValueQueue.Enqueue(output);
                             }
+                            enumerator.Publish(output);
                         }
-                        enumerator.Publish(output);
                     } else if (YieldAct != null) {
                         if (this.ConnectTo != null) {
                             await YieldAct(input, new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
@@ -58,8 +60,10 @@ namespace Figlotech.Core {
                 });
             }
             Queue<TaskCompletionSource<int>> AlsoQueue { get; set; } = new Queue<TaskCompletionSource<int>>();
+            readonly object _alsoQueueLock = new object();
             public ParallelFlowStepInOut<TIn, TOut> Also(Func<FlowYield<TOut>, Task> yieldFn) {
                 var src = new TaskCompletionSource<int>();
+                lock (_alsoQueueLock)
                 AlsoQueue.Enqueue(src);
                 Fi.Tech.FireAndForget(async () => {
                     if (this.ConnectTo != null) {
@@ -127,21 +131,35 @@ namespace Figlotech.Core {
             }
             public void FlushToConnected() {
                 if(this.ConnectTo != null) {
-                    lock (ValueQueue)
+                    lock (_valueQueueLock)
                         while(ValueQueue.Count > 0)
                             this.ConnectTo.Put(ValueQueue.Dequeue());
                 }
             }
+            bool _completionSourceSet = false;
+            readonly object _completionLock = new object();
+
             public async Task NotifyDoneQueueing() {
-                while(AlsoQueue.Count > 0) {
-                    await AlsoQueue.Dequeue().Task.ConfigureAwait(false);
+                Queue<TaskCompletionSource<int>> alsoQueueSnapshot;
+                lock (_alsoQueueLock) {
+                    alsoQueueSnapshot = new Queue<TaskCompletionSource<int>>(AlsoQueue);
+                    AlsoQueue.Clear();
+                }
+                while(alsoQueueSnapshot.Count > 0) {
+                    await alsoQueueSnapshot.Dequeue().Task.ConfigureAwait(false);
                 }
                 await queuer.Stop(true).ConfigureAwait(false);
                 if(this.ConnectTo != null) {
                     FlushToConnected();
                     await this.ConnectTo.NotifyDoneQueueing().ConfigureAwait(false);
                 }
-                TaskCompletionSource.SetResult(ValueQueue.ToList());
+                lock (_completionLock) {
+                    if (!_completionSourceSet) {
+                        _completionSourceSet = true;
+                        TaskCompletionSource.SetResult(ValueQueue.ToList());
+                    }
+                }
+                enumerator.Finish();
             }
             public TaskAwaiter<List<TOut>> GetAwaiter() {
                 return TaskCompletionSource.Task.GetAwaiter();

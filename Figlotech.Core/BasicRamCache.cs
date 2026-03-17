@@ -24,7 +24,11 @@ namespace Figlotech.Core {
         public ConcurrentDictionary<string, T> InternalCache<T>() where T : ILegacyDataObject, new() {
             return (ConcurrentDictionary<string, T>)DataCache.GetOrAddWithLocking(typeof(T), t => {
                 var list = LoadListOfType<T>();
-                return new ConcurrentDictionary<string, T>(list.ToDictionary(x => GetKey(x), x => x));
+                var retv = new ConcurrentDictionary<string, T>();
+                foreach (var item in list) {
+                    retv[GetKey(item)] = item;
+                }
+                return retv;
             });
         }
 

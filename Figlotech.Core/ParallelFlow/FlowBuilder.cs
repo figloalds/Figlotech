@@ -205,10 +205,26 @@ namespace Figlotech.Core.ParallelFlow {
             Func<T, Task> action,
             CancellationToken cancellationToken = default) {
 
+            var tasks = new List<Task>();
             await foreach (var item in Output.ReadAllAsync(cancellationToken)) {
                 await action(item);
             }
 
+            await Completion;
+        }
+        /// <summary>
+        /// Consumes all items with the specified async action in parallel
+        /// </summary>
+        public async Task ParallelForEachAsync(
+            Func<T, Task> action,
+            CancellationToken cancellationToken = default) {
+
+            var tasks = new List<Task>();
+            await foreach (var item in Output.ReadAllAsync(cancellationToken)) {
+                tasks.Add(action(item));
+            }
+
+            await Task.WhenAll(tasks);
             await Completion;
         }
 

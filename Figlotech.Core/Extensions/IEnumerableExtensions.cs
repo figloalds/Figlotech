@@ -102,7 +102,17 @@ namespace System
                 }
             }
         }
-
+        public static Dictionary<TKey, TValue> ToDictionaryIgnoreDuplicates<TSource, TKey, TValue>(
+            this IEnumerable<TSource> source,
+            Func<TSource, TKey> keySelector,
+            Func<TSource, TValue> valueSelector
+        ) {
+            var dict = new Dictionary<TKey, TValue>();
+            foreach (var item in source) {
+                dict[keySelector(item)] = valueSelector(item);
+            }
+            return dict;
+        }
         public static async IAsyncEnumerable<T> ToResults<T>(this IEnumerable<Task<T>> promises) {
             foreach (var promise in promises) {
                 if(promise == null) {
