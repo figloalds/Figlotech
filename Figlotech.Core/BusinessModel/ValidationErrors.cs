@@ -35,7 +35,7 @@ namespace Figlotech.Core.BusinessModel {
         }
 
         public override string ToString() {
-            StringBuilder retv = new StringBuilder();
+            using var retv = new ValueStringBuilder();
             foreach(var a in this) {
                 retv.Append(a.Message);
                 retv.Append("\n");

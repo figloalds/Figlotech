@@ -119,7 +119,7 @@ namespace Figlotech.Core {
             i *= 1000000000;
             i += r.Next(1000000000);
             var retv = new IntEx(i.ToByteArray()).ToString(IntEx.Base36);
-            StringBuilder preempt = new StringBuilder();
+            using var preempt = new ValueStringBuilder();
             preempt.Append(retv);
             while (preempt.Length < 64) {
                 preempt.Append(IntEx.Base36[r.Next(IntEx.Base36.Length)]);

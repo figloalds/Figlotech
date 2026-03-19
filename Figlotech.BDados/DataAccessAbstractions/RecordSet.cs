@@ -46,7 +46,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         
         public String CustomListing(Func<T, String> fn) {
-            StringBuilder retv = new StringBuilder();
+            using var retv = new ValueStringBuilder();
             for (int i = 0; i < this.Count; i++) {
                 retv.Append(
                     String.Format(

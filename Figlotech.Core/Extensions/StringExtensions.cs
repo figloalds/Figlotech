@@ -36,7 +36,7 @@ namespace System
             if (me == null)
                 return null;
             var matches = Regex.Matches(me, pattern);
-            StringBuilder retv = new StringBuilder();
+            using var retv = new ValueStringBuilder();
             int cursor = 0;
             foreach(Match a in matches) {
                 retv.Append(me.Substring(cursor, a.Index - cursor));

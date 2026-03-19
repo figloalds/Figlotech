@@ -120,7 +120,7 @@ namespace Figlotech.Core
 
         private static List<PathSegment> ParsePath(string path) {
             var segments = new List<PathSegment>();
-            var current = new StringBuilder();
+            using var current = new ValueStringBuilder();
             bool inBracket = false;
 
             for (int i = 0; i < path.Length; i++) {

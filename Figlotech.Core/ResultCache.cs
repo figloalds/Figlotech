@@ -38,7 +38,7 @@ public sealed class ResultCache {
         }
         var t = o.GetType();
         if (t.FullName.StartsWith("System.Collections.Generic.List`1")) {
-            StringBuilder sb = new StringBuilder();
+            using var sb = new ValueStringBuilder();
             var any = false;
             var enny = o.GetType().GetMethod("GetEnumerator").Invoke(o, new object[0]);
             while((bool) enny.GetType().GetMethod("MoveNext").Invoke(enny, new object[0])) {

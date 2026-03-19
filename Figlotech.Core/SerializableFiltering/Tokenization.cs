@@ -142,7 +142,7 @@ namespace MiniWhere {
         private string ReadString() {
             char quote = _s[_i];
             _i++;
-            var sb = new StringBuilder();
+            using var sb = new ValueStringBuilder();
             while (_i < _s.Length) {
                 char c = _s[_i++];
                 if (c == quote) break;

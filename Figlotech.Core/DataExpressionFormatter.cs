@@ -33,7 +33,8 @@ namespace Figlotech.Core {
             if (max < min) max = min;
 
             // Build a numeric custom format like "0.00###" (min = 2, max = 5)
-            var sb = new StringBuilder("0");
+            using var sb = new ValueStringBuilder();
+            sb.Append("0");
             if (max > 0) {
                 sb.Append('.');
                 sb.Append(new string('0', min));
@@ -188,7 +189,7 @@ namespace Figlotech.Core {
         private string Render(object context, ReadOnlySpan<char> tpl, int depth) {
             if (depth > _maxDepth) return string.Empty;
 
-            var sb = new StringBuilder();
+            using var sb = new ValueStringBuilder();
             int i = 0;
 
             while (i < tpl.Length) {
@@ -387,7 +388,7 @@ namespace Figlotech.Core {
         private static List<string> SplitPipes(string s) {
             var list = new List<string>();
             if (string.IsNullOrEmpty(s)) return list;
-            var sb = new StringBuilder();
+            using var sb = new ValueStringBuilder();
             int paren = 0;
             int tagDepth = 0;
             for (int i = 0; i < s.Length; i++) {
@@ -433,7 +434,7 @@ namespace Figlotech.Core {
 
             static string[] SplitArgs(string s) {
                 var res = new List<string>();
-                var sb = new StringBuilder();
+                using var sb = new ValueStringBuilder();
                 bool inQuote = false;
                 char q = '\0';
 

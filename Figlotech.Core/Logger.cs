@@ -92,9 +92,7 @@ namespace Figlotech.Core {
             } catch (Exception) { }
         }
 
-        private void writeExInternal(string message, Exception x, StringBuilder sw = null) {
-            bool isRoot = sw == null;
-            sw = sw ?? new StringBuilder();
+        private void writeExInternal(string message, Exception x, ValueStringBuilder sw, bool isRoot) {
             if(isRoot) {
                 sw.AppendLine($"-> {{");
                 sw.AppendLine($" -- [{message}] -- {{");
@@ -103,11 +101,11 @@ namespace Figlotech.Core {
             sw.AppendLine(x.StackTrace);
             sw.AppendLine(new String('-', 20));
             if(x.InnerException != null) {
-                writeExInternal(message, x.InnerException, sw);
+                writeExInternal(message, x.InnerException, sw, false);
             }
             if(x is AggregateException ag) {
                 foreach(var agex in ag.InnerExceptions) {
-                    writeExInternal(message, agex, sw);
+                    writeExInternal(message, agex, sw, false);
                 }
             }
             if(isRoot) {

@@ -385,9 +385,9 @@ namespace Figlotech.Core {
         }
 
         private byte[] GetObjectBytes<T>(T postData, string contentType) {
+            using var retv = new ValueStringBuilder();
             switch (contentType) {
                 case ContentTypeFormUrlEncoded:
-                    StringBuilder retv = new StringBuilder();
                     bool isFirst = true;
                     var kvpairs = Fi.Tech.EnumerateKvpFromObject(postData);
                     foreach (var item in kvpairs) {
