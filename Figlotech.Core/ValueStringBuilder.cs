@@ -1,9 +1,39 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace System.Text {
+    public static class ListOfStringsBuilderConcatExtensions {
+        
+        public static string ConcatAll(this IEnumerable<string> stringsEnum) {
+            var Strings = stringsEnum.ToList();
+            using var builder = new ValueStringBuilder(Strings.Sum(x => x.Length));
+            foreach (var str in Strings) {
+                builder.Append(str);
+            }
+            return builder.ToString();
+        }
+        public static string JoinWith(this IEnumerable<string> stringsEnum, string separator) {
+            var Strings = stringsEnum.ToList();
+            if(Strings.Count == 0) {
+                return string.Empty;
+            }
+            using var builder = new ValueStringBuilder(Strings.Sum(x => x.Length) + (separator.Length * Strings.Count - 1));
+            var first = true;
+            foreach (var str in Strings) {
+                if(!first) {
+                    builder.Append(separator);
+                } else {
+                    first = false;
+                }
+                builder.Append(str);
+            }
+            return builder.ToString();
+        }
+    }
+
     public ref struct ValueStringBuilder {
         private char[]? _arrayFromPool;
         private Span<char> _chars;
