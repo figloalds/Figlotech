@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Figlotech.Core
-{
+namespace Figlotech.Core {
     public sealed class Any<T> : Any {
-        T val;
+        readonly T val;
 
         public T Value { get; }
 
@@ -25,12 +22,12 @@ namespace Figlotech.Core
                 try {
                     var newVal = (T)Convert.ChangeType(a.val, typeof(T));
                     return new Any<T>(newVal);
-                } catch(Exception x) {
+                } catch (Exception) {
                     //return new Any<T>(default(T));
                 }
             }
             if (typeof(T).IsAssignableFrom(a.val?.GetType())) {
-                return new Any<T>((T) a.val);
+                return new Any<T>((T)a.val);
             }
             return new Any<T>(default(T));
         }

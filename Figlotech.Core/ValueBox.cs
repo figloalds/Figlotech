@@ -1,11 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Figlotech.Core
-{
-    public sealed class ValueBox<T>
-    {
+﻿namespace Figlotech.Core {
+    public sealed class ValueBox<T> {
         public T Value { get; set; }
         public ValueBox(T value) {
             this.Value = value;

@@ -3,7 +3,6 @@ using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public sealed class TypeDepScore {

@@ -1,7 +1,4 @@
-﻿
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados;
-/**
+﻿/**
 * Figlotech.BDados.Builders.ConditionParametrizer
 * Extra Implementation for IQueryBuilder
 * 
@@ -9,15 +6,9 @@ using Figlotech.BDados;
 * August/2014
 * 
 **/
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Figlotech.Core;
 using Figlotech.Data;
+using System;
+using System.Globalization;
 
 namespace Figlotech.BDados.Builders {
     public sealed class ConditionParametrizer : QueryBuilder {
@@ -40,7 +31,7 @@ namespace Figlotech.BDados.Builders {
         }
 
         public ConditionParametrizer AndIsNull(String target, bool? inputValue) {
-            if(inputValue != null)
+            if (inputValue != null)
                 this.AppendCondition($"({target} IS NULL)==@{RandomId}", inputValue);
             return this;
         }
@@ -71,7 +62,7 @@ namespace Figlotech.BDados.Builders {
         public ConditionParametrizer AppendCondition(String fragment, params object[] args) {
             if (!fragment.StartsWith(" "))
                 fragment = $" {fragment}";
-            if(!this.IsEmpty) {
+            if (!this.IsEmpty) {
                 Append(" AND ");
             }
             Append(fragment, args);

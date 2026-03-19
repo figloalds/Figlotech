@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
-namespace System
-{
+namespace System {
     public static class StringExtensions {
         public static string Remove(this string me, string other) {
             return me.Replace(other, String.Empty);
@@ -38,7 +33,7 @@ namespace System
             var matches = Regex.Matches(me, pattern);
             using var retv = new ValueStringBuilder();
             int cursor = 0;
-            foreach(Match a in matches) {
+            foreach (Match a in matches) {
                 retv.Append(me.Substring(cursor, a.Index - cursor));
                 retv.Append(replace());
                 cursor = a.Index + a.Length;
@@ -54,7 +49,7 @@ namespace System
             try {
                 Convert.FromBase64String(base64String);
                 return true;
-            } catch (Exception exception) {
+            } catch (Exception) {
                 // Handle the exception
             }
             return false;
@@ -64,7 +59,7 @@ namespace System
             return String.IsNullOrEmpty(me);
         }
 
-        
+
     }
 
 }

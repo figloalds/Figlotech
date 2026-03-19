@@ -1,15 +1,9 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using System;
-using System.Data;
-using System.Collections.Generic;
 using Figlotech.Core.Helpers;
-using System.Linq;
-using Figlotech.Core;
-using System.Reflection;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados;
-using System.Text.RegularExpressions;
 using Npgsql;
+using System;
+using System.Collections.Generic;
+using System.Data;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
     public sealed class PgSQLPlugin : IRdbmsPluginAdapter {
@@ -62,7 +56,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         static long idGen = 0;
-        long myId = ++idGen;
+        readonly long myId = ++idGen;
 
         public void SetConfiguration(IDictionary<string, object> settings) {
             Config = new PgSQLPluginConfiguration();
@@ -72,16 +66,16 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public object ProcessParameterValue(object value) {
-            if(value == null) {
+            if (value == null) {
                 return DBNull.Value;
             } else
-            if (value is UInt64) {
-                return value.ToString();
-            } else
-            if (value.GetType().IsEnum) {
-                return (int) value;
-            } else
-                return value;
+                if (value is UInt64) {
+                    return value.ToString();
+                } else
+                    if (value.GetType().IsEnum) {
+                        return (int)value;
+                    } else
+                        return value;
         }
     }
 }

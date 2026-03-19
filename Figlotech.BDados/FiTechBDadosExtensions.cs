@@ -1,6 +1,4 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
+﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
@@ -67,7 +65,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return typeof(ILegacyDataObject).IsAssignableFrom(t) ? "UpdatedTime" : "UpdatedAt";
         });
         public static SelfInitializerDictionary<Type, MemberInfo> UpdateColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetUpdateColumn(t));
-        
+
         public static SelfInitializerDictionary<Type, String> RidColumnNameOf { get; private set; } = new SelfInitializerDictionary<Type, string>((t) => Fi.Tech.GetRidColumn(t)?.Name ?? "RID");
         public static SelfInitializerDictionary<Type, MemberInfo> RidColumnOf { get; private set; } = new SelfInitializerDictionary<Type, MemberInfo>((t) => Fi.Tech.GetRidColumn(t));
 
@@ -147,7 +145,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             yield break;
         }
 
-        static ConcurrentDictionary<(Type, string), object> MaterializerCache = new ConcurrentDictionary<(Type, string), object>();
+        static readonly ConcurrentDictionary<(Type, string), object> MaterializerCache = new ConcurrentDictionary<(Type, string), object>();
         public static Func<DbDataReader, T> GetSimpleLoadAllMaterializerFor<T>(IDataReader reader) where T : new() {
             var fieldNames = Fi.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToArray();
             var fieldTypes = Fi.Range(0, reader.FieldCount).Select(i => reader.GetFieldType(i).Name).ToArray();
@@ -156,7 +154,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var cols = new string[reader.FieldCount];
                 for (int i = 0; i < cols.Length; i++)
                     cols[i] = reader.GetName(i);
-                                
+
                 var existingKeys = new (MemberInfo Member, int Ordinal, Type TypeAtReader)[reader.FieldCount];
                 for (int i = 0; i < reader.FieldCount; i++) {
                     var name = cols[i];
@@ -167,7 +165,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                     }
                 }
-                int c = 0;
                 var swBuild = Stopwatch.StartNew();
 
                 var materializer = ReflectionTool.BuildMaterializer<T>(
@@ -185,7 +182,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static async Task<T> RetryUntilNotNull<T>(this Fi _selfie, Func<Task<T>> func, int maxRetries = int.MaxValue, TimeSpan? delay = null) where T : class {
             T retv = null;
             int attempt = 0;
-            var retryDelay = delay ?? TimeSpan.FromMilliseconds(1500);  
+            var retryDelay = delay ?? TimeSpan.FromMilliseconds(1500);
             while (retv == null && attempt < maxRetries) {
                 retv = await func().ConfigureAwait(false);
                 if (retv == null)
@@ -198,7 +195,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public static async IAsyncEnumerable<T> MapFromReaderAsync<T>(this Fi _selfie, DbDataReader reader, [EnumeratorCancellation] CancellationToken cancellationToken, bool ignoreCase = false) where T : new() {
 
             var materializer = FiTechBDadosExtensions.GetSimpleLoadAllMaterializerFor<T>(reader);
-            
+
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) {
                 T obj = materializer(reader);
                 yield return obj;
@@ -217,8 +214,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 case "string":
                     if (valor.ToString() == "CURRENT_TIMESTAMP")
                         return "CURRENT_TIMESTAMP";
-                    var invalid = new char[] { (char) 0x0, '\n', '\r', '\\', '\'', (char) 0x1a };
-                    valOutput = String.Join(string.Empty, (valor as string).Select(a=>
+                    var invalid = new char[] { (char)0x0, '\n', '\r', '\\', '\'', (char)0x1a };
+                    valOutput = String.Join(string.Empty, (valor as string).Select(a =>
                         invalid.Contains(a) ? $"\\{a}" : $"{a}"
                     ));
                     return $"'{valOutput}'";
@@ -349,8 +346,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             QueryBuilder retv = new QueryBuilder();
 
             var type = set.FirstOrDefault()?.GetType() ?? typeof(T);
-
-            int x = 0;
             var ridType = RidFieldType[type];
 
             int ggid = ++gid;
@@ -397,11 +392,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        static SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]> FieldMembers = new SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]>(t => {
+        static readonly SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]> FieldMembers = new SelfInitializerDictionary<Type, (MemberInfo, FieldAttribute)[]>(t => {
             return ReflectionTool.FieldsAndPropertiesOf(t).Select(fp => {
                 return (fp, fp.GetCustomAttribute<FieldAttribute>());
             })
-            .Where(tup=> tup.Item2 != null)
+            .Where(tup => tup.Item2 != null)
             .ToArray();
         });
         public static String[] GetFieldNames(this Fi _selfie, Type t) {

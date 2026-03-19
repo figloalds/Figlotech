@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
-namespace Figlotech.Core.InAppServiceHosting
-{
+namespace Figlotech.Core.InAppServiceHosting {
 
     public interface IFthService {
         bool InterruptIssued { get; set; }

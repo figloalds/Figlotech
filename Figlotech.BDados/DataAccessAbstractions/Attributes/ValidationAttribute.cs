@@ -15,8 +15,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Basic abstract ValidationAttribute, a work in progress.
     /// </summary>
-    public abstract class ValidationAttribute : Attribute
-    {
+    public abstract class ValidationAttribute : Attribute {
         public abstract ValidationErrors Validate(MemberInfo member, object value);
     }
 }

@@ -1,15 +1,10 @@
 ﻿using Figlotech.Core.BusinessModel;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.BDados.DataAccessAbstractions
-{
-    public sealed class Rule<T> : IValidationRule<T> where T : IBusinessObject, new()
-    {
-        Func<T, IEnumerable<ValidationError>> validationFunction;
+namespace Figlotech.BDados.DataAccessAbstractions {
+    public sealed class Rule<T> : IValidationRule<T> where T : IBusinessObject, new() {
+        readonly Func<T, IEnumerable<ValidationError>> validationFunction;
 
         public Rule(Func<T, IEnumerable<ValidationError>> rule) {
             validationFunction = rule;

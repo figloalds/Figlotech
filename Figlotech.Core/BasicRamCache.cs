@@ -10,7 +10,7 @@ using System.Linq.Expressions;
 namespace Figlotech.Core {
     public sealed class BasicMemoryCache {
         static int idGen = 0;
-        int myId = ++idGen;
+        readonly int myId = ++idGen;
 
         private readonly ConcurrentDictionary<Type, object> DataCache = new ConcurrentDictionary<Type, object>();
         private readonly ConcurrentDictionary<Type, object> DataCacheByIndex = new ConcurrentDictionary<Type, object>();
@@ -20,7 +20,7 @@ namespace Figlotech.Core {
         public BasicMemoryCache(IDataAccessor dataAccessor = null) {
             DataAccessor = dataAccessor;
         }
-        
+
         public ConcurrentDictionary<string, T> InternalCache<T>() where T : ILegacyDataObject, new() {
             return (ConcurrentDictionary<string, T>)DataCache.GetOrAddWithLocking(typeof(T), t => {
                 var list = LoadListOfType<T>();
@@ -104,7 +104,7 @@ namespace Figlotech.Core {
             throw new ArgumentException("Expression must be a MemberExpression");
         }
 
-        static object ObjectThatLiterallyMeansNull = new object();
+        static readonly object ObjectThatLiterallyMeansNull = new object();
 
         private static string GetKey(ILegacyDataObject obj) {
             if (obj is ILegacyDataObject legacy) {

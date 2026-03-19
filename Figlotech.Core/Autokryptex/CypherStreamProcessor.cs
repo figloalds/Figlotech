@@ -1,16 +1,12 @@
 ﻿using Figlotech.Core.Helpers;
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.IO;
-using Figlotech.Core.Autokryptex;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex
-{
+namespace Figlotech.Core.Autokryptex {
     public sealed class CypherStreamProcessor : IStreamProcessor {
 
-        IEncryptionMethod _method;
+        readonly IEncryptionMethod _method;
 
         public CypherStreamProcessor(IEncryptionMethod method) {
             _method = method;

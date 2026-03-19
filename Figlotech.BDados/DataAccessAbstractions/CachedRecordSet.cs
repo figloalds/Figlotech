@@ -1,20 +1,15 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.Core.Helpers;
-using Figlotech.Core.Interfaces;
+﻿using Figlotech.Core.Interfaces;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public sealed class CachedRecordSet<T> : RecordSet<T> where T: ILegacyDataObject, new() {
+    public sealed class CachedRecordSet<T> : RecordSet<T> where T : ILegacyDataObject, new() {
 
         public CachedRecordSet() {
 
         }
-        public CachedRecordSet(IDataAccessor da) :base(da) {
+        public CachedRecordSet(IDataAccessor da) : base(da) {
         }
         public bool AutoPersist { get; set; } = false;
         public CachedRecordSet(IDataAccessor dataAccessor, bool autoPersist = false) : base(dataAccessor) {
@@ -26,7 +21,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var retv = this.FirstOrDefault(expr.Compile());
             if (retv == null && customInit != null) {
                 retv = customInit.Invoke();
-                if(retv != null) {
+                if (retv != null) {
                     this.Add(retv);
                 }
             }
@@ -76,6 +71,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        private object listLockObject = new object();
+        private readonly object listLockObject = new object();
     }
 }

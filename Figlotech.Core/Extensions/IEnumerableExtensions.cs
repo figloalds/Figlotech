@@ -1,6 +1,5 @@
 ﻿using Figlotech.Core;
 using Figlotech.Core.Autokryptex;
-using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
@@ -9,12 +8,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
-using static System.Accumulators;
 
-namespace System
-{
+namespace System {
     public interface IAccumulator<T> {
         void Apply(T element, IEnumerable<T> elements);
     }
@@ -63,18 +59,17 @@ namespace System
             }
         }
     }
-    public static class IEnumerableExtensions
-    {
+    public static class IEnumerableExtensions {
         public static void SetAllTo<T>(this T[] me, T val) {
-            for(int i = 0; i < me.Length; i++) {
+            for (int i = 0; i < me.Length; i++) {
                 me[i] = val;
             }
         }
 
         public static List<T> ToSetAsList<T>(this IEnumerable<T> items) {
             List<T> retv = new List<T>();
-            foreach(var item in items) {
-                if(!retv.Contains(item)) {
+            foreach (var item in items) {
+                if (!retv.Contains(item)) {
                     retv.Add(item);
                 }
             }
@@ -93,11 +88,11 @@ namespace System
             }
         }
 
-        static SelfInitializerDictionary<string, MethodInfo> AccumulatorInitializerMethodsCache = new SelfInitializerDictionary<string, MethodInfo>(type=> typeof(Accumulators).GetMethods().FirstOrDefault(m => m.IsStatic && m.Name == type));
+        static readonly SelfInitializerDictionary<string, MethodInfo> AccumulatorInitializerMethodsCache = new SelfInitializerDictionary<string, MethodInfo>(type => typeof(Accumulators).GetMethods().FirstOrDefault(m => m.IsStatic && m.Name == type));
 
         public static IEnumerable<T> IgnoreNulls<T>(this IEnumerable<T> self) {
-            foreach(var item in self) {
-                if(item != null) {
+            foreach (var item in self) {
+                if (item != null) {
                     yield return item;
                 }
             }
@@ -115,7 +110,7 @@ namespace System
         }
         public static async IAsyncEnumerable<T> ToResults<T>(this IEnumerable<Task<T>> promises) {
             foreach (var promise in promises) {
-                if(promise == null) {
+                if (promise == null) {
                     yield return default(T);
                 }
                 yield return await promise;
@@ -132,11 +127,11 @@ namespace System
 
         public static IEnumerable<T> Accumulate<TKey, T>(this IEnumerable<T> self, Func<T, TKey> grouping, params (string type, Expression<Func<T, object>> exp)[] accumulators) where T : new() {
             var accts = new IAccumulator<T>[accumulators.Length];
-            for(int i = 0; i < accts.Length; i++) {
+            for (int i = 0; i < accts.Length; i++) {
                 var acctInitMethod = AccumulatorInitializerMethodsCache[accumulators[i].type];
                 var member = (accumulators[i].exp as MemberExpression).Member;
-                if(acctInitMethod.GetGenericArguments().Length == 1) {
-                    accts[i] = (IAccumulator<T>) acctInitMethod.MakeGenericMethod(typeof(T)).Invoke(null, new object[] { member });
+                if (acctInitMethod.GetGenericArguments().Length == 1) {
+                    accts[i] = (IAccumulator<T>)acctInitMethod.MakeGenericMethod(typeof(T)).Invoke(null, new object[] { member });
                 } else {
                     accts[i] = (IAccumulator<T>)acctInitMethod.MakeGenericMethod(typeof(T), ReflectionTool.GetTypeOf(member)).Invoke(null, new object[] { member });
                 }
@@ -157,7 +152,7 @@ namespace System
         public static int GetIndexOf<T>(this IEnumerable<T> self, T obj) {
             var enny = self.GetEnumerator();
             int i = 0;
-            while(enny.MoveNext()) {
+            while (enny.MoveNext()) {
                 if (enny.Current?.Equals(obj) ?? false) {
                     return i;
                 } else {
@@ -169,7 +164,7 @@ namespace System
         public static int GetIndexOfIgnoreCase(this IEnumerable<string> self, string value) {
             var enny = self.GetEnumerator();
             int i = 0;
-            while(enny.MoveNext()) {
+            while (enny.MoveNext()) {
                 if (enny.Current?.Equals(value, StringComparison.OrdinalIgnoreCase) ?? false) {
                     return i;
                 } else {
@@ -185,7 +180,7 @@ namespace System
             var pickedNumbers = new int[Math.Min(arr.Length, count)];
             pickedNumbers.SetAllTo(-1);
             int cursor = 0;
-            for(int i = 0; i < count; i++) {
+            for (int i = 0; i < count; i++) {
                 if (cursor >= pickedNumbers.Length) {
                     pickedNumbers.SetAllTo(-1);
                     cursor = 0;
@@ -236,9 +231,9 @@ namespace System
 
         public static IDictionary<TKey, TValue> ToIndex<TKey, TValue>(this IEnumerable<TValue> self, Func<TValue, TKey> keyFn) {
             Dictionary<TKey, TValue> retv = new Dictionary<TKey, TValue>();
-            foreach(var v in self) {
+            foreach (var v in self) {
                 var k = keyFn(v);
-                if(k != null && !retv.ContainsKey(k)) {
+                if (k != null && !retv.ContainsKey(k)) {
                     retv.Add(k, v);
                 }
             }
@@ -252,27 +247,27 @@ namespace System
             }
             other.AddRange(li.Splice(predicate));
         }
-                                                        // Cus I'm T int T, I'm dynamite.
+        // Cus I'm T int T, I'm dynamite.
         public static void IterateAssign<T>(this T[] me, Func<T, int, T> act) {
             me.ForEachIndexed((v, idx) => {
                 me[idx] = act(v, idx);
             });
         }
-        
+
         public static void ForEachReverse<T>(this IEnumerable<T> me, Action<T> act) {
             var stack = new Stack<T>();
-            foreach(var item in me) {
+            foreach (var item in me) {
                 stack.Push(item);
             }
 
-            while(stack.Count > 0) {
+            while (stack.Count > 0) {
                 act?.Invoke(stack.Pop());
             }
         }
 
         public static void ForEachIndexed<T>(this IEnumerable<T> me, Action<T, int> action) {
             int i = 0;
-            foreach(var a in me) {
+            foreach (var a in me) {
                 action(a, i++);
             }
         }
@@ -290,7 +285,7 @@ namespace System
 
         public static IEnumerable<int> ToRange<T>(this IEnumerable<T> me) {
             int i = -1;
-            foreach(var a in me) {
+            foreach (var a in me) {
                 yield return ++i;
             }
             yield break;
@@ -315,12 +310,12 @@ namespace System
 
         public static IEnumerable<T> Slice<T>(this IEnumerable<T> t, int start, int end) {
             return t.Skip(start).Take(end);
-        } 
+        }
         public static IEnumerable<T> Flatten<T>(this IEnumerable<IEnumerable<T>> t) {
-            if(t != null) {
-                foreach(var a in t) {
-                    if(a != null) {
-                        foreach(var b in a) {
+            if (t != null) {
+                foreach (var a in t) {
+                    if (a != null) {
+                        foreach (var b in a) {
                             yield return b;
                         }
                     }
@@ -330,7 +325,7 @@ namespace System
 
         public static IEnumerable<IEnumerable<T>> Fracture<T>(this IEnumerable<T> t, int max) {
             List<T> li = new List<T>();
-            foreach(var a in t) {
+            foreach (var a in t) {
                 li.Add(a);
                 if (li.Count == max) {
                     yield return li;
@@ -359,8 +354,8 @@ namespace System
         }
 
         public static IEnumerable<T> Splice<T>(this List<T> li, Predicate<T> predicate) {
-            for(int i = li.Count-1; i >= 0; i--) {
-                if(predicate(li[i])) {
+            for (int i = li.Count - 1; i >= 0; i--) {
+                if (predicate(li[i])) {
                     var retv = li[i];
                     li.RemoveAt(i);
                     yield return retv;
@@ -458,7 +453,7 @@ namespace System
             var enumerator = me.GetEnumerator();
             while (enumerator.MoveNext()) {
                 if (predicate(enumerator.Current)) {
-                    if(enumerator.MoveNext()) {
+                    if (enumerator.MoveNext()) {
                         return enumerator.Current;
                     }
                 }

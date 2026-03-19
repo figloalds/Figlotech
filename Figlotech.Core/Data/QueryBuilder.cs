@@ -7,12 +7,9 @@
 * 
 * Comment on comments, yep they do tend to become a lie over time.
 **/
-using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -38,7 +35,7 @@ namespace Figlotech.Data {
         }
     }
     public sealed class QbIf : QueryBuilder {
-        bool Condition;
+        readonly bool Condition;
         public QbIf(bool condition) {
             this.Condition = condition;
         }
@@ -190,7 +187,7 @@ namespace Figlotech.Data {
             return new Qb(s);
         }
     }
-    
+
     public sealed class QbFmt : QueryBuilder {
         public QbFmt(String str, params object[] args) {
             Append(str, args);
@@ -213,11 +210,11 @@ namespace Figlotech.Data {
 
         public long Id { get; } = ++_qid;
 
-        private bool _conditionalEngaged = false;
+        private readonly bool _conditionalEngaged = false;
 
-        private bool _elseEngaged = false;
+        private readonly bool _elseEngaged = false;
 
-        private bool _conditionalRetv = false;
+        private readonly bool _conditionalRetv = false;
 
         internal StringBuilder _queryString = new StringBuilder(2048);
         internal Dictionary<String, Object> _objParams = new Dictionary<String, Object>();
@@ -247,8 +244,8 @@ namespace Figlotech.Data {
             return command;
         }
 
-        public T ToCommand<T>(IDbConnection connection) where T: IDbCommand {
-            return (T) ToCommand(connection);
+        public T ToCommand<T>(IDbConnection connection) where T : IDbCommand {
+            return (T)ToCommand(connection);
         }
 
         public QueryBuilder AppendQuery(params object[] args) {
@@ -257,17 +254,17 @@ namespace Figlotech.Data {
                 if (a is String s) {
                     Append(s);
                 } else
-                if (a is IQueryBuilder qb) {
-                    Append(qb);
-                } else
-                if (a is QbParam p) {
-                    Append("@???", p.Value);
-                } else
-                if (a is QbIfParam ip) {
-                    Append("@???", ip.Condition ? ip.Value : ip.ElseValue);
-                } else {
-                    Append("@???", a);
-                }
+                    if (a is IQueryBuilder qb) {
+                        Append(qb);
+                    } else
+                        if (a is QbParam p) {
+                            Append("@???", p.Value);
+                        } else
+                            if (a is QbIfParam ip) {
+                                Append("@???", ip.Condition ? ip.Value : ip.ElseValue);
+                            } else {
+                                Append("@???", a);
+                            }
             }
 
             return this;
@@ -294,7 +291,7 @@ namespace Figlotech.Data {
         }
 
         public static QueryBuilder operator +(QueryBuilder a, QueryBuilder b) {
-            return (QueryBuilder) new QueryBuilder().Append(a).Append(b);
+            return (QueryBuilder)new QueryBuilder().Append(a).Append(b);
         }
 
         public static QueryBuilder operator +(String a, QueryBuilder b) {
@@ -306,7 +303,7 @@ namespace Figlotech.Data {
         }
 
         static long _l = 0;
-        Random r = new Random();
+        readonly Random r = new Random();
         string l {
             get {
                 String retv = "";
@@ -321,7 +318,7 @@ namespace Figlotech.Data {
 
         public IQueryBuilder Append(String fragment, params object[] args) {
             if (!_conditionalEngaged || (_conditionalEngaged && _conditionalRetv)) {
-                if(fragment.Contains("@???")) {
+                if (fragment.Contains("@???")) {
                     var pat = new Regex(Regex.Escape("@???"));
                     var s = false;
 
@@ -341,7 +338,7 @@ namespace Figlotech.Data {
                         matches.Add(match);
                     }
                 }
-                
+
                 var args2 = args.Where(a => !a?.GetType()?.Name.Contains("PythonFunction") ?? true).ToArray();
                 matches.RemoveAll(match => {
                     var pname = match.Groups["tagname"].Value;
@@ -349,7 +346,7 @@ namespace Figlotech.Data {
                 });
                 if (args2.Length > 0 && args2.Length != matches.Count) {
                     throw new Exception($@"Parameter count mismatch on QueryBuilder.Append\r\n
-                        Text Parameters: {string.Join(", ", matches.Select(x=> $"@{x.Groups["tagname"].Value}"))}\r\n
+                        Text Parameters: {string.Join(", ", matches.Select(x => $"@{x.Groups["tagname"].Value}"))}\r\n
                         Parameters: {string.Join(", ", args)}\r\n
                         Text was: {fragment}\r\n");
                 }

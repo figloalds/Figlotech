@@ -14,7 +14,7 @@ namespace Figlotech.ECSEngine {
         public sealed class V<T> : IValueExpression<T> {
             public T Value => throw new NotImplementedException();
 
-            IValueExpression<T> wrappedExpression;
+            readonly IValueExpression<T> wrappedExpression;
 
             public V(T t) {
                 wrappedExpression = V.val(t);

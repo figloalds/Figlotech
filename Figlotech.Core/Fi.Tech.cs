@@ -1,22 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Data;
-using System.Reflection;
+using System.Globalization;
 using System.Linq;
-using System.Linq.Expressions;
-using Newtonsoft.Json;
-using System.Threading.Tasks;
-using System.Diagnostics;
-using Figlotech.Core.Helpers;
-using Figlotech.Core.I18n;
-using Figlotech.Core.Interfaces;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class With<T> {
-        T value;
+        readonly T value;
         public With(T value) {
             this.value = value;
         }
@@ -114,7 +106,7 @@ namespace Figlotech.Core {
             IECLongByte,
             IECLongBit,
         }
-        
+
         public static Dictionary<DataUnitGeneralFormat, string[]> DataUnitNames { get; private set; } = new Dictionary<DataUnitGeneralFormat, string[]> {
             { DataUnitGeneralFormat.SIShortByte, new string[] {
                 "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"
@@ -160,7 +152,7 @@ namespace Figlotech.Core {
             }
             Benchmarker bm = new Benchmarker();
             var i = 0;
-            foreach(var a in fn) {
+            foreach (var a in fn) {
                 bm.Mark($"{++i}");
                 a?.Invoke();
             }

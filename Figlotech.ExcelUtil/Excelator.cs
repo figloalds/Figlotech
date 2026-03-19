@@ -1,5 +1,4 @@
 ﻿using Figlotech.Core;
-using Figlotech.Core.FileAcessAbstractions;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using OfficeOpenXml.Style.Dxf;
@@ -13,12 +12,12 @@ using System.Threading.Tasks;
 
 namespace Figlotech.ExcelUtil {
     public sealed class ReadingStoppedException : Exception {
-        
+
     }
     public sealed class ExcelatorLineReader {
         int line;
         internal bool stopReadingIssued;
-        Excelator excelator;
+        readonly Excelator excelator;
 
         public int LineNumber => line;
 
@@ -42,7 +41,6 @@ namespace Figlotech.ExcelUtil {
                 return ret;
             }
             var retv = 0;
-            int len = 0;
             for (int i = s.Length - 1; i >= 0; i--) {
                 var number = (int)new IntEx(s[i].ToString().ToUpper(), "*" + IntEx.Base26).ToLong();
                 if (i == s.Length - 1) {
@@ -79,14 +77,14 @@ namespace Figlotech.ExcelUtil {
             throw new ReadingStoppedException();
         }
     }
-    
-    public sealed class ExcelatorRowRangeWriter {
-        int row;
-        int ColFrom;
-        int ColTo;
 
-        Excelator Excelator;
-        ExcelatorRowWriter rowWriter;
+    public sealed class ExcelatorRowRangeWriter {
+        readonly int row;
+        readonly int ColFrom;
+        readonly int ColTo;
+
+        readonly Excelator Excelator;
+        readonly ExcelatorRowWriter rowWriter;
 
         public int LineNumber => row;
         public int ColStart => ColFrom;
@@ -116,8 +114,8 @@ namespace Figlotech.ExcelUtil {
         }
 
         public ExcelatorRowRangeWriter RowSum(int columnFrom, int columnTo) {
-            var cf = IntEx.Int64ToString(columnFrom-1, IntEx.Base26);
-            var ct = IntEx.Int64ToString(columnTo-1, IntEx.Base26);
+            var cf = IntEx.Int64ToString(columnFrom - 1, IntEx.Base26);
+            var ct = IntEx.Int64ToString(columnTo - 1, IntEx.Base26);
             Excelator.SetFormula(row, ColFrom, ColTo, $"SUM({cf}{row}:{ct}{row})");
             return this;
         }
@@ -146,7 +144,7 @@ namespace Figlotech.ExcelUtil {
             return this;
         }
         public ExcelatorRowRangeWriter SolidFill(Color c) {
-            Excelator.Style(row, row, ColFrom, ColTo, es=> {
+            Excelator.Style(row, row, ColFrom, ColTo, es => {
                 es.Fill.PatternType = ExcelFillStyle.Solid;
                 es.Fill.BackgroundColor.SetColor(c);
             });
@@ -208,10 +206,10 @@ namespace Figlotech.ExcelUtil {
             }
             return this;
         }
-        
+
         public ExcelatorRowWriter IterateThrough<T>(IEnumerable<T> values, Action<T, int> fn, bool autoNextRow = true) {
             int i = 0;
-            foreach(var a in values) {
+            foreach (var a in values) {
                 fn(a, i++);
                 if (autoNextRow) {
                     NextRow();
@@ -257,7 +255,7 @@ namespace Figlotech.ExcelUtil {
             return new ExcelatorRowRangeWriter(this, column + offsetCols, column + offsetCols);
         }
         public ExcelatorRowRangeWriter ForCellsInRange(int start, int end, Action<ExcelatorRowRangeWriter> cellAction) {
-            for(int i = start; i <= end; i++) {
+            for (int i = start; i <= end; i++) {
                 cellAction(new ExcelatorRowRangeWriter(this, i + offsetCols, i + offsetCols));
             }
             return new ExcelatorRowRangeWriter(this, start + offsetCols, end + offsetCols);
@@ -265,7 +263,7 @@ namespace Figlotech.ExcelUtil {
         public ExcelatorRowRangeWriter Range(int columnFrom, int columnTo) {
             return new ExcelatorRowRangeWriter(this, columnFrom + offsetCols, columnTo + offsetCols);
         }
-         
+
         public ExcelatorRowWriter Style(int column, Action<ExcelStyle> es) {
             Style(column, column, es);
             return this;
@@ -337,7 +335,7 @@ namespace Figlotech.ExcelUtil {
                 _pack?.Dispose();
                 _stream?.Dispose();
                 _currentWorkSheet?.Dispose();
-                for(var i = _workSheets.Count - 1; i >= 0; i--) {
+                for (var i = _workSheets.Count - 1; i >= 0; i--) {
                     _workSheets[i]?.Dispose();
                     _workSheets.RemoveAt(i);
                 }
@@ -370,7 +368,7 @@ namespace Figlotech.ExcelUtil {
                 for (int c = 0; c < _currentWorkSheet.Dimension.Columns + 1; c++) {
                     _currentWorkSheet.Column(c + 1).AutoFit();
                 }
-            } catch(Exception x) {
+            } catch (Exception x) {
                 Fi.Tech.WriteLine("EXCELATOR", $"AutoFit threw an exception {x.Message}");
             }
         }
@@ -410,8 +408,8 @@ namespace Figlotech.ExcelUtil {
             EnsureRowRange(fr, tr);
             try {
                 fn(_currentWorkSheet.Cells[fr, fc, tr, tc].Style);
-            } catch(Exception x) {
-                if(Debugger.IsAttached) {
+            } catch (Exception x) {
+                if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
                 throw x;
@@ -429,26 +427,26 @@ namespace Figlotech.ExcelUtil {
         public T Get<T>(int line, int column) {
             try {
                 var o = Get(line, column);
-                if(o == null) {
+                if (o == null) {
                     return default(T);
                 }
-                if(o != null && o is T obj) {
+                if (o != null && o is T obj) {
                     return obj;
                 }
-                if(typeof(T).IsAssignableFrom(o.GetType())) {
+                if (typeof(T).IsAssignableFrom(o.GetType())) {
                     return (T)o;
                 }
-                if(Nullable.GetUnderlyingType(typeof(T)) != null) {
+                if (Nullable.GetUnderlyingType(typeof(T)) != null) {
                     return (T)Convert.ChangeType(o, Nullable.GetUnderlyingType(typeof(T)));
                 }
-                return (T) Convert.ChangeType(o, typeof(T));
-            } catch(Exception) {
+                return (T)Convert.ChangeType(o, typeof(T));
+            } catch (Exception) {
 
             }
             return default(T);
         }
         public object Get(int line, int column) {
-            if(line > NumRows + 1 || column > NumCols +1) {
+            if (line > NumRows + 1 || column > NumCols + 1) {
                 return null;
             }
             return _currentWorkSheet.Cells[line, column].Value;
@@ -459,7 +457,7 @@ namespace Figlotech.ExcelUtil {
             try {
                 _currentWorkSheet.Cells[line, column].Style.Numberformat.Format = value;
 
-            } catch (Exception x) {
+            } catch (Exception) {
 
                 //Console.WriteLine(x.Message);
             }
@@ -472,9 +470,7 @@ namespace Figlotech.ExcelUtil {
                 if (columnFrom != columnTo) {
                     _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
-            }
-
-            catch (Exception x) {
+            } catch (Exception) {
 
                 //Console.WriteLine(x.Message);
             }
@@ -485,7 +481,7 @@ namespace Figlotech.ExcelUtil {
             if (wdc < columnFrom - 1) {
                 _currentWorkSheet.InsertColumn(columnFrom, columnFrom - wdc);
             }
-            if(columnTo > columnFrom) {
+            if (columnTo > columnFrom) {
                 if (wdc < columnTo - 1) {
                     _currentWorkSheet.InsertColumn(columnTo, columnTo - wdc);
                 }
@@ -496,7 +492,7 @@ namespace Figlotech.ExcelUtil {
             if (wdr < rowFrom - 1) {
                 _currentWorkSheet.InsertRow(rowFrom, rowFrom - wdr);
             }
-            if(rowTo > rowFrom) {
+            if (rowTo > rowFrom) {
                 if (wdr < rowTo - 1) {
                     _currentWorkSheet.InsertRow(rowTo, rowTo - wdr);
                 }
@@ -511,7 +507,7 @@ namespace Figlotech.ExcelUtil {
                 if (columnFrom != columnTo) {
                     _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
-            } catch (Exception x) {
+            } catch (Exception) {
 
                 //Console.WriteLine(x.Message);
             }
@@ -524,7 +520,7 @@ namespace Figlotech.ExcelUtil {
                 if (columnFrom != columnTo) {
                     _currentWorkSheet.Cells[line, columnFrom, line, columnTo].Merge = true;
                 }
-            } catch (Exception x) {
+            } catch (Exception) {
 
                 //Console.WriteLine(x.Message);
             }
@@ -584,11 +580,11 @@ namespace Figlotech.ExcelUtil {
                     xcl.CurrentRow = i;
                     using var tcsFork = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
                     await lineFun(tcsFork.Token, xcl).ConfigureAwait(false);
-                    if(xcl.stopReadingIssued || cancellation.IsCancellationRequested) {
+                    if (xcl.stopReadingIssued || cancellation.IsCancellationRequested) {
                         break;
                     }
                 } catch (Exception x) {
-                    if(x is ReadingStoppedException) {
+                    if (x is ReadingStoppedException) {
                         break;
                     }
                     await handler(x).ConfigureAwait(false);
@@ -596,7 +592,7 @@ namespace Figlotech.ExcelUtil {
             }
         }
         public async Task ReadAllAsync(Func<ExcelatorLineReader, Task> lineFun, int skipLines = 0, Func<Exception, Task> handler = null) {
-            await ReadAllAsync(CancellationToken.None, async(cancellation, xcl) => {
+            await ReadAllAsync(CancellationToken.None, async (cancellation, xcl) => {
                 await lineFun(xcl).ConfigureAwait(false);
             }, skipLines, handler).ConfigureAwait(false);
         }

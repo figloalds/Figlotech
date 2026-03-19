@@ -1,10 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 
-namespace Figlotech.Core.Autokryptex
-{
+namespace Figlotech.Core.Autokryptex {
     /// <summary>
     /// This class provides stateful pseudo-random for 
     /// this lib's "lame" encryption methods.
@@ -23,8 +19,8 @@ namespace Figlotech.Core.Autokryptex
         }
         int g1 = 0;
         const int chunkSize = 256;
-        byte[][] hashs = new byte[8][];
-        byte[] chunk = new byte[chunkSize];
+        readonly byte[][] hashs = new byte[8][];
+        readonly byte[] chunk = new byte[chunkSize];
         int cursor = 0;
 
         private void InitSeed(long seed) {

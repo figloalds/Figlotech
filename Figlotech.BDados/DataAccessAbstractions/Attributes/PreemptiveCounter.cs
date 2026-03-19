@@ -8,24 +8,16 @@
  * August/2014
  * 
 **/
-using Figlotech.BDados.Builders;
-using Figlotech.Core;
 using Figlotech.Data;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Tells IRdbmsDataAccessors that the decorated field should be a primary key in the database.
     /// </summary>
-    public sealed class PreemptiveCounter : Attribute
-    {
-        public PreemptiveCounter()
-        {
+    public sealed class PreemptiveCounter : Attribute {
+        public PreemptiveCounter() {
         }
 
         public IQueryBuilder OnInsertSubQuery(Type t, MemberInfo mi) {

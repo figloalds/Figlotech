@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Figlotech.Core.Extensions
-{
-    public static class ArraySegmentExtensions
-    {
+namespace Figlotech.Core.Extensions {
+    public static class ArraySegmentExtensions {
 
         public static T[] ToSegmentArray<T>(this ArraySegment<T> arraySegment) {
             T[] array = new T[arraySegment.Count];

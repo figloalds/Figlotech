@@ -1,16 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using Figlotech.Extensions;
+using System;
 using System.IO.Pipes;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Figlotech.Extensions;
 
 namespace Figlotech.Core.InAppServiceHosting {
     public sealed class FthPipeClient {
-        string pipeName;
+        readonly string pipeName;
         public FthPipeClient(string pipeName) {
             this.pipeName = pipeName;
         }
@@ -22,7 +16,7 @@ namespace Figlotech.Core.InAppServiceHosting {
                 }
 
                 client.Connect(5000);
-                if(!client.IsConnected) {
+                if (!client.IsConnected) {
                     throw new Exception($"No listeners at Pipe {pipeName}");
                 }
 

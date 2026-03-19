@@ -6,14 +6,12 @@ using System.Linq;
 
 using System.Threading.Tasks;
 
-namespace Figlotech.Data
-{
+namespace Figlotech.Data {
     public sealed class SimpleDatabaseAccessorQueryHelper<TConnection, TCommand, TReader>
         where TCommand : IDbCommand
         where TReader : IDataReader
-        where TConnection : IDbConnection
-    {
-        TConnection Connection;
+        where TConnection : IDbConnection {
+        readonly TConnection Connection;
         public SimpleDatabaseAccessorQueryHelper(TConnection conn) {
             Connection = conn;
         }
@@ -91,7 +89,7 @@ namespace Figlotech.Data
             });
         }
 
-        public Task<List<T>> Query<T>(IQueryBuilder query) where T: new() {
+        public Task<List<T>> Query<T>(IQueryBuilder query) where T : new() {
             return DbQuery(async cmd => {
                 query.ApplyToCommand(cmd);
                 var retv = new List<T>();
@@ -101,7 +99,7 @@ namespace Figlotech.Data
                 } else {
                     reader = cmd.ExecuteReader();
                 }
-                var propertiesOfT = typeof(T).GetProperties().Where(x=> x.GetSetMethod(false) != null).ToDictionary(t => t.Name.ToLower(), t=> t);
+                var propertiesOfT = typeof(T).GetProperties().Where(x => x.GetSetMethod(false) != null).ToDictionary(t => t.Name.ToLower(), t => t);
                 using (reader) {
                     var existingKeys = new string[reader.FieldCount];
                     for (int i = 0; i < reader.FieldCount; i++) {
@@ -110,13 +108,13 @@ namespace Figlotech.Data
                     while (reader.Read()) {
                         var record = new T();
                         for (int i = 0; i < existingKeys.Length; i++) {
-                            if(propertiesOfT.ContainsKey(existingKeys[i].ToLower())) {
+                            if (propertiesOfT.ContainsKey(existingKeys[i].ToLower())) {
                                 var val = reader.GetValue(i);
                                 var property = propertiesOfT[existingKeys[i].ToLower()];
                                 if (val is DBNull) {
                                     val = null;
                                 }
-                                if(val != null || !property.PropertyType.IsValueType) {
+                                if (val != null || !property.PropertyType.IsValueType) {
                                     property.SetValue(record, val);
                                 }
                             }
@@ -133,9 +131,8 @@ namespace Figlotech.Data
     public class SimpleDatabaseAccessorBase<TConnection, TCommand, TReader>
         where TCommand : IDbCommand
         where TReader : IDataReader
-        where TConnection : IDbConnection
-    {
-        Func<TConnection> GetConnectionCommand;
+        where TConnection : IDbConnection {
+        readonly Func<TConnection> GetConnectionCommand;
         public SimpleDatabaseAccessorBase(Func<TConnection> howToGetAConnection) {
             GetConnectionCommand = howToGetAConnection;
         }
@@ -199,8 +196,7 @@ namespace Figlotech.Data
         }
     }
 
-    public sealed class SimpleDatabaseAccessor : SimpleDatabaseAccessorBase<DbConnection, DbCommand, DbDataReader>
-    {
+    public sealed class SimpleDatabaseAccessor : SimpleDatabaseAccessorBase<DbConnection, DbCommand, DbDataReader> {
         public SimpleDatabaseAccessor(Func<DbConnection> howToGetAConnection) : base(howToGetAConnection) {
         }
     }

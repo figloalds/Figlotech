@@ -17,7 +17,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public string FarKey;
         public string FarField;
 
-        public AggregateFarFieldAttribute(Type imediateType, string imediateKey, Type farType, string farkey, string farField){
+        public AggregateFarFieldAttribute(Type imediateType, string imediateKey, Type farType, string farkey, string farField) {
             ImediateType = imediateType;
             FarType = farType;
             FarKey = farkey;

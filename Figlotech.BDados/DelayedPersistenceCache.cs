@@ -20,14 +20,14 @@ namespace Figlotech.BDados {
     }
 
     public sealed class DelayedPersistenceCache<T> : IAsyncDisposable, IDictionary<string, T> where T : ILegacyDataObject, new() {
-        private TimedCache<string, PersistenceCacheObject<T>> Dictionary;
+        private readonly TimedCache<string, PersistenceCacheObject<T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
         private TimeSpan PersistenceInterval { get; set; }
         private IRdbmsDataAccessor DataAccessor { get; set; }
 
         public ICollection<string> Keys => Dictionary.Keys;
 
-        public ICollection<T> Values => Dictionary.Values.Select(x=> x.Object).ToList();
+        public ICollection<T> Values => Dictionary.Values.Select(x => x.Object).ToList();
 
         public Func<T, Task<T>> CustomOnLoad { get; set; }
 
@@ -35,18 +35,18 @@ namespace Figlotech.BDados {
 
         public bool IsReadOnly => Dictionary.IsReadOnly;
 
-        private string SelfScheduleId = $"PersistenceCache{RID.GenerateNewAsBase36()}";
+        private readonly string SelfScheduleId = $"PersistenceCache{RID.GenerateNewAsBase36()}";
 
         public int MaxPersistenceBatchPerInterval = 100;
 
-        public T this[string key] { 
-            get => Dictionary.TryGetValue(key, out var val) ? val.Object : default(T); 
-            set => Add(key, value); 
+        public T this[string key] {
+            get => Dictionary.TryGetValue(key, out var val) ? val.Object : default(T);
+            set => Add(key, value);
         }
 
         public DelayedPersistenceCache(
-            IRdbmsDataAccessor dataAccessor, 
-            TimeSpan cacheDuration, 
+            IRdbmsDataAccessor dataAccessor,
+            TimeSpan cacheDuration,
             TimeSpan persistenceInterval,
             WorkQueuer workQueuer = null
         ) {
@@ -56,7 +56,7 @@ namespace Figlotech.BDados {
             Dictionary = new TimedCache<string, PersistenceCacheObject<T>>(cacheDuration);
             Dictionary.OnSet = async (key, value) => {
                 await Task.Yield();
-                if(!value.IsDirty) {
+                if (!value.IsDirty) {
                     value.LastSetDirty = DateTime.UtcNow;
                     value.IsDirty = true;
                 }
@@ -70,8 +70,8 @@ namespace Figlotech.BDados {
             };
             Dictionary.OnFailOver = async (key) => {
                 using var tsn = await DataAccessor.CreateNewTransactionAsync(CancellationToken.None);
-                var obj = new PersistenceCacheObject<T> { 
-                    Object = 
+                var obj = new PersistenceCacheObject<T> {
+                    Object =
                         CustomOnLoad != null
                         ? await CustomOnLoad(await DataAccessor.LoadByRidAsync<T>(tsn, key))
                         : await DataAccessor.LoadByRidAsync<T>(tsn, key),
@@ -84,7 +84,7 @@ namespace Figlotech.BDados {
                     await using var tsn = await DataAccessor.CreateNewTransactionAsync(CancellationToken.None);
                     var dirtyObjects = Dictionary.Values
                         .Where(x => x.IsDirty)
-                        .OrderBy(x=> x.LastSetDirty)
+                        .OrderBy(x => x.LastSetDirty)
                         .Take(MaxPersistenceBatchPerInterval)
                         .Select(x => x.Object)
                         .ToList();
@@ -94,7 +94,7 @@ namespace Figlotech.BDados {
                 } catch (Exception ex) {
                     Debug.WriteLine($"Error during scheduled persistence: {ex.Message}");
                 }
-            }) { 
+            }) {
                 Name = "DelayedPersistenceCache Persistence Task",
             }, persistenceInterval);
         }
@@ -141,7 +141,7 @@ namespace Figlotech.BDados {
         private async Task SaveToPersistentStorage<T>(IEnumerable<T> obj) where T : ILegacyDataObject, new() {
             try {
                 var list = obj.ToList();
-                if(list.Count == 0) {
+                if (list.Count == 0) {
                     return;
                 }
                 using var cts = new CancellationTokenSource();
@@ -154,7 +154,7 @@ namespace Figlotech.BDados {
             }
         }
 
-        private async Task SaveToPersistentStorage<T>(T obj) where T: ILegacyDataObject, new() {
+        private async Task SaveToPersistentStorage<T>(T obj) where T : ILegacyDataObject, new() {
             try {
                 using var cts = new CancellationTokenSource();
                 cts.CancelAfter(this.PersistenceInterval);

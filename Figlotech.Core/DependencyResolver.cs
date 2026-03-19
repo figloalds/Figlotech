@@ -7,7 +7,7 @@ namespace Figlotech.Core {
     /// This class is a Syntax suggar for Figlotech.Core.DependencySolver
     /// </summary>
     public sealed class DS : DependencyResolver {
-        
+
     }
     /// <summary>
     /// This is my very own approach and study of dependency injection. 
@@ -17,7 +17,7 @@ namespace Figlotech.Core {
 
         public static DependencyResolver Default { get; } = new DependencyResolver();
 
-        IDictionary<String, DependencyResolver> solvers = new Dictionary<String, DependencyResolver>();
+        readonly IDictionary<String, DependencyResolver> solvers = new Dictionary<String, DependencyResolver>();
 
         public DependencyResolver this[String name] {
             get {
@@ -30,7 +30,7 @@ namespace Figlotech.Core {
             }
         }
 
-        private DependencyResolver ParentResolver;
+        private readonly DependencyResolver ParentResolver;
         public DependencyResolver(DependencyResolver parent = null) {
             ParentResolver = parent;
         }
@@ -47,9 +47,9 @@ namespace Figlotech.Core {
             }
         }
 
-        private Dictionary<Type, Type> BindingMap = new Dictionary<Type, Type>();
-        private Dictionary<Type, object> InstanceMap = new Dictionary<Type, Object>();
-        private Dictionary<Type, Delegate> FactoryMap = new Dictionary<Type, Delegate>();
+        private readonly Dictionary<Type, Type> BindingMap = new Dictionary<Type, Type>();
+        private readonly Dictionary<Type, object> InstanceMap = new Dictionary<Type, Object>();
+        private readonly Dictionary<Type, Delegate> FactoryMap = new Dictionary<Type, Delegate>();
 
         private Type FindBinding(Type t) {
             if (BindingMap.ContainsKey(t)) {
@@ -102,11 +102,11 @@ namespace Figlotech.Core {
             var t = input.GetType();
             var members = ReflectionTool.FieldsAndPropertiesOf(t);
 
-            foreach(var member in members) {
+            foreach (var member in members) {
                 var type = ReflectionTool.GetTypeOf(member);
-                if(type.IsInterface) {
+                if (type.IsInterface) {
                     var resolution = Resolve(type, ignoreErrors);
-                    if(resolution != null) {
+                    if (resolution != null) {
                         ReflectionTool.SetMemberValue(member, input, resolution);
                     }
                 }
@@ -118,13 +118,13 @@ namespace Figlotech.Core {
             if (value != null)
                 return value;
 
-            object factory = ((Func<object>) FindFactory(t))?.Invoke();
-            if(factory != null) {
+            object factory = ((Func<object>)FindFactory(t))?.Invoke();
+            if (factory != null) {
                 return factory;
             }
 
             Type res = FindBinding(t);
-            if(res != null) {
+            if (res != null) {
                 var ctorList = res.GetConstructors();
                 bool hasParameterLessCtor = false;
                 foreach (var ctor in ctorList) {
@@ -153,7 +153,7 @@ namespace Figlotech.Core {
                     ));
                 }
             }
-            if(!ignoreErrors) {
+            if (!ignoreErrors) {
                 throw new Exception(String.Format(
                     Fi.Tech.GetStrings().BDIOC_CANNOT_RESOLVE_TYPE, t.Name
                 ));

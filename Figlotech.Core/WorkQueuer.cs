@@ -1,4 +1,3 @@
-using Figlotech.Core.Extensions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -169,7 +168,7 @@ namespace Figlotech.Core {
 
     public sealed class WorkQueuer : IDisposable, IAsyncDisposable {
         public static int qid_increment = 0;
-        private int __qid = ++qid_increment;
+        private readonly int __qid = ++qid_increment;
         public int QID => __qid;
         public string Name { get; set; }
 
@@ -272,7 +271,7 @@ namespace Figlotech.Core {
             _runCts = new CancellationTokenSource();
 
             _dispatcherTask = Task.Run(() => DispatchLoop(_runCts.Token));
-            
+
             FlushHeldJobsToQueue();
             ProcessMissedSchedules();
             SignalDispatcher();
@@ -715,7 +714,7 @@ namespace Figlotech.Core {
         private void SetupTimer(ScheduledTaskEntry entry) {
             // Dispose existing timer before creating new one
             entry.Timer?.Dispose();
-            
+
             var now = DateTime.UtcNow;
             var delay = entry.ScheduledTime - now;
             var delayMs = Math.Max(0, (long)delay.TotalMilliseconds);
@@ -785,7 +784,7 @@ namespace Figlotech.Core {
             entry.Timer = null;
 
             var request = Enqueue(entry.Job, entry.Cancellation.Token);
-            
+
             request.GetAwaiter().OnCompleted(() => {
                 lock (_scheduledTasksLock) {
                     entry.IsExecuting = false;

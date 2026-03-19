@@ -2,14 +2,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core
-{
-    public sealed class AsyncConcurrentList<T> : IEnumerable<T>, IList<T>
-    {
-        FiAsyncLock alock = new FiAsyncLock();
+namespace Figlotech.Core {
+    public sealed class AsyncConcurrentList<T> : IEnumerable<T>, IList<T> {
+        readonly FiAsyncLock alock = new FiAsyncLock();
         List<T> dmmy { get; set; } = new List<T>();
 
         public int Count {
@@ -21,7 +18,7 @@ namespace Figlotech.Core
 
         public bool IsReadOnly {
             get {
-                lock (dmmy) 
+                lock (dmmy)
                     return ((ICollection<T>)dmmy).IsReadOnly;
             }
         }
@@ -55,7 +52,7 @@ namespace Figlotech.Core
         }
 
         public IEnumerator<T> GetEnumerator() {
-            lock(dmmy)
+            lock (dmmy)
                 return ((IEnumerable<T>)dmmy.ToList()).GetEnumerator();
         }
 

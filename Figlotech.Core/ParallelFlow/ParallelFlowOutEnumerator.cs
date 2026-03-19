@@ -13,14 +13,14 @@ namespace Figlotech.Core {
             }
 
             public async ValueTask<bool> MoveNextAsync() {
-                lock(cache) {
-                    if(cache.Count > 0) {
+                lock (cache) {
+                    if (cache.Count > 0) {
                         Current = cache.Dequeue();
                         return true;
                     }
                 }
                 var retv = await MoveNext.Task;
-                if(!retv) {
+                if (!retv) {
                     return false;
                 }
                 Current = cache.Dequeue();
@@ -29,10 +29,10 @@ namespace Figlotech.Core {
 
             private readonly object publishLock = new object();
             public void Publish(T o) {
-                lock(cache) {
+                lock (cache) {
                     cache.Enqueue(o);
                 }
-                lock(publishLock) {
+                lock (publishLock) {
                     var mn = MoveNext;
                     MoveNext = new TaskCompletionSource<bool>();
                     mn.SetResult(true);
@@ -44,7 +44,7 @@ namespace Figlotech.Core {
                 }
             }
 
-            Queue<T> cache = new Queue<T>();
+            readonly Queue<T> cache = new Queue<T>();
 
             TaskCompletionSource<bool> MoveNext = new TaskCompletionSource<bool>();
 

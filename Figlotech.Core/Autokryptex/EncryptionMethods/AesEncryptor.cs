@@ -1,17 +1,11 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.Autokryptex.Legacy;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods {
 
     public sealed class AesEncryptor : IEncryptionMethod {
-        String instanceSecret;
-        int instancePin;
+        readonly String instanceSecret;
+        readonly int instancePin;
         FiRandom cr;
 
         public AesEncryptor(String password, int pin = 179425879) {

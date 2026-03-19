@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.DomainEvents
-{
+namespace Figlotech.Core.DomainEvents {
 
     public interface IExtension {
     }
@@ -34,7 +30,7 @@ namespace Figlotech.Core.DomainEvents
     }
 
     public abstract class Extension<T> : IExtension<int, T> {
-        int _opcode;
+        readonly int _opcode;
         public Extension(int opcode) {
             _opcode = opcode;
         }
@@ -43,14 +39,14 @@ namespace Figlotech.Core.DomainEvents
         public abstract Task OnError(T obj, Exception x);
 
         public async Task Execute(int opcode, T obj) {
-            if(opcode == _opcode) {
-                await Execute((T) obj);
+            if (opcode == _opcode) {
+                await Execute((T)obj);
             }
         }
 
         public async Task OnError(int opcode, T obj, Exception x) {
             if (opcode == _opcode) {
-                await OnError((T) obj, x);
+                await OnError((T)obj, x);
             }
         }
     }

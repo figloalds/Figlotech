@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace System {
     /// <summary>
@@ -15,7 +14,7 @@ namespace System {
 
         public ExternalServerTimeoutException(string message, Exception innerException) : base(504, message, innerException) {
         }
-        
+
         protected ExternalServerTimeoutException(SerializationInfo info, StreamingContext context) : base(504, info, context) {
         }
     }

@@ -11,7 +11,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace Figlotech.Core {
     public static class MathUtils {
@@ -154,17 +153,17 @@ namespace Figlotech.Core {
             }
         }
 
-        static List<long> foundprimes = new List<long>();
+        static readonly List<long> foundprimes = new List<long>();
         private static bool IsPrime(long Number) {
-            for(int i = 0; i<foundprimes.Count; i++) {
-                if(Number % foundprimes[i] == 0) {
+            for (int i = 0; i < foundprimes.Count; i++) {
+                if (Number % foundprimes[i] == 0) {
                     return false;
                 }
             }
             return true;
         }
         public static IEnumerable<long> PrimeNumbers() {
-            for(int i = 0; i < foundprimes.Count; i++) {
+            for (int i = 0; i < foundprimes.Count; i++) {
                 yield return foundprimes[i];
             }
             for (long k = 3; k < long.MaxValue; k += 2) {

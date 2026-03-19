@@ -1,18 +1,14 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.TableNameTransformDefaults;
+﻿using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.Core;
 using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.CustomForms {
-    public sealed class CustomFormsApi
-    {
+    public sealed class CustomFormsApi {
         public static String Prefix = "ibcf";
         public static void CheckStructure(IRdbmsDataAccessor da, CustomForm form) {
 
@@ -29,28 +25,28 @@ namespace Figlotech.BDados.CustomForms {
                 DataTable columnsInfo = da.Query(
                     new Qb($"SELECT * FROM information_schema.columns WHERE table_schema='{da.SchemaName}' AND table_name='{tableName}'"));
 
-                for(var i = 0; i < form.Fields.Count; i++) {
+                for (var i = 0; i < form.Fields.Count; i++) {
                     bool exists = false;
                     int cIndex = -1;
-                    for(var c = 0; c < columnsInfo.Rows.Count; c++) { // C++!!!
-                        if(columnsInfo.Rows[c]["COLUMN_NAME"] as String == form.Fields[i].Name) {
+                    for (var c = 0; c < columnsInfo.Rows.Count; c++) { // C++!!!
+                        if (columnsInfo.Rows[c]["COLUMN_NAME"] as String == form.Fields[i].Name) {
                             exists = true;
                             cIndex = c;
                             break;
                         }
                     }
-                    if(!exists) {
+                    if (!exists) {
                         da.Execute(new Qb($"ALTER TABLE {tableName} ADD COLUMN {SqlType(form.Fields[i])} DEFAULT NULL;"));
                     } else {
-                        ulong? sz = (ulong?) columnsInfo.Rows[cIndex]["CHARACTER_MAXIMUM_LENGTH"];
-                        String dbtype = (String) columnsInfo.Rows[cIndex]["DATA_TYPE"];
-                        if (dbtype.ToLower() == "varchar" && sz != (ulong) form.Fields[i].Size) {
+                        ulong? sz = (ulong?)columnsInfo.Rows[cIndex]["CHARACTER_MAXIMUM_LENGTH"];
+                        String dbtype = (String)columnsInfo.Rows[cIndex]["DATA_TYPE"];
+                        if (dbtype.ToLower() == "varchar" && sz != (ulong)form.Fields[i].Size) {
                             da.Execute(new Qb($"ALTER TABLE {tableName} CHANGE COLUMN {form.Fields[i].Name} {form.Fields[i].Name} {SqlType(form.Fields[i])} DEFAULT NULL"));
                         }
                     }
                 }
             }
-            
+
         }
 
         public static String GetPrefixedTableName(ref CustomForm cf) {
@@ -68,7 +64,7 @@ namespace Figlotech.BDados.CustomForms {
         public static void Save(IRdbmsDataAccessor rda, CustomForm cf, CustomObject value) {
             var tableName = GetPrefixedTableName(ref cf);
             Object getId = value.Get("Id");
-            if(getId is long && (long) getId > 0) {
+            if (getId is long && (long)getId > 0) {
                 rda.Execute(BuildUpdateQuery(cf, value));
             } else {
                 rda.Execute(BuildInsertQuery(cf, value));
@@ -124,41 +120,40 @@ namespace Figlotech.BDados.CustomForms {
             return retv;
         }
 
-        public static IQueryBuilder BuildSelectQuery(CustomForm cf, IDictionary<String, Object> conditions  = null, int? p = 1, int? l = 200) {
+        public static IQueryBuilder BuildSelectQuery(CustomForm cf, IDictionary<String, Object> conditions = null, int? p = 1, int? l = 200) {
             var tableName = GetPrefixedTableName(ref cf);
 
             QueryBuilder retv = new QueryBuilder();
             int seq = 0;
             retv.Append("SELECT Id, ");
-            for(int i = 0; i < cf.Fields.Count; i++) {
+            for (int i = 0; i < cf.Fields.Count; i++) {
                 retv.Append($"{cf.Fields[i].Name},");
             }
             retv.Append($"RID FROM {tableName}");
 
-            if(conditions != null && conditions.Count > 0) {
+            if (conditions != null && conditions.Count > 0) {
                 var validConditions = new Dictionary<String, Object>();
-                foreach(var a in conditions) {
-                    if(cf.Fields.Any((f)=>f.Name == a.Key)) {
+                foreach (var a in conditions) {
+                    if (cf.Fields.Any((f) => f.Name == a.Key)) {
                         validConditions.Add(a.Key, a.Value);
                     }
                 }
-                if(validConditions.Count > 0) {
+                if (validConditions.Count > 0) {
                     retv.Append("WHERE");
                     for (var a = 0; a < validConditions.Count; a++) {
-                        if(validConditions.ElementAt(a).Value is String) {
+                        if (validConditions.ElementAt(a).Value is String) {
                             retv.Append($"{validConditions.ElementAt(a).Key} LIKE CONCAT('%', @_sq{seq++}, '%')", validConditions.ElementAt(a).Value);
-                        }
-                        else {
+                        } else {
                             retv.Append($"{validConditions.ElementAt(a).Key}=@_sq{seq++}", validConditions.ElementAt(a).Value);
                         }
                     }
                 }
             }
 
-            if(l != null) {
+            if (l != null) {
                 retv.Append("LIMIT");
-                if(p != null) {
-                    retv.Append($"{((p-1) * l)}, {l}");
+                if (p != null) {
+                    retv.Append($"{((p - 1) * l)}, {l}");
                 } else {
                     retv.Append($"{l}");
                 }
@@ -199,7 +194,7 @@ namespace Figlotech.BDados.CustomForms {
             var tableName = GetPrefixedTableName(ref form);
             QueryBuilder retv = new QueryBuilder();
             retv.Append($"INSERT INTO {tableName} (");
-            for(var i = 0; i < form.Fields.Count; i++) {
+            for (var i = 0; i < form.Fields.Count; i++) {
                 retv.Append($"{form.Fields[i].Name},");
             }
             retv.Append("RID");
@@ -214,7 +209,7 @@ namespace Figlotech.BDados.CustomForms {
 
         public static IQueryBuilder BuildUpdateQuery(CustomForm form, CustomObject o) {
             var tableName = GetPrefixedTableName(ref form);
-            if(!(o.Get("Id") is long) || ((o.Get("Id") as long?)??0) < 1) {
+            if (!(o.Get("Id") is long) || ((o.Get("Id") as long?) ?? 0) < 1) {
                 throw new Exception("Can't build an update query for an object that has no Id");
             }
             uint seq = 0;
@@ -224,7 +219,7 @@ namespace Figlotech.BDados.CustomForms {
                 retv.Append($"{form.Fields[i].Name}=@_uq{++seq}", o.Get(form.Fields[i].Name));
             }
             /* LMAO GET RID */
-            if(o.Get("RID") != null) {
+            if (o.Get("RID") != null) {
                 retv.Append($"RID=@_uq{++seq}", o.Get("RID"));
             } else {
                 retv.Append($"RID=@_uq{++seq}", IntEx.GenerateUniqueRID());
@@ -241,11 +236,11 @@ namespace Figlotech.BDados.CustomForms {
             QueryBuilder retv = new QueryBuilder();
             retv.Append($"CREATE TABLE {tableName} (");
             retv.Append("Id BIGINT(20) NOT NULL PRIMARY KEY AUTO_INCREMENT,");
-            for(var i = 0; i < form.Fields.Count; i++) {
+            for (var i = 0; i < form.Fields.Count; i++) {
 
                 retv.Append($"{form.Fields[i].Name} {SqlType(form.Fields[i])} DEFAULT NULL");
                 //if (i < form.Campos.Count-1) {
-                    retv.Append($",");
+                retv.Append($",");
                 //}
             }
             retv.Append("RID VARCHAR(64) NOT NULL UNIQUE");

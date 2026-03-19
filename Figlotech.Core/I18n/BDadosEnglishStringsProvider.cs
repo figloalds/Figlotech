@@ -1,5 +1,4 @@
-﻿using System;
-using Figlotech.Core.I18n;
+﻿using Figlotech.Core.I18n;
 
 namespace Figlotech.Core {
     public sealed class BDadosEnglishStringsProvider : IBDadosStringsProvider {

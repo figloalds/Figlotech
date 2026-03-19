@@ -10,17 +10,12 @@
 
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// Tells BDados DataAccessors to ignore this field when persisting updates
     /// </summary>
-    public sealed class NoUpdateAttribute : Attribute
-    {
+    public sealed class NoUpdateAttribute : Attribute {
         public NoUpdateAttribute() { }
     }
 }

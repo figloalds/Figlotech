@@ -9,22 +9,20 @@
  * 
 **/
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core.Interfaces;
-using System.Reflection;
-using System.Linq.Expressions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core;
-using Figlotech.Core.Helpers;
-using System.Diagnostics;
-using Figlotech.Data;
-using System.Collections.Concurrent;
 using Figlotech.Core.Extensions;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
+using Figlotech.Data;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
@@ -69,11 +67,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     if (pc != null) {
                         query.Append(pc.OnInsertSubQuery(inputObject.GetType(), members[i]));
                     } else
-                    if (ic != null) {
-                        query.Append(ic.OnInsertSubQuery(inputObject.GetType(), members[i]));
-                    } else {
-                        query.Append($"@{members[i].Name}_{i + 1}", val);
-                    }
+                        if (ic != null) {
+                            query.Append(ic.OnInsertSubQuery(inputObject.GetType(), members[i]));
+                        } else {
+                            query.Append($"@{members[i].Name}_{i + 1}", val);
+                        }
                 } else {
                     query.Append($"@{members[i].Name}_{i + 1}", val);
                 }
@@ -107,23 +105,23 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 var cTimeField = fields[type].FirstOrDefault(f => f.GetCustomAttribute<CreationTimeStampAttribute>() != null);
                 var uTimeField = fields[type].FirstOrDefault(f => f.GetCustomAttribute<UpdateTimeStampAttribute>() != null);
                 query.Append($"(SELECT \r\n\t'{type.Name}' AS TypeName, ");
-                for(int i = 0; i < dataLen; i++) {
-                    if(fields[type].Length > i) {
+                for (int i = 0; i < dataLen; i++) {
+                    if (fields[type].Length > i) {
                         query.Append($"\r\n\tCAST({fields[type][i].Name} AS BINARY)");
                     } else {
                         query.Append("\r\n\tNULL");
                     }
-                    if(ti == 0)
+                    if (ti == 0)
                         query.Append($"AS data_{i}");
-                    if(i < dataLen -1) {
+                    if (i < dataLen - 1) {
                         query.Append(",");
                     }
                 }
                 query.Append("\r\nFROM");
                 query.Append(type.Name);
-                if(moment != DateTime.MinValue && (cTimeField != null || uTimeField != null)) {
+                if (moment != DateTime.MinValue && (cTimeField != null || uTimeField != null)) {
                     query.Append("\r\nWHERE");
-                    if(cTimeField != null) {
+                    if (cTimeField != null) {
                         query.Append($"{cTimeField.Name} > @m", moment);
                     }
                     if (cTimeField != null && uTimeField != null)
@@ -133,7 +131,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 query.Append(")\r\n");
 
-                if(ti < workingTypes.Count - 1) {
+                if (ti < workingTypes.Count - 1) {
                     query.Append("UNION ALL\r\n");
                 }
             });
@@ -144,7 +142,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder GetCreationCommand(Type t) {
             String objectName = t.Name;
 
-            var members = 
+            var members =
                 ReflectionTool
                     .FieldsAndPropertiesOf(t).Where((m) => m?.GetCustomAttribute<FieldAttribute>() != null)
                     .ToArray();
@@ -163,7 +161,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             CreateTable.Append(" );");
             return CreateTable;
         }
-        
+
 
 
         /// <summary>
@@ -190,7 +188,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 } else if (Nullable.GetUnderlyingType(typeOfField) == null && typeOfField.IsValueType && !info.AllowNull) {
                     options += " NOT NULL";
                 }
-                if(info.Unsigned) {
+                if (info.Unsigned) {
                     options += " UNSIGNED";
                 }
                 if (info.Unique)
@@ -238,8 +236,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (Nullable.GetUnderlyingType(dotnetRelevantType) != null) {
                 dotnetRelevantType = Nullable.GetUnderlyingType(dotnetRelevantType);
                 dotnetTypeName = dotnetRelevantType.Name;
-            }
-            else
+            } else
                 dotnetTypeName = dotnetRelevantType.Name;
             if (dotnetRelevantType.IsEnum) {
                 return "INT";
@@ -321,7 +318,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return retv;
         }
 
-        static ConcurrentDictionary<JoinDefinition, QueryBuilder> AutoJoinCache = new ConcurrentDictionary<JoinDefinition, QueryBuilder>();
+        static readonly ConcurrentDictionary<JoinDefinition, QueryBuilder> AutoJoinCache = new ConcurrentDictionary<JoinDefinition, QueryBuilder>();
         public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
             if (rootConditions == null)
                 rootConditions = new QbFmt("true");
@@ -417,9 +414,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        static MySqlQueryGenerator instance = new MySqlQueryGenerator();
-        static SelfInitializerDictionary<Type, QueryBuilder> AutoSelectCache = new SelfInitializerDictionary<Type, QueryBuilder>(
-            t=> {
+        static readonly MySqlQueryGenerator instance = new MySqlQueryGenerator();
+        static readonly SelfInitializerDictionary<Type, QueryBuilder> AutoSelectCache = new SelfInitializerDictionary<Type, QueryBuilder>(
+            t => {
                 QueryBuilder baseSelect = new QbFmt("SELECT ");
                 baseSelect.Append(instance.GenerateFieldsString(t, false));
                 baseSelect.Append(String.Format($"FROM {t.Name} AS tba"));
@@ -429,7 +426,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             QueryBuilder Query = new QueryBuilder();
-            
+
             Query.Append(AutoSelectCache[typeof(T)]);
 
             if (condicoes != null && !condicoes.IsEmpty) {
@@ -463,33 +460,33 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Query;
         }
 
-        public IQueryBuilder GeneratePrecisionUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T: IDataObject {
+        public IQueryBuilder GeneratePrecisionUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject {
             var type = input.GetType();
             QueryBuilder Query = new QueryBuilder($"UPDATE {type.Name} SET");
             var addComma = false;
             var prefix = IntEx.GenerateShortRid();
             int c = 0;
-            for(int i = 0; i < updates.Length; i++) {
+            for (int i = 0; i < updates.Length; i++) {
                 var check = updates[i].parameterExpression.Body;
-                if(check is UnaryExpression unaex) {
+                if (check is UnaryExpression unaex) {
                     check = unaex.Operand;
                 }
 
                 if (check is MemberExpression mex) {
-                    if(addComma) {
+                    if (addComma) {
                         Query.Append(",");
                     } else {
                         addComma = true;
                     }
                     Query.Append($"{mex.Member.Name}=@{prefix}_{++c}", updates[i].Value);
                 } else {
-                    if(Debugger.IsAttached) {
+                    if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
                     throw new BDadosException("Parameter Expression must be a valid member-access expression. eg: x=> x.Price");
                 }
             }
-            if(addComma) {
+            if (addComma) {
                 Query.Append(",");
             }
             Query.Append($"{FiTechBDadosExtensions.UpdateColumnNameOf[type]}=@dt", DateTime.UtcNow);
@@ -552,7 +549,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             // -- 
             var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
             var t = legacySet?.FirstOrDefault()?.GetType();
-            if(t == null) {
+            if (t == null) {
                 return Qb.Fmt("SELECT 1");
             }
 
@@ -577,7 +574,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             Query.PrepareForQueryLength(inputRecordset.Count * 512);
             bool isFirst = true;
             for (var i = 0; i < members.Length; i++) {
-                if(members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null ||
+                if (members[i].GetCustomAttribute<PrimaryKeyAttribute>() != null ||
                     members[i].GetCustomAttribute<ReliableIdAttribute>() != null) {
                     continue;
                 }
@@ -588,14 +585,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     Query.Append(",\r\n");
                 }
                 Query.Append($"\t{members[i].Name}=(CASE ");
-                for(int ridx = 0; ridx < legacySet.Count; ridx++) {
-                    if(i == 0) {
+                for (int ridx = 0; ridx < legacySet.Count; ridx++) {
+                    if (i == 0) {
                         Query.Append($"WHEN {rid}=@r_{ridx}", legacySet[ridx].RID);
                     } else {
                         Query.Append($"WHEN {rid}=@r_{ridx}");
                     }
                     if (legacySet[ridx].IsReceivedFromSync) {
-                        if(i == 0) {
+                        if (i == 0) {
                             Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
                         } else {
                             Query.Append($"AND {upd}<@u_{ridx}");
@@ -606,7 +603,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 }
                 Query.Append($"ELSE {members[i].Name} END)");
             }
-            
+
             Query.Append($"WHERE {rid} IN (")
                 .Append(Fi.Tech.ListRids(workingSet))
                 .Append(");");
@@ -621,7 +618,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
             var legacySet = inputRecordset?.OfType<ILegacyDataObject>().ToList();
             var t = legacySet?.FirstOrDefault()?.GetType();
-            if(t == null) {
+            if (t == null) {
                 return Qb.Fmt("SELECT 1");
             }
 
@@ -779,7 +776,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
             if (!isNullable) {
                 var lastPart = $"(SELECT {refColumn} FROM {refTable})";
-                if(table == refTable) {
+                if (table == refTable) {
                     // I don't know why mysql requires this.
                     lastPart = $"(SELECT {refColumn} FROM (SELECT {refColumn} FROM {refTable}) subquery)";
                 }
@@ -789,7 +786,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
         }
 
-        static SelfInitializerDictionary<Type, MemberInfo[]> MemberFields = new SelfInitializerDictionary<Type, MemberInfo[]>(
+        static readonly SelfInitializerDictionary<Type, MemberInfo[]> MemberFields = new SelfInitializerDictionary<Type, MemberInfo[]>(
             t => {
                 return ReflectionTool.GetAttributedMemberValues<FieldAttribute>(t).Select(x => x.Member).ToArray();
             }
@@ -821,7 +818,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }
-            if(!rs.Any()) {
+            if (!rs.Any()) {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }
             var legacySet = rs.OfType<ILegacyDataObject>().ToList();

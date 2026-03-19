@@ -1,14 +1,12 @@
 ﻿using Figlotech.Core.Interfaces;
-using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
     public static class LoadAllArgsExtensions<T> where T : ILegacyDataObject, new() {
-        public static IntermediateLoadAllArgsRdbms<T> UsingRdbmsAccessor(LoadAllArgs<T> self, IRdbmsDataAccessor dataAccessor)  {
+        public static IntermediateLoadAllArgsRdbms<T> UsingRdbmsAccessor(LoadAllArgs<T> self, IRdbmsDataAccessor dataAccessor) {
             return new IntermediateLoadAllArgsRdbms<T>(dataAccessor, self);
         }
     }

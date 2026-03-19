@@ -1,6 +1,4 @@
 ﻿using Figlotech.Core;
-using System;
-using System.Collections;
 using System.Runtime.Serialization;
 
 namespace System {

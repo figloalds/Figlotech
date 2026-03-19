@@ -9,7 +9,7 @@ namespace Figlotech.Core.Helpers {
         }
 
         public async Task Process(Stream input, Func<Stream, Task> act) {
-            if(act == null) {
+            if (act == null) {
                 return;
             }
             using (var gzs = new GZipStream(input, CompressionMode.Decompress))

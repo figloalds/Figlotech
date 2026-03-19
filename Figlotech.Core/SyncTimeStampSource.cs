@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
@@ -40,9 +38,9 @@ namespace Figlotech.Core {
             var cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH");
             Directory.CreateDirectory(cacheDir);
             var cacheFile = Path.Combine(cacheDir, "system.time");
-            if(File.Exists(cacheFile)) {
+            if (File.Exists(cacheFile)) {
                 var bytes = File.ReadAllBytes(cacheFile);
-                if(bytes.Length < sizeof(Int64) * 2) {
+                if (bytes.Length < sizeof(Int64) * 2) {
                     File.Delete(cacheFile);
                     return await FromNtpServerCached(ntpServer);
                 }

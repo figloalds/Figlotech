@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
@@ -25,7 +22,7 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public override async Task OnEventHandlingError(T evt, Exception x) {
-            if(OnHandle == null) {
+            if (OnHandle == null) {
                 Fi.Tech.SwallowException(x);
             }
             await OnHandle?.Invoke(evt, x);

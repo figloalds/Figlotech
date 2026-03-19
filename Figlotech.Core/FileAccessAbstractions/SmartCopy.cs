@@ -1,5 +1,4 @@
-﻿using Figlotech.Core.Helpers;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -54,8 +53,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
     }
 
-    public sealed class CopyMirrorFileData
-    {
+    public sealed class CopyMirrorFileData {
         public string RelativePath { get; set; }
         public bool Changed { get; set; }
     }
@@ -67,9 +65,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
     /// </summary>
     public sealed class SmartCopy {
 
-        IFileSystem local;
+        readonly IFileSystem local;
         IFileSystem remote;
-        SmartCopyOptions options;
+        readonly SmartCopyOptions options;
 
         /// <summary>
         /// Provides easy in-program robust copy utility
@@ -81,7 +79,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public List<String> Excludes = new List<String>();
-        
+
         private bool CheckMatch(string file, string criteria) {
             var regex = Fi.Tech.WildcardToRegex(criteria);
             return Regex.Match(file, regex, RegexOptions.IgnoreCase).Success;
@@ -97,7 +95,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public static async Task<string> GetHash(Stream stream) {
             using (var md5 = MD5.Create()) {
-                return Convert.ToBase64String(await Task.Run((()=> md5.ComputeHash(stream))));
+                return Convert.ToBase64String(await Task.Run((() => md5.ComputeHash(stream))));
             }
         }
 
@@ -129,7 +127,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             workedFiles = 0;
-            foreach(var f in origin.GetFilesIn(path)) {
+            foreach (var f in origin.GetFilesIn(path)) {
                 if (f == HASHLIST_FILENAME) {
                     continue;
                 }
@@ -152,10 +150,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
 
             if (options.Recursive) {
-                foreach(var dir in origin.GetDirectoriesIn(path)) {
+                foreach (var dir in origin.GetDirectoriesIn(path)) {
                     await destination.MkDirsAsync(dir).ConfigureAwait(false);
                     var newAdds = await EnumerateDownloadableFiles(origin, destination, dir);
-                    foreach(var a in newAdds) {
+                    foreach (var a in newAdds) {
                         retv.Add(a);
                     }
                 }
@@ -312,25 +310,25 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (oriLen != destLen) {
                 return true;
             } else
-            if (options.UseHash) {
-                var originHash = GetHash(o, f);
-                var destinationHash = GetHash(d, f);
-                if (originHash == destinationHash) {
-                    return true;
+                if (options.UseHash) {
+                    var originHash = GetHash(o, f);
+                    var destinationHash = GetHash(d, f);
+                    if (originHash == destinationHash) {
+                        return true;
+                    } else {
+                        return false;
+                    }
                 } else {
-                    return false;
+                    var originDate = await o.GetLastModifiedAsync(f).ConfigureAwait(false);
+                    var destinationDate = await d.GetLastModifiedAsync(f).ConfigureAwait(false);
+                    changed = (
+                        (originDate > destinationDate) ||
+                        (
+                            (originDate < destinationDate && !options.IgnoreOlder)
+                        )
+                    );
+                    return changed;
                 }
-            } else {
-                var originDate = await o.GetLastModifiedAsync(f).ConfigureAwait(false);
-                var destinationDate = await d.GetLastModifiedAsync(f).ConfigureAwait(false);
-                changed = (
-                    (originDate > destinationDate) ||
-                    (
-                        (originDate < destinationDate && !options.IgnoreOlder)
-                    )
-                );
-                return changed;
-            }
         }
 
         private async Task MirrorFromList(string path) {
@@ -341,7 +339,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (bufferSize < 0) bufferSize = 256 * 1024;
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
             workingList = workingList.GroupBy(f => f.RelativePath).Select(g => g.First()).ToList();
-            workingList.RemoveAll(f => Excludes.Any(excl=> CheckMatch(f.RelativePath, excl)));
+            workingList.RemoveAll(f => Excludes.Any(excl => CheckMatch(f.RelativePath, excl)));
             OnReportTotalFilesCount?.Invoke(workingList.Count);
             foreach (var a in HashList) {
                 wq.Enqueue(async () => {
@@ -376,7 +374,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                                     await downStream.CopyToAsync(fileStream, bufferSize);
                                 });
-                                var oldTempName = a.RelativePath + "_$ft_old-"+IntEx.GenerateShortRid();
+                                var oldTempName = a.RelativePath + "_$ft_old-" + IntEx.GenerateShortRid();
                                 if (await local.ExistsAsync(a.RelativePath).ConfigureAwait(false)) {
                                     await local.RenameAsync(a.RelativePath, oldTempName).ConfigureAwait(false);
                                 }
@@ -388,9 +386,9 @@ namespace Figlotech.Core.FileAcessAbstractions {
                                     });
                                 }
                                 try {
-                                    if(await local.ExistsAsync(oldTempName).ConfigureAwait(false))
+                                    if (await local.ExistsAsync(oldTempName).ConfigureAwait(false))
                                         await local.DeleteAsync(oldTempName).ConfigureAwait(false);
-                                } catch(Exception x) {
+                                } catch (Exception) {
                                     local.Hide(oldTempName);
                                 }
                                 if (a.RelativePath.EndsWith(".dll")) {
@@ -414,7 +412,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     OnFileCopyException?.Invoke(a.RelativePath, ex);
                 });
             }
-            
+
             wq.Start();
             await wq.Stop(true);
 
@@ -422,32 +420,31 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public void DeleteExtras(IFileSystem fs, string path, List<FileData> workinglist, bool recursive) {
-            if(!options.AllowDelete) {
+            if (!options.AllowDelete) {
                 return;
             }
-            Func<FileData, string, bool> cmpFn = (wl,file) => wl.RelativePath == file;
+            Func<FileData, string, bool> cmpFn = (wl, file) => wl.RelativePath == file;
             if (!fs.IsCaseSensitive) {
                 cmpFn = (wl, file) => wl.RelativePath?.ToLower() == file?.ToLower();
             }
             fs.ForFilesIn(path, file => {
-                if (Excludes.Any(x=> CheckMatch(file, x))) {
+                if (Excludes.Any(x => CheckMatch(file, x))) {
                     return;
                 }
-                if (!workinglist.Any(wl=> cmpFn(wl, file))) {
+                if (!workinglist.Any(wl => cmpFn(wl, file))) {
                     try {
                         fs.DeleteAsync(file);
-                    }
-                    catch (Exception x) {
+                    } catch (Exception) {
 
                     }
                 }
             });
 
-            if(recursive) {
+            if (recursive) {
                 fs.ForDirectoriesIn(path, dir => DeleteExtras(fs, dir, workinglist, recursive));
             }
         }
-        
+
         int workedFiles = 0;
 
         private const string GZIP_FILE_SUFFIX = ".gz";
@@ -461,12 +458,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public static async Task<List<FileData>> GetHashList(IFileSystem destination, bool ThrowOnError) {
             try {
-                string txt = await Task.Run(()=> destination.ReadAllText(HASHLIST_FILENAME));
+                string txt = await Task.Run(() => destination.ReadAllText(HASHLIST_FILENAME));
                 var hashList = JsonConvert.DeserializeObject<List<FileData>>(txt);
                 hashList = hashList.GroupBy(a => a.RelativePath).Select(a => a.First()).ToList();
                 return hashList;
             } catch (Exception x) {
-                if(ThrowOnError) {
+                if (ThrowOnError) {
                     throw x;
                 }
                 return new List<FileData>();
@@ -475,7 +472,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private async Task<List<CopyMirrorFileData>> EnumerateFilesForMirroring(IFileSystem origin, IFileSystem destination, string path, MirrorWay way) {
             List<CopyMirrorFileData> retv = new List<CopyMirrorFileData>();
-            foreach(var f in origin.GetFilesIn(path)) {
+            foreach (var f in origin.GetFilesIn(path)) {
                 if (f == HASHLIST_FILENAME) {
                     continue;
                 }
@@ -485,12 +482,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
                 try {
                     OnFileStaged?.Invoke(f);
-                } catch (Exception x) {
+                } catch (Exception) {
                     continue;
                 }
 
                 var changed = CopyDecisionCriteria != null ?
-                    await CopyDecisionCriteria(f) : 
+                    await CopyDecisionCriteria(f) :
                     await Changed(origin, destination, f);
 
                 retv.Add(new CopyMirrorFileData { RelativePath = f, Changed = changed });
@@ -515,13 +512,13 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             workedFiles = 0;
             var files = await EnumerateFilesForMirroring(origin, destination, path, way);
-            foreach(var f in files) {
+            foreach (var f in files) {
                 wq.Enqueue(async () => {
-                    
+
                     await Task.Yield();
                     OnFileStaged?.Invoke(f.RelativePath);
-                    if(f.Changed) {
-                        switch(way) {
+                    if (f.Changed) {
+                        switch (way) {
                             case MirrorWay.Up:
                                 await processFileUp(origin, destination, f.RelativePath);
                                 break;
@@ -539,7 +536,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             if (options.AllowDelete) {
                 int DeleteLimit = 15;
-                foreach(var f in destination.GetFilesIn(path)) {
+                foreach (var f in destination.GetFilesIn(path)) {
                     if (DeleteLimit < 1) return;
                     if (Excludes.Any(x => CheckMatch(f, x))) {
                         return;
@@ -555,7 +552,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
             wq.Start();
             await wq.Stop(true);
-            if(Debugger.IsAttached) {
+            if (Debugger.IsAttached) {
                 Debugger.Break();
             }
             await SaveHashList(origin, destination);
@@ -564,7 +561,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private async Task SaveHashList(IFileSystem origin, IFileSystem destination) {
             if (options.UseHashList) {
-                for(var i = HashList.Count - 1; i >= 0; i--) {
+                for (var i = HashList.Count - 1; i >= 0; i--) {
                     if (!await origin.ExistsAsync(HashList[i]?.RelativePath).ConfigureAwait(false)) {
                         HashList.RemoveAt(i);
                     }
@@ -629,14 +626,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     });
                     throwErrors = false;
                     break;
-                } catch(Exception x) {
+                } catch (Exception x) {
                     exces.Add(x);
                     await Task.Delay(options.RetryTimeout);
                     continue;
                 }
             }
 
-            if(throwErrors) {
+            if (throwErrors) {
                 throw new AggregateException($"Too many errors copying file {workingFile}, maximum retries exceeded", exces);
             }
 
@@ -658,7 +655,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 outPostFix = GZIP_FILE_SUFFIX;
 
             int tries = 0;
-            while(tries < options.RetriesPerFile) {
+            while (tries < options.RetriesPerFile) {
                 try {
                     await origin.Read(workingFile + outPostFix, async (input) => {
                         await Task.Yield();

@@ -12,12 +12,12 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 if (f.Contains("/")) {
                     f = file.Substring(file.LastIndexOf('/') + 1);
                 }
-                if(f.RegExp(regex)) {
+                if (f.RegExp(regex)) {
                     yield return file;
                 }
             }
-            foreach(var directory in fs.GetDirectoriesIn(relative)) {
-                foreach(var f in __findfile(fs, directory, regex)) {
+            foreach (var directory in fs.GetDirectoriesIn(relative)) {
+                foreach (var f in __findfile(fs, directory, regex)) {
                     yield return f;
                 }
             }
@@ -32,11 +32,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
     public static class IFileSystemAsyncExtensions {
         public static async Task RecursiveDeleteDirectoryAsync(this IFileSystem fs, string relative) {
             var files = fs.GetFilesIn(relative);
-            foreach(var file in files) {
+            foreach (var file in files) {
                 await fs.DeleteAsync(file);
             }
             var directories = fs.GetDirectoriesIn(relative);
-            foreach(var dir in directories) {
+            foreach (var dir in directories) {
                 await fs.RecursiveDeleteDirectoryAsync(dir);
             }
             await fs.DeleteAsync(relative);
@@ -88,7 +88,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         Task<bool> ExistsAsync(string relative);
         Task<bool> IsDirectoryAsync(string relative);
         Task<bool> IsFileAsync(string relative);
-        
+
         void AppendAllLines(string relative, IEnumerable<string> content);
         void Hide(string relative);
         void Show(string relative);

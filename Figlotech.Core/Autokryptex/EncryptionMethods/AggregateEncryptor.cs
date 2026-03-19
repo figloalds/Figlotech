@@ -1,15 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 
-namespace Figlotech.Core.Autokryptex.EncryptMethods
-{
+namespace Figlotech.Core.Autokryptex.EncryptMethods {
     public sealed class AggregateEncryptor : List<IEncryptionMethod>, IEncryptionMethod {
 
         public byte[] Encrypt(byte[] en) {
-            for(int i = 0; i < this.Count; i++) {
+            for (int i = 0; i < this.Count; i++) {
                 en = this[i].Encrypt(en);
             }
 
@@ -17,7 +12,7 @@ namespace Figlotech.Core.Autokryptex.EncryptMethods
         }
 
         public byte[] Decrypt(byte[] en) {
-            for (int i = this.Count-1; i >= 0; i--) {
+            for (int i = this.Count - 1; i >= 0; i--) {
                 en = this[i].Decrypt(en);
             }
 

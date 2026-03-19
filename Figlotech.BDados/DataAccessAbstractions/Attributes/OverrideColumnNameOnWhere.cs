@@ -12,7 +12,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// </summary>
     public sealed class OverrideColumnNameOnWhere : Attribute {
         public string Name { get; set; }
-        public OverrideColumnNameOnWhere(string name){
+        public OverrideColumnNameOnWhere(string name) {
             this.Name = name;
         }
     }

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
     public sealed class BatchStreamProcessor : IStreamProcessor {
-        List<IStreamProcessor> processors = new List<IStreamProcessor>();
+        readonly List<IStreamProcessor> processors = new List<IStreamProcessor>();
         public BatchStreamProcessor() { }
 
         public bool Enable { get; set; } = true;

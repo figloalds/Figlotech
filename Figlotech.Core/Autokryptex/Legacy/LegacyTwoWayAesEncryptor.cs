@@ -1,18 +1,13 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.Autokryptex.Legacy;
+﻿using Figlotech.Core.Autokryptex.Legacy;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex.EncryptMethods.Legacy {
 
     public sealed class TwoWayAesEncryptor : IEncryptionMethod {
-        string instanceEncodeSecret;
-        string instanceDecodeSecret;
-        int instancePin;
+        readonly string instanceEncodeSecret;
+        readonly string instanceDecodeSecret;
+        readonly int instancePin;
         LegacyCrossRandom cr;
 
         public TwoWayAesEncryptor(string encodePassword, string decodePassword, int pin = 179425879) {

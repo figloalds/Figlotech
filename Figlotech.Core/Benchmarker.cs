@@ -1,6 +1,4 @@
 ﻿using Figlotech.Core;
-using Figlotech.Core.Helpers;
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq.Expressions;
@@ -41,8 +39,7 @@ namespace System {
                 self.Mark($"[RegionStart] {label}");
                 retv = await action.Invoke().ConfigureAwait(false);
                 self.Mark($"[RegionEndOk] {label}");
-            }
-            catch (Exception x) {
+            } catch (Exception x) {
                 self.Mark($"[RegionException] {label}", x);
                 retv = default(T);
                 throw x;
@@ -60,7 +57,7 @@ namespace System {
                 self.Mark($"[RegionStart] {label}");
                 retv = action.Invoke();
                 self.Mark($"[RegionEndOk] {label}");
-            } catch(Exception x) {
+            } catch (Exception x) {
                 self.Mark($"[RegionException] {label}", x);
                 throw new Exception($"Error in Region {label}", x);
             }
@@ -73,15 +70,14 @@ namespace System {
                 self.Mark($"[RegionStart] {label}");
                 action.Invoke();
                 self.Mark($"[RegionEndOk] {label}");
-            }
-            catch (Exception x) {
+            } catch (Exception x) {
                 self.Mark($"[RegionException] {label}", x);
                 throw new Exception($"Error in Region {label}", x);
             }
         }
 
         public static void Assert(this Benchmarker self, Expression<Func<bool>> expr) {
-            if(self == null) {
+            if (self == null) {
                 return;
             }
             if (!self.EnabledInProduction && !FiTechCoreExtensions.EnableBenchMarkers)
@@ -92,7 +88,7 @@ namespace System {
                     self.Mark($"Assert Failed {expr.ToString()} => {result}");
                     Debugger.Break();
                 }
-            } catch(Exception x) {
+            } catch (Exception x) {
                 self.Mark($"Assert {expr.ToString()} => Exception", x);
                 if (Debugger.IsAttached) {
                     Debugger.Break();
@@ -156,7 +152,7 @@ namespace System {
                 }
                 if (FiTechCoreExtensions.EnableLiveBenchmarkerStdOut || self.WriteToStdout) {
                     lock ("BENCHMARKER BM_WRITE") {
-                        foreach(var item in self.VerboseLog()) {
+                        foreach (var item in self.VerboseLog()) {
                             Console.WriteLine(item);
                         }
                     }

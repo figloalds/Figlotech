@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Figlotech.Core.Autokryptex.EncryptionMethods {
+﻿namespace Figlotech.Core.Autokryptex.EncryptionMethods {
     public sealed class NoOpEncryptor : IEncryptionMethod {
         public byte[] Decrypt(byte[] en) {
             return en;

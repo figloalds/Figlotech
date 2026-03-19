@@ -1,12 +1,8 @@
 ﻿using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 
-namespace Figlotech.BDados
-{
+namespace Figlotech.BDados {
     public sealed class BDadosException : Exception {
         public List<IDataObject> AffectedObjects { get; private set; }
         public List<string[]> StackData { get; private set; }

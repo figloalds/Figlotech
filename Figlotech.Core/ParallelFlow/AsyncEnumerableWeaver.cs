@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.ParallelFlow {
 
@@ -49,7 +46,7 @@ namespace Figlotech.Core.ParallelFlow {
                     await enumerator.DisposeAsync().ConfigureAwait(false);
                 }
             }
-            
+
         }
     }
 }

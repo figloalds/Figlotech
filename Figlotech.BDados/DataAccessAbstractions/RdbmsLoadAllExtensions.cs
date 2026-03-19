@@ -1,7 +1,5 @@
 ﻿using Figlotech.Core.Interfaces;
-using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -23,7 +21,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return await Transaction.DataAccessor.AggregateLoadAsync(Transaction, LoadAllArgs).ConfigureAwait(false);
         }
         public async IAsyncEnumerable<T> AggregateCoroutinelyAsync() {
-            await foreach(var item in Transaction.DataAccessor.AggregateLoadAsyncCoroutinely(Transaction, LoadAllArgs).ConfigureAwait(false)) {
+            await foreach (var item in Transaction.DataAccessor.AggregateLoadAsyncCoroutinely(Transaction, LoadAllArgs).ConfigureAwait(false)) {
                 yield return item;
             }
         }
@@ -39,7 +37,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public static class RdbmsLoadAllExtensions {
-        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, BDadosTransaction transaction) where T: ILegacyDataObject, new() {
+        public static IntermediateRdbmsLoadAllArgs<T> Using<T>(this LoadAllArgs<T> me, BDadosTransaction transaction) where T : ILegacyDataObject, new() {
             return new IntermediateRdbmsLoadAllArgs<T>(transaction, me);
         }
     }

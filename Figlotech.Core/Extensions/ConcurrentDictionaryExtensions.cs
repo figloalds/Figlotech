@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.Extensions {
@@ -13,7 +11,7 @@ namespace Figlotech.Core.Extensions {
             }
             var factoryMethodInfo = factory.GetMethodInfo();
             var factoryName = $"{factoryMethodInfo.DeclaringType.FullName}::{factoryMethodInfo.Name}";
-            using(var handle = _getOrAddAsyncLock.LockSync(string.Intern(factoryName))) {
+            using (var handle = _getOrAddAsyncLock.LockSync(string.Intern(factoryName))) {
                 return self.GetOrAdd(key, factory);
             }
         }

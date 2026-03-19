@@ -1,13 +1,8 @@
-﻿using Figlotech.Core.Autokryptex.EncryptMethods;
-using Figlotech.Core.Extensions;
-using Newtonsoft.Json;
+﻿using Figlotech.Core.Extensions;
 using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Text;
 
-namespace Figlotech.Core.Autokryptex.EncryptionMethods
-{
+namespace Figlotech.Core.Autokryptex.EncryptionMethods {
     public sealed class TwoWayRsaPair {
         private TwoWayRsaPair() {
 
@@ -34,7 +29,7 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
         public override string ToString() {
             var pack = new byte[2 + 4 + EncryptionKey.Length + DecryptionKey.Length];
             pack[0] = 0x02;
-            pack[pack.Length-1] = 0x03;
+            pack[pack.Length - 1] = 0x03;
             Array.Copy(BitConverter.GetBytes((UInt16)EncryptionKey.Length), 0, pack, 1, 2);
             Array.Copy(BitConverter.GetBytes((UInt16)DecryptionKey.Length), 0, pack, 3 + EncryptionKey.Length, 2);
 
@@ -61,7 +56,7 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods
     }
 
     public sealed class TwoWayRsaEncryptor : IEncryptionMethod {
-        private TwoWayRsaPair KeyPair { get;set; }
+        private TwoWayRsaPair KeyPair { get; set; }
         public TwoWayRsaEncryptor(TwoWayRsaPair keypair) {
             KeyPair = keypair;
         }

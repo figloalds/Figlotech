@@ -4,15 +4,10 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class SelfInitializerDictionary<TKey, TValue> : IDictionary<TKey, TValue> {
-        ConcurrentDictionary<TKey, TValue> _dmmy = new ConcurrentDictionary<TKey, TValue>();
+        readonly ConcurrentDictionary<TKey, TValue> _dmmy = new ConcurrentDictionary<TKey, TValue>();
         Func<TKey, TValue> SelfInitFn { get; set; }
         public bool AllowNullValueCaching { get; set; } = true;
         public TValue this[TKey key] {
@@ -35,7 +30,7 @@ namespace Figlotech.Core {
             return init;
         }
 
-        bool FullDictionaryLockOnInit = false;
+        readonly bool FullDictionaryLockOnInit = false;
 
         public SelfInitializerDictionary(Func<TKey, TValue> initFn, bool fullDictionaryLockOnInit = false) {
             SelfInitFn = initFn;

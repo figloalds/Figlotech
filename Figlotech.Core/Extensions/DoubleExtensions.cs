@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.Core.Extensions
-{
+namespace Figlotech.Core.Extensions {
     public sealed class DoubleExtensionMapFromRangeHelper {
-        double value; double low1; double high1;
+        readonly double value; readonly double low1; readonly double high1;
         public DoubleExtensionMapFromRangeHelper(double value, double low1, double high1) {
             this.value = value;
             this.low1 = low1;
@@ -17,7 +12,7 @@ namespace Figlotech.Core.Extensions
             return (
                 Math.Min(
                     Math.Max(
-                        low2 + (value - low1) * (high2 - low2) / (high1 - low1), low2), 
+                        low2 + (value - low1) * (high2 - low2) / (high1 - low1), low2),
                         high2
                     )
                 );

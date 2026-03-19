@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Linq;
 
-namespace Figlotech.Core.Autokryptex.Legacy
-{
+namespace Figlotech.Core.Autokryptex.Legacy {
     /// <summary>
     /// This class provides stateful pseudo-random for 
     /// this lib's "lame" encryption methods.
     /// Calling this class with the same parameters will output
     /// the exact same numbers every time.
     /// </summary>
-    public sealed class  LegacyCrossRandom {
-        private static long[] Primes = new long[] {
+    public sealed class LegacyCrossRandom {
+        private static readonly long[] Primes = new long[] {
             32416187567, 32416188223, 32416188809, 32416189391,
             32416187627, 32416188227, 32416188839, 32416189459,
             32416187651, 32416188241, 32416188859, 32416189469,
@@ -38,14 +37,14 @@ namespace Figlotech.Core.Autokryptex.Legacy
             32416188191, 32416188793, 32416189381, 32416190071,
         };
 
-        private static long[] AppSecret = new long[16] {
+        private static readonly long[] AppSecret = new long[16] {
             179424989, 179425529, 179425993, 179426447,
             179425003, 179425537, 179426003, 179426453,
             179425019, 179425559, 179426029, 179426491,
             179425027, 179425579, 179426081, 179426549,
         };
 
-        private long[] InstanceSecret = new long[16] {
+        private readonly long[] InstanceSecret = new long[16] {
             104971,  105323,  105557,  105907,
             104987,  105331,  105563,  105913,
             104999,  105337,  105601,  105929,
@@ -105,7 +104,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
             return workset;
         }
 
-        private long Subcount;
+        private readonly long Subcount;
         private long CallCount;
 
         //    public CrossRandom()
@@ -131,7 +130,7 @@ namespace Figlotech.Core.Autokryptex.Legacy
         }
 
         public int Next(int Maximum) {
-            if(Maximum == 0) return 0;
+            if (Maximum == 0) return 0;
             var retv = this.Next();
             return retv % Maximum;
         }
@@ -141,13 +140,12 @@ namespace Figlotech.Core.Autokryptex.Legacy
         }
 
         long opc = 0;
-        long[] historianVals = new long[16];
+        readonly long[] historianVals = new long[16];
         private long Xor128() {
             long retv = Int64.MinValue;
             int asl = AppSecret.Length;
             int isl = InstanceSecret.Length;
             opc += CallCount;
-            int r = 0;
             for (int i = 0; i < 1 + (opc % 2); i++) {
                 ++opc;
                 var val = Math.Abs(opc * CallCount * i);
@@ -157,13 +155,13 @@ namespace Figlotech.Core.Autokryptex.Legacy
                 var c = InstanceSecret[val % isl];
                 var d = historianVals[val % historianVals.Length];
                 switch (opc % 6) {
-                    case 0: retv += a*b; break;
-                    case 1: retv += a*c; break;
-                    case 2: retv += a*d; break;
-                    case 3: retv += b*c; break;
-                    case 4: retv += b*d; break;
-                    case 5: retv += c*d; break;
-                } 
+                    case 0: retv += a * b; break;
+                    case 1: retv += a * c; break;
+                    case 2: retv += a * d; break;
+                    case 3: retv += b * c; break;
+                    case 4: retv += b * d; break;
+                    case 5: retv += c * d; break;
+                }
             }
             historianVals[CallCount % historianVals.Length] = retv;
             return retv + CallCount;

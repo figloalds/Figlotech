@@ -1,32 +1,30 @@
-using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Reflection;
-using System.Linq;
-using System.Linq.Expressions;
-using Newtonsoft.Json;
-using System.Threading.Tasks;
-using System.Diagnostics;
+using Figlotech.Core.Autokryptex;
+using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.I18n;
 using Figlotech.Core.Interfaces;
-using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.Common;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
-using System.Threading;
-using Figlotech.Core.Extensions;
-using Figlotech.Core.FileAcessAbstractions;
+using System.IO.Compression;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
-using System.Drawing;
 using System.Text.RegularExpressions;
-using Figlotech.Core.Autokryptex;
-using System.IO.Compression;
-using System.Data.Common;
-using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
-using Newtonsoft.Json.Linq;
-using System.Net.Http.Headers;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public struct RGB {
@@ -98,9 +96,9 @@ namespace Figlotech.Core {
     }
 
     public static partial class FiTechCoreExtensions {
-        private static Object _readLock = new Object();
+        private static readonly Object _readLock = new Object();
 
-        private static int _generalId = 0;
+        private static readonly int _generalId = 0;
 
         public static ITextToFileLogger ApiLogger;
         public static bool EnableDebug { get; set; } = false;
@@ -137,26 +135,26 @@ namespace Figlotech.Core {
         }
 
         private static bool IsNullableOfAPrimitive(Type t) {
-            return 
-                t.IsGenericType && 
-                t.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+            return
+                t.IsGenericType &&
+                t.GetGenericTypeDefinition() == typeof(Nullable<>) &&
                 (
                     t.GenericTypeArguments[0].IsPrimitive ||
-                    t.GenericTypeArguments[0].IsEnum               
+                    t.GenericTypeArguments[0].IsEnum
                 );
         }
 
         public static object MapIntoDTO<TInput>(this Fi _selfie, Type TRetv, TInput other) {
-            if(other == null) {
+            if (other == null) {
                 return null;
             }
-            if(TRetv.IsGenericType && TRetv.GetGenericTypeDefinition() == typeof(Nullable<>)) {
+            if (TRetv.IsGenericType && TRetv.GetGenericTypeDefinition() == typeof(Nullable<>)) {
                 TRetv = Nullable.GetUnderlyingType(TRetv);
             }
             var retv = Activator.CreateInstance(TRetv);
-            if(other.GetType().Implements(typeof(IEnumerable<>))) {
+            if (other.GetType().Implements(typeof(IEnumerable<>))) {
                 var addMethod = TRetv.GetMethod("Add");
-                if(addMethod != null) {
+                if (addMethod != null) {
                     foreach (var item in EnumerateUnknownTypeList(other)) {
                         var objValue = MapIntoDTO(_selfie, TRetv.GetGenericArguments()[0], item);
                         addMethod.Invoke(retv, new object[] { objValue });
@@ -167,12 +165,12 @@ namespace Figlotech.Core {
 
             foreach (var rel in mwc_MemberRelationCache[(retv.GetType(), other.GetType())]) {
                 var otherValue = ReflectionTool.GetMemberValue(rel.MemberB, other);
-                if(
-                    rel.TypeA == rel.TypeB || 
-                    (rel.TypeA == typeof(string)) || 
-                    (rel.TypeB == typeof(string)) || 
+                if (
+                    rel.TypeA == rel.TypeB ||
+                    (rel.TypeA == typeof(string)) ||
+                    (rel.TypeB == typeof(string)) ||
                     (IsNullableOfAPrimitive(rel.TypeA) || IsNullableOfAPrimitive(rel.TypeB)) ||
-                    (rel.TypeA.IsPrimitive && rel.TypeB.IsPrimitive) || 
+                    (rel.TypeA.IsPrimitive && rel.TypeB.IsPrimitive) ||
                     (rel.TypeA.IsEnum && rel.TypeB.IsEnum)
                 ) {
                     ReflectionTool.SetMemberValue(rel.MemberA, retv, otherValue);
@@ -186,21 +184,21 @@ namespace Figlotech.Core {
         }
 
         public static TOutput MapIntoDTO<TOutput>(this Fi _selfie, object other) {
-            if(other == null) {
+            if (other == null) {
                 return default(TOutput);
             }
-            return (TOutput) MapIntoDTO<object>(_selfie, typeof(TOutput), other);
+            return (TOutput)MapIntoDTO<object>(_selfie, typeof(TOutput), other);
         }
 
-        static ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)> EnumerateUnknownListCache = new
+        static readonly ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)> EnumerateUnknownListCache = new
             ConcurrentDictionary<Type, (MethodInfo GetEnumerator, Type EnumeratorType, MethodInfo MoveNext, PropertyInfo CurrentProperty)>();
 
         public static IEnumerable<object> EnumerateUnknownTypeList(object list) {
-            if(list == null) {
+            if (list == null) {
                 yield break;
             }
             var t = list.GetType();
-            if(!t.IsGenericType || !t.Implements(typeof(IEnumerable<>))) {
+            if (!t.IsGenericType || !t.Implements(typeof(IEnumerable<>))) {
                 yield break;
             }
 
@@ -214,7 +212,7 @@ namespace Figlotech.Core {
             });
 
             var enny = reflData.Item1.Invoke(list, Array.Empty<object>());
-            while((bool) reflData.Item3.Invoke(enny, Array.Empty<object>())) {
+            while ((bool)reflData.Item3.Invoke(enny, Array.Empty<object>())) {
                 yield return reflData.Item4.GetValue(enny);
             }
         }
@@ -364,13 +362,13 @@ namespace Figlotech.Core {
         }
 
         static StreamWriter fthLogStream;
-        static WorkQueuer FthLogStreamWriter = new WorkQueuer("FTHLogStreamWriter", 1, false);
+        static readonly WorkQueuer FthLogStreamWriter = new WorkQueuer("FTHLogStreamWriter", 1, false);
         public static StreamWriter FTHLogStream {
             get => fthLogStream ?? (fthLogStream = new StreamWriter(Console.OpenStandardOutput()));
             set => fthLogStream = value;
         }
 
-        static bool isNtpTimeRequestedAlready = false;
+        static readonly bool isNtpTimeRequestedAlready = false;
         static SyncTimeStampSource _globalTimeStampSource = SyncTimeStampSource.FromLocalTime();
         public static SyncTimeStampSource GlobalTimeStampSource {
             get {
@@ -482,7 +480,7 @@ namespace Figlotech.Core {
         public static SelfInitializerDictionary<string, bool> EnabledSystemLogs { get; private set; } = new SelfInitializerDictionary<string, bool>((str) => false);
         internal static void WriteLineInternal(this Fi _selfie, string origin, Func<string> s) {
             if (EnableStdoutLogs && EnabledSystemLogs[origin]) {
-                lock(FTHLogStream) {
+                lock (FTHLogStream) {
                     FTHLogStream.WriteLine($"[{origin}] {s()}");
                     FTHLogStream.Flush();
                 }
@@ -559,7 +557,7 @@ namespace Figlotech.Core {
             // Get stats from GlobalQueuer
             var schedules = FiTechFireTaskWorker.GetAllScheduleInfo();
             var retv = new FiTechSchedulerStats[schedules.Length];
-            for(int i = 0; i < schedules.Length; i++) {
+            for (int i = 0; i < schedules.Length; i++) {
                 retv[i] = new FiTechSchedulerStats {
                     Key = schedules[i].Identifier,
                     Created = schedules[i].Created,
@@ -762,7 +760,7 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        private static DateTime _startupstamp = Fi.Tech.GetUtcTime();
+        private static readonly DateTime _startupstamp = Fi.Tech.GetUtcTime();
         public static DateTime ProgramStartupTimestamp => _startupstamp;
         public static bool DidTimeElapseFromProgramStart(this Fi _selfie, TimeSpan ts) {
             return Fi.Tech.GetUtcTime().Subtract(_startupstamp) > ts;
@@ -805,7 +803,7 @@ namespace Figlotech.Core {
         public static Lazy<IBDadosStringsProvider> _Strings = new Lazy<IBDadosStringsProvider>(() => new BDadosEnglishStringsProvider());
         public static IBDadosStringsProvider strings { get => _Strings.Value; set { _Strings = new Lazy<IBDadosStringsProvider>(() => value); } }
 
-        private static Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Int32.MaxValue, true) {
+        private static readonly Lazy<WorkQueuer> _globalQueuer = new Lazy<WorkQueuer>(() => new WorkQueuer("FIGLOTECH_GLOBAL_QUEUER", Int32.MaxValue, true) {
 
         });
         public static WorkQueuer GlobalQueuer { get => _globalQueuer.Value; }
@@ -843,7 +841,7 @@ namespace Figlotech.Core {
             strings = provider;
         }
 
-        private static IDictionary<String, string> _mappings = new Dictionary<String, string>(StringComparer.InvariantCultureIgnoreCase) {
+        private static readonly IDictionary<String, string> _mappings = new Dictionary<String, string>(StringComparer.InvariantCultureIgnoreCase) {
 
         #region Big freaking list of mime types
         // combination of values from Windows 7 Registry and 
@@ -1444,7 +1442,7 @@ namespace Figlotech.Core {
             MainThreadHandler = Thread.CurrentThread;
         }
 
-        private static bool AnnoyDevAboutSwallowedExceptions = true;
+        private static readonly bool AnnoyDevAboutSwallowedExceptions = true;
         public static void SwallowException(this Fi _selfie, Exception x) {
             if (Debugger.IsAttached && AnnoyDevAboutSwallowedExceptions) {
                 Debugger.Break();
@@ -1463,10 +1461,10 @@ namespace Figlotech.Core {
         public static bool IsTelemetryLoggingEnabled => LoggingActivitySource != null;
         public static Activity CreateTelemetryActivity(this Fi _selfie, string name, ActivityKind whatKind = ActivityKind.Internal) {
             var retv = LoggingActivitySource?.CreateActivity(name, whatKind);
-            if(retv == null) {
+            if (retv == null) {
                 return null;
             }
-            foreach(var item in DefaultLoggingTags) {
+            foreach (var item in DefaultLoggingTags) {
                 retv?.AddTag(item.Key, item.Value);
             }
             retv?.AddTag("MachineRID2", RID.MachineRID2.AsBase36);
@@ -1479,7 +1477,7 @@ namespace Figlotech.Core {
         }
 
         public static void ConfigureTelemetry(
-            this Fi _selfie, 
+            this Fi _selfie,
             ActivitySource activitySource,
             ILoggerFactory loggerFactory,
             Dictionary<string, object> defaultTags
@@ -1631,7 +1629,7 @@ namespace Figlotech.Core {
                 try {
                     Catch?.Invoke(x);
 
-                } catch (Exception y) {
+                } catch (Exception) {
 
 
                 }
@@ -1639,7 +1637,7 @@ namespace Figlotech.Core {
                 try {
                     Finally?.Invoke(success);
 
-                } catch (Exception y) {
+                } catch (Exception) {
 
 
                 }
@@ -1721,7 +1719,7 @@ namespace Figlotech.Core {
             }
         }
 
-        static WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", -1, true) { };
+        static readonly WorkQueuer FiTechFireTaskWorker = new WorkQueuer("FireTaskHost", -1, true) { };
 
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<CancellationToken, ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
             var wj = FiTechFireTaskWorker.Enqueue(new WorkJob(
@@ -1743,7 +1741,7 @@ namespace Figlotech.Core {
             return wj;
         }
 
-        static FiAsyncMultiLock _globalMultiLock = new FiAsyncMultiLock();
+        static readonly FiAsyncMultiLock _globalMultiLock = new FiAsyncMultiLock();
         public static async Task<FiAsyncDisposableLock> Lock(this Fi _selfie, string key) {
             return await _globalMultiLock.Lock(key);
         }
@@ -1779,11 +1777,11 @@ namespace Figlotech.Core {
             return numArray;
         }
 
-        static ConcurrentDictionary<string, Task> _joinRequests = new ConcurrentDictionary<string, Task>();
+        static readonly ConcurrentDictionary<string, Task> _joinRequests = new ConcurrentDictionary<string, Task>();
         public static async Task<T> JoinRequests<T>(this Fi selfie, string tag, Func<Task<T>> fn) {
             var internalTag = $"{tag}::{typeof(T).Name}";
             if (_joinRequests.TryGetValue(internalTag, out Task existingTask)) {
-                if(existingTask is Task<T> existingTaskT) {
+                if (existingTask is Task<T> existingTaskT) {
                     return await existingTaskT.ConfigureAwait(false);
                 } else {
                     throw new InvalidOperationException($"JoinRequests for {tag}::{typeof(T).Name} was already called with a different type. Expected {typeof(T).Name}, got {existingTask.GetType().Name}");
@@ -1835,7 +1833,7 @@ namespace Figlotech.Core {
             return buffer;
         }
 
-        private static SelfInitializerDictionary<(Type TypeA, Type TypeB), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>> mwc_MemberRelationCache =
+        private static readonly SelfInitializerDictionary<(Type TypeA, Type TypeB), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>> mwc_MemberRelationCache =
             new SelfInitializerDictionary<(Type, Type), List<(MemberInfo MemberA, MemberInfo MemberB, Type TypeA, Type TypeB)>>
         (
             ((Type, Type) tup) => {
@@ -1869,7 +1867,7 @@ namespace Figlotech.Core {
                 return;
             var sametype = origin.GetType() == destination.GetType();
             foreach (var rel in mwc_MemberRelationCache[(origin.GetType(), destination.GetType())]) {
-                if(Only != null && !Only.Contains(rel.MemberA.Name)) {
+                if (Only != null && !Only.Contains(rel.MemberA.Name)) {
                     continue;
                 }
                 if (Except != null && Except.Contains(rel.MemberA.Name)) {
@@ -1940,7 +1938,7 @@ namespace Figlotech.Core {
                 await q.Stop(true);
             }
 
-            return result.Select(x=> (TResult) x).ToList();
+            return result.Select(x => (TResult)x).ToList();
         }
 
         public static void CloneDataObject(this Fi _selfie, object origin, object destination) {
@@ -1951,11 +1949,11 @@ namespace Figlotech.Core {
 
             var sameType = origin.GetType() == destination.GetType();
             var aMembers = ReflectionTool.FieldsAndPropertiesOf(origin.GetType()).ToDictionary(
-                (x)=> x.Name, x=> x   
+                (x) => x.Name, x => x
             );
 
-            foreach(var field in ReflectionTool.FieldsAndPropertiesOf(destination.GetType())) {
-                if(sameType || aMembers.ContainsKey(field.Name)) {
+            foreach (var field in ReflectionTool.FieldsAndPropertiesOf(destination.GetType())) {
+                if (sameType || aMembers.ContainsKey(field.Name)) {
                     var value = ReflectionTool.GetMemberValue(sameType ? field : aMembers[field.Name], origin);
                     ReflectionTool.SetMemberValue(field, destination, value);
                 }
@@ -1969,7 +1967,7 @@ namespace Figlotech.Core {
             }
         }
 
-        static Random rng = new Random();
+        static readonly Random rng = new Random();
         public static string GenerateCode(this Fi _selfie, int numDigits, bool useLetters) {
 
             char[] vector = new char[numDigits];

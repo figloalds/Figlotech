@@ -14,7 +14,6 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
@@ -47,7 +46,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Action<object, object[]>[] FieldPopulators;
         public AggregateRelationPlan[][] RelationPlans;
 
-        static ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan> _planCache = new ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan>();
+        static readonly ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan> _planCache = new ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan>();
 
         public static AggregateMaterializerPlan GetOrCreate(
             JoinDefinition join,
@@ -282,66 +281,66 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             switch (rel.AggregateBuildOption) {
                 case AggregateBuildOptions.AggregateField: {
-                    string childPrefix = joinTables[rel.ChildIndex].Prefix;
-                    string name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                    var childFields = fieldNamesDict[childPrefix];
-                    plan.ValueOrdinal = childFields.Item3[rel.Fields[0]];
-                    plan.SetField = BuildConvertingSetter(parentType, name);
-                    break;
-                }
+                        string childPrefix = joinTables[rel.ChildIndex].Prefix;
+                        string name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
+                        var childFields = fieldNamesDict[childPrefix];
+                        plan.ValueOrdinal = childFields.Item3[rel.Fields[0]];
+                        plan.SetField = BuildConvertingSetter(parentType, name);
+                        break;
+                    }
 
                 case AggregateBuildOptions.AggregateList: {
-                    string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                    var objectType = ReflectionTool.GetTypeOf(
-                        ReflectionTool.FieldsAndPropertiesOf(parentType)
-                            .Where(m => m.Name == fieldAlias).FirstOrDefault());
-                    if (objectType == null) break;
-                    var ulType = objectType.GetGenericArguments().FirstOrDefault();
-                    if (ulType == null) break;
+                        string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
+                        var objectType = ReflectionTool.GetTypeOf(
+                            ReflectionTool.FieldsAndPropertiesOf(parentType)
+                                .Where(m => m.Name == fieldAlias).FirstOrDefault());
+                        if (objectType == null) break;
+                        var ulType = objectType.GetGenericArguments().FirstOrDefault();
+                        if (ulType == null) break;
 
-                    plan.ChildType = ulType;
-                    plan.SetList = BuildSetter(parentType, fieldAlias);
-                    plan.GetList = BuildGetter(parentType, fieldAlias);
-                    plan.CreateListInstance = BuildConstructor(objectType);
-                    plan.CreateChildInstance = BuildConstructor(ulType);
-                    plan.AddToList = BuildListAdd(objectType, ulType);
+                        plan.ChildType = ulType;
+                        plan.SetList = BuildSetter(parentType, fieldAlias);
+                        plan.GetList = BuildGetter(parentType, fieldAlias);
+                        plan.CreateListInstance = BuildConstructor(objectType);
+                        plan.CreateChildInstance = BuildConstructor(ulType);
+                        plan.AddToList = BuildListAdd(objectType, ulType);
 
-                    var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
-                    var parentPrefix = joinTables[rel.ParentIndex].Prefix;
-                    var parentFields = fieldNamesDict[parentPrefix];
-                    plan.ParentRIDOrdinal = parentFields.Item3[rel.ParentKey];
-                    var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
-                    plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
-                    break;
-                }
+                        var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
+                        var parentPrefix = joinTables[rel.ParentIndex].Prefix;
+                        var parentFields = fieldNamesDict[parentPrefix];
+                        plan.ParentRIDOrdinal = parentFields.Item3[rel.ParentKey];
+                        var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
+                        plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
+                        break;
+                    }
 
                 case AggregateBuildOptions.AggregateObject: {
-                    string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                    var ulType = ReflectionTool.GetTypeOf(
-                        ReflectionTool.FieldsAndPropertiesOf(parentType)
-                            .Where(m => m.Name == fieldAlias).FirstOrDefault());
-                    if (ulType == null) break;
+                        string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
+                        var ulType = ReflectionTool.GetTypeOf(
+                            ReflectionTool.FieldsAndPropertiesOf(parentType)
+                                .Where(m => m.Name == fieldAlias).FirstOrDefault());
+                        if (ulType == null) break;
 
-                    plan.ChildType = ulType;
-                    plan.SetObject = BuildSetter(parentType, fieldAlias);
-                    plan.CreateInstance = BuildConstructor(ulType);
+                        plan.ChildType = ulType;
+                        plan.SetObject = BuildSetter(parentType, fieldAlias);
+                        plan.CreateInstance = BuildConstructor(ulType);
 
-                    var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
-                    var parentFieldsLookup = fieldNamesDict[joinTables[rel.ParentIndex].Prefix];
-                    plan.ParentRIDOrdinal = parentFieldsLookup.Item3[rel.ParentKey];
-                    var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
-                    plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
+                        var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
+                        var parentFieldsLookup = fieldNamesDict[joinTables[rel.ParentIndex].Prefix];
+                        plan.ParentRIDOrdinal = parentFieldsLookup.Item3[rel.ParentKey];
+                        var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
+                        plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
 
-                    var childRelations = cachedRelations[rel.ChildIndex];
-                    plan.HasAggregateList = false;
-                    for (int ci = 0; ci < childRelations.Length; ci++) {
-                        if (childRelations[ci].AggregateBuildOption == AggregateBuildOptions.AggregateList) {
-                            plan.HasAggregateList = true;
-                            break;
+                        var childRelations = cachedRelations[rel.ChildIndex];
+                        plan.HasAggregateList = false;
+                        for (int ci = 0; ci < childRelations.Length; ci++) {
+                            if (childRelations[ci].AggregateBuildOption == AggregateBuildOptions.AggregateList) {
+                                plan.HasAggregateList = true;
+                                break;
+                            }
                         }
+                        break;
                     }
-                    break;
-                }
             }
 
             return plan;
@@ -360,14 +359,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        FiAsyncMultiLock _lock = new FiAsyncMultiLock();
+        readonly FiAsyncMultiLock _lock = new FiAsyncMultiLock();
         public async Task<List<T>> GetObjectListAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
             await using var handle = await transaction.LockAsync().ConfigureAwait(false);
             transaction?.Benchmarker.Mark("- Starting Execute Query");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
-                if(!transaction.CancellationToken.IsCancellationRequested) {
+                if (!transaction.CancellationToken.IsCancellationRequested) {
                     return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
                 } else {
                     return new List<T>();
@@ -410,7 +409,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         break;
                     }
                     sb.Clear();
-                    if(!isFirst) {
+                    if (!isFirst) {
                         sb.Append(',');
                     }
                     sb.Append('{');
@@ -425,7 +424,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 sb.Append(jsonKeyPrefixes[i]);
                                 sb.Append(JsonConvert.SerializeObject(o));
                                 isFirstField = false;
-                            } catch (Exception x) {
+                            } catch (Exception) {
                                 Debugger.Break();
                                 //throw x;
                             }
@@ -474,7 +473,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return ConstructorCache[t].Invoke(Array.Empty<object>());
         }
 
-        static ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
+        static readonly ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
 
         public (string, string) cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
@@ -739,13 +738,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
-        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
+        private readonly SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
             t => t.Implements(typeof(IBusinessObject)) && t.GetMethod(nameof(IBusinessObject.OnAfterLoad)).DeclaringType == t
         );
-        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterAggregateLoad = new SelfInitializerDictionary<Type, bool>(
+        private readonly SelfInitializerDictionary<Type, bool> CacheImplementsAfterAggregateLoad = new SelfInitializerDictionary<Type, bool>(
             t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterAggregateLoadAsync").DeclaringType == t
         );
-        private SelfInitializerDictionary<Type, bool> CacheImplementsAfterListAggregateLoad = new SelfInitializerDictionary<Type, bool>(
+        private readonly SelfInitializerDictionary<Type, bool> CacheImplementsAfterListAggregateLoad = new SelfInitializerDictionary<Type, bool>(
             t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterListAggregateLoadAsync").DeclaringType == t
         );
 
@@ -848,7 +847,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 for (int i = 0; i < tFields.Length; i++) {
                     ReflectionTool.SetMemberValue(tFields[i], instance, reader[$"data_{i}"]);
                 }
-                retv.Add((ILegacyDataObject) instance);
+                retv.Add((ILegacyDataObject)instance);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");

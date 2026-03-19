@@ -1,7 +1,5 @@
 ﻿using Figlotech.Core.Interfaces;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IAlteration : ILegacyDataObject {

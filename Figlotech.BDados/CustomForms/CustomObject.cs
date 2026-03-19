@@ -1,26 +1,20 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core.Interfaces;
-using Figlotech.BDados;
+using Figlotech.Core;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Dynamic;
-using System.Linq;
-using System.Threading.Tasks;
-using Figlotech.Core;
 
 namespace Figlotech.BDados.CustomForms {
-    public sealed class CustomObject
-    {
+    public sealed class CustomObject {
 
-        IRdbmsDataAccessor DataAccessor;
+        readonly IRdbmsDataAccessor DataAccessor;
 
-        private IDictionary<String, Object> Object = new Dictionary<String, Object>();
+        private readonly IDictionary<String, Object> Object = new Dictionary<String, Object>();
         public CustomObject() {
             Set("RID", IntEx.GenerateUniqueRID());
         }
         public CustomObject(Object input) {
-            if(input is JObject) {
+            if (input is JObject) {
                 Object = (input as JObject).ToObject<Dictionary<String, Object>>();
             } else {
                 var Fields = input.GetType().GetFields();
@@ -28,7 +22,7 @@ namespace Figlotech.BDados.CustomForms {
                     Set(a.Name, a.GetValue(input));
                 }
             }
-            if(Get("RID") == null) {
+            if (Get("RID") == null) {
                 Set("RID", IntEx.GenerateUniqueRID());
             }
         }
@@ -37,8 +31,7 @@ namespace Figlotech.BDados.CustomForms {
             if (Object.ContainsKey(Key)) {
                 try {
                     return Object[Key];
-                }
-                catch (Exception) {
+                } catch (Exception) {
 
                 }
             }
@@ -46,7 +39,7 @@ namespace Figlotech.BDados.CustomForms {
         }
 
         public Object Refine() {
-            return (Object) Object;
+            return (Object)Object;
         }
 
         public void Set(String Key, Object Value) {
@@ -55,6 +48,6 @@ namespace Figlotech.BDados.CustomForms {
             }
             Object.Add(Key, Value);
         }
-        
+
     }
 }

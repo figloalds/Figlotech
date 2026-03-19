@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 /***
  * 
@@ -31,10 +28,10 @@ namespace Figlotech.Core.Autokryptex {
 
         public byte[] Decrypt(byte[] en) {
             var exces = new List<Exception>();
-            foreach(var enc in Methods) {
+            foreach (var enc in Methods) {
                 try {
                     return enc.Decrypt(en);
-                } catch(Exception x) {
+                } catch (Exception x) {
                     exces.Add(x);
                 }
             }

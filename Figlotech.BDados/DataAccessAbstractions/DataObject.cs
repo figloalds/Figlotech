@@ -1,16 +1,16 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Core;
+using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Figlotech.Core;
-using Figlotech.Core.Helpers;
-using Figlotech.Core.BusinessModel;
 using System.Threading.Tasks;
-using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public abstract class DataObject<T> : BaseDataObject, IBusinessObject where T: ILegacyDataObject, IBusinessObject, new() {
+    public abstract class DataObject<T> : BaseDataObject, IBusinessObject where T : ILegacyDataObject, IBusinessObject, new() {
 
         [Field()]
         [PrimaryKey]
@@ -59,7 +59,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             // Validations
             var validations = ReflectionTool.GetAttributedMemberValues<ValidationAttribute>(myType);
-            for(int i = 0; i < validations.Length; i++) {
+            for (int i = 0; i < validations.Length; i++) {
                 var field = validations[i].Member;
                 var vAttribute = validations[i].Attribute;
                 if (vAttribute != null) {
@@ -98,12 +98,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     T workObject = ((T)workingValue);
                     await process(workObject);
-                }
-                catch (Exception) { }
+                } catch (Exception) { }
             }
         }
 
-        InstanceAuthorizer ia = new InstanceAuthorizer();
+        readonly InstanceAuthorizer ia = new InstanceAuthorizer();
         public async Task<string> RunValidations() {
 
             var errors = new ValidationErrors();

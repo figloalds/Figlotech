@@ -1,6 +1,4 @@
-﻿
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 
 namespace Figlotech.Core.BusinessModel {
@@ -11,7 +9,7 @@ namespace Figlotech.Core.BusinessModel {
 
     public static class Validation {
         public static ValidationError Error(string msg) {
-            return  Error("Error", msg);
+            return Error("Error", msg);
         }
 
         public static ValidationError Error(string key, string msg) {
@@ -36,14 +34,14 @@ namespace Figlotech.Core.BusinessModel {
 
         public override string ToString() {
             using var retv = new ValueStringBuilder();
-            foreach(var a in this) {
+            foreach (var a in this) {
                 retv.Append(a.Message);
                 retv.Append("\n");
             }
             return retv.ToString();
         }
 
-        public static ValidationErrors operator +(ValidationErrors verr, (string,string) operand) {
+        public static ValidationErrors operator +(ValidationErrors verr, (string, string) operand) {
             verr.Add(new ValidationError() {
                 Key = operand.Item1,
                 Message = operand.Item2

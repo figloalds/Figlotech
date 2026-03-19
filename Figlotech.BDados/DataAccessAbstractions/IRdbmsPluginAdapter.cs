@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Data;
-using System.Text;
 
-namespace Figlotech.BDados.DataAccessAbstractions
-{
+namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsPluginAdapter {
         IDbConnection GetNewConnection();
         IDbConnection GetNewSchemalessConnection();

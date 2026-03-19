@@ -10,10 +10,6 @@
  * 
 **/
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
@@ -36,8 +32,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         }
 
         public ForeignKeyAttribute() { }
-        public ForeignKeyAttribute(Type foreignType, String foreignColumn = null)
-        {
+        public ForeignKeyAttribute(Type foreignType, String foreignColumn = null) {
             RefType = foreignType;
             RefTable = RefType.Name;
             RefColumn = foreignColumn;

@@ -1,7 +1,6 @@
 ﻿using System;
 
-namespace Figlotech.Core.Helpers
-{
+namespace Figlotech.Core.Helpers {
     public interface IBenchmarker {
         bool WriteToStdout { get; set; }
 

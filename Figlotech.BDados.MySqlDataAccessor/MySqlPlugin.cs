@@ -1,15 +1,9 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
-using System;
-using System.Data;
-using System.Collections.Generic;
 using Figlotech.Core.Helpers;
-using System.Linq;
-using Figlotech.Core;
-using System.Reflection;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.BDados;
-using System.Text.RegularExpressions;
 using MySqlConnector;
+using System;
+using System.Collections.Generic;
+using System.Data;
 
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlPlugin : IRdbmsPluginAdapter {
@@ -59,13 +53,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             var schemalessConfig = new MySqlPluginConfiguration();
             schemalessConfig.CopyFrom(Config);
             schemalessConfig.Database = null;
-            MySqlDataReader m;
             return new MySqlConnection(schemalessConfig.GetConnectionString());
         }
 
         static long idGen = 0;
-        long myId = ++idGen;
-        
+        readonly long myId = ++idGen;
+
         public void SetConfiguration(IDictionary<string, object> settings) {
             Config = new MySqlPluginConfiguration();
             foreach (var a in settings) {

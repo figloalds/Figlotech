@@ -9,6 +9,6 @@ namespace Figlotech.Core.Interfaces {
         IFileSystem FileAccessor { get; set; }
 
         bool Enabled { get; set; }
-        
+
     }
 }

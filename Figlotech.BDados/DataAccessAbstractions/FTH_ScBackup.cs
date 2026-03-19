@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
+﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core.BusinessModel;
+using System.Collections.Generic;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public sealed class _ResidualScData : DataObject<_ResidualScData> {
@@ -10,7 +8,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public string Type { get; set; }
         [Field(Size = 128)]
         public string Field { get; set; }
-        [Field(Type="BLOB", AllowNull = true)]
+        [Field(Type = "BLOB", AllowNull = true)]
         public byte[] Value { get; set; }
         [Field(Size = 64)]
         public string ReferenceRID { get; set; }

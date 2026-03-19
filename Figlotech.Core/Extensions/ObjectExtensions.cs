@@ -3,20 +3,15 @@ using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading.Tasks;
 
-namespace System
-{
+namespace System {
     public sealed class ProgressEvent {
         public long Current { get; set; }
         public long Total { get; set; }
@@ -120,11 +115,11 @@ namespace System
             foreach (var item in (IEnumerable)originList) {
                 // Handle the merging of complex elements if necessary, e.g., if the lists contain objects that themselves have properties to merge
 
-                if(originListElementTypeIsDataObject && listsHaveSameType) {
+                if (originListElementTypeIsDataObject && listsHaveSameType) {
                     var existingItem = FindDataObjectInList(destinationList, item);
                     if (existingItem != null) {
                         // Optionally handle deep merging here
-                        CopyFromAndMergeLists((ILegacyDataObject) item, existingItem);
+                        CopyFromAndMergeLists((ILegacyDataObject)item, existingItem);
                     } else {
                         addMethod.Invoke(destinationList, new[] { item });
                     }
@@ -136,7 +131,7 @@ namespace System
             }
         }
         static object FindDataObjectInList(object list, object item) {
-            foreach(var i in ReflectionTool.EnumerateList(list)) {
+            foreach (var i in ReflectionTool.EnumerateList(list)) {
                 if (AreSameDataObject((ILegacyDataObject)i, (ILegacyDataObject)item)) {
                     return i;
                 }
@@ -164,8 +159,8 @@ namespace System
                     m.GetParameters().Length == args.Length &&
                     m.GetGenericArguments().Length == 1
                     );
-            if(method == null) {
-                throw new MissingMethodException($"Generic method not found: {me.GetType()}::{GenericMethodName}<{genericType.Name}>({string.Join(",", args.Select(a=> a?.GetType()?.Name))})");
+            if (method == null) {
+                throw new MissingMethodException($"Generic method not found: {me.GetType()}::{GenericMethodName}<{genericType.Name}>({string.Join(",", args.Select(a => a?.GetType()?.Name))})");
             }
             return method.MakeGenericMethod(genericType)
                 .Invoke(me, args);
@@ -191,7 +186,7 @@ namespace System
                     type,
                     dr);
 
-            foreach(var data in meta.Item2) {
+            foreach (var data in meta.Item2) {
                 dr[data.ColumnName] = ReflectionTool.GetValue(me, data.ColumnName);
             }
         }
@@ -225,8 +220,8 @@ namespace System
             }
 
             var retv = new Dictionary<string, object>();
-            foreach(var a in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
-                if(ReflectionTool.GetTypeOf(a).IsPublic) {
+            foreach (var a in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
+                if (ReflectionTool.GetTypeOf(a).IsPublic) {
                     retv[a.Name] = ReflectionTool.GetMemberValue(a, me);
                 }
             }
@@ -245,7 +240,7 @@ namespace System
         }
 
         public static object ReflGet(this Object me, string prop) {
-            if(me == null) {
+            if (me == null) {
                 return null;
             }
             return ReflectionTool.GetValue(me, prop);
@@ -269,10 +264,10 @@ namespace System
             ReflectionTool.SetMemberValue(prop, me, value);
         }
         public static IEnumerable<(MemberInfo Key, object Value)> ReflEnumeratePropsAndValues(this Object me) {
-            if(me == null) {
+            if (me == null) {
                 yield break;
             }
-            foreach(var item in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
+            foreach (var item in ReflectionTool.FieldsAndPropertiesOf(me.GetType())) {
                 yield return (item, ReflectionTool.GetMemberValue(item, me));
             }
         }

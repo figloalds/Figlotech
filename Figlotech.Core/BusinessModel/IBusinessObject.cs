@@ -11,7 +11,7 @@ namespace Figlotech.Core.BusinessModel {
         public object ContextTransferObject { get; set; }
 
         public T ContextAs<T>() {
-            return (T) ContextTransferObject;
+            return (T)ContextTransferObject;
         }
     }
 
@@ -28,9 +28,9 @@ namespace Figlotech.Core.BusinessModel {
         Task OnAfterPersistAsync();
 
         void OnAfterLoad(DataLoadContext ctx);
-        
+
     }
-	
+
     public interface IBusinessObject<T> : IBusinessObject where T : IDataObject, new() {
         //List<IValidationRule<T>> ValidationRules { get; }
 

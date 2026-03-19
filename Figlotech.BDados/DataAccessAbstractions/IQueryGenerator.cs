@@ -1,16 +1,10 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
+﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Figlotech.Core.Interfaces;
-using Figlotech.Core;
-using Figlotech.Data;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);
@@ -18,7 +12,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder CreateDatabase(string schemaName);
         IQueryBuilder GenerateSingleInsertQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject tabelaInput);
-        IQueryBuilder GeneratePrecisionUpdateQuery<T>(T input, params (Expression<Func<T,object>> parameterExpression, object Value)[] updates) where T : IDataObject;
+        IQueryBuilder GeneratePrecisionUpdateQuery<T>(T input, params (Expression<Func<T, object>> parameterExpression, object Value)[] updates) where T : IDataObject;
         IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSelectAll<T>() where T : IDataObject, new();
         IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes, int? skip, int? limit, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new();

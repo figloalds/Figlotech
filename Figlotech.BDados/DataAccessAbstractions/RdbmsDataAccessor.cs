@@ -18,7 +18,6 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
@@ -54,7 +53,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public bool IsUsingRdbmsTransaction => Transaction != null;
 
-        private static List<BDadosTransaction> DebugOnlyGlobalTransactions = new List<BDadosTransaction>();
+        private static readonly List<BDadosTransaction> DebugOnlyGlobalTransactions = new List<BDadosTransaction>();
 
         private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateTargets = new List<(MemberInfo Member, IDataObject Target, object Value)>();
         private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateRollbacks = new List<(MemberInfo Member, IDataObject Target, object Value)>();
@@ -70,8 +69,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DataAccessor = rda;
             Connection = connection;
             LoggerActivity = Fi.Tech.CreateTelemetryActivity($"Database Transaction", ActivityKind.Internal);
-            if(LoggerActivity != null) {
-                foreach(var (k, v) in rda.AdditionalTelemetryTags) {
+            if (LoggerActivity != null) {
+                foreach (var (k, v) in rda.AdditionalTelemetryTags) {
                     LoggerActivity.AddTag(k, v);
                 }
                 LoggerActivity.AddTag("SourceLib", "Figlotech.BDados");
@@ -154,7 +153,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var type = frame.GetMethod().DeclaringType;
                     return $"{(type?.Name ?? "")} -> " + frame.ToString();
                 }).ToArray());
-            } catch (Exception x) {
+            } catch (Exception) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
@@ -181,7 +180,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var type = frame.GetMethod().DeclaringType;
                     return $"{(type?.Name ?? "")} -> " + frame.ToString();
                 }).ToArray());
-            } catch (Exception x) {
+            } catch (Exception) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
@@ -218,14 +217,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             await StepAsync().ConfigureAwait(false);
             var retv = Connection?.CreateCommand();
-            retv.Transaction = Transaction; 
+            retv.Transaction = Transaction;
             if (query != null) {
                 query.ApplyToCommand(retv, this.DataAccessor.Plugin.ProcessParameterValue);
             }
             lock (this._commands) {
                 this._commands.Add(retv);
             }
-            if(forWrite) {
+            if (forWrite) {
                 NumberOfWriteCommandsCreated++;
             }
             return retv;
@@ -248,7 +247,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool IsRolledBack { get; set; }
         internal DateTime CreatedTime { get; private set; } = DateTime.UtcNow;
         internal DateTime? DisposedTime { get; private set; }
-        internal TimeSpan TimeAlive => (DisposedTime ?? DateTime.UtcNow) - CreatedTime; 
+        internal TimeSpan TimeAlive => (DisposedTime ?? DateTime.UtcNow) - CreatedTime;
         internal StackTrace StackTrace { get; set; }
         internal CancellationTokenSource _cancellationTokenSource { get; set; } = new CancellationTokenSource();
         public CancellationToken CancellationToken => _cancellationTokenSource.Token;
@@ -330,7 +329,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void Commit() {
-            if(isDisposed || isTransactionEnded) {
+            if (isDisposed || isTransactionEnded) {
                 Debugger.Break();
                 throw new BDadosException("Trying to commit a transaction that has already been disposed or ended.");
             }
@@ -389,7 +388,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 IsCommited = true;
             }
-            if(!_hasOnAfterSuccessBeenRun) {
+            if (!_hasOnAfterSuccessBeenRun) {
                 _hasOnAfterSuccessBeenRun = true;
                 if (ActionsToExecuteAfterSuccess.Count > 0 || AutoMutateTargets.Count > 0) {
                     await ApplySuccessActionsAsync().ConfigureAwait(false);
@@ -420,7 +419,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ObjectsToNotify.Clear();
         }
         public async ValueTask RollbackAsync() {
-            if(isDisposed || isTransactionEnded) {
+            if (isDisposed || isTransactionEnded) {
                 Debugger.Break();
                 throw new BDadosException("Trying to rollback a transaction that has already been disposed or ended.");
             }
@@ -443,7 +442,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 .GetResult();
         }
         public async ValueTask EndTransactionAsync() {
-            if(isDisposed || isTransactionEnded) {
+            if (isDisposed || isTransactionEnded) {
                 return;
             }
             if (OnTransactionEnding != null) {
@@ -457,7 +456,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             Transaction = null;
             await DisposeConnectionIfNotYetDisposed();
             Connection = null;
-            if(!usingExternalBenchmarker) {
+            if (!usingExternalBenchmarker) {
                 LoggerActivity?.AddTag("Status", string.Join("\r\n", Benchmarker?.VerboseLog()));
             }
             LoggerActivity?.SetEndTime(DateTime.UtcNow);
@@ -485,7 +484,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             throw Exception(x);
         }
 
-        public Exception Exception<T>(T x) where T: Exception {
+        public Exception Exception<T>(T x) where T : Exception {
             Errored = true;
             if (x is MainLogicGeneratedException) {
                 return x;
@@ -494,7 +493,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task AutoCommit() {
-            if(isDisposed || isTransactionEnded) {
+            if (isDisposed || isTransactionEnded) {
                 return;
             }
             if (Connection.State == ConnectionState.Open && !IsCommited && !IsRolledBack) {
@@ -503,12 +502,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 try {
                     var tMarshal = Type.GetType("System.Runtime.InteropServices.Marshal");
                     var hasError = Marshal.GetExceptionCode() != 0;
-                    var hasExpeptionPtr = (IntPtr) tMarshal.GetMethod("GetExceptionPointers")?.Invoke(null, Array.Empty<object>()) != IntPtr.Zero;
+                    var hasExpeptionPtr = (IntPtr)tMarshal.GetMethod("GetExceptionPointers")?.Invoke(null, Array.Empty<object>()) != IntPtr.Zero;
                     hasException |= hasError || hasExpeptionPtr;
-                } catch(Exception x) {
-                    
+                } catch (Exception) {
+
                 }
-                
+
                 if (Errored || hasException || CancellationToken.IsCancellationRequested) {
                     await RollbackAsync().ConfigureAwait(false);
                 } else {
@@ -537,7 +536,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 try {
                     await AutoCommit().ConfigureAwait(false);
-                    if(!isTransactionEnded) {
+                    if (!isTransactionEnded) {
                         await EndTransactionAsync();
                     }
                     if (FiTechCoreExtensions.DebugConnectionLifecycle) {
@@ -546,13 +545,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 } catch (Exception ex) {
                     if (!isTransactionEnded) {
-                        if(!IsCommited && !IsRolledBack) {
+                        if (!IsCommited && !IsRolledBack) {
                             await RollbackAsync();
                         }
                         await EndTransactionAsync();
                     }
                     Fi.Tech.WriteLine($"Warning disposing BDadosTransaction: {ex.Message}");
-                    if(Debugger.IsAttached) {
+                    if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
                 } finally {
@@ -584,7 +583,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private async Task DisposeConnectionIfNotYetDisposed() {
             if (!isConnectionDisposed) {
-                if(Connection.State == ConnectionState.Open) {
+                if (Connection.State == ConnectionState.Open) {
                     Connection.Close();
                 }
                 if (Connection is DbConnection aconn) {
@@ -644,16 +643,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         #region **** Global Declaration ****
         internal IRdbmsPluginAdapter Plugin;
 
-        private int _simmultaneoustransactions;
+        private readonly int _simmultaneoustransactions;
 
 
-        private bool _accessSwitch = false;
+        private readonly bool _accessSwitch = false;
 
         public String SchemaName { get { return Plugin.SchemaName; } }
 
         private static int counter = 0;
-        private int myId = ++counter;
-        private String _readLock = $"readLock{counter + 1}";
+        private readonly int myId = ++counter;
+        private readonly String _readLock = $"readLock{counter + 1}";
 
         public static String Version {
             get {
@@ -676,7 +675,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public async ValueTask EnsureDatabaseExistsAsync() {
             if (_isDisposed || _isDisposing) {
-                if(Debugger.IsAttached) {
+                if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
                 throw new BDadosException("Error trying to open connection in a Disposed RdbmsDataAccessor");
@@ -755,7 +754,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return list.FirstOrDefault();
         }
         public async Task<T> LoadFirstOrDefaultAsync<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
-            return await AccessAsync(async tsn=> {
+            return await AccessAsync(async tsn => {
                 var list = await LoadAllAsync<T>(tsn, args).ConfigureAwait(false);
                 return list.FirstOrDefault();
             }, CancellationToken.None).ConfigureAwait(false);
@@ -765,7 +764,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return list.FirstOrDefault();
         }
         public async Task<T> LoadFirstOrDefaultAsync<T>(Expression<Func<T, bool>> predicate) where T : IDataObject, new() {
-            return await AccessAsync(async tsn=> {
+            return await AccessAsync(async tsn => {
                 return await LoadFirstOrDefaultAsync<T>(tsn, predicate).ConfigureAwait(false);
             }, CancellationToken.None).ConfigureAwait(false);
         }
@@ -801,13 +800,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
-            if(_isDisposed || _isDisposing) {
+            if (_isDisposed || _isDisposing) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
                 throw new BDadosException("Error trying to open connection in a Disposed RdbmsDataAccessor");
             }
-            
+
             BDadosTransaction retv;
             //if (FiTechCoreExtensions.EnableDebug) {
             //    WriteLog(Environment.StackTrace);
@@ -817,12 +816,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             retv = new BDadosTransaction(this, connection);
             WriteLog($"Database Acess Opened {retv.Id} (using DB Transaction: {ilev.HasValue})");
             var trace = new StackTrace();
-            if(ilev.HasValue) {
+            if (ilev.HasValue) {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
             }
             using var reg = cancellationToken.Register(() => {
                 try {
-                    if(!retv.DisposedTime.HasValue && !retv._cancellationTokenSource.IsCancellationRequested) {
+                    if (!retv.DisposedTime.HasValue && !retv._cancellationTokenSource.IsCancellationRequested) {
                         retv._cancellationTokenSource?.Cancel();
                     }
                 } catch { }
@@ -938,7 +937,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public MemberInfo GetOrderingMember<T>(Expression<Func<T, object>> fn) {
-            if(fn == null) {
+            if (fn == null) {
                 return null;
             }
             var OrderingMember = FindMember(fn);
@@ -1085,7 +1084,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public IEnumerable<T> Fetch<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
             using var transaction = CreateNewTransaction(CancellationToken.None);
             var retv = Fetch<T>(transaction, args);
-            foreach(var item in retv) {
+            foreach (var item in retv) {
                 yield return item;
             }
         }
@@ -1123,11 +1122,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         #region **** BDados API ****
 
-        int fail = 0;
+        readonly int fail = 0;
 
-        private List<Task<Object>> Workers = new List<Task<Object>>();
+        private readonly List<Task<Object>> Workers = new List<Task<Object>>();
 
-        private static int accessCount = 0;
+        private static readonly int accessCount = 0;
 
 
         public Object ScalarQuery(IQueryBuilder qb) {
@@ -1162,13 +1161,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }, ilev);
         }
 
-        public async ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> functions, CancellationToken cancellationToken,IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
+        public async ValueTask AccessAsync(Func<BDadosTransaction, ValueTask> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
             _ = await AccessAsync<int>(async (transaction) => {
                 await functions.Invoke(transaction).ConfigureAwait(false);
                 return 0;
             }, cancellationToken, ilev).ConfigureAwait(false);
         }
-        public async Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> functions, CancellationToken cancellationToken,IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
+        public async Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
             if (functions == null) return default(T);
 
             return await UseTransactionAsync(async (transaction) => {
@@ -1209,7 +1208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
 
             while (await channel.Reader.WaitToReadAsync(cancellationToken).AsTask().ConfigureAwait(false)) {
-                while(channel.Reader.TryRead(out var item)) {
+                while (channel.Reader.TryRead(out var item)) {
                     yield return item;
                 }
             }
@@ -1273,7 +1272,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
         }
 
-        static long ConnectionTracks = 0;
+        static readonly long ConnectionTracks = 0;
 
         internal async Task<IDbConnection> GetNewOpenConnectionAsync(CancellationToken cancellation) {
             //using var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false);
@@ -1293,7 +1292,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 throw new BDadosException("Error when trying to Open Connection", x);
             }
-            
+
         }
         internal async Task<IDbConnection> GetNewOpenSchemalessConnectionAsync(CancellationToken cancellation) {
             //using var lockHandle = await OpenConnectionLock.Lock(Plugin.ConnectionString, TimeSpan.FromSeconds(300)).ConfigureAwait(false);
@@ -1342,7 +1341,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ExclusiveOpenConnectionAsync(cancellation, connection).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        FiAsyncLock ExclusiveOpenConnectionLock = new FiAsyncLock();
+        readonly FiAsyncLock ExclusiveOpenConnectionLock = new FiAsyncLock();
         private async ValueTask ExclusiveOpenConnectionAsync(CancellationToken cancellation, IDbConnection connection) {
             await _concurrentConnectionsSemaphoreSlim.WaitAsync(Plugin.CommandTimeout, cancellation);
             await using (var handle = await ExclusiveOpenConnectionLock.Lock().ConfigureAwait(false)) {
@@ -1352,7 +1351,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     } else {
                         connection.Open();
                     }
-                } catch(Exception) {
+                } catch (Exception) {
                     _concurrentConnectionsSemaphoreSlim.Release();
                     throw;
                 }
@@ -1382,7 +1381,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        private async Task<T> UseTransactionAsync<T>(Func<BDadosTransaction, Task<T>> func, CancellationToken cancellationToken,IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
+        private async Task<T> UseTransactionAsync<T>(Func<BDadosTransaction, Task<T>> func, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
 
             if (func == null) return default(T);
 
@@ -1442,7 +1441,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         return retv;
                     } catch (TaskCanceledException x) {
-                        if(!transaction.IsRolledBack && transaction.IsCommited) {
+                        if (!transaction.IsRolledBack && transaction.IsCommited) {
                             await transaction.RollbackAsync().ConfigureAwait(false);
                         }
                         throw x;
@@ -1454,7 +1453,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         b.Mark($"[{Description}:{transaction.Id}] Begin Rollback");
                         try {
                             await transaction.RollbackAsync().ConfigureAwait(false);
-                        } catch (Exception rbex) {
+                        } catch (Exception) {
                             Debugger.Break();
                         }
                         b.Mark($"[{Description}:{transaction.Id}] End Rollback");
@@ -1479,7 +1478,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             try {
                 return UseTransactionAsync<T>(
                     async (tsn) => {
-                        return await Task.Run(()=> func(tsn)).ConfigureAwait(false);
+                        return await Task.Run(() => func(tsn)).ConfigureAwait(false);
                     },
                     CancellationToken.None,
                     ilev
@@ -1796,7 +1795,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             List<object> result = new List<object?>();
             lock (ActiveConnections) {
                 foreach (var conn in ActiveConnections.Values) {
-                    if(conn?.Connection == null) {
+                    if (conn?.Connection == null) {
                         continue;
                     }
                     result.Add(new {
@@ -1825,7 +1824,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 _isDisposing = true;
                 try {
                     if (ActiveConnections != null) {
-                        foreach(var i in ActiveConnections.Keys) {
+                        foreach (var i in ActiveConnections.Keys) {
                             try {
                                 var connection = ActiveConnections[i].Connection;
                                 if (connection is DbConnection dbc) {
@@ -1836,7 +1835,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 lock (ActiveConnections) {
                                     ActiveConnections.Remove(i);
                                 }
-                            } catch (Exception x) {
+                            } catch (Exception) {
                                 Debugger.Break();
                             }
                         }
@@ -2114,7 +2113,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task<List<ILegacyDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt) {
-            return await AccessAsync (async (transaction) => {
+            return await AccessAsync(async (transaction) => {
                 return await LoadUpdatedItemsSince(transaction, types, dt);
             }, CancellationToken.None, null);
         }
@@ -2134,7 +2133,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 transaction?.Benchmarker?.Mark($"Execute Query <{query.Id}>");
-                await using(var lh = await transaction.LockAsync()) {
+                await using (var lh = await transaction.LockAsync()) {
                     command.Prepare();
                     using (var reader = command.ExecuteReader()) {
                         return BuildStateUpdateQueryResult(transaction, reader, workingTypes, fields);
@@ -2428,7 +2427,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
-            using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+            using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
@@ -2470,7 +2469,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
-            using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+            using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
@@ -2517,7 +2516,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
-            using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+            using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
@@ -2814,7 +2813,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var exists = !IsDefaultId(input.Id) && await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
             EnsureApplicationGeneratedId(input);
             transaction.AddMutateRollback(ReflectionTool.GetMember(t, FiTechBDadosExtensions.RidColumnNameOf[t]), input, initialId);
-            
+
             try {
                 if (exists) {
                     var query = Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
@@ -2834,7 +2833,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     });
                 }
                 transaction?.MarkAsErrored();
-                if(!exists) {
+                if (!exists) {
                 }
                 throw new BDadosException("Error Saving Item", x);
             }
@@ -2861,7 +2860,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private static bool IsDefaultId(object id) {
-            if(id is Guid guid) {
+            if (id is Guid guid) {
                 return guid == Guid.Empty;
             }
             if (id == null) {
@@ -2931,18 +2930,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return SaveItemAsync(transaction, input).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        static SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixer = new SelfInitializerDictionary<Type, PrefixMaker>(
+        static readonly SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixer = new SelfInitializerDictionary<Type, PrefixMaker>(
             type => {
                 return new PrefixMaker();
             }
         );
-        static SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixerLinear = new SelfInitializerDictionary<Type, PrefixMaker>(
+        static readonly SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixerLinear = new SelfInitializerDictionary<Type, PrefixMaker>(
             type => {
                 return new PrefixMaker();
             }
         );
 
-        static SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoinLinear = new SelfInitializerDictionary<Type, JoinDefinition>(
+        static readonly SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoinLinear = new SelfInitializerDictionary<Type, JoinDefinition>(
             type => {
                 var retv = CacheAutomaticJoinBuilderLinear[type].GetJoin();
                 var _buildParameters = new BuildParametersHelper(retv);
@@ -2951,7 +2950,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return retv;
             }
         );
-        static SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoin = new SelfInitializerDictionary<Type, JoinDefinition>(
+        static readonly SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoin = new SelfInitializerDictionary<Type, JoinDefinition>(
             type => {
                 var retv = CacheAutomaticJoinBuilder[type].GetJoin();
                 var _buildParameters = new BuildParametersHelper(retv);
@@ -2961,16 +2960,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         );
 
-        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject {
             if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
                 return false;
             }
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsByRID<T>(RID))).FirstOrDefault()?.Value ?? 0) > 0;
         }
-        public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, object Id) where T : IDataObject{
+        public async Task<bool> ExistsByIdAsync<T>(BDadosTransaction transaction, object Id) where T : IDataObject {
             return ((await QueryAsync<ValueBox<int>>(transaction, Plugin.QueryGenerator.CheckExistsById<T>(Id))).FirstOrDefault()?.Value ?? 0) > 0;
         }
-        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject{
+        public async Task<bool> ExistsByRIDAsync<T>(string RID) where T : IDataObject {
             if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
                 return false;
             }
@@ -2985,7 +2984,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
+        static readonly SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
             type => {
                 var prefixer = CacheAutoPrefixer[type];
                 var retv = MakeJoin(
@@ -3003,7 +3002,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return retv;
             }
         );
-        static SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilderLinear = new SelfInitializerDictionary<Type, IJoinBuilder>(
+        static readonly SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilderLinear = new SelfInitializerDictionary<Type, IJoinBuilder>(
             type => {
                 var prefixer = CacheAutoPrefixerLinear[type];
                 return MakeJoin(
@@ -3054,7 +3053,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("--");
 
-                using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+                using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                     var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
 
                     var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
@@ -3103,13 +3102,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (implementsAfterAggregateLoad) {
                             await ((IBusinessObject<T>)item).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                         }
-                        if(rowSkip > 0) {
+                        if (rowSkip > 0) {
                             rowSkip--;
                             continue;
                         }
                         yield return item;
                         yieldedItems++;
-                        if(!args.Linear && args.RowLimit.HasValue && yieldedItems >= args.RowLimit) {
+                        if (!args.Linear && args.RowLimit.HasValue && yieldedItems >= args.RowLimit) {
                             break;
                         }
                     }
@@ -3171,18 +3170,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public int DefaultQueryLimit { get; set; } = 50;
 
-        ConcurrentDictionary<(Type, string, int?, int?, MemberInfo, OrderingType), IQueryBuilder> CacheSelectQueriesForSimpleTypes = 
+        readonly ConcurrentDictionary<(Type, string, int?, int?, MemberInfo, OrderingType), IQueryBuilder> CacheSelectQueriesForSimpleTypes =
             new ConcurrentDictionary<(Type, string, int?, int?, MemberInfo, OrderingType), IQueryBuilder>();
         private IQueryBuilder GetSelectQueryForSimpleType<T>(
             IQueryBuilder conditions,
-            int? skip, int? limit, 
+            int? skip, int? limit,
             MemberInfo orderingMember, OrderingType ordering
-        ) where T: IDataObject, new() {
-            if(conditions.GetParameters().Count == 0) {
+        ) where T : IDataObject, new() {
+            if (conditions.GetParameters().Count == 0) {
                 return CacheSelectQueriesForSimpleTypes.GetOrAdd(
                     (typeof(T), conditions.GetCommandText(), skip, limit, orderingMember, ordering), (key) => {
-                    return Plugin.QueryGenerator.GenerateSelect<T>(conditions, skip, limit, orderingMember, ordering);
-                });
+                        return Plugin.QueryGenerator.GenerateSelect<T>(conditions, skip, limit, orderingMember, ordering);
+                    });
             }
             return Plugin.QueryGenerator.GenerateSelect<T>(conditions, skip, limit, orderingMember, ordering);
         }
@@ -3215,7 +3214,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 yield break;
             }
             Stopwatch sw = Stopwatch.StartNew();
-            await using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+            await using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 command.CommandTimeout = Plugin.CommandTimeout;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
@@ -3250,7 +3249,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Reader executed OK <{query.Id}>");
                 await using (reader) {
-                    
+
                     int c = 0;
                     var swBuild = Stopwatch.StartNew();
 
@@ -3260,7 +3259,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     object[] values = new object[reader.FieldCount];
                     while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                         T obj = materializer(reader);
-                        
+
                         RunAfterLoad(obj, false, transferObject ?? transaction?.ContextTransferObject);
                         yield return (obj);
                         c++;
@@ -3391,7 +3390,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             DateTime Inicio = DateTime.Now;
             DataTable retv = new DataTable();
-            await using (var command = (DbCommand) await transaction.CreateCommandAsync().ConfigureAwait(false)) {
+            await using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 // --
@@ -3418,8 +3417,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public T QueryReader<T>(BDadosTransaction transaction, IQueryBuilder query, Func<IDataReader, T> actionRead) {
             return QueryReaderAsync<T>(transaction, query, async (dr) => {
-                    return await Task.Run(()=> actionRead(dr)).ConfigureAwait(false);
-                })
+                return await Task.Run(() => actionRead(dr)).ConfigureAwait(false);
+            })
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();

@@ -1,19 +1,15 @@
-﻿using Figlotech.Core.Extensions;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class FiAsyncMultiLock : IDictionary<string, FiAsyncLock> {
-        ConcurrentDictionary<string, FiAsyncLock> _dmmy;
+        readonly ConcurrentDictionary<string, FiAsyncLock> _dmmy;
 
         public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(600);
 
@@ -26,10 +22,10 @@ namespace Figlotech.Core {
         public FiAsyncLock this[string key] {
             get {
                 var retv = _dmmy.TryGetValue(key, out var value);
-                if(retv) {
+                if (retv) {
                     return value;
                 }
-                lock(_dmmy) {
+                lock (_dmmy) {
                     value = _dmmy.GetOrAdd(key, k => new FiAsyncLock());
                     return value;
                 }
@@ -46,13 +42,13 @@ namespace Figlotech.Core {
         public bool IsReadOnly => false;
 
         public void Add(string key, FiAsyncLock value) {
-            if(!this._dmmy.TryAdd(key, value)) {
+            if (!this._dmmy.TryAdd(key, value)) {
                 throw new Exception("Key already exists");
             }
         }
 
         public void Add(KeyValuePair<string, FiAsyncLock> item) {
-            if(!this._dmmy.TryAdd(item.Key, item.Value)) {
+            if (!this._dmmy.TryAdd(item.Key, item.Value)) {
                 throw new Exception("Key already exists");
             }
         }
@@ -91,7 +87,7 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(string key) {
-            lock(_dmmy) {
+            lock (_dmmy) {
                 return this._dmmy.TryRemove(key, out var _);
             }
         }
@@ -112,7 +108,7 @@ namespace Figlotech.Core {
     }
 
     public sealed class FiAsyncDisposableLock : IDisposable, IAsyncDisposable {
-        SemaphoreSlim _semaphore;
+        readonly SemaphoreSlim _semaphore;
         internal FiAsyncMultiLock _lock;
         internal string _key;
         private bool isDisposed { get; set; }
@@ -172,7 +168,7 @@ namespace Figlotech.Core {
     }
 
     public sealed class FiAsyncLock {
-        SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public async Task<FiAsyncDisposableLock> Lock() {
             await _semaphore.WaitAsync().ConfigureAwait(false);

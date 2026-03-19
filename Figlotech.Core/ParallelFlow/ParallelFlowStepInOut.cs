@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Threading;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
@@ -64,7 +64,7 @@ namespace Figlotech.Core {
             public ParallelFlowStepInOut<TIn, TOut> Also(Func<FlowYield<TOut>, Task> yieldFn) {
                 var src = new TaskCompletionSource<int>();
                 lock (_alsoQueueLock)
-                AlsoQueue.Enqueue(src);
+                    AlsoQueue.Enqueue(src);
                 Fi.Tech.FireAndForget(async () => {
                     if (this.ConnectTo != null) {
                         await yieldFn(new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
@@ -83,7 +83,7 @@ namespace Figlotech.Core {
 
             public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Func<TOut, TNext> act)
                 => Then(Environment.ProcessorCount, async (i) => {
-                    return await Task.Run(()=> {
+                    return await Task.Run(() => {
                         return act(i);
                     }).ConfigureAwait(false);
                 });
@@ -130,9 +130,9 @@ namespace Figlotech.Core {
                 return retv;
             }
             public void FlushToConnected() {
-                if(this.ConnectTo != null) {
+                if (this.ConnectTo != null) {
                     lock (_valueQueueLock)
-                        while(ValueQueue.Count > 0)
+                        while (ValueQueue.Count > 0)
                             this.ConnectTo.Put(ValueQueue.Dequeue());
                 }
             }
@@ -145,11 +145,11 @@ namespace Figlotech.Core {
                     alsoQueueSnapshot = new Queue<TaskCompletionSource<int>>(AlsoQueue);
                     AlsoQueue.Clear();
                 }
-                while(alsoQueueSnapshot.Count > 0) {
+                while (alsoQueueSnapshot.Count > 0) {
                     await alsoQueueSnapshot.Dequeue().Task.ConfigureAwait(false);
                 }
                 await queuer.Stop(true).ConfigureAwait(false);
-                if(this.ConnectTo != null) {
+                if (this.ConnectTo != null) {
                     FlushToConnected();
                     await this.ConnectTo.NotifyDoneQueueing().ConfigureAwait(false);
                 }
@@ -164,7 +164,7 @@ namespace Figlotech.Core {
             public TaskAwaiter<List<TOut>> GetAwaiter() {
                 return TaskCompletionSource.Task.GetAwaiter();
             }
-            private ParallelFlowOutEnumerator<TOut> enumerator = new ParallelFlowOutEnumerator<TOut>();
+            private readonly ParallelFlowOutEnumerator<TOut> enumerator = new ParallelFlowOutEnumerator<TOut>();
             public IAsyncEnumerator<TOut> GetAsyncEnumerator(CancellationToken cancellation) {
                 return enumerator;
             }

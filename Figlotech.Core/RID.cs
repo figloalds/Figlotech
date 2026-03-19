@@ -1,10 +1,8 @@
 ﻿using Figlotech.Core.Autokryptex;
 using Figlotech.Core.Autokryptex.Legacy;
-using Figlotech.Extensions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -20,12 +18,12 @@ namespace Figlotech.Core {
     }
 
     public sealed class RID {
-        static FiRandom rng = new FiRandom();
+        static readonly FiRandom rng = new FiRandom();
 
-        byte[] Signature = new byte[32];
+        readonly byte[] Signature = new byte[32];
 
         static uint segmentESequential = 0;
-        static uint segmentEOrigin = (uint)(rng.Next(0, Int32.MaxValue)) + (uint)(rng.Next(0, Int32.MaxValue));
+        static readonly uint segmentEOrigin = (uint)(rng.Next(0, Int32.MaxValue)) + (uint)(rng.Next(0, Int32.MaxValue));
         private static RID _machineRID = null;
         private static RID _machineRID2 = null;
         public static RID MachineRID {
@@ -47,24 +45,24 @@ namespace Figlotech.Core {
                     var hwid = Fi.Tech.BinaryHashPad(Fi.Tech.ComputeHash((stream) => {
 
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
-                            if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                                 var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMedia");
                                 foreach (ManagementObject wmi_HD in searcher.Get()) {
-                                    if(wmi_HD.Path.Path.Contains("CDROM")) {
+                                    if (wmi_HD.Path.Path.Contains("CDROM")) {
                                         continue;
                                     }
                                     var json = JsonConvert.SerializeObject(
                                         new PhysicalMediaInfo {
                                             SerialNumber = wmi_HD["SerialNumber"] as String,
                                             UUID = wmi_HD.Qualifiers["UUID"].Value as String
-                                        }                                        
+                                        }
                                     , Formatting.Indented);
                                     writer.WriteLine(json);
                                     break;
                                 }
                             } else {
                                 writer.WriteLine(String.Join(",", NetworkInterface.GetAllNetworkInterfaces().Select(i => i.Id)));
-                                foreach(var f in Directory.GetFiles("/dev/disk/by-id")) {
+                                foreach (var f in Directory.GetFiles("/dev/disk/by-id")) {
                                     writer.WriteLine(Path.GetFileName(f));
                                 }
                             }
@@ -85,7 +83,7 @@ namespace Figlotech.Core {
                 } catch (Exception x) {
                     Console.WriteLine(x.Message);
                 }
-                if(Environment.UserName == "IISAPPPOOL") {
+                if (Environment.UserName == "IISAPPPOOL") {
                     var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
                     if (!string.IsNullOrEmpty(envRid)) {
                         var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
@@ -97,7 +95,7 @@ namespace Figlotech.Core {
                 }
 
                 var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID");
-                if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
+                if (!Directory.Exists(Path.GetDirectoryName(fileName))) {
                     Directory.CreateDirectory(Path.GetDirectoryName(fileName));
                 }
                 if (!File.Exists(fileName)) {
@@ -107,7 +105,7 @@ namespace Figlotech.Core {
                     try {
                         File.SetAttributes(fileName, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
 
-                    } catch(Exception x) {
+                    } catch (Exception) {
 
 
                     }
@@ -115,7 +113,7 @@ namespace Figlotech.Core {
                     try {
                         _machineRID = new RID(File.ReadAllBytes(fileName));
 
-                    } catch (Exception x) {
+                    } catch (Exception) {
 
                         File.Delete(fileName);
                         return MachineRID;
@@ -148,7 +146,7 @@ namespace Figlotech.Core {
                         using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096 * 1024, true)) {
 
                             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
-                                { 
+                                {
                                     var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor");
                                     var objs = new List<ManagementObject>();
                                     foreach (ManagementObject obj in searcher.Get()) {
@@ -188,7 +186,7 @@ namespace Figlotech.Core {
                                     try {
                                         writer.WriteLine($"{f};{File.ReadAllText(f)}");
                                     } catch (Exception) {
-                                    
+
                                     }
                                 }
                             }
@@ -211,7 +209,7 @@ namespace Figlotech.Core {
                     Console.WriteLine(x.Message);
                 }
 
-                if(Environment.UserName == "IISAPPPOOL") {
+                if (Environment.UserName == "IISAPPPOOL") {
                     var envRid = Environment.GetEnvironmentVariable("MACHINE.RID");
                     if (!string.IsNullOrEmpty(envRid)) {
                         var itx = new IntEx(envRid, IntEx.Base36).ToByteArray();
@@ -223,7 +221,7 @@ namespace Figlotech.Core {
                 }
 
                 var fileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FTH", "MACHINE.RID2");
-                if(!Directory.Exists(Path.GetDirectoryName(fileName))) {
+                if (!Directory.Exists(Path.GetDirectoryName(fileName))) {
                     Directory.CreateDirectory(Path.GetDirectoryName(fileName));
                 }
 
@@ -234,7 +232,7 @@ namespace Figlotech.Core {
                     try {
                         File.SetAttributes(fileName, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
 
-                    } catch(Exception x) {
+                    } catch (Exception) {
 
 
                     }
@@ -242,7 +240,7 @@ namespace Figlotech.Core {
                     try {
                         _machineRID2 = new RID(File.ReadAllBytes(fileName));
 
-                    } catch (Exception x) {
+                    } catch (Exception) {
 
                         File.Delete(fileName);
                         return MachineRID2;
@@ -278,7 +276,7 @@ namespace Figlotech.Core {
         public ulong AsULong {
             get {
                 ulong retv = 0;
-                for(var i = 0; i < 4; i++) {
+                for (var i = 0; i < 4; i++) {
                     retv ^= BitConverter.ToUInt64(Signature, 8 * i);
                 }
                 return retv;
@@ -303,7 +301,7 @@ namespace Figlotech.Core {
             Signature = GenerateNewAsByteArray();
         }
 
-        static byte[] RidSessionSegment = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
+        static readonly byte[] RidSessionSegment = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
         public static byte[] GenerateNewAsByteArray() {
             var Signature = new byte[32];
             Buffer.BlockCopy(RidSessionSegment, 0, Signature, 0, 8);

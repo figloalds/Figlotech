@@ -2,21 +2,19 @@ using Figlotech.Core.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
     public sealed class TimedCache<TKey, T> : IDictionary<TKey, T>, IDisposable, IAsyncDisposable {
-        private LenientDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
+        private readonly LenientDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
 
         public ICollection<TKey> Keys => Dictionary.Keys;
 
-        public ICollection<T> Values => Dictionary.Values.Select(x=> x.Object).ToList();
+        public ICollection<T> Values => Dictionary.Values.Select(x => x.Object).ToList();
 
         public int Count => Dictionary.Count;
 
@@ -24,7 +22,7 @@ namespace Figlotech.Core {
 
         public Func<Exception, ValueTask> OnException { get; set; }
         public Func<TKey, Task<T>> OnFailOver { get; set; }
-        public Func<TKey,ValueTask> OnFree { get; set; }
+        public Func<TKey, ValueTask> OnFree { get; set; }
         public Func<TKey, T, ValueTask> OnSet { get; set; }
 
         public Func<T, Task<bool>> CustomCanFinalizeAsync { get; set; } = null;
@@ -61,7 +59,7 @@ namespace Figlotech.Core {
                             continue;
                         }
                         if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
-                            if(CustomCanFinalizeAsync != null) {
+                            if (CustomCanFinalizeAsync != null) {
                                 if (Dictionary[key].Object == null || !await CustomCanFinalizeAsync(Dictionary[key].Object).ConfigureAwait(false)) {
                                     Dictionary[key].KeepAlive();
                                     continue; // Don't free this item, it is still in use.
@@ -71,27 +69,27 @@ namespace Figlotech.Core {
                             freed?.Add(key);
                         }
                     }
-                    if(OnFree != null && freed.Count > 0) {
+                    if (OnFree != null && freed.Count > 0) {
                         Fi.Tech.FireAndForget(async () => {
-                            foreach(var key in freed) {
+                            foreach (var key in freed) {
                                 try {
                                     await OnFree(key);
-                                } catch(Exception x) {
+                                } catch (Exception x) {
                                     try {
                                         OnException?.Invoke(x);
-                                    } catch(Exception y) {
+                                    } catch (Exception y) {
                                         Fi.Tech.SwallowException(y);
                                     }
                                 }
                                 try {
-                                    if(Dictionary.TryGetValue(key, out var value)) {
+                                    if (Dictionary.TryGetValue(key, out var value)) {
                                         if (value is IAsyncDisposable adis) {
                                             await adis.DisposeAsync();
                                         } else if (value is IDisposable dis) {
                                             dis.Dispose();
                                         }
                                     }
-                                } catch(Exception x) {
+                                } catch (Exception x) {
                                     try {
                                         OnException?.Invoke(x);
                                     } catch (Exception y) {
@@ -127,7 +125,7 @@ namespace Figlotech.Core {
                 return item.Object;
             }
             set {
-                if(value == null && Dictionary.ContainsKey(key)) {
+                if (value == null && Dictionary.ContainsKey(key)) {
                     Dictionary.Remove(key);
                     return;
                 }
@@ -172,7 +170,7 @@ namespace Figlotech.Core {
         }
 
         public bool TryGetValue(TKey key, out T value) {
-            if(Dictionary.TryGetValue(key, out var val)) {
+            if (Dictionary.TryGetValue(key, out var val)) {
                 value = val.Object;
                 val.KeepAlive();
                 return true;
@@ -189,13 +187,13 @@ namespace Figlotech.Core {
 
         public async Task<T> GetOrAddWithLocking(TKey key, Func<TKey, Task<T>> valueFactory) {
             return (await Dictionary._dmmy.GetOrAddWithLocking(
-                key, 
+                key,
                 async key => new TimerCachedObject<TKey, T>(Dictionary, key, await valueFactory(key), CacheDuration)
             )).Object;
         }
         public T GetOrAddWithLocking(TKey key, Func<TKey, T> valueFactory) {
             return Dictionary._dmmy.GetOrAddWithLocking(
-                key, 
+                key,
                 key => new TimerCachedObject<TKey, T>(Dictionary, key, valueFactory(key), CacheDuration)
             ).Object;
         }
@@ -205,7 +203,7 @@ namespace Figlotech.Core {
         }
 
         public void Clear() {
-            foreach(var key in Dictionary.Keys) {
+            foreach (var key in Dictionary.Keys) {
                 Dictionary.Remove(key);
             }
         }
@@ -215,7 +213,7 @@ namespace Figlotech.Core {
         }
 
         public void CopyTo(KeyValuePair<TKey, T>[] array, int arrayIndex) {
-            for(int i = arrayIndex; i < array.Length; i++) {
+            for (int i = arrayIndex; i < array.Length; i++) {
                 this[array[arrayIndex].Key] = array[arrayIndex].Value;
             }
         }

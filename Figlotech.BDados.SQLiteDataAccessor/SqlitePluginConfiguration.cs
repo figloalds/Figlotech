@@ -1,16 +1,10 @@
-﻿using System;
-using Microsoft.Win32;
-using System.Configuration;
-using System.Diagnostics;
+﻿using Figlotech.Core;
 using Figlotech.Core.Autokryptex;
 using Newtonsoft.Json;
-using System.Text;
+using System;
 using System.IO;
-using Figlotech.Core.Autokryptex.EncryptMethods;
-using Figlotech.Core;
 
-namespace Figlotech.BDados.SqliteDataAccessor
-{
+namespace Figlotech.BDados.SqliteDataAccessor {
 
     public sealed class SqlitePluginConfiguration {
         public String DataSource { get; set; }
@@ -26,7 +20,7 @@ namespace Figlotech.BDados.SqliteDataAccessor
             File.WriteAllBytes(path, encryptedBytes);
         }
         public static SqlitePluginConfiguration LoadFromFile(String path, String password) {
-            if(!File.Exists(path)) {
+            if (!File.Exists(path)) {
                 return null;
             }
 
@@ -39,7 +33,7 @@ namespace Figlotech.BDados.SqliteDataAccessor
             return obj;
         }
 
-        public String GetConnectionString() { 
+        public String GetConnectionString() {
             return $"Data Source={DataSource};Pooling=True;Max Pool Size={PoolSize};";
         }
 

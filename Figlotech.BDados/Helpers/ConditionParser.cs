@@ -1,27 +1,20 @@
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.Helpers;
-using Figlotech.BDados;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
+using Figlotech.Data;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Figlotech.Core;
-using Figlotech.Core.Helpers;
-using System.Diagnostics;
-using Figlotech.Data;
 
 namespace Figlotech.BDados.Helpers {
     public sealed class ConditionParser {
         private Type rootType;
 
-        private PrefixMaker prefixer = new PrefixMaker();
-        
+        private readonly PrefixMaker prefixer = new PrefixMaker();
+
         // Static caches for performance optimization
         private static readonly ConcurrentDictionary<Expression, Func<object>> _compiledExpressionCache = new ConcurrentDictionary<Expression, Func<object>>();
         private static readonly ConcurrentDictionary<(MemberInfo member, Type attributeType), object> _attributeCache = new ConcurrentDictionary<(MemberInfo member, Type attributeType), object>();
@@ -29,7 +22,7 @@ namespace Figlotech.BDados.Helpers {
         private static readonly ConcurrentDictionary<Type, MemberInfo[]> _allMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
         private static readonly ConcurrentDictionary<(string methodName, int paramCount), MethodInfo> _qhMethodCache = new ConcurrentDictionary<(string, int), MethodInfo>();
         private static readonly object _missingAttribute = new object();
-        
+
         public ConditionParser() {
 
         }
@@ -52,7 +45,7 @@ namespace Figlotech.BDados.Helpers {
             _attributeCache.TryAdd(key, (object)attr ?? _missingAttribute);
             return attr;
         }
-        
+
         // Cached attributed members retrieval
         private MemberInfo[] GetCachedAttributedMembers(Type type, string memberName) {
             return _attributedMembersCache.GetOrAdd(type, t => {
@@ -61,7 +54,7 @@ namespace Figlotech.BDados.Helpers {
                     .ToArray();
             }).Where(m => m.Name == memberName).ToArray();
         }
-        
+
         // Cached member retrieval
         private MemberInfo GetCachedMember(Type type, string memberName) {
             var members = _allMembersCache.GetOrAdd(type, t => {
@@ -69,7 +62,7 @@ namespace Figlotech.BDados.Helpers {
                     .Where(m => m.MemberType == MemberTypes.Property || m.MemberType == MemberTypes.Field)
                     .ToArray();
             });
-            
+
             return members.FirstOrDefault(m => m.Name == memberName);
         }
 
@@ -94,7 +87,7 @@ namespace Figlotech.BDados.Helpers {
                     var f2 = smexMember?.GetCustomAttribute<AggregateObjectAttribute>();
                     var f3 = smex.Member.GetCustomAttribute<AggregateFarFieldAttribute>();
                     var f4 = smexMember?.GetCustomAttribute<AggregateListAttribute>();
-                    if(f1 != null) {
+                    if (f1 != null) {
                         thisAlias = prefixer.GetAliasFor(thisAlias, f1.RemoteObjectType.Name, f1.ObjectKey);
                     } else if (f2 != null) {
                         thisAlias = prefixer.GetAliasFor(thisAlias, ReflectionTool.GetTypeOf(smexMember)?.Name, f2.ObjectKey);
@@ -185,7 +178,7 @@ namespace Figlotech.BDados.Helpers {
             try {
                 var retv = ParseExpression(c.expression, typeof(T));
                 return retv;
-            } catch(Exception x) {
+            } catch (Exception x) {
                 throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}", x);
             }
         }
@@ -198,7 +191,7 @@ namespace Figlotech.BDados.Helpers {
                 rootType = typeof(T);
                 var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
                 return retv;
-            } catch(Exception x) {
+            } catch (Exception x) {
                 throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
             }
         }
@@ -206,15 +199,15 @@ namespace Figlotech.BDados.Helpers {
         private bool CanGetValue(Expression member) {
             // Validation-based approach instead of exception-based
             if (member == null) return false;
-            
+
             // Check if it's a constant expression
             if (member is ConstantExpression) return true;
-            
+
             // Check if it's a member expression with a valid constant base
             if (member is MemberExpression memEx) {
                 return CanGetValue(memEx.Expression);
             }
-            
+
             // Check if it's a method call expression with constant arguments
             if (member is MethodCallExpression methodEx) {
                 // Check if object can be resolved (if not static)
@@ -227,12 +220,12 @@ namespace Figlotech.BDados.Helpers {
                 }
                 return true;
             }
-            
+
             // Check if it's a unary expression (like Convert)
             if (member is UnaryExpression unaryEx) {
                 return CanGetValue(unaryEx.Operand);
             }
-            
+
             // New expressions can be evaluated
             if (member is NewExpression newEx) {
                 foreach (var arg in newEx.Arguments) {
@@ -240,13 +233,13 @@ namespace Figlotech.BDados.Helpers {
                 }
                 return true;
             }
-            
+
             return false;
         }
 
         private object GetValue(Expression member) {
             if (member == null) return null;
-            
+
             // Try to get from cache first
             if (_compiledExpressionCache.TryGetValue(member, out var cachedGetter)) {
                 try {
@@ -263,15 +256,15 @@ namespace Figlotech.BDados.Helpers {
                     return null;
                 }
             }
-            
+
             try {
                 var objectMember = Expression.Convert(member, typeof(object));
                 var getterLambda = Expression.Lambda<Func<object>>(objectMember);
                 var getter = getterLambda.Compile();
-                
+
                 // Cache the compiled delegate
                 _compiledExpressionCache.TryAdd(member, getter);
-                
+
                 return getter();
             } catch (NullReferenceException) {
                 Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for member {member?.ToString()}");
@@ -297,269 +290,269 @@ namespace Figlotech.BDados.Helpers {
                     strBuilder.Append("IS NULL");
                     strBuilder.Append(")");
                 } else
-                if (expr.NodeType == ExpressionType.NotEqual &&
-                    expr.Right is ConstantExpression rightConst2 && rightConst2.Value == null) {
-                    strBuilder.Append("(");
-                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append("IS NOT NULL");
-                    strBuilder.Append(")");
-                } else
-                if (expr.NodeType == ExpressionType.Equal &&
-                    CanGetValue(expr.Right) &&
-                    GetValue(expr.Right) is string rightValue &&
-                    (expr.Left is MemberExpression)
-                ) {
-                    var member = (expr.Left as MemberExpression).Member;
-                    var comparisonType = GetCachedAttribute<QueryComparisonAttribute>(member)?.Type;
-                    
-                    strBuilder.Append("(");
-                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    var appendFragment = comparisonType switch {
-                        DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%')",
-                        DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId})",
-                        DataStringComparisonType.StartingWith => $"LIKE CONCAT(@{GenerateParameterId}, '%')",
-                        DataStringComparisonType.ExactValue => $"=@{GenerateParameterId}",
-                        _ => $"=@{GenerateParameterId}"
-                    };
-                    strBuilder.Append(appendFragment, rightValue);
-                    strBuilder.Append(")");
-                } else {
-                    strBuilder.Append("(");
-                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(
-                        expr.NodeType == ExpressionType.AndAlso ? "AND" :
-                        expr.NodeType == ExpressionType.OrElse ? "OR" :
-                        expr.NodeType == ExpressionType.Equal ? "=" :
-                        expr.NodeType == ExpressionType.NotEqual ? "!=" :
-                        expr.NodeType == ExpressionType.Not ? "!" :
-                        expr.NodeType == ExpressionType.GreaterThan ? ">" :
-                        expr.NodeType == ExpressionType.GreaterThanOrEqual ? ">=" :
-                        expr.NodeType == ExpressionType.LessThan ? "<" :
-                        expr.NodeType == ExpressionType.LessThanOrEqual ? "<=" :
-                        "");
-                    strBuilder.Append(ParseExpression(expr.Right, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(")");
-                }
-            } else
-            if (foofun is MemberExpression) {
-                var expr = foofun as MemberExpression;
-                Expression subexp = expr;
-                while (subexp is MemberExpression sme && sme.Expression != null)
-                    subexp = sme.Expression;
-                if(subexp is UnaryExpression uex) {
-                    subexp = uex.Operand;
-                }
-                if (subexp is ParameterExpression pex) {
-                    // If this member belongs to an AggregateField, then problems problems...
-                    var aList = GetCachedAttributedMembers(subexp.Type, expr.Member.Name.Replace("_",""));
-                    if (!fullConditions && (pex.Type != typeOfT || aList.Length == 0)) {
-                        return new QbFmt("1");
-                    }
-                    if (aList.Length > 0) {
-                        strBuilder.Append($"{ForceAlias ?? GetPrefixOfExpression(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
-                    } else {
-                        // oh hell.
-                        MemberInfo member;
-                        if(expr.Expression is ParameterExpression pexpr) {
-                            member = GetCachedMember(pexpr.Type, expr.Member.Name);
-                        } else if (expr.Expression is MemberExpression memex) {
-                            member = GetCachedMember(memex.Type, expr.Member.Name);
-                        } else {
-                            member = null;
-                        }
-                        var info = GetCachedAttribute<AggregateFieldAttribute>(member);
-                        if (info != null) {
-                            var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                            //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
-                            strBuilder.Append($"{prefix}.{info.RemoteField}");
-                        } else {
-                            var info2 = GetCachedAttribute<AggregateFarFieldAttribute>(expr.Member);
-                            if (info2 != null) {
-                                var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                                                                             //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
-                                strBuilder.Append($"{prefix}.{info2.FarField}");
-                            } else {
-                                var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name) ?? expr.Member;
-                                var info3 = GetCachedAttribute<AggregateObjectAttribute>(mem);
-                                var altName = GetCachedAttribute<OverrideColumnNameOnWhere>(mem);
-                                var memberName = altName?.Name ?? member?.Name ?? expr.Member.Name;
-                                if (info3 != null) {
-                                    var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                    //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
-                                    strBuilder.Append($"{prefix}.{memberName}");
-                                } else {
-                                    var prefix = GetPrefixOfExpression(expr);
-                                    strBuilder.Append($"{prefix}.{memberName}");
-                                }
+                    if (expr.NodeType == ExpressionType.NotEqual &&
+                        expr.Right is ConstantExpression rightConst2 && rightConst2.Value == null) {
+                        strBuilder.Append("(");
+                        strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                        strBuilder.Append("IS NOT NULL");
+                        strBuilder.Append(")");
+                    } else
+                        if (expr.NodeType == ExpressionType.Equal &&
+                            CanGetValue(expr.Right) &&
+                            GetValue(expr.Right) is string rightValue &&
+                            (expr.Left is MemberExpression)
+                        ) {
+                            var member = (expr.Left as MemberExpression).Member;
+                            var comparisonType = GetCachedAttribute<QueryComparisonAttribute>(member)?.Type;
 
+                            strBuilder.Append("(");
+                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            var appendFragment = comparisonType switch {
+                                DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%')",
+                                DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId})",
+                                DataStringComparisonType.StartingWith => $"LIKE CONCAT(@{GenerateParameterId}, '%')",
+                                DataStringComparisonType.ExactValue => $"=@{GenerateParameterId}",
+                                _ => $"=@{GenerateParameterId}"
+                            };
+                            strBuilder.Append(appendFragment, rightValue);
+                            strBuilder.Append(")");
+                        } else {
+                            strBuilder.Append("(");
+                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            strBuilder.Append(
+                                expr.NodeType == ExpressionType.AndAlso ? "AND" :
+                                expr.NodeType == ExpressionType.OrElse ? "OR" :
+                                expr.NodeType == ExpressionType.Equal ? "=" :
+                                expr.NodeType == ExpressionType.NotEqual ? "!=" :
+                                expr.NodeType == ExpressionType.Not ? "!" :
+                                expr.NodeType == ExpressionType.GreaterThan ? ">" :
+                                expr.NodeType == ExpressionType.GreaterThanOrEqual ? ">=" :
+                                expr.NodeType == ExpressionType.LessThan ? "<" :
+                                expr.NodeType == ExpressionType.LessThanOrEqual ? "<=" :
+                                "");
+                            strBuilder.Append(ParseExpression(expr.Right, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            strBuilder.Append(")");
+                        }
+            } else
+                if (foofun is MemberExpression) {
+                    var expr = foofun as MemberExpression;
+                    Expression subexp = expr;
+                    while (subexp is MemberExpression sme && sme.Expression != null)
+                        subexp = sme.Expression;
+                    if (subexp is UnaryExpression uex) {
+                        subexp = uex.Operand;
+                    }
+                    if (subexp is ParameterExpression pex) {
+                        // If this member belongs to an AggregateField, then problems problems...
+                        var aList = GetCachedAttributedMembers(subexp.Type, expr.Member.Name.Replace("_", ""));
+                        if (!fullConditions && (pex.Type != typeOfT || aList.Length == 0)) {
+                            return new QbFmt("1");
+                        }
+                        if (aList.Length > 0) {
+                            strBuilder.Append($"{ForceAlias ?? GetPrefixOfExpression(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
+                        } else {
+                            // oh hell.
+                            MemberInfo member;
+                            if (expr.Expression is ParameterExpression pexpr) {
+                                member = GetCachedMember(pexpr.Type, expr.Member.Name);
+                            } else if (expr.Expression is MemberExpression memex) {
+                                member = GetCachedMember(memex.Type, expr.Member.Name);
+                            } else {
+                                member = null;
+                            }
+                            var info = GetCachedAttribute<AggregateFieldAttribute>(member);
+                            if (info != null) {
+                                var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                                                                                        //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                strBuilder.Append($"{prefix}.{info.RemoteField}");
+                            } else {
+                                var info2 = GetCachedAttribute<AggregateFarFieldAttribute>(expr.Member);
+                                if (info2 != null) {
+                                    var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                                                                                            //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                    strBuilder.Append($"{prefix}.{info2.FarField}");
+                                } else {
+                                    var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name) ?? expr.Member;
+                                    var info3 = GetCachedAttribute<AggregateObjectAttribute>(mem);
+                                    var altName = GetCachedAttribute<OverrideColumnNameOnWhere>(mem);
+                                    var memberName = altName?.Name ?? member?.Name ?? expr.Member.Name;
+                                    if (info3 != null) {
+                                        var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
+                                                                                                           //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                        strBuilder.Append($"{prefix}.{memberName}");
+                                    } else {
+                                        var prefix = GetPrefixOfExpression(expr);
+                                        strBuilder.Append($"{prefix}.{memberName}");
+                                    }
+
+                                }
                             }
                         }
+                    } else if (subexp is MethodCallExpression) {
+                        strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions).GetCommandText()}.{expr.Member.Name}");
+                    } else {
+                        strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
                     }
-                } else if (subexp is MethodCallExpression) {
-                    strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions).GetCommandText()}.{expr.Member.Name}");
-                } else {
-                    strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
-                }
-            } else
-            if (foofun is ConstantExpression cexpr) {
-                strBuilder.Append($"@{GenerateParameterId}", cexpr.Value);
-            } else
-            if (foofun is UnaryExpression uexpr) {
-                var expr = uexpr;
-                if (expr.NodeType == ExpressionType.Not) {
-                    strBuilder.Append("!(");
-                    strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(")");
-                }
-                if (expr.NodeType == ExpressionType.Convert) {
-                    //strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
-                    strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
-                }
-            } else
-            if (!fullConditions) {
-                return new QbFmt("");
-            } else
-            if (foofun is MethodCallExpression mcexpr) {
-                var expr = mcexpr;
+                } else
+                    if (foofun is ConstantExpression cexpr) {
+                        strBuilder.Append($"@{GenerateParameterId}", cexpr.Value);
+                    } else
+                        if (foofun is UnaryExpression uexpr) {
+                            var expr = uexpr;
+                            if (expr.NodeType == ExpressionType.Not) {
+                                strBuilder.Append("!(");
+                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                strBuilder.Append(")");
+                            }
+                            if (expr.NodeType == ExpressionType.Convert) {
+                                //strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
+                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            }
+                        } else
+                            if (!fullConditions) {
+                                return new QbFmt("");
+                            } else
+                                if (foofun is MethodCallExpression mcexpr) {
+                                    var expr = mcexpr;
 
-                if (expr.Method.DeclaringType == typeof(StringExtensions)) {
-                    if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
-                        var retv = Qb.Fmt("REGEXP_REPLACE(")
-                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(",")
-                            + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(",")
-                            + ParseExpression(expr.Arguments[2], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(")");
-                        return retv;
-                    }
-                }
-                if (expr.Method.DeclaringType == typeof(String)) {
-                    if (expr.Method.Name == nameof(String.Replace)) {
-                        var retv = Qb.Fmt("REPLACE(")
-                            + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(",")
-                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(",")
-                            + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt(")");
-                        return retv;
-                    }
-                }
-                if (expr.Method.DeclaringType == typeof(Int32) || expr.Method.DeclaringType == typeof(Int64)) {
-                    if (expr.Method.Name == nameof(Int32.Parse)) {
-                        var retv = Qb.Fmt("CAST(")
-                            + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
-                            + Qb.Fmt("AS")
-                            + Qb.Fmt("SIGNED")
-                            + Qb.Fmt(")");
-                        return retv;
-                    }
-                }
+                                    if (expr.Method.DeclaringType == typeof(StringExtensions)) {
+                                        if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
+                                            var retv = Qb.Fmt("REGEXP_REPLACE(")
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(",")
+                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(",")
+                                                + ParseExpression(expr.Arguments[2], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(")");
+                                            return retv;
+                                        }
+                                    }
+                                    if (expr.Method.DeclaringType == typeof(String)) {
+                                        if (expr.Method.Name == nameof(String.Replace)) {
+                                            var retv = Qb.Fmt("REPLACE(")
+                                                + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(",")
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(",")
+                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt(")");
+                                            return retv;
+                                        }
+                                    }
+                                    if (expr.Method.DeclaringType == typeof(Int32) || expr.Method.DeclaringType == typeof(Int64)) {
+                                        if (expr.Method.Name == nameof(Int32.Parse)) {
+                                            var retv = Qb.Fmt("CAST(")
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + Qb.Fmt("AS")
+                                                + Qb.Fmt("SIGNED")
+                                                + Qb.Fmt(")");
+                                            return retv;
+                                        }
+                                    }
 
-                if (expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
-                    if(expr.Method.GetParameters().Length == 1) {
-                        return Qb.Fmt($"@{GenerateParameterId}", expr.Method.Invoke(null, new object[] { Fi.Tech }));
-                    }
-                }
+                                    if (expr.Method.DeclaringType == typeof(FiTechCoreExtensions)) {
+                                        if (expr.Method.GetParameters().Length == 1) {
+                                            return Qb.Fmt($"@{GenerateParameterId}", expr.Method.Invoke(null, new object[] { Fi.Tech }));
+                                        }
+                                    }
 
-                if(expr.Method.DeclaringType == typeof(Qh)) {
-                    var tq = typeof(Qb);
-                    var paramCount = expr.Method.GetParameters().Length - 1;
-                    var cacheKey = (expr.Method.Name, paramCount);
-                    
-                    if (!_qhMethodCache.TryGetValue(cacheKey, out var equivalent)) {
-                        equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == paramCount);
-                        if (equivalent != null) {
-                            _qhMethodCache.TryAdd(cacheKey, equivalent);
-                        }
-                    }
-                    
-                    if(equivalent != null) {
-                        if(equivalent.ContainsGenericParameters) {
-                            var gmdefTypeArgs = expr.Method.GetGenericArguments();
-                            equivalent = equivalent.MakeGenericMethod(gmdefTypeArgs);
-                        }
-                        return (QueryBuilder) equivalent.Invoke(null, expr.Arguments.Skip(1).Select(a=> GetValue(a)).ToArray());
-                    }
-                }
+                                    if (expr.Method.DeclaringType == typeof(Qh)) {
+                                        var tq = typeof(Qb);
+                                        var paramCount = expr.Method.GetParameters().Length - 1;
+                                        var cacheKey = (expr.Method.Name, paramCount);
 
-                if (expr.Method.Name == "Any") {
-                    if (expr.Arguments.Count > 0) {
-                        if (expr.Arguments[0] is MemberExpression) {
-                            strBuilder.Append($"{GetPrefixOfExpression(expr.Arguments[0])}.RID IS NOT NULL");
-                        } else {
-                            strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
-                        }
-                    }
-                }
-                if (expr.Method.Name == "Equals") {
-                    var memberEx = expr.Object as MemberExpression;
-                    var pre = GetPrefixOfExpression(memberEx);
-                    var column = memberEx.Member.Name;
-                    strBuilder.Append($"{pre}.{column}=(");
-                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(")");
-                }
-                if (expr.Method.Name == nameof(String.Contains)) {
-                    strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append($" LIKE CONCAT('%', ");
-                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(", '%')");
-                }
-                if (expr.Method.Name == nameof(String.StartsWith)) {
-                    strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append($" LIKE CONCAT('%', ");
-                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(")");
-                }
-                if (expr.Method.Name == nameof(String.EndsWith)) {
-                    strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append($" LIKE CONCAT('%', ");
-                    strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
-                    strBuilder.Append(", '%')");
-                }
-                if (expr.Method.Name == nameof(String.ToUpper)) {
-                    strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
-                }
-                if (expr.Method.Name == nameof(String.ToLower)) {
-                    strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
-                }
-                if (expr.Method.Name == nameof(String.Trim)) {
-                    strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
-                }
-                if (expr.Method.Name == nameof(String.Replace)) {
-                    strBuilder
-                        .Append($"REPLACE(")
-                        .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions))
-                        .Append(",")
-                        .Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions))
-                        .Append(",")
-                        .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions))
-                        .Append(")");
-                }
-                if (expr.Method.Name == "Where") {
-                    if (expr.Arguments.Count > 1) {
-                        var prevV = ForceAlias;
-                        ForceAlias = GetPrefixOfExpression(expr.Arguments[0] as MemberExpression);
-                        strBuilder.Append(ParseExpression((expr.Arguments[1] as LambdaExpression).Body, typeOfT, ForceAlias, strBuilder, fullConditions));
-                        ForceAlias = prevV;
-                    }
-                }
-                if (expr.Method.Name == "First") {
-                    if (expr.Arguments.Count > 0) {
-                        strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
-                    }
-                }
-            }
-            if(foofun is NewExpression newex) {
+                                        if (!_qhMethodCache.TryGetValue(cacheKey, out var equivalent)) {
+                                            equivalent = tq.GetMethods().FirstOrDefault(m => m.Name == expr.Method.Name && m.GetParameters().Length == paramCount);
+                                            if (equivalent != null) {
+                                                _qhMethodCache.TryAdd(cacheKey, equivalent);
+                                            }
+                                        }
+
+                                        if (equivalent != null) {
+                                            if (equivalent.ContainsGenericParameters) {
+                                                var gmdefTypeArgs = expr.Method.GetGenericArguments();
+                                                equivalent = equivalent.MakeGenericMethod(gmdefTypeArgs);
+                                            }
+                                            return (QueryBuilder)equivalent.Invoke(null, expr.Arguments.Skip(1).Select(a => GetValue(a)).ToArray());
+                                        }
+                                    }
+
+                                    if (expr.Method.Name == "Any") {
+                                        if (expr.Arguments.Count > 0) {
+                                            if (expr.Arguments[0] is MemberExpression) {
+                                                strBuilder.Append($"{GetPrefixOfExpression(expr.Arguments[0])}.RID IS NOT NULL");
+                                            } else {
+                                                strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                            }
+                                        }
+                                    }
+                                    if (expr.Method.Name == "Equals") {
+                                        var memberEx = expr.Object as MemberExpression;
+                                        var pre = GetPrefixOfExpression(memberEx);
+                                        var column = memberEx.Member.Name;
+                                        strBuilder.Append($"{pre}.{column}=(");
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(")");
+                                    }
+                                    if (expr.Method.Name == nameof(String.Contains)) {
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append($" LIKE CONCAT('%', ");
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(", '%')");
+                                    }
+                                    if (expr.Method.Name == nameof(String.StartsWith)) {
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append($" LIKE CONCAT('%', ");
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(")");
+                                    }
+                                    if (expr.Method.Name == nameof(String.EndsWith)) {
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append($" LIKE CONCAT('%', ");
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(", '%')");
+                                    }
+                                    if (expr.Method.Name == nameof(String.ToUpper)) {
+                                        strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                    }
+                                    if (expr.Method.Name == nameof(String.ToLower)) {
+                                        strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                    }
+                                    if (expr.Method.Name == nameof(String.Trim)) {
+                                        strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                    }
+                                    if (expr.Method.Name == nameof(String.Replace)) {
+                                        strBuilder
+                                            .Append($"REPLACE(")
+                                            .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(",")
+                                            .Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(",")
+                                            .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(")");
+                                    }
+                                    if (expr.Method.Name == "Where") {
+                                        if (expr.Arguments.Count > 1) {
+                                            var prevV = ForceAlias;
+                                            ForceAlias = GetPrefixOfExpression(expr.Arguments[0] as MemberExpression);
+                                            strBuilder.Append(ParseExpression((expr.Arguments[1] as LambdaExpression).Body, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                            ForceAlias = prevV;
+                                        }
+                                    }
+                                    if (expr.Method.Name == "First") {
+                                        if (expr.Arguments.Count > 0) {
+                                            strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
+                                        }
+                                    }
+                                }
+            if (foofun is NewExpression newex) {
                 var marshalledValue = newex.Constructor.Invoke(newex.Arguments.Select(arg => GetValue(arg)).ToArray());
                 return Qb.Fmt($"@{GenerateParameterId}", marshalledValue);
             }
             if (fullConditions) {
                 return strBuilder;
             } else {
-                return (QueryBuilder) new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
+                return (QueryBuilder)new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
             }
         }
     }

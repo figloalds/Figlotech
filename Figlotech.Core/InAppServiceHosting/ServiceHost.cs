@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,9 +10,9 @@ namespace Figlotech.Core.InAppServiceHosting {
         public static ServiceHost Default { get; set; } = new ServiceHost();
 
         private List<IFthService> Services { get; set; } = new List<IFthService>();
-        ConcurrentDictionary<IFthService, Task> ServiceTasks = new ConcurrentDictionary<IFthService, Task>();
-        ConcurrentDictionary<IFthService, FthServiceInfo> ServiceInfos = new ConcurrentDictionary<IFthService, FthServiceInfo>();
-        ConcurrentDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new ConcurrentDictionary<IFthService, CancellationTokenSource>();
+        readonly ConcurrentDictionary<IFthService, Task> ServiceTasks = new ConcurrentDictionary<IFthService, Task>();
+        readonly ConcurrentDictionary<IFthService, FthServiceInfo> ServiceInfos = new ConcurrentDictionary<IFthService, FthServiceInfo>();
+        readonly ConcurrentDictionary<IFthService, CancellationTokenSource> CyclicServiceIterationResets = new ConcurrentDictionary<IFthService, CancellationTokenSource>();
 
         public IFthService InitService<T>(params object[] args) {
             return InitService(typeof(T), args);
@@ -31,7 +30,7 @@ namespace Figlotech.Core.InAppServiceHosting {
             return null;
         }
 
-        int idgen = 0;
+        readonly int idgen = 0;
         public void Start(IFthService service) {
             if (!ServiceTasks.ContainsKey(service)) {
                 var t = Task.Run(async () => {

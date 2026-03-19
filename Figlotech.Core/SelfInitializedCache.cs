@@ -1,18 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public sealed class SelfInitializedCache<TKey, T> : IDictionary<TKey, T> {
-        private TimedCache<TKey, T> Dictionary;
-        private Func<TKey, T> GenerationLogic;
+        private readonly TimedCache<TKey, T> Dictionary;
+        private readonly Func<TKey, T> GenerationLogic;
         private TimeSpan CacheDuration { get; }
-        
+
         public ICollection<TKey> Keys => Dictionary.Keys;
 
         public ICollection<T> Values => Dictionary.Values.ToList();
@@ -66,7 +62,7 @@ namespace Figlotech.Core {
         }
 
         public void Clear() {
-            foreach(var key in Dictionary.Keys) {
+            foreach (var key in Dictionary.Keys) {
                 Dictionary.Remove(key);
             }
         }
@@ -76,7 +72,7 @@ namespace Figlotech.Core {
         }
 
         public void CopyTo(KeyValuePair<TKey, T>[] array, int arrayIndex) {
-            for(int i = arrayIndex; i < array.Length; i++) {
+            for (int i = arrayIndex; i < array.Length; i++) {
                 this[array[arrayIndex].Key] = array[arrayIndex].Value;
             }
         }

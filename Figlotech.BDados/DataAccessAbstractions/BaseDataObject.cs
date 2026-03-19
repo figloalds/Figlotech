@@ -1,5 +1,4 @@
 ﻿using Figlotech.BDados.Builders;
-using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
@@ -52,7 +51,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private int _persistedHash = 0;
         public int PersistedHash {
             get {
-                if(!IsPersisted) {
+                if (!IsPersisted) {
                     return 0;
                 }
                 if (_persistedHash == 0) {
@@ -98,7 +97,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public virtual Task<ValidationErrors> ValidateInput() { return Task.FromResult(new ValidationErrors()); }
         public virtual Task<ValidationErrors> ValidateBusiness() { return Task.FromResult(new ValidationErrors()); }
 
-        public virtual Task OnBeforePersistAsync() { return Task.CompletedTask;  }
+        public virtual Task OnBeforePersistAsync() { return Task.CompletedTask; }
 
         public virtual Task OnAfterPersistAsync() { return Task.CompletedTask; }
 

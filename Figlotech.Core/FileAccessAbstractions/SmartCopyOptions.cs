@@ -1,12 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
-    public sealed class SmartCopyOptions
-    {
+    public sealed class SmartCopyOptions {
         /// <summary>
         /// If set to true (default), the comparator will calculate the file hash to determine
         /// if it has or not changed instead of date and length.

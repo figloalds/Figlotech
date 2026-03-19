@@ -5,15 +5,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core
-{
+namespace Figlotech.Core {
     /// <summary>
     /// SplitStream allows a single input Stream to be read by multiple consumers (forks) independently.
     /// It buffers the data from the source stream into blocks so that each fork can read at its own pace.
     /// It automatically discards blocks that have been read by all active forks to save memory.
     /// </summary>
-    public class SplitStream : IDisposable
-    {
+    public class SplitStream : IDisposable {
         private readonly Stream _source;
         private readonly List<byte[]> _blocks = new List<byte[]>();
         private readonly List<TaskCompletionSource<bool>> _signals = new List<TaskCompletionSource<bool>>();
@@ -83,13 +81,13 @@ namespace Figlotech.Core
             lock (_syncLock) {
                 if (_isDisposed) throw new ObjectDisposedException(nameof(SplitStream));
                 _hasStarted = true;
-                
+
                 if (index < _minRequestedIndex) {
                     throw new InvalidOperationException("This part of the stream has already been discarded because all forks moved past it.");
                 }
                 if (index < _blocks.Count) return (_blocks[index], false);
                 if (_isEndOfSource) return (null, true);
-                
+
                 while (_signals.Count <= index) {
                     _signals.Add(new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
                 }
@@ -135,7 +133,7 @@ namespace Figlotech.Core
                         }
                         signal.TrySetResult(true);
                     }
-                    
+
                     if (_isEndOfSource && bytesRead == 0) return (null, true);
                     return (buffer, false);
                 } catch (Exception ex) {
@@ -151,7 +149,7 @@ namespace Figlotech.Core
                 } catch (OperationCanceledException) {
                     throw;
                 }
-                
+
                 lock (_syncLock) {
                     if (index < _blocks.Count) return (_blocks[index], false);
                     return (null, true);
@@ -180,8 +178,7 @@ namespace Figlotech.Core
     /// A read-only Stream view into a SplitStream.
     /// Each view maintains its own cursor position and reads from the shared buffered blocks.
     /// </summary>
-    public class SplitStreamView : Stream
-    {
+    public class SplitStreamView : Stream {
         private readonly SplitStream _parent;
         private int _blockIndex = 0;
         private int _blockOffset = 0;
@@ -205,7 +202,7 @@ namespace Figlotech.Core
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
             if (_isDisposed) throw new ObjectDisposedException(nameof(SplitStreamView));
-            
+
             var (block, eof) = await _parent.GetBlockAsync(_blockIndex, cancellationToken).ConfigureAwait(false);
             if (eof) return 0;
 
@@ -233,7 +230,7 @@ namespace Figlotech.Core
 
             int available = block.Length - _blockOffset;
             int toCopy = Math.Min(available, buffer.Length);
-            
+
             block.AsMemory(_blockOffset, toCopy).CopyTo(buffer);
 
             _blockOffset += toCopy;

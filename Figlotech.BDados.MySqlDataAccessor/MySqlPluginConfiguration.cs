@@ -1,17 +1,10 @@
-﻿using System;
-using Microsoft.Win32;
-using System.Configuration;
-using System.Diagnostics;
+﻿using Figlotech.Core;
 using Figlotech.Core.Autokryptex;
 using Newtonsoft.Json;
-using System.Text;
+using System;
 using System.IO;
-using Figlotech.Core.Autokryptex.EncryptMethods;
-using Figlotech.Core;
-using Figlotech.Core.Autokryptex.Legacy;
 
-namespace Figlotech.BDados.MySqlDataAccessor
-{
+namespace Figlotech.BDados.MySqlDataAccessor {
 
     public sealed class MySqlPluginConfiguration {
         public String Host { get; set; }
@@ -39,7 +32,7 @@ namespace Figlotech.BDados.MySqlDataAccessor
             File.WriteAllBytes(path, encryptedBytes);
         }
         public static MySqlPluginConfiguration LoadFromFile(String path, String password) {
-            if(!File.Exists(path)) {
+            if (!File.Exists(path)) {
                 return null;
             }
 
@@ -52,8 +45,8 @@ namespace Figlotech.BDados.MySqlDataAccessor
             return obj;
         }
 
-        public String GetConnectionString() { 
-            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=0;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Math.Min(1800, Timeout)};Connect Timeout={Math.Min(30, ConnectTimeout)};DefaultCommandTimeout={Timeout};ConnectionLifetime={Math.Min(1800, Lifetime)};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL?"Required":"None")};charset=utf8mb4;default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
+        public String GetConnectionString() {
+            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=0;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Math.Min(1800, Timeout)};Connect Timeout={Math.Min(30, ConnectTimeout)};DefaultCommandTimeout={Timeout};ConnectionLifetime={Math.Min(1800, Lifetime)};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL ? "Required" : "None")};charset=utf8mb4;default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
             return connstr;
         }
     }

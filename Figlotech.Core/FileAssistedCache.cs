@@ -30,7 +30,7 @@ namespace Figlotech.Core {
         public async Task LoadAllFromFile() {
             if (UseFileReplacementTechnique) {
                 if (!await this.FileSystem.ExistsAsync(this.Filename)) {
-                    foreach(var f in this.FileSystem.GetFilesIn("")) {
+                    foreach (var f in this.FileSystem.GetFilesIn("")) {
                         var fn = Path.GetFileName(f);
                         if (fn.StartsWith(Path.GetFileName(this.Filename + ".new."))) {
                             await this.FileSystem.RenameAsync(fn, this.Filename);
@@ -58,7 +58,7 @@ namespace Figlotech.Core {
                             }
                         }
                     }
-                } catch (Exception x) {
+                } catch (Exception) {
                     await this.FileSystem.DeleteAsync(this.Filename);
                 }
             }
@@ -80,12 +80,12 @@ namespace Figlotech.Core {
                         }
                     }
                 }
-            } catch (Exception x) {
+            } catch (Exception) {
 
             }
             return default(T);
         }
-        FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
+        readonly FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
         public async Task TryPutTTofile(string? rid, T value) {
             try {
                 var json = JsonConvert.SerializeObject(value);
@@ -94,12 +94,12 @@ namespace Figlotech.Core {
                     var fileNameNew = Filename + $".new.{srid}";
                     var fileNameOld = Filename + $".old.{srid}";
 
-                    if(UseFileReplacementTechnique) {
+                    if (UseFileReplacementTechnique) {
                         await this.FileSystem.CopyFile(Filename, FileSystem, fileNameNew);
                     } else {
                         fileNameNew = Filename;
                     }
-                    
+
                     using (var stream = await this.FileSystem.OpenAsync(fileNameNew, FileMode.OpenOrCreate, FileAccess.ReadWrite)) {
                         using (var zipstream = new ZipArchive(stream, ZipArchiveMode.Update)) {
                             var entry = zipstream.GetEntry(rid);
@@ -119,14 +119,14 @@ namespace Figlotech.Core {
                         }
                     }
 
-                    if(UseFileReplacementTechnique) {
+                    if (UseFileReplacementTechnique) {
                         await this.FileSystem.DeleteAsync(Filename);
                         await this.FileSystem.RenameAsync(Filename, fileNameOld);
                         await this.FileSystem.RenameAsync(fileNameNew, Filename);
                         await this.FileSystem.DeleteAsync(fileNameOld);
                     }
                 }
-            } catch (Exception x) {
+            } catch (Exception) {
                 await this.FileSystem.DeleteAsync(this.Filename);
                 foreach (var item in this.Cache) {
                     await this.TryPutTTofile(item.Key, item.Value);

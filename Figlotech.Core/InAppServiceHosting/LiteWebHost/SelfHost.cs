@@ -1,17 +1,12 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.DomainEvents;
-using Figlotech.Core.FileAcessAbstractions;
+﻿using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,7 +26,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
     public sealed class SelfHost {
 
         public static async Task SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {
-            foreach(var header in headers) {
+            foreach (var header in headers) {
                 await writer.WriteLineAsync($"{header.Key}: {header.Value}");
             }
         }
@@ -74,10 +69,10 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             return JsonConvert.DeserializeObject<T>(txt);
         }
 
-        WorkQueuer work = new WorkQueuer("EmbededProxyRequestHandler", -1, true) {};
-                
-        TcpListener listener;
-        bool started;
+        readonly WorkQueuer work = new WorkQueuer("EmbededProxyRequestHandler", -1, true) { };
+
+        readonly TcpListener listener;
+        readonly bool started;
         bool running;
         Thread serverThread;
         public IPAddress Host { get; private set; }
@@ -86,8 +81,8 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
         private static Type[] _evtTypes = null;
         public static Type[] EvtTypes {
             get {
-                lock("INIT_EVT_TYPES") {
-                    if(_evtTypes == null) {
+                lock ("INIT_EVT_TYPES") {
+                    if (_evtTypes == null) {
                         _evtTypes = new Type[0];
                     }
 
@@ -101,7 +96,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             Port = port;
         }
 
-        SelfInitializerDictionary<string, byte[]> AppFiles = new SelfInitializerDictionary<string, byte[]>(
+        readonly SelfInitializerDictionary<string, byte[]> AppFiles = new SelfInitializerDictionary<string, byte[]>(
             key => {
                 return null;
             }
@@ -133,8 +128,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             return false;
         }
 
-        public void Join()
-        {
+        public void Join() {
             serverThread.Join();
         }
 
@@ -151,8 +145,8 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             Handlers.AddRange(
                 typeof(SelfHost).Assembly
                     .GetTypes()
-                    .Where(t=> !t.IsAbstract && t.Implements(typeof(IApiHandler)))
-                    .Select(t=> (IApiHandler) Activator.CreateInstance(t))
+                    .Where(t => !t.IsAbstract && t.Implements(typeof(IApiHandler)))
+                    .Select(t => (IApiHandler)Activator.CreateInstance(t))
             );
 
             serverThread = Fi.Tech.SafeCreateThread((Action)(() => {
@@ -217,7 +211,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
                                             }
 
                                             Console.WriteLine($"REQUEST: {method} {uri}");
-                                            if(method == "OPTIONS") {
+                                            if (method == "OPTIONS") {
                                                 using (var writer = new StreamWriter(stream, Fi.StandardEncoding, 8196, true)) {
                                                     writer.WriteLine($"HTTP/1.1 200 OK");
                                                     writer.WriteLine($"Access-Control-Allow-Origin: *");
@@ -239,11 +233,11 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
                                                 query = queryString.Split('&')
                                                     .Where(kvps => !string.IsNullOrEmpty(kvps) && kvps.Contains("="))
                                                     .Select(
-                                                    (kvps)=> {
+                                                    (kvps) => {
                                                         var split = kvps.Split('=');
                                                         return new KeyValuePair<string, string>(split[0], split[1]);
                                                     }
-                                                ).ToDictionary(x=>x.Key, x=> x.Value);
+                                                ).ToDictionary(x => x.Key, x => x.Value);
                                             }
 
 
@@ -274,10 +268,10 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
                                                             return;
                                                         }
                                                     }
-                                                } catch(MainLogicGeneratedException mlex) {
+                                                } catch (MainLogicGeneratedException mlex) {
                                                     await SelfHost.SendJson(mlex.StatusCode, "Error", stream, mlex);
                                                     return;
-                                                } catch(Exception x) {
+                                                } catch (Exception x) {
                                                     await SelfHost.SendJson(500, "Error", stream, x);
                                                     return;
                                                 }
@@ -306,7 +300,7 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
             serverThread.Start();
         }
 
-        IFileSystem RequestLog;
+        readonly IFileSystem RequestLog;
 
     }
 }

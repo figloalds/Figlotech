@@ -1,8 +1,6 @@
-﻿using Figlotech.Core;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace Figlotech.ECSEngine {
 
@@ -16,10 +14,10 @@ namespace Figlotech.ECSEngine {
         }
         public static T GetComponent<T>(this IEntity entity) {
             var retv = entity.Components.FirstOrDefault(c => c.GetType() == typeof(T));
-            if(retv == null) {
+            if (retv == null) {
                 return default(T);
             }
-            return (T) retv;
+            return (T)retv;
         }
     }
 
@@ -44,7 +42,7 @@ namespace Figlotech.ECSEngine {
             set {
                 var field = this.Components
                     .FirstOrDefault(f => f.Name == s);
-                if(field != null) {
+                if (field != null) {
                     this.Components.Remove(field);
                 }
                 this.Components.Add(field);

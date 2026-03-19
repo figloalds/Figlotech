@@ -7,17 +7,16 @@
 * August/2014
 * 
 **/
-using Figlotech.Core.BusinessModel;
+using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    
+
     public class RecordSet<T> : List<T>, IEnumerable<T> where T : ILegacyDataObject, new() {
 
 
@@ -44,7 +43,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public T FirstOrDefault() {
             return this.Count > 0 ? this[0] : default(T);
         }
-        
+
         public String CustomListing(Func<T, String> fn) {
             using var retv = new ValueStringBuilder();
             for (int i = 0; i < this.Count; i++) {
@@ -122,11 +121,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> Fetch(LoadAllArgs<T> args = null) {
             Clear();
             var agl = DataAccessor.AggregateLoad<T>(args);
-            if(agl == null || agl.Any(a=> a == null)) {
+            if (agl == null || agl.Any(a => a == null)) {
                 throw new BDadosException("CRITICAL DATA MAPPING ERROR!");
             }
             if (orderingExpression != null) {
-                if(Ordering == OrderingType.Desc) {
+                if (Ordering == OrderingType.Desc) {
                     agl = agl.OrderByDescending(orderingExpression).ToList();
                 } else {
                     agl = agl.OrderBy(orderingExpression).ToList();

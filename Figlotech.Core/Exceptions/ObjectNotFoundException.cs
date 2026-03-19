@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace System {
     /// <summary>
@@ -15,7 +14,7 @@ namespace System {
 
         public ObjectNotFoundException(string message, Exception innerException) : base(404, message, innerException) {
         }
-        
+
         protected ObjectNotFoundException(SerializationInfo info, StreamingContext context) : base(404, info, context) {
         }
     }

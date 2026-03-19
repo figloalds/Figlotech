@@ -8,7 +8,7 @@ namespace Figlotech.DataFlow {
         ValueTask Execute();
     }
 
-    public class Input : Attribute { 
+    public class Input : Attribute {
         public string Description { get; set; }
         public bool Optional { get; set; }
 
@@ -47,8 +47,8 @@ namespace Figlotech.DataFlow {
         public string Url { get; set; }
 
         public async ValueTask Execute() {
-            using(var httpRequest = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, Url)) {
-                using(var httpClient = new System.Net.Http.HttpClient()) {
+            using (var httpRequest = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, Url)) {
+                using (var httpClient = new System.Net.Http.HttpClient()) {
                     var response = await httpClient.SendAsync(httpRequest).ConfigureAwait(false);
                     StatusCode = (int)response.StatusCode;
                     ResponseBody = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);

@@ -9,10 +9,6 @@
  * 
 **/
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
@@ -28,10 +24,8 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// auto-incremental Ids were giving me a PUNK headache.
     /// </para>
     /// </summary>
-    public sealed class ReliableIdAttribute : Attribute
-    {
-        public ReliableIdAttribute()
-        {
+    public sealed class ReliableIdAttribute : Attribute {
+        public ReliableIdAttribute() {
         }
     }
 }

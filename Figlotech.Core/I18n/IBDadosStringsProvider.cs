@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Figlotech.Core.I18n
-{
+﻿namespace Figlotech.Core.I18n {
     public interface IBDadosStringsProvider {
         string AUTH_USER_MAX_ATTEMPTS_EXCEEDED { get; }
         string AUTH_USER_NOT_FOUND { get; }

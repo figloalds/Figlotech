@@ -1,8 +1,7 @@
-﻿using static Figlotech.Core.FiTechCoreExtensions;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 

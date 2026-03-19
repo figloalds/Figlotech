@@ -2,7 +2,7 @@
 
 namespace Figlotech.Core.BusinessModel {
 
-    public interface IValidationRule  {
+    public interface IValidationRule {
         IEnumerable<ValidationError> Validate(IBusinessObject ObjectToValidate);
     }
 

@@ -1,25 +1,18 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.Core;
+﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core.Interfaces;
 using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    
-    public interface IRdbmsDataAccessor : IDataAccessor
-    {
+
+    public interface IRdbmsDataAccessor : IDataAccessor {
         event Action<Type, ILegacyDataObject[]> OnSuccessfulSave;
         event Action<Type, ILegacyDataObject[], Exception> OnFailedSave;
         event Action<Type, ILegacyDataObject[]> OnDataObjectAltered;
@@ -33,7 +26,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         Task<T> AccessAsync<T>(Func<BDadosTransaction, Task<T>> tryFun, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
         IAsyncEnumerable<T> AccessAsyncCoroutinely<T>(Func<BDadosTransaction, ChannelWriter<T>, Task> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted);
         List<T> LoadAll<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
-        
+
         IEnumerable<T> Fetch<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, object contextObject = null) where T : IDataObject, new();
 
         T ForceExist<T>(Func<T> Default, IQueryBuilder qb) where T : IDataObject, new();
@@ -55,7 +48,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IRdbmsDataAccessor Fork();
 
         BDadosTransaction CreateNewTransaction(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
-        
+
         Task<BDadosTransaction> CreateNonDbLevelTransaction(CancellationToken cancellationToken, Benchmarker bmark = null);
 
         Task<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
@@ -123,9 +116,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new();
         List<T> AggregateLoad<T>(
-            BDadosTransaction transaction, 
+            BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new();
-        
+
         IAsyncEnumerable<T> AggregateLoadAsyncCoroutinely<T>(
             BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new();

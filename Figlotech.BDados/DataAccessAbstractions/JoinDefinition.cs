@@ -1,43 +1,30 @@
 ﻿using Figlotech.BDados.Helpers;
-using Figlotech.BDados.TableNameTransformDefaults;
 using Figlotech.Core;
-using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Dynamic;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
-    public enum AggregateBuildOptions
-    {
+    public enum AggregateBuildOptions {
         None, AggregateField, AggregateList, AggregateObject
     }
-    public enum JoinType
-    {
+    public enum JoinType {
         LEFT, RIGHT, INNER, CROSS, LEFT_OUTER, RIGHT_OUTER, NATURAL, NATURAL_LEFT_OUTER, NATURAL_RIGHT_OUTER
     }
 
-    public sealed class JoinDefinition
-    {
+    public sealed class JoinDefinition {
 
         private bool Validated = false;
 
         public List<JoiningTable> Joins = new List<JoiningTable>();
         public List<Relation> Relations = new List<Relation>();
 
-        public JoinDefinition()
-        {
+        public JoinDefinition() {
         }
 
-        private void ValidateOnClauses(String args, String prefix)
-        {
+        private void ValidateOnClauses(String args, String prefix) {
             if (args == null || args.Length < 1)
                 throw new BDadosException($"ON CLAUSE should be declared for {prefix}");
 
@@ -63,21 +50,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             // TODO: Adicionar validação dos nomes dos campos depois.
         }
 
-        public JoinConfigureHelper AggregateRoot(Type type, String Alias)
-
-        {
+        public JoinConfigureHelper AggregateRoot(Type type, String Alias) {
             // Tipo junção é ignorado para a primeira tabela, de qualquer forma.
             Join(type, Alias, "", JoinType.LEFT);
-            return GenerateNewHelper(Joins.Count-1);
+            return GenerateNewHelper(Joins.Count - 1);
         }
 
-        private JoinConfigureHelper GenerateNewHelper(int Index)
-        {
+        private JoinConfigureHelper GenerateNewHelper(int Index) {
             return new JoinConfigureHelper(this, Index);
         }
 
-        internal List<Relation> GenerateRelations()
-        {
+        internal List<Relation> GenerateRelations() {
             Validated = false;
             Relations.Clear();
             for (int i = 1; i < Joins.Count; ++i) {
@@ -130,36 +113,33 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         /// <param name="Alias">Table alias</param>
         /// <param name="Args">ON CLAUSE argument</param>
         /// <param name="joinType">Specifies the join type between LEFT, RIGHT or INNER</param>
-        public JoinConfigureHelper Join(Type type, String Alias, String Args = "", JoinType joinType = JoinType.LEFT)
-        {
+        public JoinConfigureHelper Join(Type type, String Alias, String Args = "", JoinType joinType = JoinType.LEFT) {
             Validated = false;
             Relations.Clear();
 
-            JoiningTable tj = Joins.FirstOrDefault(t=> t.Alias == Alias) ?? new JoiningTable();
+            JoiningTable tj = Joins.FirstOrDefault(t => t.Alias == Alias) ?? new JoiningTable();
             tj.Alias = Alias;
             tj.TableName = type.Name;
             tj.ValueObject = type;
             tj.Args = Args;
             tj.Type = joinType;
             tj.Prefix = Alias;
-            if(!Joins.Contains(tj)) {
+            if (!Joins.Contains(tj)) {
                 Joins.Add(tj);
             }
             return GenerateNewHelper(Joins.IndexOf(tj));
         }
 
-        private bool ValidateTableCount()
-        {
+        private bool ValidateTableCount() {
             int c = Joins.Count;
-            return c>0;
+            return c > 0;
         }
 
         public override string ToString() {
-            return $"{string.Join("|", this.Joins.Select(j=> $"{j.TableName}"))}";
+            return $"{string.Join("|", this.Joins.Select(j => $"{j.TableName}"))}";
         }
 
-        private String GetAPrefix(String Alias)
-        {
+        private String GetAPrefix(String Alias) {
             List<String> prefixes = (from a in Joins select a.Prefix).ToList();
             int tam = 0;
             int c = 0;

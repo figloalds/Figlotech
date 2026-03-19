@@ -1,24 +1,20 @@
 ﻿using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.Core.Helpers
-{
+namespace Figlotech.Core.Helpers {
     public sealed class ContextProvider : IContextProvider {
-        Dictionary<String, object> obj = new Dictionary<string, object>();
+        readonly Dictionary<String, object> obj = new Dictionary<string, object>();
 
         public object Get(string name) {
-            if(obj.ContainsKey(name)) {
+            if (obj.ContainsKey(name)) {
                 return obj[name];
             }
             return null;
         }
 
         public T Get<T>(string name) {
-            return (T) Get(name);
+            return (T)Get(name);
         }
 
         public void Set(string name, object value) {

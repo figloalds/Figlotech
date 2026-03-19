@@ -1,6 +1,4 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.Helpers;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -316,7 +314,7 @@ namespace System.Threading.Tasks {
             async Task AwaitPartition(IEnumerator<T> partition) {
                 using (partition) {
                     while (partition.MoveNext()) {
-                        if(cancellation.IsCancellationRequested) {
+                        if (cancellation.IsCancellationRequested) {
                             break;
                         }
                         await Task.Yield(); // prevents a sync/hot thread hangup

@@ -11,11 +11,9 @@ using Figlotech.Core.Extensions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core {
     public struct IntEx {
@@ -107,7 +105,7 @@ namespace Figlotech.Core {
                 }
             }
         }
-        private static Random r = new Random();
+        private static readonly Random r = new Random();
         public static String GenerateUniqueRID() {
             BigInteger i = new BigInteger();
             i = DateTime.Now.Ticks;
@@ -349,7 +347,7 @@ namespace Figlotech.Core {
             return new String(result);
         }
 
-        static ConcurrentDictionary<string, int[]> charToValCache = new ConcurrentDictionary<string, int[]>();
+        static readonly ConcurrentDictionary<string, int[]> charToValCache = new ConcurrentDictionary<string, int[]>();
         public static string BaseMult(string a, string b, string baseStr) {
             if (a.Length == 1 && a[0] == baseStr[0] || b.Length == 1 && b.Length == baseStr[0]) {
                 return baseStr[0].ToString();

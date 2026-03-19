@@ -1,13 +1,11 @@
 ﻿using Figlotech.Core.Autokryptex;
-using Figlotech.Core.Autokryptex.EncryptMethods;
-using Figlotech.Core.Autokryptex.Legacy;
 using System;
 using System.Linq;
 
 namespace Figlotech.Core {
     public sealed class HourlySyncCode {
         public static HourlySyncCode Generate(String Password = null, DateTime? KeyMoment = null) {
-            return Generate(KeyMoment??Fi.Tech.GetUtcTime(), Password);
+            return Generate(KeyMoment ?? Fi.Tech.GetUtcTime(), Password);
         }
 
         private HourlySyncCode(byte[] code) {
@@ -69,7 +67,7 @@ namespace Figlotech.Core {
 
         public static bool Validate(DateTime keyMoment, HourlySyncCode code, String Password) {
             return Validate(code, Password, keyMoment);
-        } 
+        }
         public static bool Validate(HourlySyncCode code, String Password, DateTime? keyMoment = null) {
             keyMoment = keyMoment ?? Fi.Tech.GetUtcTime();
             if (Generate(keyMoment.Value, Password).Code.SequenceEqual(code.Code)) {
@@ -83,7 +81,7 @@ namespace Figlotech.Core {
                 }
             }
 
-            if(DateTime.UtcNow < new DateTime(2026, 01, 01)) {
+            if (DateTime.UtcNow < new DateTime(2026, 01, 01)) {
                 var mins = (long)(TimeSpan.FromTicks(keyMoment.Value.Ticks)).TotalMinutes;
                 if (Generate(new LegacyFiRandom(mins), keyMoment.Value, Password).Code.SequenceEqual(code.Code)) {
                     return true;

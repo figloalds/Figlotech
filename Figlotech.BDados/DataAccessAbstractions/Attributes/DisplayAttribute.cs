@@ -12,10 +12,6 @@
 **/
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     public enum DisplayFormatType {
@@ -27,15 +23,13 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         NoFormat,
     }
 
-    public interface ICustomDisplayFormatter
-    {
+    public interface ICustomDisplayFormatter {
         object Format(object input);
     }
 
-    public abstract class CustomDisplayFormatter<T> : ICustomDisplayFormatter
-    {
+    public abstract class CustomDisplayFormatter<T> : ICustomDisplayFormatter {
         public object Format(object input) {
-            return Format((T) input);
+            return Format((T)input);
         }
         public abstract object Format(T input);
     }
@@ -44,8 +38,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// Tells tools how to display this field on a screen.
     /// can be used to generate forms or tables from dataobject metadata
     /// </summary>
-    public sealed class DisplayAttribute : Attribute
-    {
+    public sealed class DisplayAttribute : Attribute {
         public String Name;
         public bool CanFilterBy;
         public int Order;

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace System {
     /// <summary>
@@ -15,7 +14,7 @@ namespace System {
 
         public ForbiddenAccessException(string message, Exception innerException) : base(403, message, innerException) {
         }
-        
+
         protected ForbiddenAccessException(SerializationInfo info, StreamingContext context) : base(403, info, context) {
         }
     }

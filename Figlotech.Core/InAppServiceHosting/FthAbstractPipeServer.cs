@@ -1,24 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.IO;
+﻿using Figlotech.Extensions;
 using System.IO.Pipes;
-using System.Linq;
-using System.Net;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using Figlotech.Extensions;
 
-namespace Figlotech.Core.InAppServiceHosting
-{
-    public abstract class FthAbstractPipeServer
-    {
+namespace Figlotech.Core.InAppServiceHosting {
+    public abstract class FthAbstractPipeServer {
 
         NamedPipeServerStream server;
         Thread serverThread;
         public string pipeName { get; private set; }
-        CancellationToken cancellationToken;
+        readonly CancellationToken cancellationToken;
 
         public FthAbstractPipeServer(string pipeName) {
             this.pipeName = pipeName;

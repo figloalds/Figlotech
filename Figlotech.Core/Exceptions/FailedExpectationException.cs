@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace System {
     /// <summary>
@@ -15,7 +14,7 @@ namespace System {
 
         public FailedExpectationException(string message, Exception innerException) : base(417, message, innerException) {
         }
-        
+
         protected FailedExpectationException(SerializationInfo info, StreamingContext context) : base(417, info, context) {
         }
     }

@@ -1,15 +1,12 @@
-﻿using Figlotech.Core.Helpers;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
 
-namespace Figlotech.Core
-{
-    public static class ValuePathReader
-    {
-        static SelfInitializerDictionary<Type, LenientDictionary<string, PropertyInfo>> PropertyCache =
+namespace Figlotech.Core {
+    public static class ValuePathReader {
+        static readonly SelfInitializerDictionary<Type, LenientDictionary<string, PropertyInfo>> PropertyCache =
             new SelfInitializerDictionary<Type, LenientDictionary<string, PropertyInfo>>(
                 t => {
                     return (LenientDictionary<string, PropertyInfo>)t
@@ -17,28 +14,28 @@ namespace Figlotech.Core
                         .ToDictionary(p => p.Name, p => p);
                 }
             );
-        static SelfInitializerDictionary<Type, MethodInfo> SquareMethodsStringCache =
+        static readonly SelfInitializerDictionary<Type, MethodInfo> SquareMethodsStringCache =
             new SelfInitializerDictionary<Type, MethodInfo>(
                 t => {
                     return t
                         .GetMethods()
                         .FirstOrDefault(
-                            x => x.Name == "get_Item" && 
-                                x.GetParameters().Length == 1 && 
+                            x => x.Name == "get_Item" &&
+                                x.GetParameters().Length == 1 &&
                                 x.GetParameters()[0].ParameterType == typeof(String)
                             );
                 }
             ) {
                 AllowNullValueCaching = true
             };
-        static SelfInitializerDictionary<Type, MethodInfo> SquareMethodsIntCache =
+        static readonly SelfInitializerDictionary<Type, MethodInfo> SquareMethodsIntCache =
             new SelfInitializerDictionary<Type, MethodInfo>(
                 t => {
                     return t
                         .GetMethods()
                         .FirstOrDefault(
-                            x => x.Name == "get_Item" && 
-                                x.GetParameters().Length == 1 && 
+                            x => x.Name == "get_Item" &&
+                                x.GetParameters().Length == 1 &&
                                 x.GetParameters()[0].ParameterType == typeof(Int32)
                             );
                 }
@@ -99,8 +96,7 @@ namespace Figlotech.Core
                                 return null;
                             }
                         }
-                    }
-                    catch (TargetInvocationException) {
+                    } catch (TargetInvocationException) {
                         return null;
                     } catch (IndexOutOfRangeException) {
                         return null;

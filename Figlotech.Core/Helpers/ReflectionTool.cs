@@ -1,5 +1,4 @@
 using Figlotech.Core.Extensions;
-using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,7 +10,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Helpers {
     public static class BadassReflectionExtensions {
@@ -51,7 +49,7 @@ namespace Figlotech.Core.Helpers {
     }
 
     public sealed class ReflectionTool {
-        
+
         private static LenientDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new LenientDictionary<Type, MemberInfo[]>();
 
         public static bool StrictMode { get; set; } = false;
@@ -69,9 +67,9 @@ namespace Figlotech.Core.Helpers {
             }
         }
 
-        static ConcurrentDictionary<(Type, Type), object> AttributedMembersCache = new ConcurrentDictionary<(Type, Type), object>();
+        static readonly ConcurrentDictionary<(Type, Type), object> AttributedMembersCache = new ConcurrentDictionary<(Type, Type), object>();
         public static (MemberInfo Member, TAttribute Attribute)[] GetAttributedMemberValues<TAttribute>(Type t) where TAttribute : Attribute {
-            return AttributedMembersCache.GetOrAdd((t, typeof(TAttribute)), 
+            return AttributedMembersCache.GetOrAdd((t, typeof(TAttribute)),
                 _ => InitAttributedMembersCache<TAttribute>(t)) as (MemberInfo, TAttribute)[];
         }
 
@@ -134,17 +132,17 @@ namespace Figlotech.Core.Helpers {
                 (t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType));
         }
         public static Type? TypeAsDerivingFromGeneric(Type t, Type ancestorType) {
-            if(t == typeof(Object)) {
+            if (t == typeof(Object)) {
                 return null;
             }
             return (t != null && t != typeof(Object)) &&
                 (
                     t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType
-                    
+
                 ) ? t : TypeAsDerivingFromGeneric(t.BaseType, ancestorType);
         }
 
-        private static readonly ConcurrentDictionary<(Type t, Type ancestor), bool> TypeDerivesFromGenericResponseCache = new ConcurrentDictionary<(Type t, Type ancestor), bool>(); 
+        private static readonly ConcurrentDictionary<(Type t, Type ancestor), bool> TypeDerivesFromGenericResponseCache = new ConcurrentDictionary<(Type t, Type ancestor), bool>();
         public static bool TypeDerivesFromGeneric(Type t, Type ancestorType) {
             return TypeDerivesFromGenericResponseCache.GetOrAdd((t, ancestorType), (tup) => {
                 return
@@ -175,7 +173,7 @@ namespace Figlotech.Core.Helpers {
             foreach (var a in methods) {
                 try {
                     return a.MakeGenericMethod(type).Invoke(input, args);
-                } catch (Exception x) {
+                } catch (Exception) {
                     if (Debugger.IsAttached) {
                         Debugger.Break();
                     }
@@ -195,29 +193,29 @@ namespace Figlotech.Core.Helpers {
             return list.GetType().GetGenericArguments()[0];
         }
 
-        private static SelfInitializerDictionary<Type, MethodInfo> ListEnumeratorCache = new SelfInitializerDictionary<Type, MethodInfo>(
+        private static readonly SelfInitializerDictionary<Type, MethodInfo> ListEnumeratorCache = new SelfInitializerDictionary<Type, MethodInfo>(
             t => t.GetMethod("GetEnumerator")
         );
-        private static SelfInitializerDictionary<Type, MethodInfo> EnumeratorMoveNextCache = new SelfInitializerDictionary<Type, MethodInfo>(
+        private static readonly SelfInitializerDictionary<Type, MethodInfo> EnumeratorMoveNextCache = new SelfInitializerDictionary<Type, MethodInfo>(
             t => t.GetMethod("MoveNext")
         );
-        private static SelfInitializerDictionary<Type, PropertyInfo> EnumeratorPropCurrentCache = new SelfInitializerDictionary<Type, PropertyInfo>(
+        private static readonly SelfInitializerDictionary<Type, PropertyInfo> EnumeratorPropCurrentCache = new SelfInitializerDictionary<Type, PropertyInfo>(
             t => t.GetProperty("Current")
         );
 
         public static IEnumerable<object> EnumerateList(object list) {
-            if(list == null) {
+            if (list == null) {
                 yield break;
             }
             var enumerator = ListEnumeratorCache[list.GetType()].Invoke(list, Array.Empty<object>());
             var enumeratorType = enumerator.GetType();
             var moveNext = EnumeratorMoveNextCache[enumeratorType];
-            while ((bool) moveNext.Invoke(enumerator, Array.Empty<object>())) {
+            while ((bool)moveNext.Invoke(enumerator, Array.Empty<object>())) {
                 yield return EnumeratorPropCurrentCache[enumeratorType];
             }
         }
 
-        static ConcurrentDictionary<(MemberInfo, Type), Attribute[]> MemberAttributesByTypeCache = new ConcurrentDictionary<(MemberInfo, Type), Attribute[]>();
+        static readonly ConcurrentDictionary<(MemberInfo, Type), Attribute[]> MemberAttributesByTypeCache = new ConcurrentDictionary<(MemberInfo, Type), Attribute[]>();
         public static T GetAttributeFrom<T>(MemberInfo member) where T : Attribute {
             return MemberAttributesByTypeCache.GetOrAddWithLocking((member, typeof(T)), (k) => {
                 return member.GetCustomAttributes<T>().ToArray();
@@ -312,7 +310,7 @@ namespace Figlotech.Core.Helpers {
                 if (pi.GetIndexParameters().Length == 0) {
                     try {
                         return pi.GetValue(target);
-                    } catch (Exception x) {
+                    } catch (Exception) {
                         return null;
                     }
                 } else {
@@ -469,7 +467,7 @@ namespace Figlotech.Core.Helpers {
         }
 
 
-        static SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>> CastMethods = new SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>>(
+        static readonly SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>> CastMethods = new SelfInitializerDictionary<Type, LenientDictionary<Type, MethodInfo>>(
             fieldType => {
                 var retv = new LenientDictionary<Type, MethodInfo>();
 
@@ -560,8 +558,7 @@ namespace Figlotech.Core.Helpers {
                 return targetType;
 
             // User-defined conversion from a provider type?
-            return _bestSourceTypeCache.GetOrAdd(targetType, t =>
-            {
+            return _bestSourceTypeCache.GetOrAdd(targetType, t => {
                 // Scan candidates; if an implicit/explicit operator exists from candidate -> t, pick it.
                 foreach (var cand in _dbSourceCandidates) {
                     if (TryGetUserDefinedConversion(cand, t, out _))
@@ -586,8 +583,7 @@ namespace Figlotech.Core.Helpers {
             var destUnderlying = Nullable.GetUnderlyingType(destType);
             var effectiveDest = destUnderlying ?? destType;
 
-            return _converterCache.GetOrAdd((srcType, effectiveDest), key =>
-            {
+            return _converterCache.GetOrAdd((srcType, effectiveDest), key => {
                 var (src, dest) = key;
                 return BuildStrongConverter(src, dest);
             });
@@ -632,7 +628,7 @@ namespace Figlotech.Core.Helpers {
 
             return null;
         }
-        private static Expression BuildConversionBody(Type src, Type dest, Expression p) { 
+        private static Expression BuildConversionBody(Type src, Type dest, Expression p) {
             // Se src for object, construa uma cadeia de conversão em tempo de execução
             if (src == typeof(object)) {
                 return BuildObjectRuntimeAwareConversion(p, dest);
@@ -672,7 +668,7 @@ namespace Figlotech.Core.Helpers {
             }
 
             // Atribuível (referência ou boxing)
-            if (dest.IsAssignableFrom(src)) 
+            if (dest.IsAssignableFrom(src))
                 return p;
 
             // >>> CORREÇÃO: conversão definida pelo usuário
@@ -739,7 +735,7 @@ namespace Figlotech.Core.Helpers {
                     var body = BuildConversionBody(c, dest, asType);
                     chain = chain == null ? (Expression)Expression.Condition(test, body, Expression.Default(dest))
                                           : (Expression)Expression.Condition(test, body, chain);
-                } catch(Exception x) {
+                } catch (Exception) {
                     // ignore non-sensical conversions
                 }
             }
@@ -821,7 +817,7 @@ namespace Figlotech.Core.Helpers {
 
         // OPTIMIZED: Fast path converters - pre-built and cached to avoid DynamicInvoke
         private static readonly ConcurrentDictionary<(Type Source, Type Target), Delegate> _typedConverterCache = new();
-        
+
         /// <summary>
         /// Gets or creates a strongly-typed converter Func<TSource, TTarget> for the given types.
         /// This avoids boxing and DynamicInvoke overhead.
@@ -829,7 +825,7 @@ namespace Figlotech.Core.Helpers {
         private static Delegate GetOrCreateTypedConverter(Type sourceType, Type targetType) {
             return _typedConverterCache.GetOrAdd((sourceType, targetType), key => {
                 var (src, dest) = key;
-                
+
                 // Handle ValueBox<T> wrapper - unwrap to get inner type
                 Type effectiveDest = dest;
                 bool isValueBox = false;
@@ -837,20 +833,20 @@ namespace Figlotech.Core.Helpers {
                     effectiveDest = dest.GetGenericArguments()[0];
                     isValueBox = true;
                 }
-                
+
                 // Handle nullable - check if effectiveDest is nullable
                 var underlyingDest = Nullable.GetUnderlyingType(effectiveDest);
                 bool isNullable = underlyingDest != null;
                 if (!isNullable) {
                     underlyingDest = effectiveDest;
                 }
-                
+
                 // Build Func<src, dest>
                 var funcType = typeof(Func<,>).MakeGenericType(src, dest);
                 var p = Expression.Parameter(src, "v");
-                
+
                 Expression body;
-                
+
                 // Fast path: direct assignment when types match exactly
                 if (src == dest && !isValueBox) {
                     body = p;
@@ -872,7 +868,7 @@ namespace Figlotech.Core.Helpers {
                     } else {
                         result = enumVal;
                     }
-                    
+
                     if (isValueBox) {
                         body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
                     } else {
@@ -889,7 +885,7 @@ namespace Figlotech.Core.Helpers {
                     } else {
                         result = boolVal;
                     }
-                    
+
                     if (isValueBox) {
                         body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
                     } else {
@@ -907,7 +903,7 @@ namespace Figlotech.Core.Helpers {
                     } else {
                         result = dtVal;
                     }
-                    
+
                     if (isValueBox) {
                         body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
                     } else {
@@ -924,7 +920,7 @@ namespace Figlotech.Core.Helpers {
                     } else {
                         result = converted;
                     }
-                    
+
                     if (isValueBox) {
                         body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
                     } else {
@@ -941,19 +937,19 @@ namespace Figlotech.Core.Helpers {
                     } else {
                         result = innerBody;
                     }
-                    
+
                     if (isValueBox) {
                         body = Expression.New(dest.GetConstructor(new[] { effectiveDest }), result);
                     } else {
                         body = result;
                     }
                 }
-                
+
                 var lambda = Expression.Lambda(funcType, body, p);
                 return lambda.Compile();
             });
         }
-        
+
         private static bool IsNumeric(Type t) {
             return t == typeof(byte) || t == typeof(sbyte) ||
                    t == typeof(short) || t == typeof(ushort) ||
@@ -1081,8 +1077,8 @@ namespace Figlotech.Core.Helpers {
             return new[] { tryCatch };
         }
 
-        static ConcurrentDictionary<MemberInfo, Action<object, object>?> _setterMethodCache = new ConcurrentDictionary<MemberInfo, Action<object, object>?>();
-        static ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>> _setterConversionCache = new ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>>();
+        static readonly ConcurrentDictionary<MemberInfo, Action<object, object>?> _setterMethodCache = new ConcurrentDictionary<MemberInfo, Action<object, object>?>();
+        static readonly ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>> _setterConversionCache = new ConcurrentDictionary<(MemberInfo, Type?), Action<object, object>>();
         static void TvDoNothing(object t, object v) { }
 
         public static void SetMemberValue(MemberInfo member, Object target, Object value) {
@@ -1207,7 +1203,7 @@ namespace Figlotech.Core.Helpers {
                             value = Convert.ChangeType(value, type);
                             _setMemberValueInternal(member, target, value);
                             return;
-                        } catch (Exception ex) {
+                        } catch (Exception) {
                             if (StrictMode) {
                                 if (Debugger.IsAttached) {
                                     Debugger.Break();

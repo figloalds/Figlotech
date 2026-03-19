@@ -1,6 +1,4 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.BusinessModel;
-using Figlotech.Core.Helpers;
+﻿using Figlotech.Core.Helpers;
 using System;
 using System.Linq;
 using System.Reflection;
@@ -13,7 +11,7 @@ namespace Figlotech.Core.Interfaces {
         public static bool WasCreatedLocally(this ILegacyDataObject o) => o.CreatedBy == localInstanceId;
         public static bool WasAlteredLocally(this ILegacyDataObject o) => o.AlteredBy == localInstanceId;
 
-        static SelfInitializerDictionary<Type, MemberInfo[]> membersList = new SelfInitializerDictionary<Type, MemberInfo[]>(
+        static readonly SelfInitializerDictionary<Type, MemberInfo[]> membersList = new SelfInitializerDictionary<Type, MemberInfo[]>(
             (t) => ReflectionTool.FieldsAndPropertiesOf(t).Where(f => f.Name != "PersistedHash").ToArray()
         );
         public static int SpFthComputeDataFieldsHash(this ILegacyDataObject self) {

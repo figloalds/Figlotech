@@ -1,22 +1,15 @@
 ﻿using Figlotech.Core.Autokryptex.EncryptionMethods;
-using Figlotech.Core.Autokryptex.EncryptMethods;
-using Figlotech.Core.Autokryptex.EncryptMethods.Legacy;
-using Figlotech.Core.Autokryptex.Legacy;
 using Figlotech.Core.FileAcessAbstractions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.Autokryptex
-{
-    public sealed class SafeDataPayload
-    {
+namespace Figlotech.Core.Autokryptex {
+    public sealed class SafeDataPayload {
         public string Type { get; set; }
         public byte[] Hash { get; set; }
         public byte[] Data { get; set; }
@@ -24,8 +17,7 @@ namespace Figlotech.Core.Autokryptex
         [JsonIgnore]
         internal string RID { get; set; }
     }
-    public sealed class SafeObjectStorage
-    {
+    public sealed class SafeObjectStorage {
         IFileSystem fileSystem { get; set; }
         IEncryptionMethod dataEncryptor { get; set; }
         IEncryptionMethod fileEncryptor { get; set; }
@@ -67,22 +59,22 @@ namespace Figlotech.Core.Autokryptex
                 cachedRids = Cache.Select(c => c.RID).ToList();
             var newList = new List<SafeDataPayload>();
             var files = fileSystem.GetFilesIn("");
-            foreach(var rid in files) {
+            foreach (var rid in files) {
                 if (cachedRids.Contains(rid)) {
                     return;
                 }
                 var tries = 3;
-                while(tries-- > 0) {
+                while (tries-- > 0) {
                     try {
                         _cachePayload(await _getPayloadFromFileAsync(rid).ConfigureAwait(false));
                         break;
-                    } catch(Exception x) {
+                    } catch (Exception) {
                         try {
                             Fi.Tech.FireAndForget(async () => {
                                 await fileSystem.DeleteAsync(rid).ConfigureAwait(false);
                             });
-                        } catch(Exception ex) { 
-                        
+                        } catch (Exception) {
+
                         }
                     }
                 }
@@ -168,8 +160,8 @@ namespace Figlotech.Core.Autokryptex
             try {
                 List<string> cachedRids;
                 lock (Cache)
-                    lock(DeletionQueue)
-                        cachedRids = Cache.Select(c => c.RID).Where(x=> !DeletionQueue.Contains(x)).ToList();
+                    lock (DeletionQueue)
+                        cachedRids = Cache.Select(c => c.RID).Where(x => !DeletionQueue.Contains(x)).ToList();
                 var newList = new List<SafeDataPayload>();
                 var files = fileSystem.GetFilesIn("");
                 foreach (var rid in files) {
@@ -177,8 +169,8 @@ namespace Figlotech.Core.Autokryptex
                         continue;
                     }
                     bool shouldProcess = false;
-                    lock (DeletionQueue) 
-                        if(!DeletionQueue.Contains(rid)) {
+                    lock (DeletionQueue)
+                        if (!DeletionQueue.Contains(rid)) {
                             shouldProcess = true;
                         }
                     if (shouldProcess) {

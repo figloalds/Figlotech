@@ -3,7 +3,6 @@ using Figlotech.Core.FileAcessAbstractions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Figlotech.BDados.CustomForms {
     public sealed class CustomForm {
@@ -27,7 +26,7 @@ namespace Figlotech.BDados.CustomForms {
                 CustomForm c = JsonConvert.DeserializeObject<CustomForm>(RawJson);
 
                 return c;
-            } catch(Exception x) {
+            } catch (Exception x) {
                 throw new CustomFormsException($"Custom Form was in an invalid format: {x.Message}");
             }
 

@@ -12,10 +12,6 @@
 **/
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
@@ -41,7 +37,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public string GenerationExpression { get; set; }
         // --
 
-        public string TABLE_NAME { get => Table; set => Table=value; }
+        public string TABLE_NAME { get => Table; set => Table = value; }
         public string COLUMN_NAME { get => Name; set => Name = value; }
         public object COLUMN_DEFAULT { get => DefaultValue; set => DefaultValue = value; }
         public string IS_NULLABLE { get => AllowNull ? "YES" : "NO"; set => AllowNull = value?.ToLower() == "yes"; }
@@ -54,8 +50,7 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public string GENERATION_EXPRESSION { get => GenerationExpression; set => GenerationExpression = value; }
         public bool Index { get; set; }
 
-        public FieldAttribute(string tipo, string opcoes)
-        {
+        public FieldAttribute(string tipo, string opcoes) {
             Type = tipo;
             Options = opcoes;
         }

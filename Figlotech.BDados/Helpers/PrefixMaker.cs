@@ -1,18 +1,13 @@
-﻿using Figlotech.BDados;
-using Figlotech.Core;
-using System;
+﻿using Figlotech.Core;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
     public sealed class PrefixMaker {
 
         int seq = 0;
-        Dictionary<string, string> dict = new Dictionary<string, string>();
+        readonly Dictionary<string, string> dict = new Dictionary<string, string>();
 
-        Dictionary<string, (string parent, string child, string key)> revDict = new Dictionary<string, (string parent, string child, string key)>();
+        readonly Dictionary<string, (string parent, string child, string key)> revDict = new Dictionary<string, (string parent, string child, string key)>();
 
         public string GetNewAliasFor(string parent, string child, string pkey) {
             var k = $"{parent}_{child}_{pkey}".ToLower();

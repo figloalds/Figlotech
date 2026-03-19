@@ -1,42 +1,32 @@
-﻿using Figlotech.Core;
-using Figlotech.Core.FileAcessAbstractions;
-using Figlotech.Core.Helpers;
+﻿using Figlotech.Core.FileAcessAbstractions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Figlotech.Core.InAppServiceHosting
-{
+namespace Figlotech.Core.InAppServiceHosting {
 
-    public interface IApiHandler
-    {
+    public interface IApiHandler {
         bool CanHandleApi(string method, string uri);
 
         void HandleRequest(string reqUri, Dictionary<string, string> query, Dictionary<string, string> reqHeaders, byte[] bodyBytes, Stream stream);
     }
 
-    public abstract class ApiHandler : IApiHandler
-    {
+    public abstract class ApiHandler : IApiHandler {
         public abstract bool CanHandleApi(string method, string uri);
         public abstract void HandleRequest(string reqUri, Dictionary<string, string> query, Dictionary<string, string> reqHeaders, byte[] bodyBytes, Stream stream);
 
     }
 
-    public sealed class GenericInlineHandler : ApiHandler
-    {
+    public sealed class GenericInlineHandler : ApiHandler {
         Func<string, string, bool> CanHandle { get; set; }
-        Action<string, Dictionary<string, string> , Dictionary<string, string>, byte[], Stream> DoHandle { get; set; }
+        Action<string, Dictionary<string, string>, Dictionary<string, string>, byte[], Stream> DoHandle { get; set; }
 
         public GenericInlineHandler(Func<string, string, bool> canHandle, Action<string, Dictionary<string, string>, Dictionary<string, string>, byte[], Stream> doHandle) {
             this.CanHandle = canHandle;
@@ -53,8 +43,7 @@ namespace Figlotech.Core.InAppServiceHosting
     }
 
 
-    public static class SelfHostCacheService
-    {
+    public static class SelfHostCacheService {
         public static LenientDictionary<string, object> DataCache = new LenientDictionary<string, object>();
 
         public static void PutCache<T>(string label, T obj) {
@@ -77,8 +66,7 @@ namespace Figlotech.Core.InAppServiceHosting
 
     }
 
-    public sealed class SelfHost
-    {
+    public sealed class SelfHost {
 
         public static void SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {
             writer.WriteLine($"Access-Control-Allow-Origin: *");
@@ -111,23 +99,23 @@ namespace Figlotech.Core.InAppServiceHosting
             SendJson(200, "OK", stream, obj);
         }
 
-        WorkQueuer work = new WorkQueuer("EmbededRequestHandler", -1, true) {
+        readonly WorkQueuer work = new WorkQueuer("EmbededRequestHandler", -1, true) {
             MaxParallelTasks = 16
         };
 
-        TcpListener listener;
-        bool started;
+        readonly TcpListener listener;
+        readonly bool started;
         bool running;
         Thread serverThread;
-        int Port;
-        IPAddress Ip;
+        readonly int Port;
+        readonly IPAddress Ip;
 
         public SelfHost(IPAddress Ip, int Port) {
             this.Ip = Ip;
             this.Port = Port;
         }
 
-        SelfInitializerDictionary<string, byte[]> AppFiles = new SelfInitializerDictionary<string, byte[]>(
+        readonly SelfInitializerDictionary<string, byte[]> AppFiles = new SelfInitializerDictionary<string, byte[]>(
             key => {
                 return null;
             }
@@ -174,7 +162,7 @@ namespace Figlotech.Core.InAppServiceHosting
             ServicePointManager.MaxServicePoints = Int32.MaxValue;
             ServicePointManager.ReusePort = true;
             ServicePointManager.UseNagleAlgorithm = false;
-            
+
             serverThread = Fi.Tech.SafeCreateThread((Action)(() => {
                 running = true;
                 var listener = new TcpListener(Ip, Port);
@@ -236,7 +224,7 @@ namespace Figlotech.Core.InAppServiceHosting
                                             Console.WriteLine($"REQUEST: {method} {uri}");
 
 #if DEBUG
-                                            if(method == "OPTIONS") {
+                                            if (method == "OPTIONS") {
                                                 using (var writer = new StreamWriter(stream, Fi.StandardEncoding, 8196, true)) {
                                                     writer.WriteLine($"HTTP/1.1 200 OK");
                                                     writer.WriteLine($"Access-Control-Allow-Origin: *");
@@ -319,7 +307,7 @@ namespace Figlotech.Core.InAppServiceHosting
             serverThread.Start();
         }
 
-        IFileSystem RequestLog;
+        readonly IFileSystem RequestLog;
 
     }
 }

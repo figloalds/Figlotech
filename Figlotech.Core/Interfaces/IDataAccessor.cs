@@ -1,12 +1,8 @@
 ﻿using Figlotech.Core.Helpers;
-using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Interfaces {
     public enum OrderingType {
@@ -138,8 +134,7 @@ namespace Figlotech.Core.Interfaces {
             => new LoadAllArgs<T>().WithContext(ContextObject);
     }
 
-    public interface IDataAccessor
-    {
+    public interface IDataAccessor {
         ITextToFileLogger Logger { get; set; }
 
         T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new();

@@ -9,22 +9,18 @@
  * 
 **/
 
+using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Helpers;
+using Figlotech.Core;
+using Figlotech.Core.Helpers;
+using Figlotech.Core.Interfaces;
+using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core.Interfaces;
-using System.Reflection;
 using System.Linq.Expressions;
-using Figlotech.BDados.Helpers;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using System.Text.RegularExpressions;
-using Figlotech.BDados.Builders;
-using Figlotech.Core.Helpers;
-using Figlotech.Core;
-using Figlotech.Data;
+using System.Reflection;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqliteQueryGenerator : IQueryGenerator {
@@ -339,8 +335,8 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (orderingMember != null) {
                 Query.Append($"ORDER BY {orderingMember.Name} {(ordering == OrderingType.Asc ? "ASC" : "DESC")}");
             }
-            if(limit != null || skip != null) {
-                Query.Append($"LIMIT {(skip != null ? $"{skip},": "")} {limit??Int32.MaxValue}");
+            if (limit != null || skip != null) {
+                Query.Append($"LIMIT {(skip != null ? $"{skip}," : "")} {limit ?? Int32.MaxValue}");
             }
             Query.Append(";");
             return Query;

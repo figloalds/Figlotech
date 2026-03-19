@@ -1,11 +1,8 @@
 ﻿using Figlotech.Core.FileAcessAbstractions;
-using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -13,15 +10,15 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
     public sealed class Logger : ITextToFileLogger {
         public static int gid = 0;
-        private int myid = ++gid;
+        private readonly int myid = ++gid;
 
-        private int writec = 0;
+        private readonly int writec = 0;
 
         public bool Enabled { get; set; } = true;
         public IFileSystem FileAccessor { get; set; }
 
         public List<String> logLinesCache = new List<String>();
-        private object BDLogLock = new Object();
+        private readonly object BDLogLock = new Object();
 
         public bool EnableConsoleLogging { get; set; } = true;
 
@@ -45,12 +42,12 @@ namespace Figlotech.Core {
         }
 
 
-        int maxBounce = 5;
+        readonly int maxBounce = 5;
 
         public void WriteLog(String log) {
             if (!Enabled)
                 return;
-            if(log == null) {
+            if (log == null) {
                 return;
             }
             //Debug.WriteLine(log);
@@ -67,13 +64,13 @@ namespace Figlotech.Core {
                     logLinesCache.Clear();
                 }
                 var errTreshold = 10;
-                while(errTreshold --> 0) {
+                while (errTreshold-- > 0) {
                     try {
                         FileAccessor.AppendAllLines(
                             Filename.Value, Lines
                         );
                         break;
-                    } catch (Exception x) {
+                    } catch (Exception) {
                         await Task.Delay(1000);
                     }
                 }
@@ -93,22 +90,22 @@ namespace Figlotech.Core {
         }
 
         private void writeExInternal(string message, Exception x, ValueStringBuilder sw, bool isRoot) {
-            if(isRoot) {
+            if (isRoot) {
                 sw.AppendLine($"-> {{");
                 sw.AppendLine($" -- [{message}] -- {{");
             }
             sw.AppendLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
             sw.AppendLine(x.StackTrace);
             sw.AppendLine(new String('-', 20));
-            if(x.InnerException != null) {
+            if (x.InnerException != null) {
                 writeExInternal(message, x.InnerException, sw, false);
             }
-            if(x is AggregateException ag) {
-                foreach(var agex in ag.InnerExceptions) {
+            if (x is AggregateException ag) {
+                foreach (var agex in ag.InnerExceptions) {
                     writeExInternal(message, agex, sw, false);
                 }
             }
-            if(isRoot) {
+            if (isRoot) {
                 sw.AppendLine($"}} // {message} ");
                 WriteLog(sw.ToString());
             }

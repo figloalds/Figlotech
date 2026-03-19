@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-/***
+﻿/***
  * 
  * CrossCrypt.cs
  * This class provides a basic enigma encode algorithm.
@@ -13,10 +7,10 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.Autokryptex {
     public sealed class LegacyEnigmaEncryptor : IEncryptionMethod {
-        private int enigmaPin;
-        private static byte[] originalByteMap = new byte[byte.MaxValue + 1];
+        private readonly int enigmaPin;
+        private static readonly byte[] originalByteMap = new byte[byte.MaxValue + 1];
         LegacyFiRandom rng;
-        int instancePin;
+        readonly int instancePin;
         public LegacyEnigmaEncryptor(int pin) {
             for (int i = 0; i < originalByteMap.Length; i++) {
                 originalByteMap[i] = (byte)i;

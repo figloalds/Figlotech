@@ -1,13 +1,9 @@
-﻿using Figlotech.Core.Interfaces;
-using Microsoft.WindowsAzure.Storage;
+﻿using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
@@ -29,7 +25,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
     public sealed class AzureBlobsFileAccessor : IFileSystem {
 
         private static int gid = 0;
-        private static int myid = ++gid;
+        private static readonly int myid = ++gid;
 
         public bool IsCaseSensitive => false;
 
@@ -48,7 +44,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             CloudBlobClient cloudBlobClient;
 
             IsReadOnly = AccountKey == null;
-            
+
             if (!IsReadOnly) {
                 string connectionString =
                     (host != null ?
@@ -76,7 +72,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void SetBaseDirectory(string path) {
             BaseDirectory = path.Replace(Path.DirectorySeparatorChar, '/');
-            if(!BaseDirectory.EndsWith("/")) {
+            if (!BaseDirectory.EndsWith("/")) {
                 BaseDirectory += '/';
             }
         }
@@ -96,7 +92,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             AbsMkDirs(dir);
         }
 
-        public IFileSystem Fork(string relative) {             
+        public IFileSystem Fork(string relative) {
             FixRelative(ref relative);
             var newAccessor = new AzureBlobsFileAccessor(AccountName, new BlobsCredentials { AccountKey = AccountKey }, ContainerName);
             newAccessor.SetBaseDirectory(BaseDirectory + relative.Replace(Path.DirectorySeparatorChar, '/'));
@@ -122,7 +118,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void RenDir(string relative, string newName) {
-            
+
         }
 
         public async Task RenameAsync(string relative, string newName) {
@@ -183,7 +179,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         execFunc(a);
                     } catch (Exception x) {
                         handler?.Invoke(a, x);
-                    };
+                    }
+                    ;
                 });
             } catch (StorageException) { } catch (Exception) { }
 
@@ -195,7 +192,8 @@ namespace Figlotech.Core.FileAcessAbstractions {
                         execFunc(a);
                     } catch (Exception x) {
                         handler?.Invoke(a, x);
-                    };
+                    }
+                    ;
                 }
             } catch (StorageException sex) {
                 Console.WriteLine(sex); // nice
@@ -234,7 +232,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public List<CloudBlockBlob> ListBlobs(string relative) {
             BlobContinuationToken bucet = new BlobContinuationToken();
             BlobResultSegment result;
-            if(relative.StartsWith("/")) {
+            if (relative.StartsWith("/")) {
                 relative = relative.Substring(1);
             }
             List<CloudBlockBlob> retv = new List<CloudBlockBlob>();
@@ -248,7 +246,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 numResults = blobResults.Count;
             } while (bucet != null);
 
-            return retv.Where(x=> x?.Name != null).ToList();
+            return retv.Where(x => x?.Name != null).ToList();
         }
 
         public IEnumerable<string> GetDirectoriesIn(String relative) {
@@ -260,10 +258,10 @@ namespace Figlotech.Core.FileAcessAbstractions {
             do {
                 result = directory.ListBlobsSegmentedAsync(bucet).Result;
                 bucet = result.ContinuationToken;
-                var folders = result.Results.Where(x=> x as CloudBlobDirectory != null);
-                foreach(var folder in result.Results) {
+                var folders = result.Results.Where(x => x as CloudBlobDirectory != null);
+                foreach (var folder in result.Results) {
                     var retv = folder.Uri.LocalPath.Replace($"/{this.ContainerName.ToLower()}", "").Replace(this.BaseDirectory, "").Substring(1);
-                    if(retv.EndsWith("/")) {
+                    if (retv.EndsWith("/")) {
                         retv = retv.Substring(0, retv.Length - 1);
                         yield return retv;
                     }
@@ -289,7 +287,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public void WriteAllText(String relative, String content) {
-            WriteAllTextAsync(relative,content).GetAwaiter().GetResult();
+            WriteAllTextAsync(relative, content).GetAwaiter().GetResult();
         }
 
         public byte[] ReadAllBytes(String relative) {
@@ -327,7 +325,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public void AppendAllLines(String relative, IEnumerable<string> content) {
             FixRelative(ref relative);
             var blob = BlobContainer.GetAppendBlobReference(relative);
-            if(!blob.ExistsAsync().Result) {
+            if (!blob.ExistsAsync().Result) {
                 blob.CreateOrReplaceAsync().GetAwaiter().GetResult();
             }
 
@@ -344,7 +342,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public async Task<Stream> OpenAsync(String relative, FileMode fileMode, FileAccess fileAccess) {
             FixRelative(ref relative);
             var blob = BlobContainer.GetAppendBlobReference(relative);
-            if(
+            if (
                 fileMode == FileMode.Append
                 || fileMode == FileMode.Create
                 || fileMode == FileMode.CreateNew) {

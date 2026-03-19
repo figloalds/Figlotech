@@ -1,13 +1,10 @@
-﻿using Figlotech.BDados.Builders;
-using Figlotech.Core;
-using Figlotech.Core.Interfaces;
+﻿using Figlotech.Core.Interfaces;
 using Figlotech.Data;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -146,7 +143,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public static async Task<List<T>> QueryAsync<T>(this IRdbmsDataAccessor self, IQueryBuilder query)
             where T : new() {
-            return await self.AccessAsync(async tsn=> {
+            return await self.AccessAsync(async tsn => {
                 return await self.QueryAsync<T>(tsn, query).ConfigureAwait(false);
             }, CancellationToken.None, null).ConfigureAwait(false);
         }
@@ -211,7 +208,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         public static async Task<List<T>> AggregateLoadAsync<T>(this IRdbmsDataAccessor self, Expression<Func<T, bool>> conditions = null, int? skip = null, int? limit = null, Expression<Func<T, object>> orderingMember = null, OrderingType ordering = OrderingType.Asc, MemberInfo GroupingMember = null, bool Linear = false)
            where T : ILegacyDataObject, new() {
-            return await self.AccessAsync(async transaction=> {
+            return await self.AccessAsync(async transaction => {
                 return await self.AggregateLoadAsync<T>(
                     transaction,
                     Core.Interfaces.LoadAll.Where<T>(conditions)

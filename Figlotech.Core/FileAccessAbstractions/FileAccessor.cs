@@ -1,19 +1,15 @@
-﻿using Figlotech.Core.Interfaces;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.FileAcessAbstractions {
     public sealed class FileAccessor : IFileSystem {
 
         private static int gid = 0;
-        private static int myid = ++gid;
+        private static readonly int myid = ++gid;
         private static readonly char S = Path.DirectorySeparatorChar;
 
         public bool IsCaseSensitive => !RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
@@ -47,7 +43,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private void absMkDirs(string dir) {
-            if(string.IsNullOrEmpty(dir)) {
+            if (string.IsNullOrEmpty(dir)) {
                 return;
             }
             FixRel(ref dir);
@@ -62,7 +58,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             try {
                 Directory.CreateDirectory(dir);
-            } catch (Exception x) {
+            } catch (Exception) {
                 //Fi.Tech.WriteLine(x.Message);
             }
         }
@@ -241,7 +237,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
-            if(!WorkingDirectory.EndsWith(Path.DirectorySeparatorChar.ToString())) {
+            if (!WorkingDirectory.EndsWith(Path.DirectorySeparatorChar.ToString())) {
                 WorkingDirectory += Path.DirectorySeparatorChar.ToString();
             }
             return new DirectoryInfo(WorkingDirectory).EnumerateFiles().Select(
@@ -363,7 +359,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return act.Invoke();
             }
         }
-        static FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
+        static readonly FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
         private void LockRegion(String wd, Action act) {
             using (FileLocks.Lock(wd).GetAwaiter().GetResult()) {
                 act?.Invoke();
@@ -402,7 +398,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
                 return false;
             }
-            if(await IsDirectoryAsync(relative).ConfigureAwait(false)) {
+            if (await IsDirectoryAsync(relative).ConfigureAwait(false)) {
                 Directory.Delete(WorkingDirectory);
             } else {
                 if (!File.Exists(WorkingDirectory)) {
@@ -417,11 +413,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public async Task<bool> IsDirectoryAsync(string relative) {
             FixRel(ref relative);
-            return await Task.Run(()=> Directory.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
+            return await Task.Run(() => Directory.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
         }
         public async Task<bool> IsFileAsync(string relative) {
             FixRel(ref relative);
-            return await Task.Run(()=> File.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
+            return await Task.Run(() => File.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
         }
 
         private string AssemblePath(params string[] segments) {
@@ -430,11 +426,11 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 .Where(s => !string.IsNullOrEmpty(s))
                 .ToArray();
             var retv = string.Join(S.ToString(), seg);
-            if(segments[0].StartsWith($"{S}")) {
-                retv = S + retv;   
+            if (segments[0].StartsWith($"{S}")) {
+                retv = S + retv;
             }
             retv = Path.GetFullPath(retv);
-            if(!retv.StartsWith(RootDirectory)) {
+            if (!retv.StartsWith(RootDirectory)) {
                 throw new BusinessValidationException("Relative path must be within the FileSystem's Root Directory");
             }
             return retv;
@@ -501,7 +497,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         public async Task<string> ReadAllTextAsync(string relative) {
-            if(!await ExistsAsync(relative).ConfigureAwait(false)) {
+            if (!await ExistsAsync(relative).ConfigureAwait(false)) {
                 return string.Empty;
             }
             using (var fstream = await OpenAsync(relative, FileMode.Open, FileAccess.Read).ConfigureAwait(false)) {

@@ -1,10 +1,8 @@
-﻿using Figlotech.Core;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace Figlotech.Core {
@@ -72,11 +70,11 @@ namespace Figlotech.Core {
 
     public sealed class DateFormatter : IDataFormatter {
         private readonly TimeZoneInfo _timeZone;
-        
+
         public DateFormatter(TimeZoneInfo timeZone = null) {
             _timeZone = timeZone;
         }
-        
+
         public string Name => "Date";
         public object Apply(object value, string[] args, CultureInfo culture) {
             if (!TemplatingHelpers.TryToDateTime(value, culture, out var dt)) return string.Empty;
@@ -93,11 +91,11 @@ namespace Figlotech.Core {
 
     public sealed class DateTimeFormatter : IDataFormatter {
         private readonly TimeZoneInfo _timeZone;
-        
+
         public DateTimeFormatter(TimeZoneInfo timeZone = null) {
             _timeZone = timeZone;
         }
-        
+
         public string Name => "DateTime";
         public object Apply(object value, string[] args, CultureInfo culture) {
             if (!TemplatingHelpers.TryToDateTime(value, culture, out var dt)) return string.Empty;
@@ -293,7 +291,7 @@ namespace Figlotech.Core {
 
             return sb.ToString();
         }
-        
+
         private void FindBalanced(ReadOnlySpan<char> tpl, int start, string opener, string closer, out ReadOnlySpan<char> inner, out int endAfter) {
             int oLen = opener.Length, cLen = closer.Length;
             int i = start + oLen, depth = 1;

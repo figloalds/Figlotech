@@ -1,24 +1,16 @@
 using Figlotech.Core.Autokryptex;
-using Figlotech.Core.Extensions;
 using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Helpers;
-using Figlotech.Core.Interfaces;
-using Figlotech.Extensions;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Pipelines;
-using System.IO.Pipes;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 using System.Numerics;
-using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -43,9 +35,9 @@ namespace Figlotech.Core {
         private MemoryStream CachedResponseBody { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
 
-        FiHttp Caller;
-        HttpRequestMessage RequestMessage;
-        List<IDisposable> Disposables = new List<IDisposable>();
+        readonly FiHttp Caller;
+        readonly HttpRequestMessage RequestMessage;
+        readonly List<IDisposable> Disposables = new List<IDisposable>();
         Stopwatch RequestStopwatch;
 
         public TimeSpan Elapsed => RequestStopwatch?.Elapsed ?? TimeSpan.Zero;
@@ -74,7 +66,7 @@ namespace Figlotech.Core {
                 await retv.Init(response).ConfigureAwait(false);
             } catch (WebException ex) {
                 await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
-            } catch (Exception ex) {
+            } catch (Exception) {
                 await retv.Init(null as HttpResponseMessage).ConfigureAwait(false);
             } finally {
                 retv.RequestStopwatch?.Stop();
@@ -105,7 +97,7 @@ namespace Figlotech.Core {
             }
         }
 
-        static JsonSerializerSettings LoggerSerializerSettings = new JsonSerializerSettings {
+        static readonly JsonSerializerSettings LoggerSerializerSettings = new JsonSerializerSettings {
             NullValueHandling = NullValueHandling.Ignore,
             Formatting = Formatting.Indented,
         };
@@ -215,7 +207,7 @@ namespace Figlotech.Core {
             try {
                 T obj = JsonConvert.DeserializeObject<T>(json, Caller.JsonSettings);
                 retv = obj;
-            } catch (Exception x) {
+            } catch (Exception) {
                 return default(T);
             }
             return retv;
@@ -331,7 +323,7 @@ namespace Figlotech.Core {
         }
 
         public string SyncKeyCodePassword { get; set; } = null;
-        IDictionary<string, string> headers = new Dictionary<string, string>();
+        readonly IDictionary<string, string> headers = new Dictionary<string, string>();
         public IWebProxy Proxy { get; set; } = null;
         public FiHttp(string urlPrefix = null) {
             this.UrlPrefix = urlPrefix;
@@ -343,7 +335,7 @@ namespace Figlotech.Core {
             }
         }
 
-        string[] reservedHeaders = new string[] {
+        readonly string[] reservedHeaders = new string[] {
             "Host",
             "Origin",
             "Connection",

@@ -6,7 +6,6 @@
 * August/2014
 * 
 **/
-using Figlotech.BDados.Builders;
 using Figlotech.Data;
 using System;
 

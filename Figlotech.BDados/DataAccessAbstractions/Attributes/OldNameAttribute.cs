@@ -12,10 +12,6 @@
 **/
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
@@ -23,12 +19,10 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// this can be useful for structure checkers to rename columns instead of creating new ones
     /// and transfer data over in the process avoiding data loss and extra management hassle.
     /// </summary>
-    public sealed class OldNameAttribute : Attribute
-    {
+    public sealed class OldNameAttribute : Attribute {
         public String Name { get; set; }
 
-        public OldNameAttribute(String name)
-        {
+        public OldNameAttribute(String name) {
             Name = name;
         }
     }

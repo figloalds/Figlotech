@@ -1,21 +1,16 @@
-﻿
-using Figlotech.Core.Extensions;
-using IronPython.Hosting;
+﻿using IronPython.Hosting;
 using Microsoft.Scripting.Hosting;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.Scripting
-{
-    public sealed class PythonEnvironment
-    {
-        ScriptEngine engine;
-        ScriptScope scope;
-        
+namespace Figlotech.Scripting {
+    public sealed class PythonEnvironment {
+        readonly ScriptEngine engine;
+        readonly ScriptScope scope;
+
         public PythonEnvironment(string[] references, string[] namespaces) {
             engine = Python.CreateEngine();
             scope = engine.CreateScope();
@@ -51,7 +46,7 @@ namespace Figlotech.Scripting
                 object result = source.Execute(scope);
             } catch (Exception x) {
                 handleException?.Invoke(x);
-                if(handleException == null) {
+                if (handleException == null) {
                     Console.Error.WriteLine($"Error Executing Script");
                     ExceptionOperations eo = engine.GetService<ExceptionOperations>();
                     string error = eo.FormatException(x);
@@ -105,7 +100,7 @@ namespace Figlotech.Scripting
 
         public void Execute(IEnumerable<string> cmd, Func<Exception, bool> handleException = null, bool stopOnError = true) {
             var e = cmd.GetEnumerator();
-            while(e.MoveNext()) {
+            while (e.MoveNext()) {
                 scope.RemoveVariable("clr");
                 var source = engine.CreateScriptSourceFromString(e.Current);
                 try {

@@ -1,5 +1,3 @@
-
-using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
@@ -153,9 +151,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 foreach (var att in field.GetCustomAttributes())
                     if (att is PrimaryKeyAttribute) {
                         options = " PRIMARY KEY";
-                        if(typeOfField != typeof(Guid) && typeOfField != typeof(string)) {
+                        if (typeOfField != typeof(Guid) && typeOfField != typeof(string)) {
                             // Use BIGSERIAL for long/Int64, SERIAL for int/Int32
-                            if(typeOfField == typeof(long) || typeOfField == typeof(Int64)) {
+                            if (typeOfField == typeof(long) || typeOfField == typeof(Int64)) {
                                 tipo = "BIGSERIAL";
                             } else {
                                 tipo = "SERIAL";
@@ -391,7 +389,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
-            Query.Append(String.Format($"FROM {type.Name} AS { alias }"));
+            Query.Append(String.Format($"FROM {type.Name} AS {alias}"));
             if (condicoes != null && !condicoes.IsEmpty) {
                 Query.Append("WHERE");
                 Query.Append(condicoes);
@@ -475,7 +473,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             }
             return Query;
         }
-        uint gvIdGen = 0;
+        readonly uint gvIdGen = 0;
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
             var type = tabelaInput.GetType();
             QueryBuilder sb = new QueryBuilder();
@@ -525,7 +523,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 Query.Append($"{members[i].Name}=(CASE ");
                 for (var v = 0; v < legacySet.Count; v++) {
                     var a = legacySet[v];
-                    if(i == 0) {
+                    if (i == 0) {
                         Query.Append($"WHEN {rid}=@_id{v} THEN @_mu{x++}", Convert.ChangeType(a.RID, ridFieldType), ReflectionTool.GetMemberValue(members[i], a));
                     } else {
                         Query.Append($"WHEN {rid}=@_id{v} THEN @_mu{x++}", ReflectionTool.GetMemberValue(members[i], a));
@@ -536,7 +534,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     Query.Append(",");
                 }
             }
-            
+
             Query.Append($"WHERE {rid} IN (")
                 .Append(Fi.Tech.ListRids(workingSet))
                 .Append(");");
@@ -755,7 +753,7 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
             if (legacySet.Count == 0) {
                 return Qb.Fmt("SELECT 1 as Id, 'no-rid' as RID WHERE FALSE");
             }
-            var type = legacySet.FirstOrDefault()?.GetType()??typeof(T);
+            var type = legacySet.FirstOrDefault()?.GetType() ?? typeof(T);
             var id = FiTechBDadosExtensions.IdColumnNameOf[type];
             var rid = FiTechBDadosExtensions.RidColumnNameOf[type];
             var ridType = ReflectionTool.GetTypeOf(ReflectionTool.FieldsAndPropertiesOf(type).FirstOrDefault(x => x.GetCustomAttribute<ReliableIdAttribute>() != null));

@@ -1,5 +1,3 @@
-using Figlotech.BDados.Builders;
-using Figlotech.Core;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;
 using System;

@@ -5,13 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public sealed class CacheableDataAccessor : IDataAccessor {
         private IDataAccessor DataAccessor { get; set; }
         bool CacheEverything { get; set; }
-        private SelfInitializerDictionary<Type, LenientDictionary<String, ILegacyDataObject>> Cache { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, ILegacyDataObject>>((type)=> new LenientDictionary<string, ILegacyDataObject>());
+        private SelfInitializerDictionary<Type, LenientDictionary<String, ILegacyDataObject>> Cache { get; set; } = new SelfInitializerDictionary<Type, LenientDictionary<string, ILegacyDataObject>>((type) => new LenientDictionary<string, ILegacyDataObject>());
         private List<Type> CacheableTypes { get; set; } = new List<Type>();
         public CacheableDataAccessor(IDataAccessor da, bool cacheEverything) {
             throw new Exception("THIS IS A WORK IN PROGRESS");
@@ -26,8 +25,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Type[] WorkingTypes { get => DataAccessor.WorkingTypes; set => DataAccessor.WorkingTypes = value; }
 
         public T ForceExist<T>(Func<T> Default, Conditions<T> cnd) where T : IDataObject, new() {
-            if(CacheEverything || CacheableTypes.Contains(typeof(T))) {
-                var retv = Cache[typeof(T)].Values.FirstOrDefault(e => (cnd.expression as Expression<Func<T, bool>>).Compile().Invoke((T) e));
+            if (CacheEverything || CacheableTypes.Contains(typeof(T))) {
+                var retv = Cache[typeof(T)].Values.FirstOrDefault(e => (cnd.expression as Expression<Func<T, bool>>).Compile().Invoke((T)e));
                 if (retv != null) {
                     return (T)retv;
                 }

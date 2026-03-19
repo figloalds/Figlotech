@@ -10,7 +10,7 @@ namespace MiniWhere {
     public static class WhereEngine {
         public static IEnumerable<T> Filter<T>(IEnumerable<T> items, string where) {
             var ast = new Parser(where).ParseExpression();
-            foreach(var item in items.Where(x => EvalBool(ast, x!, null))) { 
+            foreach (var item in items.Where(x => EvalBool(ast, x!, null))) {
                 yield return item;
             }
         }
@@ -46,7 +46,7 @@ namespace MiniWhere {
 
         private static bool EvalCollectionPredicate(CollectionPredicateExpr cp, object row, object? thisValue) {
             var collectionValue = ResolveValue(cp.Collection, row, thisValue);
-            
+
             if (collectionValue is null) {
                 // Null collection: ANY/EXISTS return false, ALL returns true (vacuous truth)
                 return cp.Kind == CollectionPredicateKind.All;
@@ -79,9 +79,7 @@ namespace MiniWhere {
         }
 
         private static bool EvalAll(IEnumerable collection, Expr predicate, object row) {
-            bool hasItems = false;
             foreach (var item in collection) {
-                hasItems = true;
                 if (item == null || !EvalBool(predicate, row, item)) {
                     return false;
                 }
@@ -134,7 +132,7 @@ namespace MiniWhere {
             var regex = "^" + Regex.Escape(pattern).Replace("%", ".*").Replace("_", ".") + "$";
             return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
         }
-        
+
         private static object? ResolveValue(ValueExpr v, object row, object? thisValue) {
             return v switch {
                 LiteralExpr lit => lit.Value,

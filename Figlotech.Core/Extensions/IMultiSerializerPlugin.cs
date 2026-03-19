@@ -1,12 +1,5 @@
 ﻿using Figlotech.Core.Autokryptex;
-using Figlotech.Core.FileAcessAbstractions;
-using Figlotech.Core.Helpers;
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.Core.Extensions {
     public sealed class FTHSerializableOptions {

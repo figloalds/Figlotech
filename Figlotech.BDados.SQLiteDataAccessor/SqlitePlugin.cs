@@ -1,13 +1,9 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.Core.Helpers;
 using Microsoft.Data.Sqlite;
 using System;
-using System.Data;
 using System.Collections.Generic;
-using Figlotech.Core.Helpers;
-using System.Linq;
-using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using System.Reflection;
-using Figlotech.Core;
+using System.Data;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqlitePlugin : IRdbmsPluginAdapter {
@@ -16,7 +12,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public SqlitePlugin() {
-            
+
         }
 
         public IQueryGenerator QueryGenerator { get; } = new SqliteQueryGenerator();
@@ -58,7 +54,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         static long idGen = 0;
-        long myId = ++idGen;
+        readonly long myId = ++idGen;
 
         public void SetConfiguration(IDictionary<string, object> settings) {
             Config = new SqlitePluginConfiguration();

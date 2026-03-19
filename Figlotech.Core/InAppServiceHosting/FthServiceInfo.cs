@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Figlotech.Core.InAppServiceHosting
-{
-    public sealed class FthServiceInfo
-    {
-        DateTime _started = DateTime.UtcNow;
-        IFthService service;
+namespace Figlotech.Core.InAppServiceHosting {
+    public sealed class FthServiceInfo {
+        readonly DateTime _started = DateTime.UtcNow;
+        readonly IFthService service;
 
         internal FthServiceInfo(IFthService service) {
             this.Name = service.GetType().Name;

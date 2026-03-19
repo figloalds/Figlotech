@@ -109,24 +109,24 @@ namespace MiniWhere {
         private Expr ParseCollectionPredicate() {
             string name = Expect(TokenKind.Identifier).Text;
             Expect(TokenKind.LParen);
-            
+
             // First argument: collection path (ValueExpr)
             var collection = ParseValue();
-            
+
             Expect(TokenKind.Comma);
-            
+
             // Second argument: predicate expression (full Expr, parsed recursively)
             var predicate = ParseOrInternal();
-            
+
             Expect(TokenKind.RParen);
-            
+
             var kind = name.ToUpperInvariant() switch {
                 "ANY" => CollectionPredicateKind.Any,
                 "ALL" => CollectionPredicateKind.All,
                 "EXISTS" => CollectionPredicateKind.Exists,
                 _ => throw new Exception($"Unknown collection predicate: {name}")
             };
-            
+
             return new CollectionPredicateExpr(kind, collection, predicate);
         }
 

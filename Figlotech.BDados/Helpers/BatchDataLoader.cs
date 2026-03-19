@@ -1,9 +1,6 @@
-﻿using Figlotech.BDados.DataAccessAbstractions;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.BDados.Helpers {
@@ -14,9 +11,9 @@ namespace Figlotech.BDados.Helpers {
             TContext context,
             [EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default
         ) {
-            while(hasMoreBatches(context)) {
+            while (hasMoreBatches(context)) {
                 cancellationToken.ThrowIfCancellationRequested();
-                await foreach(var item in batchLoader(context).WithCancellation(cancellationToken)) {
+                await foreach (var item in batchLoader(context).WithCancellation(cancellationToken)) {
                     yield return item;
                 }
             }

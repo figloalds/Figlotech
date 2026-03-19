@@ -1,10 +1,4 @@
-﻿
-
-
-using Figlotech.BDados.DataAccessAbstractions;
-using Figlotech.Core;
-using Figlotech.Core.BusinessModel;
-using Newtonsoft.Json;
+﻿using Figlotech.Core.BusinessModel;
 /**
 * Figlotech::Database::Entity::FieldAttribute
 * Fields marked with this attribute will be automatically assigned
@@ -15,29 +9,25 @@ using Newtonsoft.Json;
 * 
 **/
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This is an example of ValidationAttribute
     /// </summary>
-    public sealed class MaxLengthAttribute : ValidationAttribute
-    {
-        int MaxLength;
+    public sealed class MaxLengthAttribute : ValidationAttribute {
+        readonly int MaxLength;
         public MaxLengthAttribute(int value) {
             MaxLength = value;
         }
 
         public override ValidationErrors Validate(MemberInfo member, object value) {
             ValidationErrors retv = new ValidationErrors();
-            if(value is String str) {
+            if (value is String str) {
                 if (str.Length > MaxLength)
                     retv.Add(member.Name, $"{member.Name} exceeds the maximum of {MaxLength} characters");
-            };
+            }
+            ;
             return retv;
         }
     }

@@ -10,17 +10,12 @@
 
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
     /// <summary>
     /// This attribute could be AMAZING if C# allowed functions in attributes.
     /// </summary>
-    public sealed class NoUpdateIfAttribute : Attribute
-    {
+    public sealed class NoUpdateIfAttribute : Attribute {
         public Func<bool> Condition;
         public NoUpdateIfAttribute(Func<bool> condition) {
             Condition = condition;
