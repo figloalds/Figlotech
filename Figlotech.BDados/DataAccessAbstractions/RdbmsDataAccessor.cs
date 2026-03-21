@@ -1181,7 +1181,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 var retv = await functions.Invoke(transaction).ConfigureAwait(false);
                 if (retv is Task t) {
-                    t.GetAwaiter().GetResult();
+                    await t;
                 }
                 if (!transaction?.usingExternalBenchmarker ?? false) {
                     var total = transaction?.Benchmarker.FinalMark();
@@ -1386,7 +1386,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (func == null) return default(T);
 
             try {
-
                 await using (var transaction = await CreateNewTransactionAsync(cancellationToken, ilev).ConfigureAwait(false)) {
                     var b = transaction.Benchmarker;
                     try {
@@ -1441,7 +1440,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         return retv;
                     } catch (TaskCanceledException x) {
-                        if (!transaction.IsRolledBack && transaction.IsCommited) {
+                        if (!transaction.IsRolledBack && !transaction.IsCommited) {
                             await transaction.RollbackAsync().ConfigureAwait(false);
                         }
                         throw x;
@@ -1468,8 +1467,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         await transaction.DisposeAsync().ConfigureAwait(false);
                     }
                 }
-            } finally {
-                GC.Collect(0, GCCollectionMode.Default);
+            } catch (Exception x) {
+                throw;
             }
             return default(T);
         }

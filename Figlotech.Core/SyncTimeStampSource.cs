@@ -47,10 +47,9 @@ namespace Figlotech.Core {
                 var localTimeSaved = new DateTime(BitConverter.ToInt64(bytes, 0));
                 var remoteTimeSaved = new DateTime(BitConverter.ToInt64(bytes, sizeof(Int64)));
                 if (
-                    Math.Abs(localTimeSaved.Ticks - new FileInfo(cacheFile).CreationTimeUtc.Ticks) > 5 ||
                     localTimeSaved > DateTime.UtcNow ||
                     remoteTimeSaved > DateTime.UtcNow ||
-                    DateTime.UtcNow - localTimeSaved > TimeSpan.FromHours(24)
+                    DateTime.UtcNow - localTimeSaved > TimeSpan.FromHours(48)
                 ) {
                     File.Delete(cacheFile);
                     return await FromNtpServerCached(ntpServer);

@@ -12,6 +12,7 @@ namespace Figlotech.Core {
 
         public TValue this[TKey key] {
             get {
+                key = GetKey(key);
                 if (key == null) {
                     return default(TValue);
                 }
@@ -21,6 +22,7 @@ namespace Figlotech.Core {
                 return default(TValue);
             }
             set {
+                key = GetKey(key);
                 _dmmy[key] = value;
             }
         }
@@ -30,6 +32,8 @@ namespace Figlotech.Core {
         public static implicit operator LenientDictionary<TKey, TValue>(Dictionary<TKey, TValue> a) {
             return new LenientDictionary<TKey, TValue>() { _dmmy = new ConcurrentDictionary<TKey, TValue>(a) };
         }
+
+        public Func<TKey, TKey> PreprocessKey { get; set; }
 
         public ICollection<TKey> Keys {
             get {
@@ -47,6 +51,10 @@ namespace Figlotech.Core {
             }
         }
 
+        public TKey GetKey(TKey key) {
+            return PreprocessKey != null ? PreprocessKey(key) : key;
+        }
+
         public int Count => _dmmy.Count;
 
         public bool IsReadOnly => ((IDictionary<TKey, TValue>)_dmmy).IsReadOnly;
@@ -54,13 +62,13 @@ namespace Figlotech.Core {
         public async Task<TValue> GetOrAddWithLocking(TKey key, Func<TKey, Task<TValue>> valueFactory) {
             return await _dmmy.GetOrAddWithLocking(
                 key,
-                async key => await valueFactory(key)
+                async key => await valueFactory(GetKey(key))
             );
         }
         public TValue GetOrAddWithLocking(TKey key, Func<TKey, TValue> valueFactory) {
             return _dmmy.GetOrAddWithLocking(
                 key,
-                key => valueFactory(key)
+                key => valueFactory(GetKey(key))
             );
         }
 
@@ -69,13 +77,14 @@ namespace Figlotech.Core {
         IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Values;
 
         public void Add(TKey key, TValue value) {
+            key = GetKey(key);
             if (!_dmmy.TryAdd(key, value)) {
                 throw new Exception("Could not add item to dictionary");
             }
         }
 
         public void Add(KeyValuePair<TKey, TValue> item) {
-            var key = item.Key;
+            var key = GetKey(item.Key);
             if (!_dmmy.TryAdd(key, item.Value)) {
                 throw new Exception("Could not add item to dictionary");
             }
@@ -90,6 +99,7 @@ namespace Figlotech.Core {
         }
 
         public bool ContainsKey(TKey key) {
+            key = GetKey(key);
             return _dmmy.ContainsKey(key);
         }
 
@@ -102,6 +112,7 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(TKey key) {
+            key = GetKey(key);
             return ((IDictionary<TKey, TValue>)_dmmy).Remove(key);
         }
 
@@ -110,6 +121,7 @@ namespace Figlotech.Core {
         }
 
         public bool TryGetValue(TKey key, out TValue value) {
+            key = GetKey(key);
             return _dmmy.TryGetValue(key, out value);
         }
 
