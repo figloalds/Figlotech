@@ -4,27 +4,24 @@ using System;
 namespace Figlotech.Core.DomainEvents {
     public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent {
         private string _cachedSerialization;
+        FiAsyncLock SerializationLock = new FiAsyncLock();
         public string GetSerializedData() {
             if (_cachedSerialization != null) {
                 return _cachedSerialization;
             }
-            lock (this) {
-                if (_cachedSerialization == null) {
-                    _cachedSerialization = JsonConvert.SerializeObject(this);
-                }
-                return _cachedSerialization;
-            }
+            Serialize();
+            return _cachedSerialization;
         }
         public void ClearSerializedData() {
             lock (this) {
                 _cachedSerialization = null;
             }
         }
+
         public void Serialize() {
-            lock (this) {
-                if (_cachedSerialization == null) {
-                    _cachedSerialization = JsonConvert.SerializeObject(this);
-                }
+            using var handle = SerializationLock.Lock();
+            if (_cachedSerialization == null) {
+                _cachedSerialization = JsonConvert.SerializeObject(this);
             }
         }
     }

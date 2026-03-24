@@ -1,34 +1,13 @@
-﻿using Figlotech.Core.BusinessModel;
+using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
-
-    public sealed class ScheduledDomainEvent {
-        public IDomainEvent Event;
-        public DateTime ScheduledTime;
-        public string Identifier;
-        internal Timer timer;
-    }
-
-    public sealed class CustomDomainValidation {
-        public CustomDomainValidation(IValidationRule validator, int? phase) {
-            this.Validator = validator;
-            this.ValidationPhase = phase;
-        }
-        public IValidationRule Validator { get; set; }
-        public int? ValidationPhase { get; set; } = null;
-    }
-
-    public sealed class CustomFlushOrderToken {
-        public bool IsFlushIssued { get; set; } = false;
-        public bool IsReleased { get; set; } = false;
-    }
-
     public static class DomainEventsHubExtensions {
         public static void SubscribeInline<T>(this DomainEventsHub self, Func<T, Task> fn, Func<T, Exception, Task> handler = null) where T : IDomainEvent {
             self.SubscribeListener(InlineLambdaListener.Create<T>(fn, handler));
@@ -43,14 +22,6 @@ namespace Figlotech.Core.DomainEvents {
 
         public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
         private readonly DomainEventsHub parentHub;
-        private CancellationTokenSource CancelationTokenSource { get; set; } = new CancellationTokenSource();
-
-        private readonly bool IsTerminationIssued = false;
-
-        public TimeSpan EventCacheDuration { get; set; } = TimeSpan.FromMinutes(2);
-        public DateTime LastEventDateTime { get; set; }
-        List<CustomFlushOrderToken> FlushOrderTokens { get; set; } = new List<CustomFlushOrderToken>();
-        private List<ScheduledDomainEvent> ScheduledEvents { get; set; } = new List<ScheduledDomainEvent>();
 
         private WorkQueuer MainQueuer { get; set; }
 
@@ -59,65 +30,20 @@ namespace Figlotech.Core.DomainEvents {
             MainQueuer = queuer ?? FiTechCoreExtensions.GlobalQueuer;
         }
 
-        public bool EnableEventCache { get; set; } = false;
-        private List<IDomainEvent> EventCache { get; set; } = new List<IDomainEvent>();
-        private List<IDomainEventListener> Listeners { get; set; } = new List<IDomainEventListener>();
-        public Dictionary<String, Object> Scope { get; private set; } = new Dictionary<string, object>();
-        //public List<CustomDomainValidation> CustomValidators { get; private set; } = new List<CustomDomainValidation>();
+        private ImmutableArray<IDomainEventListener> _listeners = ImmutableArray<IDomainEventListener>.Empty;
 
-        public void Schedule(IDomainEvent evt, DateTime when, string identifier) {
-            var due = when.ToUniversalTime() - DateTime.UtcNow;
-            var sched = ScheduledEvents.FirstOrDefault(s => s.Identifier == identifier) ??
-                new ScheduledDomainEvent() {
-                    Identifier = identifier ?? RID.GenerateNewAsBase36(),
-                };
-            sched.Event = evt;
-            sched.ScheduledTime = when;
-            if (sched.timer != null) {
-                sched.timer.Dispose();
-                sched.timer = null;
-            }
+        private readonly List<IExtension> Extensions = new List<IExtension>();
 
-            sched.timer = new Timer((s) => {
-                this.Raise((s as ScheduledDomainEvent).Event);
-                this.Unschedule(sched);
-            }, sched, (long)due.TotalMilliseconds, Timeout.Infinite);
-
-            ScheduledEvents.Add(sched);
-        }
-
-        public void Unschedule(ScheduledDomainEvent sched) {
-            sched.timer.Dispose();
-            ScheduledEvents.Remove(sched);
-        }
-
-        public void Unschedule(string identifier) {
-            ScheduledEvents.ForEachReverse(i => {
-                if (i.Identifier == identifier) {
-                    this.Unschedule(i);
-                }
-            });
-        }
 
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
-            var tempLi = domainEvents.ToList();
-            tempLi.ForEach(evt => Raise(evt));
-        }
-
-        readonly object LockFlushSwitch = new object();
-        public void FlushAllInlineListeners() {
-            lock (LockFlushSwitch) {
-                foreach (var a in FlushOrderTokens) {
-                    a.IsFlushIssued = true;
-                }
+            foreach (var domainEvent in domainEvents) {
+                Raise(domainEvent);
             }
         }
 
         private void WriteLog(string log) {
             Fi.Tech.WriteLine("FTH:EventHub", log);
         }
-
-        readonly List<IExtension> Extensions = new List<IExtension>();
 
         public void RegisterExtension(IExtension Extension) {
             if (Extension == null) {
@@ -129,7 +55,10 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public void RegisterExtension<TOpCode, T>(Extension<TOpCode, T> Extension) {
-            RegisterExtension(Extension);
+            if (Extension == null) {
+                throw new ArgumentNullException("Trying to register null extension");
+            }
+            RegisterExtension((IExtension)Extension);
         }
 
         public async Task ExecuteExtensionsAsync<TOpCode, T>(TOpCode opcode, T input) {
@@ -149,43 +78,27 @@ namespace Figlotech.Core.DomainEvents {
 
         public EventRaiseResponse Raise(IDomainEvent domainEvent) {
             WriteLog($"Raising Event {domainEvent.GetType()}");
-            // Cache event
+            
             if (FiTechCoreExtensions.StdoutEventHubLogs) {
                 domainEvent.d_RaiseOrigin = Environment.StackTrace;
             }
-            if (domainEvent is IPreserializableDomainEvent seri) {
-                seri.Serialize();
-            }
-            lock (EventCache) {
-                if (EventCache.Any(x => x.Id == domainEvent.Id)) {
-                    return new EventRaiseResponse();
-                }
-                EventCache.RemoveAll(e => (DateTime.UtcNow - e.TimeStamp) > EventCacheDuration);
-            }
-
-            // Raise event on all listeners.
-            List<IDomainEventListener> listeners;
-            lock (Listeners) {
-                Listeners.RemoveAll(l => l == null);
-                listeners = Listeners.ToList();
-            }
-            var tcsList = new List<TaskCompletionSource<int>>(listeners.Count);
-            for (int i = 0; i < listeners.Count; i++) {
+            
+            // Atomic snapshot of listeners - no locks, no allocation
+            var listeners = _listeners;
+            
+            var tcsList = new List<TaskCompletionSource<int>>();
+            for (int i = 0; i < listeners.Length; i++) {
                 var listener = listeners[i];
-                var t = listener.GetType().AsDerivingFromGeneric(typeof(DomainEventListener<>));
-                if (t != null && t.GetGenericArguments().First() != domainEvent.GetType()) {
+                if (!listener.CanHandle(domainEvent)) {
                     continue;
                 }
                 if (MainQueuer != null) {
                     var req = MainQueuer.Enqueue(new WorkJob(async () => {
                         await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
-                        if (domainEvent.AllowPropagation) {
-                            parentHub?.Raise(domainEvent);
-                        }
                     }, async x => {
                         try {
                             await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
-                        } catch (Exception) {
+                        } catch {
                             Fi.Tech.SwallowException(x);
                         }
                     }, (b) => {
@@ -197,107 +110,30 @@ namespace Figlotech.Core.DomainEvents {
                     tcsList.Add(req.TaskCompletionSource);
                 }
             }
-
-            if (EnableEventCache) {
-                lock (EventCache) {
-                    domainEvent.TimeStamp = DateTime.UtcNow;
-                    EventCache.Add(domainEvent);
-                }
-                LastEventDateTime = Fi.Tech.GetUtcTime();
-                CancelationTokenSource.Cancel();
-                CancelationTokenSource = new CancellationTokenSource();
-            } else if (domainEvent is IPreserializableDomainEvent ser && ser.GetSerializedData() != null) {
-                Task.WhenAll(tcsList.Select(x => x.Task))
-                    .ContinueWith((t) => {
-                        var gen = GC.GetGeneration(ser.GetSerializedData());
-                        ser.ClearSerializedData();
-                        domainEvent = null;
-                        if (gen <= 2) {
-                            GC.Collect(gen);
-                        }
-                    });
+            if (domainEvent.AllowPropagation) {
+                parentHub?.Raise(domainEvent);
             }
+
             return new EventRaiseResponse() {
                 CompletionSources = tcsList,
             };
         }
 
-        public bool IsTimeInDomainCacheDuration(DateTime dt) {
-            return DateTime.UtcNow.Subtract(dt) > EventCacheDuration;
-        }
-
-        public IEnumerable<IDomainEvent> GetEventsSince(long Id) {
-            lock (EventCache) {
-                return EventCache.Where(e => e.Id > Id).ToArray();
-            }
-        }
-
-        public IEnumerable<IDomainEvent> GetEventsSince(DateTime Stamp) {
-            lock (EventCache) {
-                return EventCache.Where(e => e.TimeStamp >= Stamp).ToArray();
-            }
-        }
-
-        public Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, long Id, Predicate<IDomainEvent> filter) {
-            return PollForEventsSince(maximumPollTime, () => GetEventsSince(Id), e => filter(e));
-        }
-
-        public Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, DateTime dt, Predicate<IDomainEvent> filter) {
-            return PollForEventsSince(maximumPollTime, () => GetEventsSince(dt), e => filter(e));
-        }
-
-        private Task<IDomainEvent[]> PollForEventsSince(TimeSpan maximumPollTime, Func<IEnumerable<IDomainEvent>> getEvents, Predicate<IDomainEvent> filter) {
-            DateTime pollStart = DateTime.UtcNow;
-            return Task.Run<IDomainEvent[]>(async () => {
-                IDomainEvent[] events;
-                var flushOrder = new CustomFlushOrderToken();
-                lock ("FLUSH_SWITCH") {
-                    FlushOrderTokens.Add(flushOrder);
-                }
-                do {
-                    lock (EventCache) {
-                        events = getEvents().ToArray();
-                    }
-                    if (events.Length > 0) {
-                        return events;
-                    }
-                    if (flushOrder.IsFlushIssued) {
-                        return events;
-                    }
-
-                    if (maximumPollTime > TimeSpan.Zero) {
-                        var wh = CancelationTokenSource;
-                        try {
-                            await Task.Delay(maximumPollTime, CancelationTokenSource.Token).ConfigureAwait(false);
-                        } catch (Exception) {
-
-                        }
-                    } else {
-                        break;
-                    }
-                } while (DateTime.UtcNow.Subtract(pollStart) < maximumPollTime);
-                flushOrder.IsReleased = true;
-                lock ("FLUSH_SWITCH") {
-                    FlushOrderTokens.Remove(flushOrder);
-                }
-                return new IDomainEvent[0];
-            });
-        }
-
         public void SubscribeListener(IDomainEventListener listener) {
-            lock (Listeners) {
-                if (!Listeners.Contains(listener)) {
-                    Listeners.Add(listener);
+            if(listener == null) throw new ArgumentNullException(nameof(listener));
+            
+            ImmutableInterlocked.Update(ref _listeners, (current, l) => {
+                if (current.Contains(l)) {
+                    return current;
                 }
-            }
+                return current.Add(l);
+            }, listener);
         }
 
         public void RemoveListener(IDomainEventListener listener) {
-            lock (Listeners) {
-                if (Listeners.Contains(listener)) {
-                    Listeners.Remove(listener);
-                }
-            }
+            if(listener == null) throw new ArgumentNullException(nameof(listener));
+            
+            ImmutableInterlocked.Update(ref _listeners, (current, l) => current.Remove(l), listener);
         }
     }
 }

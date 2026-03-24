@@ -32,12 +32,16 @@ namespace Figlotech.Core.DomainEvents {
         public void Subscribe(DomainEventsHub hub = null) {
             if (hub == null)
                 hub = DomainEventsHub.Global;
+            if(_registeredHub != null) {
+                Unsubscribe();
+            }
             _registeredHub = hub;
             _registeredHub.SubscribeListener(this);
         }
 
-        public void DeRegisterSelf() {
-            _registeredHub.SubscribeListener(this);
+        public void Unsubscribe() {
+            _registeredHub.RemoveListener(this);
+            _registeredHub = null;
         }
     }
 }
