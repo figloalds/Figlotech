@@ -19,7 +19,7 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public void Serialize() {
-            using var handle = SerializationLock.Lock();
+            using var handle = SerializationLock.LockSync();
             if (_cachedSerialization == null) {
                 _cachedSerialization = JsonConvert.SerializeObject(this);
             }
