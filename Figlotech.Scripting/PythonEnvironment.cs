@@ -64,7 +64,7 @@ namespace Figlotech.Scripting {
         IEnumerable<string> InteractiveLoop() {
             while (true) {
                 Console.Write(">>>");
-                using var input = new ValueStringBuilder();
+                var input = new StringBuilder();
                 var indent = 0;
                 while (true) {
                     var line = Console.ReadLine();

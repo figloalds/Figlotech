@@ -226,6 +226,45 @@ namespace Figlotech.Core.Tests {
             // Assert - should complete without hanging
             Assert.True(started > 0);
         }
+
+        [Fact]
+        public void Start_InitializesWorkersUpToProcessorCount() {
+            var maxThreads = Environment.ProcessorCount + 3;
+            var queuer = new WorkQueuer("Test", maxThreads, init_started: false);
+
+            queuer.Start();
+
+            Assert.Equal(Math.Min(Environment.ProcessorCount, maxThreads), queuer.NumberOfActualWorkers);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task Enqueue_ScalesWorkersWhenDemandExceedsInitialPool() {
+            var maxThreads = Environment.ProcessorCount + 2;
+            var initialWorkers = Math.Min(Environment.ProcessorCount, maxThreads);
+            var queuer = new WorkQueuer("Test", maxThreads, init_started: false);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            queuer.Start();
+
+            for (int i = 0; i < maxThreads; i++) {
+                queuer.EnqueueTask(async () => {
+                    await release.Task;
+                });
+            }
+
+            var timeoutAt = DateTime.UtcNow.AddSeconds(3);
+            while (queuer.NumberOfActualWorkers <= initialWorkers && DateTime.UtcNow < timeoutAt) {
+                await Task.Delay(25);
+            }
+
+            Assert.True(queuer.NumberOfActualWorkers > initialWorkers,
+                $"Expected worker count to grow beyond {initialWorkers}, but found {queuer.NumberOfActualWorkers}.");
+
+            release.SetResult(true);
+            await queuer.Stop(true);
+            queuer.Dispose();
+        }
     }
 
     public class ScheduleTaskTests {
