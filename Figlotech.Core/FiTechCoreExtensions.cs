@@ -134,14 +134,26 @@ namespace Figlotech.Core {
             return (TRetv)MapIntoDTO(_selfie, typeof(TRetv), other);
         }
 
-        private static bool IsNullableOfAPrimitive(Type t) {
+        private static bool IsNullableOfSimpleType(Type t) {
             return
                 t.IsGenericType &&
                 t.GetGenericTypeDefinition() == typeof(Nullable<>) &&
                 (
-                    t.GenericTypeArguments[0].IsPrimitive ||
-                    t.GenericTypeArguments[0].IsEnum
+                    IsASimpleType(t.GenericTypeArguments[0])
                 );
+        }
+
+        private static bool IsASimpleType(Type t) {
+            return
+                t.IsPrimitive ||
+                t.IsEnum ||
+                t == typeof(string) ||
+                t == typeof(bool) ||
+                t == typeof(decimal);
+        }
+
+        private static bool IsASimpleTypeOrNullableOfSimpleType(Type t) {
+            return IsASimpleType(t) || IsNullableOfSimpleType(t);
         }
 
         public static object MapIntoDTO<TInput>(this Fi _selfie, Type TRetv, TInput other) {
@@ -167,11 +179,7 @@ namespace Figlotech.Core {
                 var otherValue = ReflectionTool.GetMemberValue(rel.MemberB, other);
                 if (
                     rel.TypeA == rel.TypeB ||
-                    (rel.TypeA == typeof(string)) ||
-                    (rel.TypeB == typeof(string)) ||
-                    (IsNullableOfAPrimitive(rel.TypeA) || IsNullableOfAPrimitive(rel.TypeB)) ||
-                    (rel.TypeA.IsPrimitive && rel.TypeB.IsPrimitive) ||
-                    (rel.TypeA.IsEnum && rel.TypeB.IsEnum)
+                    (IsASimpleTypeOrNullableOfSimpleType(rel.TypeA) || IsASimpleTypeOrNullableOfSimpleType(rel.TypeB))
                 ) {
                     ReflectionTool.SetMemberValue(rel.MemberA, retv, otherValue);
                 } else {
