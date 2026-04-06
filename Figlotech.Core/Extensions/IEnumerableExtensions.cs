@@ -362,7 +362,7 @@ namespace System {
                 }
             }
         }
-        public static IEnumerable<TSource[]> Chunk<TSource>(this IEnumerable<TSource> source, int size) {
+        public static IEnumerable<TSource[]> ToChunks<TSource>(this IEnumerable<TSource> source, int size) {
             if (source is null) {
                 throw new ArgumentNullException("source");
             }
