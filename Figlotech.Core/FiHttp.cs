@@ -35,6 +35,8 @@ namespace Figlotech.Core {
         private MemoryStream CachedResponseBody { get; set; }
         public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
 
+        public Exception Exception { get; set; }
+
         readonly FiHttp Caller;
         readonly HttpRequestMessage RequestMessage;
         readonly List<IDisposable> Disposables = new List<IDisposable>();
@@ -66,8 +68,10 @@ namespace Figlotech.Core {
                 await retv.Init(response).ConfigureAwait(false);
             } catch (WebException ex) {
                 await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
-            } catch (Exception) {
+                retv.Exception = ex;
+            } catch (Exception x) {
                 await retv.Init(null as HttpResponseMessage).ConfigureAwait(false);
+                retv.Exception = x;
             } finally {
                 retv.RequestStopwatch?.Stop();
             }
@@ -432,7 +436,7 @@ namespace Figlotech.Core {
         public async Task<T> Delete<T>(string url, CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Delete, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+        public async Task<FiHttpResult> Delete<T>(String url, T bodyData, string contentType = "application/json", CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Delete, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
@@ -503,7 +507,7 @@ namespace Figlotech.Core {
         public async Task<T> Put<T>(string url, CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Put, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+        public async Task<FiHttpResult> Put<T>(String url, T bodyData, string contentType = "application/json", CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Put, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
@@ -527,7 +531,7 @@ namespace Figlotech.Core {
         public async Task<T> Patch<T>(string url, CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Patch, url, cancellationToken).ConfigureAwait(false);
         }
-        public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = null, CancellationToken? cancellationToken = null) {
+        public async Task<FiHttpResult> Patch<T>(String url, T bodyData, string contentType = "application/json", CancellationToken? cancellationToken = null) {
             return await SendRequest<T>(HttpMethod.Patch, url, bodyData, contentType, cancellationToken).ConfigureAwait(false);
         }
 
@@ -540,7 +544,7 @@ namespace Figlotech.Core {
             return await FiHttpResult.InitFromRequest(this, req, cancellationToken ?? CancellationToken.None).ConfigureAwait(false);
         }
 
-        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = null, CancellationToken? cancellationToken = null) {
+        public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = "application/json", CancellationToken? cancellationToken = null) {
             var req = CreateRequest(url);
             req.Method = method;
             using (var ms = new MemoryStream()) {
@@ -589,7 +593,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = null, CancellationToken? cancellationToken = null) {
+        public async Task<FiHttpResult> SendRequest<T>(HttpMethod method, string url, T postData, string contentType = "application/json", CancellationToken? cancellationToken = null) {
             if (postData is Stream s) {
                 return await SendRequest(method, url, s, contentType, cancellationToken).ConfigureAwait(false);
             }
