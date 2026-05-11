@@ -26,6 +26,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         public int PoolSize => Config.PoolSize;
 
         public string SchemaName => Config.Database;
+        public string DatabaseHost => Config.Host;
 
         public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {
             { "TABLE_NAME"              , "TABLE_NAME"                  },

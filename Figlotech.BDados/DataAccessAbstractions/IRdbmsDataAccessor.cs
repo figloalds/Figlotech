@@ -36,6 +36,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         DataTable Query(IQueryBuilder Query);
 
         String SchemaName { get; }
+        String DatabaseHost { get; }
 
         IQueryGenerator QueryGenerator { get; }
 

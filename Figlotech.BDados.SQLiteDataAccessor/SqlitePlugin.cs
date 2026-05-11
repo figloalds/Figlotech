@@ -26,6 +26,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         public int ConnectTimeout => throw new NotImplementedException();
 
         public string SchemaName => Config.Schema;
+        public string DatabaseHost => Config.DataSource;
 
         public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {
             { "TABLE_NAME"              , "TABLE_NAME"                  },

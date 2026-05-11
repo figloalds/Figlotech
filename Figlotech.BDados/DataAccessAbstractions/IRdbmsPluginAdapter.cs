@@ -12,6 +12,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         int ConnectTimeout { get; }
         int PoolSize { get; }
         string SchemaName { get; }
+        string DatabaseHost { get; }
         string ConnectionString { get; }
         Dictionary<string, string> InfoSchemaColumnsMap { get; }
 

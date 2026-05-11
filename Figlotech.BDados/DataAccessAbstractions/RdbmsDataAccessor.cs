@@ -651,6 +651,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public String SchemaName { get { return Plugin.SchemaName; } }
 
+        public String DatabaseHost { get { return Plugin.DatabaseHost; } }
+
         private static int counter = 0;
         private readonly int myId = ++counter;
         private readonly String _readLock = $"readLock{counter + 1}";
