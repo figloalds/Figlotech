@@ -817,7 +817,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var connection = await GetNewOpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             retv = new BDadosTransaction(this, connection);
-            WriteLog($"Database Acess Opened {retv.Id} (using DB Transaction: {ilev.HasValue})");
+            WriteLog($"Database Access Opened {retv.Id} (using DB Transaction: {ilev.HasValue})");
             var trace = new StackTrace();
             if (ilev.HasValue) {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
@@ -3495,7 +3495,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                     }
                     var elaps = transaction.Benchmarker?.Mark("--");
-                    if(result > 0) {
+                    if(result != 0) {
                         transaction.NotifyWriteOperation();
                     }
                     WriteLog($"[{Description}:{transaction.Id}] --------- Executed [OK] ({result} lines affected) [{elaps} ms]");
