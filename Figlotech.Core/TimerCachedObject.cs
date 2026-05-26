@@ -26,6 +26,6 @@ internal sealed class TimerCachedObject<TKey, T> {
     }
 
     public void KeepAlive() {
-        DateTime DataUpdate = DateTime.UtcNow;
+        LastChecked = DateTime.UtcNow;
     }
 }

@@ -32,82 +32,93 @@ namespace Figlotech.Core {
         bool isDisposed = false;
 
         public void Dispose() {
+            if (isDisposed) return;
+            isDisposed = true;
             timer.Change(Timeout.Infinite, Timeout.Infinite);
             Fi.Tech.FireAndForget(async () => {
                 await timer.DisposeAsync().ConfigureAwait(false);
             });
-            isDisposed = true;
+            GC.SuppressFinalize(this);
         }
         public async ValueTask DisposeAsync() {
+            if (isDisposed) return;
+            isDisposed = true;
             timer.Change(Timeout.Infinite, Timeout.Infinite);
             await timer.DisposeAsync().ConfigureAwait(false);
-            isDisposed = true;
+            GC.SuppressFinalize(this);
+        }
+
+        private static async ValueTask DisposeValueAsync(T value) {
+            if (value is IAsyncDisposable adis) {
+                await adis.DisposeAsync().ConfigureAwait(false);
+            } else if (value is IDisposable dis) {
+                dis.Dispose();
+            }
         }
 
         public TimedCache(TimeSpan duration) {
             this.CacheDuration = duration;
             Dictionary = new LenientDictionary<TKey, TimerCachedObject<TKey, T>>();
 
-            var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, CacheDuration.Seconds / 10));
-            timer = new Timer((state) => {
+            var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, CacheDuration.TotalSeconds / 10));
+            var weakRef = new WeakReference<TimedCache<TKey, T>>(this);
+            Timer t = null;
+            t = new Timer((state) => {
+                if (!weakRef.TryGetTarget(out var cache) || cache.isDisposed) {
+                    t?.Change(Timeout.Infinite, Timeout.Infinite);
+                    t?.Dispose();
+                    return;
+                }
                 Fi.Tech.FireAndForget(async () => {
-                    var keys = Dictionary.Keys.ToList();
-                    var freed = OnFree != null ? new List<TKey>(Dictionary.Count) : null;
+                    var keys = cache.Dictionary.Keys.ToList();
+                    var freed = cache.OnFree != null ? new List<TKey>(cache.Dictionary.Count) : null;
                     foreach (var key in keys) {
-                        if (Dictionary[key] == null) {
-                            Dictionary.Remove(key);
+                        if (!cache.Dictionary.TryGetValue(key, out var item)) {
                             continue;
                         }
-                        if ((DateTime.UtcNow - Dictionary[key].LastChecked) > CacheDuration) {
-                            if (CustomCanFinalizeAsync != null) {
-                                if (Dictionary[key].Object == null || !await CustomCanFinalizeAsync(Dictionary[key].Object).ConfigureAwait(false)) {
-                                    Dictionary[key].KeepAlive();
-                                    continue; // Don't free this item, it is still in use.
+                        if (item == null) {
+                            cache.Dictionary.Remove(key);
+                            continue;
+                        }
+                        if ((DateTime.UtcNow - item.LastChecked) > cache.CacheDuration) {
+                            if (cache.CustomCanFinalizeAsync != null) {
+                                if (item.Object == null || !await cache.CustomCanFinalizeAsync(item.Object).ConfigureAwait(false)) {
+                                    item.KeepAlive();
+                                    continue;
                                 }
                             }
-                            Dictionary.Remove(key);
+                            cache.Dictionary.Remove(key);
                             freed?.Add(key);
+
+                            if (item.Object != null) {
+                                try {
+                                    await DisposeValueAsync(item.Object).ConfigureAwait(false);
+                                } catch (Exception x) {
+                                    try {
+                                        cache.OnException?.Invoke(x);
+                                    } catch (Exception y) {
+                                        Fi.Tech.SwallowException(y);
+                                    }
+                                }
+                            }
                         }
                     }
-                    if (OnFree != null && freed.Count > 0) {
-                        Fi.Tech.FireAndForget(async () => {
-                            foreach (var key in freed) {
+                    if (cache.OnFree != null && freed.Count > 0) {
+                        foreach (var key in freed) {
+                            try {
+                                await cache.OnFree(key).ConfigureAwait(false);
+                            } catch (Exception x) {
                                 try {
-                                    await OnFree(key);
-                                } catch (Exception x) {
-                                    try {
-                                        OnException?.Invoke(x);
-                                    } catch (Exception y) {
-                                        Fi.Tech.SwallowException(y);
-                                    }
-                                }
-                                try {
-                                    if (Dictionary.TryGetValue(key, out var value)) {
-                                        if (value is IAsyncDisposable adis) {
-                                            await adis.DisposeAsync();
-                                        } else if (value is IDisposable dis) {
-                                            dis.Dispose();
-                                        }
-                                    }
-                                } catch (Exception x) {
-                                    try {
-                                        OnException?.Invoke(x);
-                                    } catch (Exception y) {
-                                        Fi.Tech.SwallowException(y);
-                                    }
+                                    cache.OnException?.Invoke(x);
+                                } catch (Exception y) {
+                                    Fi.Tech.SwallowException(y);
                                 }
                             }
-                        });
+                        }
                     }
                 });
-            }, null, CacheDuration, CacheDuration);
-        }
-
-        ~TimedCache() {
-            timer.Change(Timeout.Infinite, Timeout.Infinite);
-            Fi.Tech.FireAndForget(async () => {
-                await timer.DisposeAsync().ConfigureAwait(false);
-            });
+            }, null, timerCheckInterval, timerCheckInterval);
+            timer = t;
         }
 
         public T this[TKey key] {
@@ -126,12 +137,24 @@ namespace Figlotech.Core {
             }
             set {
                 if (value == null && Dictionary.ContainsKey(key)) {
+                    var old = Dictionary[key];
                     Dictionary.Remove(key);
+                    if (old != null && old.Object != null) {
+                        Fi.Tech.FireAndForget(async () => {
+                            await DisposeValueAsync(old.Object).ConfigureAwait(false);
+                        });
+                    }
                     return;
                 }
                 if (Dictionary.ContainsKey(key)) {
-                    Dictionary[key].Object = value;
-                    Dictionary[key].KeepAlive();
+                    var old = Dictionary[key];
+                    if (old != null && !ReferenceEquals(old.Object, value) && old.Object != null) {
+                        Fi.Tech.FireAndForget(async () => {
+                            await DisposeValueAsync(old.Object).ConfigureAwait(false);
+                        });
+                    }
+                    old.Object = value;
+                    old.KeepAlive();
                     if (OnSet != null) {
                         Fi.Tech.FireAndForget(async () => {
                             await OnSet(key, value);
@@ -152,7 +175,16 @@ namespace Figlotech.Core {
         }
 
         public bool Remove(TKey key) {
-            return Dictionary.Remove(key);
+            if (Dictionary.TryGetValue(key, out var value)) {
+                Dictionary.Remove(key);
+                if (value != null && value.Object != null) {
+                    Fi.Tech.FireAndForget(async () => {
+                        await DisposeValueAsync(value.Object).ConfigureAwait(false);
+                    });
+                }
+                return true;
+            }
+            return false;
         }
 
         public async Task<(bool Success, T Value)> TryGetValueAsync(TKey key) {
@@ -203,8 +235,14 @@ namespace Figlotech.Core {
         }
 
         public void Clear() {
-            foreach (var key in Dictionary.Keys) {
-                Dictionary.Remove(key);
+            var items = Dictionary.Values.ToList();
+            Dictionary.Clear();
+            foreach (var item in items) {
+                if (item != null && item.Object != null) {
+                    Fi.Tech.FireAndForget(async () => {
+                        await DisposeValueAsync(item.Object).ConfigureAwait(false);
+                    });
+                }
             }
         }
 
@@ -213,8 +251,13 @@ namespace Figlotech.Core {
         }
 
         public void CopyTo(KeyValuePair<TKey, T>[] array, int arrayIndex) {
-            for (int i = arrayIndex; i < array.Length; i++) {
-                this[array[arrayIndex].Key] = array[arrayIndex].Value;
+            if (array == null) throw new ArgumentNullException(nameof(array));
+            if (arrayIndex < 0 || arrayIndex > array.Length) throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+            if (array.Length - arrayIndex < Count) throw new ArgumentException("Destination array is not large enough.");
+
+            int i = arrayIndex;
+            foreach (var kvp in Dictionary) {
+                array[i++] = new KeyValuePair<TKey, T>(kvp.Key, kvp.Value.Object);
             }
         }
 
