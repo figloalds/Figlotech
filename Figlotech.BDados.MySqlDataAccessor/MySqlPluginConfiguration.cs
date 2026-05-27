@@ -46,7 +46,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
         }
 
         public String GetConnectionString() {
-            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=0;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Math.Min(1800, Timeout)};Connect Timeout={Math.Min(30, ConnectTimeout)};DefaultCommandTimeout={Timeout};ConnectionLifetime={Math.Min(600, Lifetime)};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL ? "Required" : "None")};charset=utf8mb4;default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
+            var connstr = $"server={Host};port={Port};user id={User};password={Password};persistsecurityinfo=True;{(Database != null ? $"database={Database};" : "")}Min Pool Size=0;Max Pool Size={PoolSize};Pooling={UsePooling};ConnectionTimeout={Math.Min(300, ConnectTimeout)};Connect Timeout={Math.Min(30, ConnectTimeout)};DefaultCommandTimeout={Timeout};ConnectionLifetime={Math.Min(300, Lifetime)};ConnectionReset={ResetConnection};Allow User Variables=True;Convert Zero Datetime=True;SSL Mode={(RequireSSL ? "Required" : "None")};charset=utf8mb4;default command timeout={DefaultCommandTimeout};AllowPublicKeyRetrieval=true;";
             return connstr;
         }
     }
