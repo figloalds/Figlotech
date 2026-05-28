@@ -34,7 +34,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.AgentSDK", "Figlo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.Core.Tests", "Figlotech.Core.Tests\Figlotech.Core.Tests.csproj", "{0E409759-EB92-4F21-8183-4C49EAA184DC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Figlotech.BDados.Analyzers", "Figlotech.BDados.Analyzers\Figlotech.BDados.Analyzers.csproj", "{F898F09E-28CA-4AAA-924F-4586966AC4E2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Figlotech.BDados.Analyzers", "Figlotech.BDados.Analyzers\Figlotech.BDados.Analyzers.csproj", "{F898F09E-28CA-4AAA-924F-4586966AC4E2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
