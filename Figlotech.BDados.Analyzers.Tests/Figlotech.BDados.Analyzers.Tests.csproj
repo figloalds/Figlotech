@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.BDados.Analyzers\Figlotech.BDados.Analyzers.csproj" />
+    <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />
   </ItemGroup>
 
 </Project>
