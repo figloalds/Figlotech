@@ -118,6 +118,10 @@ namespace Figlotech.BDados.Analyzers {
                 return true;
             }
 
+            if (irdbmsInterface != null && SymbolEqualityComparer.Default.Equals(containingType, irdbmsInterface)) {
+                return true;
+            }
+
             if (irdbmsInterface != null) {
                 foreach (var iface in containingType.AllInterfaces) {
                     if (SymbolEqualityComparer.Default.Equals(iface, irdbmsInterface)) {
