@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -63,12 +62,16 @@ namespace Figlotech.BDados.Analyzers {
             var methodSymbol = context.SemanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
             if (methodSymbol == null) return;
 
+            if (!IsRdbmsDataAccessorMethod(methodSymbol, context.Compilation)) return;
+
             var receiver = GetReceiverSymbol(invocation, context.SemanticModel);
             if (receiver == null) return;
 
+            var bdadosTransactionType = context.Compilation.GetTypeByMetadataName("Figlotech.BDados.DataAccessAbstractions.BDadosTransaction");
+
             // Check if this invocation is itself an Access/AccessAsync call (BD001)
             if (AccessMethodNames.Contains(methodSymbol.Name)) {
-                var enclosingAccess = FindEnclosingAccessLambda(invocation, context.SemanticModel);
+                var enclosingAccess = FindEnclosingAccessLambda(invocation, invocation, context.SemanticModel);
                 if (enclosingAccess.Invocation != null) {
                     var outerReceiver = GetReceiverSymbol(enclosingAccess.Invocation, context.SemanticModel);
                     if (outerReceiver != null && SymbolEqualityComparer.Default.Equals(receiver, outerReceiver)) {
@@ -85,13 +88,13 @@ namespace Figlotech.BDados.Analyzers {
 
             // Check for missing transaction parameter (BD002)
             if (ConvenienceMethodNames.Contains(methodSymbol.Name)) {
-                var enclosingAccess = FindEnclosingAccessLambda(invocation, context.SemanticModel);
+                var enclosingAccess = FindEnclosingAccessLambda(invocation, invocation, context.SemanticModel);
                 if (enclosingAccess.Invocation != null) {
                     var outerReceiver = GetReceiverSymbol(enclosingAccess.Invocation, context.SemanticModel);
                     if (outerReceiver != null && SymbolEqualityComparer.Default.Equals(receiver, outerReceiver)) {
                         // Check if first argument is BDadosTransaction
                         var args = invocation.ArgumentList.Arguments;
-                        if (args.Count == 0 || !IsBDadosTransaction(args[0], context.SemanticModel)) {
+                        if (args.Count == 0 || !IsBDadosTransaction(args[0], context.SemanticModel, bdadosTransactionType)) {
                             var diagnostic = Diagnostic.Create(
                                 RdbmsDataAccessorDiagnostics.MissingTransaction,
                                 invocation.GetLocation(),
@@ -104,19 +107,45 @@ namespace Figlotech.BDados.Analyzers {
             }
         }
 
+        private bool IsRdbmsDataAccessorMethod(IMethodSymbol methodSymbol, Compilation compilation) {
+            var containingType = methodSymbol.ContainingType;
+            if (containingType == null) return false;
+
+            var irdbmsInterface = compilation.GetTypeByMetadataName("Figlotech.BDados.DataAccessAbstractions.IRdbmsDataAccessor");
+            var rdbmsClass = compilation.GetTypeByMetadataName("Figlotech.BDados.DataAccessAbstractions.RdbmsDataAccessor");
+
+            if (rdbmsClass != null && SymbolEqualityComparer.Default.Equals(containingType, rdbmsClass)) {
+                return true;
+            }
+
+            if (irdbmsInterface != null) {
+                foreach (var iface in containingType.AllInterfaces) {
+                    if (SymbolEqualityComparer.Default.Equals(iface, irdbmsInterface)) {
+                        return true;
+                    }
+                }
+            }
+
+            var baseType = containingType.BaseType;
+            while (baseType != null) {
+                if (rdbmsClass != null && SymbolEqualityComparer.Default.Equals(baseType, rdbmsClass)) {
+                    return true;
+                }
+                baseType = baseType.BaseType;
+            }
+
+            return false;
+        }
+
         private ISymbol GetReceiverSymbol(InvocationExpressionSyntax invocation, SemanticModel semanticModel) {
             if (invocation.Expression is MemberAccessExpressionSyntax memberAccess) {
                 return semanticModel.GetSymbolInfo(memberAccess.Expression).Symbol;
             }
             // Implicit this access
             if (invocation.Expression is IdentifierNameSyntax) {
-                // Try to get containing type's instance
-                var methodDecl = invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
-                if (methodDecl != null) {
-                    var methodSymbol = semanticModel.GetDeclaredSymbol(methodDecl);
-                    if (methodSymbol != null) {
-                        return methodSymbol.ContainingType;
-                    }
+                var enclosingSymbol = semanticModel.GetEnclosingSymbol(invocation.SpanStart);
+                if (enclosingSymbol != null) {
+                    return enclosingSymbol.ContainingType;
                 }
             }
             return null;
@@ -124,6 +153,7 @@ namespace Figlotech.BDados.Analyzers {
 
         private (InvocationExpressionSyntax Invocation, string MethodName) FindEnclosingAccessLambda(
             SyntaxNode node,
+            InvocationExpressionSyntax skipInvocation,
             SemanticModel semanticModel) {
             var current = node.Parent;
             while (current != null) {
@@ -132,7 +162,7 @@ namespace Figlotech.BDados.Analyzers {
                     var parent = lambda.Parent;
                     if (parent is ArgumentSyntax arg) {
                         var invocation = arg.Ancestors().OfType<InvocationExpressionSyntax>().FirstOrDefault();
-                        if (invocation != null) {
+                        if (invocation != null && invocation != skipInvocation) {
                             var symbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
                             if (symbol != null && AccessMethodNames.Contains(symbol.Name)) {
                                 return (invocation, symbol.Name);
@@ -145,10 +175,11 @@ namespace Figlotech.BDados.Analyzers {
             return (null, null);
         }
 
-        private bool IsBDadosTransaction(ArgumentSyntax argument, SemanticModel semanticModel) {
+        private bool IsBDadosTransaction(ArgumentSyntax argument, SemanticModel semanticModel, INamedTypeSymbol bdadosTransactionType) {
+            if (bdadosTransactionType == null) return false;
             var typeInfo = semanticModel.GetTypeInfo(argument.Expression);
             if (typeInfo.Type == null) return false;
-            return typeInfo.Type.ToDisplayString() == "Figlotech.BDados.DataAccessAbstractions.BDadosTransaction";
+            return SymbolEqualityComparer.Default.Equals(typeInfo.Type, bdadosTransactionType);
         }
     }
 }
