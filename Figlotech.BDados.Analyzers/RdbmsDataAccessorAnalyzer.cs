@@ -164,7 +164,7 @@ namespace Figlotech.BDados.Analyzers {
                         var invocation = arg.Ancestors().OfType<InvocationExpressionSyntax>().FirstOrDefault();
                         if (invocation != null && invocation != skipInvocation) {
                             var symbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
-                            if (symbol != null && AccessMethodNames.Contains(symbol.Name)) {
+                            if (symbol != null && AccessMethodNames.Contains(symbol.Name) && IsRdbmsDataAccessorMethod(symbol, semanticModel.Compilation)) {
                                 return (invocation, symbol.Name);
                             }
                         }
