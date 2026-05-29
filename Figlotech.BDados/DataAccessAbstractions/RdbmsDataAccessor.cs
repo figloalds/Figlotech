@@ -1,8 +1,9 @@
 using Figlotech.BDados.Builders;
+using Figlotech.BDados.Business;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Exceptions;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core;
-using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
@@ -609,7 +610,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable, IAsyncDisposable {
 
-        public Dictionary<long, BDadosTransaction> ActiveConnections = new Dictionary<long, BDadosTransaction>();
+        public LenientDictionary<long, BDadosTransaction> ActiveConnections = new LenientDictionary<long, BDadosTransaction>();
 
         public ITextToFileLogger Logger { get; set; }
         public static int DefaultMaxOpenAttempts { get; set; } = 5;
@@ -803,6 +804,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public async Task<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null) {
+            var trace = new StackTrace();
             if (_isDisposed || _isDisposing) {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
@@ -818,7 +820,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             retv = new BDadosTransaction(this, connection);
             WriteLog($"Database Access Opened {retv.Id} (using DB Transaction: {ilev.HasValue})");
-            var trace = new StackTrace();
             if (ilev.HasValue) {
                 await retv.BeginTransactionAsync(ilev.Value).ConfigureAwait(false);
             }
@@ -834,6 +835,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Active = true
             };
             retv.usingExternalBenchmarker = bmark != null;
+            if(ActiveConnections == null || _isDisposed || _isDisposing) {
+                await retv.DisposeAsync();
+                throw new BDadosException("Error trying to open connection in a Disposed RdbmsDataAccessor");
+                return null;
+            }
             lock (ActiveConnections) {
                 ActiveConnections[retv.Id] = retv;
             }
@@ -1841,6 +1847,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 Debugger.Break();
                             }
                         }
+                        ActiveConnections.Clear();
+                        ActiveConnections = null;
                     }
                 } catch (Exception x) {
                     Fi.Tech.SwallowException(x);
@@ -3075,29 +3083,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var dlc = new DataLoadContext {
                         DataAccessor = this,
                         IsAggregateLoad = true,
+                        Transaction = transaction,
                         ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
                     };
 
                     var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                     var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
 
-                    // One day this could be great, but right now it sucks;
-                    //
-                    //await foreach(var item in Fi.Tech.ParallelFlow<T>(async yield => {
-                    //    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
-                    //        yield.Return(item);
-                    //    }
-                    //}).Then<T>(async i => {
-                    //    if (implementsAfterLoad) {
-                    //        ((IBusinessObject)i).OnAfterLoad(dlc);
-                    //    }
-                    //    if (implementsAfterAggregateLoad) {
-                    //        await ((IBusinessObject<T>)i).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
-                    //    }
-                    //    return i;
-                    //})) {
-                    //    yield return item;
-                    //}
                     var yieldedItems = 0;
                     var rowSkip = args.Linear ? 0 : (args.RowSkip ?? 0);
                     await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
@@ -3139,6 +3131,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
+                Transaction = transaction,
                 ContextTransferObject = args?.ContextObject ?? transaction?.ContextTransferObject
             };
             if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {

@@ -8,6 +8,7 @@
 * 
 **/
 using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.Exceptions;
 using Figlotech.BDados.Helpers;
 using Figlotech.Core;
 using Figlotech.Core.FileAcessAbstractions;

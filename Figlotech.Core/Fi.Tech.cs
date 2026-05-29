@@ -82,11 +82,6 @@ namespace Figlotech.Core {
             return new FnVal<T>(fn);
         }
 
-        public static void NullCheck(object obj, string msg) {
-            if (obj == null)
-                throw new BusinessValidationException(msg);
-        }
-
         public enum DataUnitType {
             SI, IEC
         }

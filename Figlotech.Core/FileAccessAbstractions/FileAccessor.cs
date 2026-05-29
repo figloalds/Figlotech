@@ -431,7 +431,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
             retv = Path.GetFullPath(retv);
             if (!retv.StartsWith(RootDirectory)) {
-                throw new BusinessValidationException("Relative path must be within the FileSystem's Root Directory");
+                throw new Exception("Relative path must be within the FileSystem's Root Directory");
             }
             return retv;
         }

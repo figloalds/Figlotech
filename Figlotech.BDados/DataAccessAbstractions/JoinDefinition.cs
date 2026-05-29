@@ -1,4 +1,5 @@
-﻿using Figlotech.BDados.Helpers;
+﻿using Figlotech.BDados.Exceptions;
+using Figlotech.BDados.Helpers;
 using Figlotech.Core;
 using System;
 using System.Collections.Generic;

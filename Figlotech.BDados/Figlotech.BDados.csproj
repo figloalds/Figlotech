@@ -18,9 +18,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
-		<ProjectReference Include="..\Figlotech.BDados.Analyzers\Figlotech.BDados.Analyzers.csproj"
-		                  OutputItemType="Analyzer"
-		                  ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\Figlotech.BDados.Analyzers\Figlotech.BDados.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<!-- NETSTANDARD REFS -->

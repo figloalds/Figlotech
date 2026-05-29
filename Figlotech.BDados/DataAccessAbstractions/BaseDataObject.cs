@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.Builders;
+using Figlotech.BDados.Business;
 using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Interfaces;
 using Newtonsoft.Json;

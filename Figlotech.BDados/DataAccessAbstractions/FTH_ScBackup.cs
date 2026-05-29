@@ -1,5 +1,5 @@
-﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
-using Figlotech.Core.BusinessModel;
+﻿using Figlotech.BDados.Business;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using System.Collections.Generic;
 
 namespace Figlotech.BDados.DataAccessAbstractions {

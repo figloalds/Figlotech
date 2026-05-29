@@ -11,6 +11,7 @@
 
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Exceptions;
 using Figlotech.Core;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;

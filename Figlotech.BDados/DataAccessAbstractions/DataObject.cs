@@ -1,4 +1,6 @@
-﻿using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Business;
+using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.BDados.Exceptions;
 using Figlotech.Core;
 using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Helpers;
@@ -141,5 +143,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             return retv;
         }
+
     }
 }

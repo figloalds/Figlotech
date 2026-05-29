@@ -1,4 +1,5 @@
 ﻿using Figlotech.BDados.DataAccessAbstractions;
+using Figlotech.BDados.Exceptions;
 using Figlotech.Core;
 using System;
 using System.Collections.Generic;

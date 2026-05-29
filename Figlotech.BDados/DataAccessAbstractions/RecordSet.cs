@@ -7,6 +7,7 @@
 * August/2014
 * 
 **/
+using Figlotech.BDados.Exceptions;
 using Figlotech.Core.Interfaces;
 using System;
 using System.Collections.Generic;

@@ -1,4 +1,5 @@
 ﻿using Figlotech.Core.BusinessModel;
+
 /**
 * Figlotech::Database::Entity::FieldAttribute
 * Fields marked with this attribute will be automatically assigned

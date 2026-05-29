@@ -1,5 +1,5 @@
+using Figlotech.BDados.Business;
 using Figlotech.Core;
-using Figlotech.Core.BusinessModel;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
@@ -661,6 +661,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
+                Transaction = transaction,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
@@ -809,6 +810,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
+                Transaction = transaction,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
             transaction?.Benchmarker?.Mark("Run afterloads");

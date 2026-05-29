@@ -1,4 +1,5 @@
-﻿using Figlotech.Core.BusinessModel;
+﻿using Figlotech.BDados.Business;
+using Figlotech.Core.BusinessModel;
 using System;
 using System.Collections.Generic;
 
