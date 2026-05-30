@@ -9,8 +9,11 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
 
     public sealed class TimedCache<TKey, T> : IDictionary<TKey, T>, IDisposable, IAsyncDisposable {
-        private readonly LenientDictionary<TKey, TimerCachedObject<TKey, T>> Dictionary;
-        private TimeSpan CacheDuration { get; set; }
+        private readonly LenientDictionary<TKey, TimerCachedObject<T>> Dictionary;
+        private readonly TimeSpan _cacheDuration;
+        private readonly Timer _timer;
+        private readonly object _disposeLock = new object();
+        private volatile bool _isDisposed;
 
         public ICollection<TKey> Keys => Dictionary.Keys;
 
@@ -27,25 +30,22 @@ namespace Figlotech.Core {
 
         public Func<T, Task<bool>> CustomCanFinalizeAsync { get; set; } = null;
 
-        Timer timer { get; set; }
-
-        bool isDisposed = false;
-
         public void Dispose() {
-            if (isDisposed) return;
-            isDisposed = true;
-            timer.Change(Timeout.Infinite, Timeout.Infinite);
-            Fi.Tech.FireAndForget(async () => {
-                await timer.DisposeAsync().ConfigureAwait(false);
-            });
-            GC.SuppressFinalize(this);
+            lock (_disposeLock) {
+                if (_isDisposed) return;
+                _isDisposed = true;
+                _timer.Change(Timeout.Infinite, Timeout.Infinite);
+                _timer.Dispose();
+            }
         }
+
         public async ValueTask DisposeAsync() {
-            if (isDisposed) return;
-            isDisposed = true;
-            timer.Change(Timeout.Infinite, Timeout.Infinite);
-            await timer.DisposeAsync().ConfigureAwait(false);
-            GC.SuppressFinalize(this);
+            lock (_disposeLock) {
+                if (_isDisposed) return;
+                _isDisposed = true;
+                _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+            await _timer.DisposeAsync().ConfigureAwait(false);
         }
 
         private static async ValueTask DisposeValueAsync(T value) {
@@ -57,21 +57,18 @@ namespace Figlotech.Core {
         }
 
         public TimedCache(TimeSpan duration) {
-            this.CacheDuration = duration;
-            Dictionary = new LenientDictionary<TKey, TimerCachedObject<TKey, T>>();
+            this._cacheDuration = duration;
+            Dictionary = new LenientDictionary<TKey, TimerCachedObject<T>>();
 
-            var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, CacheDuration.TotalSeconds / 10));
-            var weakRef = new WeakReference<TimedCache<TKey, T>>(this);
-            Timer t = null;
-            t = new Timer((state) => {
-                if (!weakRef.TryGetTarget(out var cache) || cache.isDisposed) {
-                    t?.Change(Timeout.Infinite, Timeout.Infinite);
-                    t?.Dispose();
+            var timerCheckInterval = TimeSpan.FromSeconds(Math.Max(1, _cacheDuration.TotalSeconds / 10));
+            _timer = new Timer((state) => {
+                var cache = (TimedCache<TKey, T>)state;
+                if (cache._isDisposed) {
                     return;
                 }
                 Fi.Tech.FireAndForget(async () => {
-                    var keys = cache.Dictionary.Keys.ToList();
-                    var freed = cache.OnFree != null ? new List<TKey>(cache.Dictionary.Count) : null;
+                    var keys = cache.Dictionary.Keys;
+                    var freed = cache.OnFree != null ? new List<TKey>() : null;
                     foreach (var key in keys) {
                         if (!cache.Dictionary.TryGetValue(key, out var item)) {
                             continue;
@@ -80,7 +77,7 @@ namespace Figlotech.Core {
                             cache.Dictionary.Remove(key);
                             continue;
                         }
-                        if ((DateTime.UtcNow - item.LastChecked) > cache.CacheDuration) {
+                        if ((DateTime.UtcNow - item.LastChecked) > cache._cacheDuration) {
                             if (cache.CustomCanFinalizeAsync != null) {
                                 if (item.Object == null || !await cache.CustomCanFinalizeAsync(item.Object).ConfigureAwait(false)) {
                                     item.KeepAlive();
@@ -117,37 +114,30 @@ namespace Figlotech.Core {
                         }
                     }
                 });
-            }, null, timerCheckInterval, timerCheckInterval);
-            timer = t;
+            }, this, timerCheckInterval, timerCheckInterval);
         }
 
         public T this[TKey key] {
             get {
-                TimerCachedObject<TKey, T> item;
-                if (!Dictionary.TryGetValue(key, out item)) {
-                    if (OnFailOver != null) {
-                        var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
-                        this[key] = ret;
-                        return ret;
-                    }
-                    return default(T);
+                if (Dictionary.TryGetValue(key, out var item)) {
+                    item.KeepAlive();
+                    return item.Object;
                 }
-                item.KeepAlive();
-                return item.Object;
+                return default;
             }
             set {
-                if (value == null && Dictionary.ContainsKey(key)) {
-                    var old = Dictionary[key];
-                    Dictionary.Remove(key);
-                    if (old != null && old.Object != null) {
-                        Fi.Tech.FireAndForget(async () => {
-                            await DisposeValueAsync(old.Object).ConfigureAwait(false);
-                        });
+                if (value == null) {
+                    if (Dictionary.TryGetValue(key, out var existing)) {
+                        Dictionary.Remove(key);
+                        if (existing != null && existing.Object != null) {
+                            Fi.Tech.FireAndForget(async () => {
+                                await DisposeValueAsync(existing.Object).ConfigureAwait(false);
+                            });
+                        }
                     }
                     return;
                 }
-                if (Dictionary.ContainsKey(key)) {
-                    var old = Dictionary[key];
+                if (Dictionary.TryGetValue(key, out var old)) {
                     if (old != null && !ReferenceEquals(old.Object, value) && old.Object != null) {
                         Fi.Tech.FireAndForget(async () => {
                             await DisposeValueAsync(old.Object).ConfigureAwait(false);
@@ -161,7 +151,7 @@ namespace Figlotech.Core {
                         });
                     }
                 } else {
-                    Dictionary[key] = new TimerCachedObject<TKey, T>(Dictionary, key, value, CacheDuration);
+                    Dictionary[key] = new TimerCachedObject<T>(value);
                 }
             }
         }
@@ -188,17 +178,16 @@ namespace Figlotech.Core {
         }
 
         public async Task<(bool Success, T Value)> TryGetValueAsync(TKey key) {
-            TimerCachedObject<TKey, T> item;
-            if (!Dictionary.TryGetValue(key, out item)) {
-                if (OnFailOver != null) {
-                    var ret = await OnFailOver.Invoke(key).ConfigureAwait(false);
-                    this[key] = ret;
-                    return (ret != null, ret);
-                }
-                return (false, default(T));
+            if (Dictionary.TryGetValue(key, out var item)) {
+                item.KeepAlive();
+                return (true, item.Object);
             }
-            item.KeepAlive();
-            return (true, item.Object);
+            if (OnFailOver != null) {
+                var ret = await OnFailOver.Invoke(key).ConfigureAwait(false);
+                this[key] = ret;
+                return (ret != null, ret);
+            }
+            return (false, default);
         }
 
         public bool TryGetValue(TKey key, out T value) {
@@ -207,26 +196,20 @@ namespace Figlotech.Core {
                 val.KeepAlive();
                 return true;
             }
-            if (OnFailOver != null) {
-                var ret = OnFailOver.Invoke(key).ConfigureAwait(false).GetAwaiter().GetResult();
-                this[key] = ret;
-                value = ret;
-                return true;
-            }
-            value = default(T);
+            value = default;
             return false;
         }
 
         public async Task<T> GetOrAddWithLocking(TKey key, Func<TKey, Task<T>> valueFactory) {
             return (await Dictionary._dmmy.GetOrAddWithLocking(
                 key,
-                async key => new TimerCachedObject<TKey, T>(Dictionary, key, await valueFactory(key), CacheDuration)
+                async key => new TimerCachedObject<T>(await valueFactory(key))
             )).Object;
         }
         public T GetOrAddWithLocking(TKey key, Func<TKey, T> valueFactory) {
             return Dictionary._dmmy.GetOrAddWithLocking(
                 key,
-                key => new TimerCachedObject<TKey, T>(Dictionary, key, valueFactory(key), CacheDuration)
+                key => new TimerCachedObject<T>(valueFactory(key))
             ).Object;
         }
 
@@ -247,7 +230,10 @@ namespace Figlotech.Core {
         }
 
         public bool Contains(KeyValuePair<TKey, T> item) {
-            return Dictionary.Keys.Any(x => x.Equals(item.Key) && Dictionary[item.Key].Object.Equals(item.Value));
+            if (Dictionary.TryGetValue(item.Key, out var val)) {
+                return val != null && val.Object != null && val.Object.Equals(item.Value);
+            }
+            return false;
         }
 
         public void CopyTo(KeyValuePair<TKey, T>[] array, int arrayIndex) {
