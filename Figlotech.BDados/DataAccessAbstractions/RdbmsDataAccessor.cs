@@ -19,6 +19,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
@@ -85,7 +86,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         ~BDadosTransaction() {
-            Dispose();
+            if (!isDisposed) {
+                Dispose();
+            }
         }
 
         public List<string[]> FrameHistory { get; private set; } = new List<string[]>(200);
@@ -167,6 +170,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (CancellationToken.IsCancellationRequested) {
                 throw new OperationCanceledException("The transaction was cancelled");
+            }
+            if (Connection.State != ConnectionState.Open) {
+                await DataAccessor.OpenConnectionAsync(this.CancellationToken, Connection).ConfigureAwait(false);
             }
             if (!FiTechCoreExtensions.EnableDebug)
                 return;
@@ -559,6 +565,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } finally {
                     DisposedTime = DateTime.UtcNow;
                     isDisposed = true;
+                    GC.SuppressFinalize(this);
                 }
                 try {
                     _cancellationTokenSource.Dispose();
@@ -674,7 +681,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _concurrentConnectionsSemaphoreSlim = new SemaphoreSlim(Plugin.PoolSize);
         }
         ~RdbmsDataAccessor() {
-            Dispose();
+            if (!_isDisposed) {
+                Dispose();
+            }
         }
 
         public async ValueTask EnsureDatabaseExistsAsync() {
@@ -686,19 +695,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             await using (var conn = (DbConnection)await this.GetNewOpenSchemalessConnectionAsync(CancellationToken.None).ConfigureAwait(false)) {
-                var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
-                using (var command = conn.CreateCommand()) {
-                    query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+                try {
+                    var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
+                    using (var command = conn.CreateCommand()) {
+                        query.ApplyToCommand(command, Plugin.ProcessParameterValue);
 
-                    if (command is DbCommand acom) {
-                        await acom.PrepareAsync().ConfigureAwait(false);
-                        await acom.ExecuteNonQueryAsync().ConfigureAwait(false);
-                    } else {
-                        command.Prepare();
-                        command.ExecuteNonQuery();
+                        if (command is DbCommand acom) {
+                            await acom.PrepareAsync().ConfigureAwait(false);
+                            await acom.ExecuteNonQueryAsync().ConfigureAwait(false);
+                        } else {
+                            command.Prepare();
+                            command.ExecuteNonQuery();
+                        }
                     }
+                } finally {
+                    _concurrentConnectionsSemaphoreSlim.Release();
                 }
-                _concurrentConnectionsSemaphoreSlim.Release();
             }
         }
 
@@ -1189,9 +1201,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
 
                 var retv = await functions.Invoke(transaction).ConfigureAwait(false);
-                if (retv is Task t) {
-                    await t;
-                }
+
                 if (!transaction?.usingExternalBenchmarker ?? false) {
                     var total = transaction?.Benchmarker.FinalMark();
                     WriteLog($"---- Access [{Description}:{aid}] Finished in {total}ms");
@@ -1202,13 +1212,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }, cancellationToken, ilev).ConfigureAwait(false);
         }
 
-        public async IAsyncEnumerable<T> AccessAsyncCoroutinely<T>(Func<BDadosTransaction, ChannelWriter<T>, Task> functions, CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
-            Channel<T> channel = Channel.CreateUnbounded<T>();
+        public async IAsyncEnumerable<T> AccessAsyncCoroutinely<T>(Func<BDadosTransaction, ChannelWriter<T>, Task> functions, [EnumeratorCancellation] CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
+            var channelOptions = new BoundedChannelOptions(1000) {
+                FullMode = BoundedChannelFullMode.Wait
+            };
+            Channel<T> channel = Channel.CreateBounded<T>(channelOptions);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var task = Task.Run(async () => {
                 try {
                     await AccessAsync(async (transaction) => {
                         await functions.Invoke(transaction, channel.Writer);
-                    }, cancellationToken, ilev).ConfigureAwait(false);
+                    }, cts.Token, ilev).ConfigureAwait(false);
+                } catch (OperationCanceledException) when (cts.Token.IsCancellationRequested) {
+                    // Expected when consumer cancels enumeration 
                 } catch (Exception x) {
                     throw new BusinessValidationException("Error reading data", x);
                 } finally {
@@ -1216,12 +1232,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             });
 
-            while (await channel.Reader.WaitToReadAsync(cancellationToken).AsTask().ConfigureAwait(false)) {
-                while (channel.Reader.TryRead(out var item)) {
-                    yield return item;
+            try {
+                while (await channel.Reader.WaitToReadAsync(cancellationToken).AsTask().ConfigureAwait(false)) {
+                    while (channel.Reader.TryRead(out var item)) {
+                        yield return item;
+                    }
                 }
+            } finally {
+                await task.ConfigureAwait(false);
             }
-            await task;
         }
 
         public T Access<T>(Func<BDadosTransaction, T> functions, IsolationLevel? ilev = IsolationLevel.ReadUncommitted) {
@@ -1832,9 +1851,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 _isDisposing = true;
                 try {
                     if (ActiveConnections != null) {
-                        foreach (var i in ActiveConnections.Keys) {
+                        long[] keys;
+                        lock (ActiveConnections) {
+                            keys = ActiveConnections.Keys.ToArray();
+                        }
+                        foreach (var i in keys) {
                             try {
-                                var connection = ActiveConnections[i].Connection;
+                                BDadosTransaction transaction;
+                                lock (ActiveConnections) {
+                                    if (!ActiveConnections.TryGetValue(i, out transaction)) {
+                                        continue;
+                                    }
+                                }
+                                var connection = transaction.Connection;
                                 if (connection is DbConnection dbc) {
                                     await dbc.DisposeAsync();
                                 } else {
@@ -1847,7 +1876,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 Debugger.Break();
                             }
                         }
-                        ActiveConnections.Clear();
+                        lock (ActiveConnections) {
+                            ActiveConnections.Clear();
+                        }
                         ActiveConnections = null;
                     }
                 } catch (Exception x) {
@@ -1855,6 +1886,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 } finally {
                     _isDisposed = true;
                     _isDisposing = false;
+                    GC.SuppressFinalize(this);
                 }
             }
         }
@@ -2188,206 +2220,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             workingTypes.Clear();
             workingTypes.AddRange(finalList);
-        }
-
-        public async Task SendLocalUpdates(IEnumerable<Type> types, DateTime dt, Stream stream) {
-            await AccessAsync(async tsn => await SendLocalUpdates(tsn, types, dt, stream), CancellationToken.None);
-        }
-        public void ReceiveRemoteUpdatesAndPersist(IEnumerable<Type> types, Stream stream) {
-            Access(tsn => ReceiveRemoteUpdatesAndPersist(tsn, types, stream));
-        }
-
-        public async Task SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream) {
-            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(ILegacyDataObject))).ToList();
-
-            SortTypesByDep(workingTypes);
-
-            var fields = new Dictionary<Type, MemberInfo[]>();
-            foreach (var type in workingTypes) {
-                fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                    .Select(x => x.Member)
-                    .ToArray();
-            }
-            var memberTypeOf = new Dictionary<MemberInfo, Type>();
-            foreach (var typeMembers in fields) {
-                foreach (var member in typeMembers.Value) {
-                    memberTypeOf[member] = ReflectionTool.GetTypeOf(member);
-                }
-            }
-            var query = Plugin.QueryGenerator.GenerateGetStateChangesQuery(workingTypes, fields, dt);
-
-            using (var cmd = await transaction.CreateCommandAsync(Qb.Fmt("set net_write_timeout=99999; set net_read_timeout=99999"), true)) {
-                cmd.ExecuteNonQuery();
-            }
-
-            using (var command = await transaction.CreateCommandAsync()) {
-                command.CommandTimeout = 999999;
-                VerboseLogQueryParameterization(transaction, query);
-                query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                transaction?.Benchmarker?.Mark($"@SendLocalUpdates Execute Query <{query.Id}>");
-                await using (var lh = await transaction.LockAsync()) {
-                    command.Prepare();
-                    using (var reader = command.ExecuteReader()) {
-                        using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024 * 64, true)) {
-                            object[] values = new object[reader.FieldCount];
-                            transaction?.Benchmarker?.Mark("Begin transmit data");
-                            BinaryFormatter bf = new BinaryFormatter();
-                            int readRows = 0;
-                            try {
-                                while (true) {
-                                    if (transaction?.ConnectionState == ConnectionState.Closed) {
-                                        Debugger.Break();
-                                    }
-                                    if (reader.IsClosed || !reader.Read()) {
-                                        break;
-                                    }
-                                    readRows++;
-                                    // 0x09 is Tab in the ASCII table,
-                                    // this character is chosen because it's 100% sure it will not
-                                    // appear in the JSON serialized values
-                                    reader.GetValues(values);
-                                    var type = workingTypes.FirstOrDefault(t => t.Name == values[0] as string);
-                                    if (type == null) {
-                                        continue;
-                                    }
-                                    for (int i = 0; i < fields[type].Length; i++) {
-                                        values[i + 1] = ReflectionTool.TryCast(values[i + 1], memberTypeOf[fields[type][i]]);
-                                    }
-                                    // +1 because we need to add the type name too
-                                    var outv = new object[fields[type].Length + 1];
-                                    Array.Copy(values, 0, outv, 0, outv.Length);
-                                    writer.WriteLine(JsonConvert.SerializeObject(outv));
-                                    //writer.WriteLine(String.Join(((char) 0x09).ToString(), values.Select(v => JsonConvert.SerializeObject(v))));
-                                }
-                            } catch (Exception x) {
-                                var elaps = transaction?.Benchmarker?.Mark("End data transmission");
-                                Console.WriteLine($"Error in {elaps}ms");
-                                transaction?.MarkAsErrored(x);
-                                throw new BDadosException("Error sending updates to peers", x);
-                            }
-                            transaction?.Benchmarker?.Mark($"End data transmission {readRows} items");
-                        }
-                    }
-                }
-            }
-        }
-
-        public IEnumerable<ILegacyDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream) {
-            var workingTypes = types.Where(t => !t.IsInterface && t.GetCustomAttribute<ViewOnlyAttribute>() == null && !t.IsGenericType && t.Implements(typeof(ILegacyDataObject))).ToList();
-            var fields = new Dictionary<Type, MemberInfo[]>();
-            foreach (var type in workingTypes) {
-                fields[type] = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                    .Select(x => x.Member)
-                    .ToArray();
-            }
-            var memberTypeOf = new Dictionary<MemberInfo, Type>();
-            foreach (var typeMembers in fields) {
-                foreach (var member in typeMembers.Value) {
-                    memberTypeOf[member] = ReflectionTool.GetTypeOf(member);
-                }
-            }
-
-            var cache = new Queue<ILegacyDataObject>();
-            var objAssembly = new WorkQueuer("rcv_updates_objasm", -1, true);
-
-            using (var reader = new StreamReader(stream, new UTF8Encoding(false), false, 1024 * 1024 * 8)) {
-                String line;
-                while (!string.IsNullOrEmpty(line = reader.ReadLine())) {
-                    var values = JsonConvert.DeserializeObject<object[]>(line);
-                    objAssembly.Enqueue(async () => {
-                        await Task.Yield();
-                        var v = values;
-                        Type type = types.FirstOrDefault(t => t.Name == values[0] as String);
-                        if (type == null)
-                            return;
-                        var instance = NewInstance(type);
-                        var ft = fields[type];
-                        for (int i = 0; i < fields[type].Length; i++) {
-                            ReflectionTool.SetMemberValue(ft[i], instance, v[i + 1]);
-                        }
-                        var add = instance as ILegacyDataObject;
-                        if (add != null) {
-                            lock (cache) {
-                                cache.Enqueue(add);
-                            }
-                        } else {
-                            Debugger.Break();
-                        }
-                        //yield return instance as IDataObject;
-                    });
-                }
-            }
-            while (cache.Count > 0) {
-                lock (cache) {
-                    var ret = cache.Dequeue();
-                    if (ret != null) {
-                        yield return ret;
-                    } else {
-                        Debugger.Break();
-                    }
-                }
-            }
-
-            while (objAssembly.WorkDone < objAssembly.TotalWork) {
-                while (cache.Count > 0) {
-                    lock (cache) {
-                        var ret = cache.Dequeue();
-                        if (ret != null) {
-                            yield return ret;
-                        } else {
-                            Debugger.Break();
-                        }
-                        lock (cache) {
-                        }
-                    }
-                }
-            }
-            objAssembly.Stop(true).GetAwaiter().GetResult();
-        }
-
-        public void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream) {
-
-            var cache = new List<ILegacyDataObject>();
-            int maxCacheLenBeforeFlush = 5000;
-            var persistenceQueue = new WorkQueuer("rcv_updates_persist", 1, true);
-
-            Action flushAndPersist = () => {
-                lock (cache) {
-                    var persistenceBatch = new List<ILegacyDataObject>(cache);
-                    cache.Clear();
-                    persistenceQueue.Enqueue(async () => {
-                        await Task.Yield();
-                        var grouping = persistenceBatch.GroupBy(item => item.GetType());
-                        foreach (var g in grouping) {
-                            var listOfType = g.ToList();
-                            Console.WriteLine($"Saving batch of type {listOfType.First().GetType().Name} {listOfType.Count} items");
-                            listOfType.ForEach(i => i.IsReceivedFromSync = true);
-                            SaveList(transaction, listOfType, false);
-                        }
-                    }, async x => {
-                        await Task.Yield();
-                        transaction?.MarkAsErrored(x);
-                        Console.WriteLine($"Error persisting batch {x.Message}");
-                    });
-                }
-            };
-
-            foreach (var instance in ReceiveRemoteUpdates(types, stream)) {
-                if (instance is ILegacyDataObject legacy) {
-                    lock (cache) {
-                        cache.Add(legacy);
-                    }
-                }
-                if (persistenceQueue.TotalWork - persistenceQueue.WorkDone > 2) {
-                    Thread.Sleep(100);
-                }
-                if (cache.Count >= maxCacheLenBeforeFlush) {
-                    flushAndPersist();
-                }
-            }
-
-            flushAndPersist();
-            persistenceQueue.Stop(true).GetAwaiter().GetResult();
         }
 
         public bool Delete<T>(BDadosTransaction transaction, Expression<Func<T, bool>> conditions) where T : IDataObject, new() {

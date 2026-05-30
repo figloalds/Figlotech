@@ -14,7 +14,9 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
@@ -47,11 +49,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public AggregateRelationPlan[][] RelationPlans;
 
         static readonly ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan> _planCache = new ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan>();
+        const int MaxPlanCacheSize = 1000;
 
         public static AggregateMaterializerPlan GetOrCreate(
             JoinDefinition join,
             Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict,
             IDictionary<int, Relation[]> cachedRelations) {
+            if (_planCache.Count >= MaxPlanCacheSize) {
+                return Build(join, fieldNamesDict, cachedRelations);
+            }
             return _planCache.GetOrAddWithLocking(join, _ => Build(join, fieldNamesDict, cachedRelations));
         }
 
@@ -374,12 +380,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command) where T : new() {
+        public async IAsyncEnumerable<T> GetObjectEnumerableAsync<T>(BDadosTransaction transaction, DbCommand command, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : new() {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(transaction.CancellationToken, cancellationToken);
+            var combinedToken = cts.Token;
             transaction?.Benchmarker.Mark("Enter lock command");
             transaction?.Benchmarker.Mark("- Starting Execute Query");
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, combinedToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
-                await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ConfigureAwait(false)) {
+                await foreach (var item in Fi.Tech.MapFromReaderAsync<T>(reader, combinedToken).ConfigureAwait(false)) {
                     yield return item;
                 }
             }
@@ -405,9 +413,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var isFirst = true;
                 var sb = new System.Text.StringBuilder(256);
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
-                    if (transaction.CancellationToken.IsCancellationRequested) {
-                        break;
-                    }
+                    transaction.CancellationToken.ThrowIfCancellationRequested();
                     sb.Clear();
                     if (!isFirst) {
                         sb.Append(',');
@@ -474,6 +480,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         static readonly ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
+        const int MaxAutoAggregateCacheSize = 1000;
 
         public (string, string) cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
@@ -574,7 +581,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex) where T : IDataObject, new() {
+        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : IDataObject, new() {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(transaction.CancellationToken, cancellationToken);
+            var combinedToken = cts.Token;
             var myPrefix = join.Joins[thisIndex].Prefix;
             var joinTables = join.Joins;
             var joinRelations = join.Relations;
@@ -584,14 +593,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
 
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
+            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, combinedToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker?.Mark("Prepare caches");
-                if ((transaction?.CancellationToken.IsCancellationRequested) ?? false) {
-                    throw transaction.Exception(new TaskCanceledException("Task was cancelled"));
-                }
+                combinedToken.ThrowIfCancellationRequested();
                 Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
+                    fieldNamesDict = CreateFieldNamesDict(reader, join);
+                } else {
+                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                }
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -611,7 +622,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 int objs = 0;
                 T currentObject = default(T);
                 var objArray = new object[reader.FieldCount];
-                while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
+                while (await reader.ReadAsync(combinedToken).ConfigureAwait(false)) {
+                    combinedToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T iterationObject;
                     var thisCacheId = cacheId(reader, myRidCol, typeof(T));
@@ -668,7 +680,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
+                    fieldNamesDict = CreateFieldNamesDict(reader, join);
+                } else {
+                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                }
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -688,9 +704,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                 var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+                const int AfterLoadInlineThreshold = 1000;
                 WorkQueuer afterLoads = implementsAfterLoad || implementsAfterAggregateLoad ? new WorkQueuer("AfterLoads") : null;
+                bool useInlineAfterLoad = false;
                 var objArray = new object[reader.FieldCount];
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
+                    transaction.CancellationToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T newObj;
                     var thisCacheId = cacheId(reader, myRidCol, typeof(T));
@@ -698,15 +717,28 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         newObj = new T();
                         constructionCache[thisCacheId] = newObj;
                         if (implementsAfterLoad || implementsAfterAggregateLoad) {
-                            afterLoads.Enqueue(async () => {
+                            if (retv.Count >= AfterLoadInlineThreshold) {
+                                useInlineAfterLoad = true;
+                            }
+                            if (useInlineAfterLoad) {
                                 if (implementsAfterLoad) {
                                     ((IBusinessObject)newObj).OnAfterLoad(dlc);
                                 }
-
                                 if (implementsAfterAggregateLoad) {
                                     await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                                 }
-                            });
+                            } else {
+                                var capturedNewObj = newObj;
+                                afterLoads.Enqueue(async () => {
+                                    if (implementsAfterLoad) {
+                                        ((IBusinessObject)capturedNewObj).OnAfterLoad(dlc);
+                                    }
+
+                                    if (implementsAfterAggregateLoad) {
+                                        await ((IBusinessObject<T>)capturedNewObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
+                                    }
+                                });
+                            }
                         }
                         retv.Add(newObj);
                     } else {
@@ -764,7 +796,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction?.Benchmarker?.Mark("Prepare caches");
                     Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                     Benchmarker.Assert(() => join != null);
-                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                    if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
+                        fieldNamesDict = CreateFieldNamesDict(reader, join);
+                    } else {
+                        fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
+                    }
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();

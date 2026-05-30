@@ -54,13 +54,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         Task<BDadosTransaction> CreateNewTransactionAsync(CancellationToken cancellationToken, IsolationLevel? ilev = IsolationLevel.ReadUncommitted, Benchmarker bmark = null);
 
-        Task SendLocalUpdates(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt, Stream stream);
-        void ReceiveRemoteUpdatesAndPersist(BDadosTransaction transaction, IEnumerable<Type> types, Stream stream);
-        Task SendLocalUpdates(IEnumerable<Type> types, DateTime dt, Stream stream);
-        void ReceiveRemoteUpdatesAndPersist(IEnumerable<Type> types, Stream stream);
-
-        IEnumerable<ILegacyDataObject> ReceiveRemoteUpdates(IEnumerable<Type> types, Stream stream);
-
         Task<List<ILegacyDataObject>> LoadUpdatedItemsSince(BDadosTransaction transaction, IEnumerable<Type> types, DateTime dt);
         Task<List<ILegacyDataObject>> LoadUpdatedItemsSince(IEnumerable<Type> types, DateTime dt);
 
