@@ -70,19 +70,16 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
-        public async Task SemaphoreDisposed_NoException() {
-            // Arrange
+        public async Task EnqueueAfterDispose_ReturnsFaultedRequest() {
             var queuer = new WorkQueuer("Test", 2);
-            queuer.Enqueue(() => new ValueTask());
-
-            // Act - Dispose and then try to signal
             queuer.Dispose();
 
-            // This should not throw
-            queuer.Enqueue(() => new ValueTask());
+            var request = queuer.Enqueue(new WorkJob(() => new ValueTask()));
 
-            // Assert - no exception thrown
-            Assert.True(true);
+            // Should return a request (not throw synchronously)
+            Assert.NotNull(request);
+            // But the request should be faulted
+            Assert.True(request.TaskCompletionSource.Task.IsFaulted);
         }
 
         [Fact]
@@ -240,18 +237,26 @@ namespace Figlotech.Core.Tests {
 
         [Fact]
         public async Task Enqueue_ScalesWorkersWhenDemandExceedsInitialPool() {
-            var maxThreads = Environment.ProcessorCount + 2;
+            var maxThreads = Environment.ProcessorCount * 3;
             var initialWorkers = Math.Min(Environment.ProcessorCount, maxThreads);
             var queuer = new WorkQueuer("Test", maxThreads, init_started: false);
             var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             queuer.Start();
 
-            for (int i = 0; i < maxThreads; i++) {
+            // Enqueue enough jobs to exceed 150% of initial worker count
+            var jobsToEnqueue = (int)(initialWorkers * 1.5) + 2;
+            for (int i = 0; i < jobsToEnqueue; i++) {
                 queuer.EnqueueTask(async () => {
                     await release.Task;
                 });
             }
+
+            // Wait for rate limiter to allow next scale check, then trigger one more enqueue
+            await Task.Delay(150);
+            queuer.EnqueueTask(async () => {
+                await release.Task;
+            });
 
             var timeoutAt = DateTime.UtcNow.AddSeconds(3);
             while (queuer.NumberOfActualWorkers <= initialWorkers && DateTime.UtcNow < timeoutAt) {
@@ -262,6 +267,26 @@ namespace Figlotech.Core.Tests {
                 $"Expected worker count to grow beyond {initialWorkers}, but found {queuer.NumberOfActualWorkers}.");
 
             release.SetResult(true);
+            await queuer.Stop(true);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task RapidEnqueue_DoesNotExcessivelyScaleWorkers() {
+            var queuer = new WorkQueuer("Test", 50, init_started: false);
+            queuer.Start();
+
+            // Enqueue 1000 jobs rapidly
+            for (int i = 0; i < 1000; i++) {
+                queuer.EnqueueTask(async () => await Task.Delay(1));
+            }
+
+            await Task.Delay(200); // Let scaling happen
+
+            // Should not have created all 50 workers immediately
+            Assert.True(queuer.NumberOfActualWorkers < 50,
+                $"Expected fewer than 50 workers but got {queuer.NumberOfActualWorkers}");
+
             await queuer.Stop(true);
             queuer.Dispose();
         }
@@ -768,6 +793,23 @@ namespace Figlotech.Core.Tests {
             // Assert
             Assert.Equal(200, completed);
             Assert.Equal(200, queuer.WorkDone);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task ConcurrentStop_NoDeadlock() {
+            var queuer = new WorkQueuer("Test", 4);
+            for (int i = 0; i < 20; i++) {
+                queuer.EnqueueTask(async () => await Task.Delay(50));
+            }
+            
+            // Call Stop concurrently from multiple threads
+            var stopTasks = Enumerable.Range(0, 5)
+                .Select(_ => Task.Run(() => queuer.Stop(true)))
+                .ToArray();
+            
+            await Task.WhenAll(stopTasks);
+            Assert.Equal(20, queuer.WorkDone);
             queuer.Dispose();
         }
     }

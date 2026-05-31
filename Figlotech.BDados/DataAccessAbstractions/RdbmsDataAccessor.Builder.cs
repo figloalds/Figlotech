@@ -49,15 +49,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public AggregateRelationPlan[][] RelationPlans;
 
         static readonly ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan> _planCache = new ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan>();
-        const int MaxPlanCacheSize = 1000;
 
         public static AggregateMaterializerPlan GetOrCreate(
             JoinDefinition join,
             Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict,
             IDictionary<int, Relation[]> cachedRelations) {
-            if (_planCache.Count >= MaxPlanCacheSize) {
-                return Build(join, fieldNamesDict, cachedRelations);
-            }
             return _planCache.GetOrAddWithLocking(join, _ => Build(join, fieldNamesDict, cachedRelations));
         }
 
@@ -167,7 +163,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return lambda.Compile();
         }
 
-        static Func<object> BuildConstructor(Type type) {
+        static internal Func<object> BuildConstructor(Type type) {
             var newExpr = Expression.New(type);
             var lambda = Expression.Lambda<Func<object>>(Expression.Convert(newExpr, typeof(object)));
             return lambda.Compile();
@@ -196,7 +192,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return lambda.Compile();
         }
 
-        static Action<object, object> BuildConvertingSetter(Type ownerType, string memberName) {
+        static internal Action<object, object> BuildConvertingSetter(Type ownerType, string memberName) {
             var member = ReflectionTool.GetMember(ownerType, memberName);
             if (member == null) return null;
             if (member is PropertyInfo prop && prop.SetMethod == null) return null;
@@ -355,6 +351,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable, IAsyncDisposable {
 
+        private readonly object _aggregateBuildSyncLock = new object();
+
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
             using var handle = transaction.Lock();
@@ -422,18 +420,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     bool isFirstField = true;
                     for (int i = 0; i < existingKeys.Length; i++) {
                         if (existingKeys[i] != null) {
-                            try {
-                                var o = reader.GetValue(i);
-                                if (!isFirstField) {
-                                    sb.Append(',');
-                                }
-                                sb.Append(jsonKeyPrefixes[i]);
-                                sb.Append(JsonConvert.SerializeObject(o));
-                                isFirstField = false;
-                            } catch (Exception) {
-                                Debugger.Break();
-                                //throw x;
+                            var o = reader.GetValue(i);
+                            if (!isFirstField) {
+                                sb.Append(',');
                             }
+                            sb.Append(jsonKeyPrefixes[i]);
+                            sb.Append(JsonConvert.SerializeObject(o));
+                            isFirstField = false;
                         }
                     }
                     sb.Append('}');
@@ -472,15 +465,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        static readonly SelfInitializerDictionary<Type, ConstructorInfo> ConstructorCache = new SelfInitializerDictionary<Type, ConstructorInfo>(
-            x => x.GetConstructor(Array.Empty<Type>())
-        );
-        private object NewInstance(Type t) {
-            return ConstructorCache[t].Invoke(Array.Empty<object>());
-        }
-
         static readonly ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
-        const int MaxAutoAggregateCacheSize = 1000;
 
         public (string, string) cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
@@ -488,6 +473,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
         public (string, string) cacheId(object[] reader, int myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
+            return (t.Name, rid);
+        }
+
+        private (string, string) cacheId(IDataReader reader, int ordinal, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader.GetValue(ordinal))?.ToString();
             return (t.Name, rid);
         }
 
@@ -598,11 +588,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 combinedToken.ThrowIfCancellationRequested();
                 Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
-                    fieldNamesDict = CreateFieldNamesDict(reader, join);
-                } else {
-                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-                }
+                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -611,6 +597,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
 
                 var myRidCol = $"{myPrefix}_{ridcol}";
+                var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
                 var constructionCache = new Dictionary<(string, string), object>();
                 if (myRidCol == null && Debugger.IsAttached) {
@@ -626,7 +613,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     combinedToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T iterationObject;
-                    var thisCacheId = cacheId(reader, myRidCol, typeof(T));
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
                     if (!constructionCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
                         iterationObject = new T();
                         if (currentObject != null) {
@@ -680,11 +667,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
-                if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
-                    fieldNamesDict = CreateFieldNamesDict(reader, join);
-                } else {
-                    fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-                }
+                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                 var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                     return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -693,6 +676,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
 
                 var myRidCol = $"{myPrefix}_{ridcol}";
+                var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
                 var constructionCache = new Dictionary<(string, string), object>();
                 if (myRidCol == null && Debugger.IsAttached) {
@@ -712,7 +696,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction.CancellationToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T newObj;
-                    var thisCacheId = cacheId(reader, myRidCol, typeof(T));
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
                     if (!constructionCache.TryGetValue(thisCacheId, out var newObjObj)) {
                         newObj = new T();
                         constructionCache[thisCacheId] = newObj;
@@ -790,17 +774,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
                 Debugger.Break();
             }
-            lock (command) {
+            lock (_aggregateBuildSyncLock) {
                 transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
                 using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
                     transaction?.Benchmarker?.Mark("Prepare caches");
-                    Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
-                    Benchmarker.Assert(() => join != null);
-                    if (_autoAggregateCache.Count >= MaxAutoAggregateCacheSize) {
-                        fieldNamesDict = CreateFieldNamesDict(reader, join);
-                    } else {
-                        fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-                    }
+                Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
+                Benchmarker.Assert(() => join != null);
+                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
                     var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
                         return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
@@ -809,6 +789,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
 
                     var myRidCol = $"{myPrefix}_{ridcol}";
+                    var myRidOrdinal = reader.GetOrdinal(myRidCol);
                     bool isNew;
                     var constructionCache = new Dictionary<(string, string), object>();
                     if (myRidCol == null && Debugger.IsAttached) {
@@ -821,7 +802,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     while (reader.Read()) {
                         isNew = true;
                         T newObj;
-                        var thisCacheId = cacheId(reader, myRidCol, typeof(T));
+                        var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
                         if (!constructionCache.TryGetValue(thisCacheId, out var newObjObj)) {
                             newObj = new T();
                             constructionCache[thisCacheId] = newObj;
@@ -873,17 +854,39 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<ILegacyDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
             var retv = new List<ILegacyDataObject>();
             transaction?.Benchmarker?.Mark("Init Build Result");
+
+            var typeByName = new Dictionary<string, Type>(StringComparer.Ordinal);
+            var constructors = new Dictionary<Type, Func<object>>();
+            var setters = new Dictionary<Type, Action<object, object>[]>();
+            var dataOrdinals = new Dictionary<Type, int[]>();
+
+            foreach (var type in workingTypes) {
+                typeByName[type.Name] = type;
+                constructors[type] = AggregateMaterializerPlan.BuildConstructor(type);
+                var typeFields = fields[type];
+                var typeSetters = new Action<object, object>[typeFields.Length];
+                var ordinals = new int[typeFields.Length];
+                for (int i = 0; i < typeFields.Length; i++) {
+                    typeSetters[i] = AggregateMaterializerPlan.BuildConvertingSetter(type, typeFields[i].Name);
+                    ordinals[i] = reader.GetOrdinal($"data_{i}");
+                }
+                setters[type] = typeSetters;
+                dataOrdinals[type] = ordinals;
+            }
+
+            var typeNameOrdinal = reader.GetOrdinal("TypeName");
+
             while (reader.Read()) {
-                var typename = reader["TypeName"] as String;
-                var type = workingTypes.FirstOrDefault(wt => wt.Name == typename);
-                if (type == null) {
+                var typename = reader.GetValue(typeNameOrdinal) as string;
+                if (!typeByName.TryGetValue(typename, out var type)) {
                     continue;
                 }
 
-                var instance = NewInstance(type);
-                var tFields = fields[type];
-                for (int i = 0; i < tFields.Length; i++) {
-                    ReflectionTool.SetMemberValue(tFields[i], instance, reader[$"data_{i}"]);
+                var instance = constructors[type]();
+                var typeSettersArr = setters[type];
+                var typeOrdinals = dataOrdinals[type];
+                for (int i = 0; i < typeSettersArr.Length; i++) {
+                    typeSettersArr[i]?.Invoke(instance, reader.GetValue(typeOrdinals[i]));
                 }
                 retv.Add((ILegacyDataObject)instance);
             }
@@ -892,29 +895,34 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
         private Dictionary<string, (int[], string[], Dictionary<string, int>)> CreateFieldNamesDict(IDataReader reader, JoinDefinition join) {
-            var fieldNames = new string[reader.FieldCount];
-            for (int i = 0; i < fieldNames.Length; i++)
-                fieldNames[i] = reader.GetName(i);
-            int idx = 0;
-            var newEntryGrp = fieldNames.Select<string, (string, int, string)>(name => {
+            var groups = new Dictionary<string, List<(int Index, string FieldName)>>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < reader.FieldCount; i++) {
+                var name = reader.GetName(i);
+                if (name == null) continue;
                 var underscoreIdx = name.IndexOf('_');
                 var prefix = underscoreIdx >= 0 ? name.Substring(0, underscoreIdx).ToLowerInvariant() : name.ToLowerInvariant();
                 var fieldName = underscoreIdx >= 0 ? name.Substring(underscoreIdx + 1) : name;
-                return (prefix, idx++, fieldName);
-            })
-            .Where(i => i.Item1 != null)
-            .GroupBy(i => i.Item1);
-            return newEntryGrp.ToDictionary(
-                i => i.First().Item1,
-                i => {
-                    var indices = i.Select(j => j.Item2).ToArray();
-                    var names = i.Select(j => j.Item3).ToArray();
-                    var lookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    for (int k = 0; k < names.Length; k++) {
-                        lookup[names[k]] = indices[k];
-                    }
-                    return (indices, names, lookup);
-                });
+                if (!groups.TryGetValue(prefix, out var list)) {
+                    list = new List<(int, string)>();
+                    groups[prefix] = list;
+                }
+                list.Add((i, fieldName));
+            }
+
+            var result = new Dictionary<string, (int[], string[], Dictionary<string, int>)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in groups) {
+                var list = kvp.Value;
+                var indices = new int[list.Count];
+                var names = new string[list.Count];
+                var lookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < list.Count; i++) {
+                    indices[i] = list[i].Index;
+                    names[i] = list[i].FieldName;
+                    lookup[names[i]] = indices[i];
+                }
+                result[kvp.Key] = (indices, names, lookup);
+            }
+            return result;
         }
     }
 }

@@ -75,7 +75,7 @@ namespace Figlotech.Core {
         internal readonly TaskCompletionSource<int> _tcsNotifyDequeued = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         readonly TaskCompletionSource<int> _taskCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
+        public TaskCompletionSource<int> TaskCompletionSource => _taskCompletionSource;
 
         public ConfiguredTaskAwaitable<int>.ConfiguredTaskAwaiter GetAwaiter() {
             return GetAwaiterInternal().ConfigureAwait(false).GetAwaiter();
@@ -179,7 +179,7 @@ namespace Figlotech.Core {
         public Dictionary<string, object> DefaultLoggingTags => _defaultLoggingTags ??= new Dictionary<string, object>();
 
         // Held when not Active, flushed on Start()
-        private readonly List<WorkJobExecutionRequest> HeldJobs = new List<WorkJobExecutionRequest>();
+        private readonly ConcurrentQueue<WorkJobExecutionRequest> HeldJobs = new ConcurrentQueue<WorkJobExecutionRequest>();
 
         // Track active jobs (for stats) without locking a List
         private readonly ConcurrentDictionary<int, WorkJobExecutionRequest> ActiveJobs = new ConcurrentDictionary<int, WorkJobExecutionRequest>();
@@ -236,6 +236,10 @@ namespace Figlotech.Core {
         public TimeSpan TotalTaskResolutionTime => TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks));
         public TimeSpan AverageTaskResolutionTime => WorkDone > 0 ? TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks) / WorkDone) : TimeSpan.Zero;
 
+        // Worker scaling rate limiting
+        private long _lastWorkerScaleTicks = DateTime.UtcNow.Ticks;
+        private const int MinScaleIntervalMs = 100;
+
         public TimeSpan TimeIdle => WentIdle > DateTime.UtcNow ? TimeSpan.Zero : DateTime.UtcNow - WentIdle;
 
         // Scheduling infrastructure - consolidated single timer with priority queue
@@ -291,30 +295,35 @@ namespace Figlotech.Core {
         public async Task Stop(bool wait = true) {
             if (!IsRunning) return;
 
-            // Prevent new jobs being written into the channel
             _drainOnStop = wait;
 
             if (wait) {
-                // Signal-based drain: wait for all queued and active jobs to complete
                 if (Volatile.Read(ref _inQueueInternal) > 0 || !ActiveJobs.IsEmpty) {
                     var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    _drainTcs = tcs;
-                    // Double-check after publishing tcs (job may have finished between check and assignment)
+                    var existing = Interlocked.CompareExchange(ref _drainTcs, tcs, null);
+                    if (existing != null) {
+                        await existing.Task.ConfigureAwait(false);
+                        return;
+                    }
                     if (Volatile.Read(ref _inQueueInternal) <= 0 && ActiveJobs.IsEmpty) {
                         tcs.TrySetResult(true);
                     }
                     await tcs.Task.ConfigureAwait(false);
-                    _drainTcs = null;
+                    Interlocked.Exchange(ref _drainTcs, null);
                 }
             } else {
                 if (!ActiveJobs.IsEmpty) {
                     var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    _drainTcs = tcs;
+                    var existing = Interlocked.CompareExchange(ref _drainTcs, tcs, null);
+                    if (existing != null) {
+                        await existing.Task.ConfigureAwait(false);
+                        return;
+                    }
                     if (ActiveJobs.IsEmpty) {
                         tcs.TrySetResult(true);
                     }
                     await tcs.Task.ConfigureAwait(false);
-                    _drainTcs = null;
+                    Interlocked.Exchange(ref _drainTcs, null);
                 }
             }
             Active = false;
@@ -344,15 +353,14 @@ namespace Figlotech.Core {
         }
 
         private void FlushHeldJobsToQueue() {
-            List<WorkJobExecutionRequest> pending = null;
-            lock (HeldJobs) {
-                if (HeldJobs.Count == 0) return;
-                pending = new List<WorkJobExecutionRequest>(HeldJobs);
-                HeldJobs.Clear();
-            }
-
-            foreach (var job in pending) {
+            while (HeldJobs.TryDequeue(out var job)) {
                 WriteQueuedJob(job, alreadyCounted: false);
+            }
+        }
+
+        private void DisposeHeldJobs() {
+            while (HeldJobs.TryDequeue(out var job)) {
+                job.Dispose();
             }
         }
 
@@ -384,11 +392,19 @@ namespace Figlotech.Core {
         private void EnsureWorkerCapacityForDemand() {
             if (!IsRunning || _runCts == null || _runCts.IsCancellationRequested) return;
 
+            var lastScale = new DateTime(Interlocked.Read(ref _lastWorkerScaleTicks), DateTimeKind.Utc);
+            if (DateTime.UtcNow - lastScale < TimeSpan.FromMilliseconds(MinScaleIntervalMs)) {
+                return;
+            }
+
             var limit = EffectiveParallelLimit();
             var currentWorkers = Volatile.Read(ref _numberOfActualWorkers);
             var demand = Volatile.Read(ref _executingInternal) + Volatile.Read(ref _inQueueInternal);
+
+            // Only scale if demand exceeds current capacity by 50% or more
             var desiredWorkers = Math.Max(InitialWorkerCount(), Math.Min(limit, demand));
-            if (desiredWorkers > currentWorkers) {
+            if (desiredWorkers > currentWorkers && desiredWorkers > currentWorkers * 1.5) {
+                Interlocked.Exchange(ref _lastWorkerScaleTicks, DateTime.UtcNow.Ticks);
                 EnsureWorkers(desiredWorkers);
             }
         }
@@ -474,7 +490,11 @@ namespace Figlotech.Core {
 
         private void SignalDrainIfComplete() {
             var tcs = _drainTcs;
-            if (tcs != null && Volatile.Read(ref _inQueueInternal) <= 0 && ActiveJobs.IsEmpty) {
+            var inQueue = Volatile.Read(ref _inQueueInternal);
+            if (inQueue < 0) {
+                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"WARNING: _inQueueInternal went negative ({inQueue}), indicating a counting bug");
+            }
+            if (tcs != null && inQueue <= 0 && ActiveJobs.IsEmpty) {
                 tcs.TrySetResult(true);
             }
         }
@@ -513,9 +533,7 @@ namespace Figlotech.Core {
             if (Active) {
                 WriteQueuedJob(request, alreadyCounted: false);
             } else {
-                lock (HeldJobs) {
-                    HeldJobs.Add(request);
-                }
+                HeldJobs.Enqueue(request);
             }
 
             _ = SafeInvoke(OnWorkEnqueued, request);
@@ -769,6 +787,7 @@ namespace Figlotech.Core {
         }
 
         private void OnConsolidatedTimerFired() {
+            if (_isClosed || !_isRunning) return;
             List<ScheduledTaskEntry> entriesToExecute = null;
             List<ScheduledTaskEntry> entriesToReschedule = null;
             List<ScheduledTaskEntry> entriesToCleanup = null;
@@ -915,9 +934,9 @@ namespace Figlotech.Core {
                 entry.Cancellation?.Cancel();
                 lock (_scheduledTasksLock) {
                     _scheduledTaskQueue.Remove(entry);
+                    _scheduledTasks.Remove(identifier);
                 }
                 entry.Cancellation?.Dispose();
-                _scheduledTasks.Remove(identifier);
             }
         }
 
@@ -1017,6 +1036,7 @@ namespace Figlotech.Core {
             } catch (Exception) {
                 // Ignore other exceptions during dispose
             }
+            DisposeHeldJobs();
             DisposeScheduledTasks();
             _workChannel.Writer.TryComplete();
             _runCts?.Dispose();
@@ -1024,6 +1044,7 @@ namespace Figlotech.Core {
         public async ValueTask DisposeAsync() {
             IsClosed = true;
             await Stop(true).ConfigureAwait(false);
+            DisposeHeldJobs();
             DisposeScheduledTasks();
             _workChannel.Writer.TryComplete();
             _runCts?.Dispose();
