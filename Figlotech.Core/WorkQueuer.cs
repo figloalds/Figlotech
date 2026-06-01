@@ -152,6 +152,7 @@ namespace Figlotech.Core {
         public decimal TimeInExecution { get; set; }
         public Dictionary<string, object> AdditionalTelemetryTags { get; set; }
         public StackTrace SchedulingContextStackTrace { get; set; }
+        public CancellationTokenSource CancellationTokenSource { get; set;  }
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
             EnqueuedAt = x.EnqueuedTime;
@@ -160,6 +161,7 @@ namespace Figlotech.Core {
             TimeInExecution = (decimal)(DateTime.UtcNow - (x.DequeuedTime ?? DateTime.UtcNow)).TotalMilliseconds;
             SchedulingContextStackTrace = x?.StackTrace;
             AdditionalTelemetryTags = x.WorkJob.AdditionalTelemetryTags;
+            CancellationTokenSource = x.Cancellation;
         }
     }
 

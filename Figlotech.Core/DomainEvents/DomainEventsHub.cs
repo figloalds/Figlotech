@@ -129,6 +129,10 @@ namespace Figlotech.Core.DomainEvents {
             }, listener);
         }
 
+        public void ClearListeners() {
+            _listeners = ImmutableArray<IDomainEventListener>.Empty;
+        }
+
         public void RemoveListener(IDomainEventListener listener) {
             if(listener == null) throw new ArgumentNullException(nameof(listener));
             
