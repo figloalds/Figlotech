@@ -42,7 +42,7 @@ namespace System {
             } catch (Exception x) {
                 self.Mark($"[RegionException] {label}", x);
                 retv = default(T);
-                throw x;
+                throw;
             }
 
             return retv;

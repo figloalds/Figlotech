@@ -462,7 +462,7 @@ namespace Figlotech.Core.Helpers {
                 return Activator.CreateInstance(t);
             } catch (Exception x) {
 
-                throw x;
+                throw;
             }
         }
 

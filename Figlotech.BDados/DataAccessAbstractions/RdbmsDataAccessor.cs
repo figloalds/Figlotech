@@ -1651,7 +1651,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (!transaction.IsRolledBack && !transaction.IsCommited) {
                             await transaction.RollbackAsync().ConfigureAwait(false);
                         }
-                        throw x;
+                        throw;
                     } catch (Exception x) {
                         if (Debugger.IsAttached && x?.GetType() != typeof(System.OperationCanceledException)) {
                             Debugger.Break();
@@ -1742,7 +1742,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (!transaction.IsRolledBack && !transaction.IsCommited) {
                             transaction.Rollback();
                         }
-                        throw x;
+                        throw;
                     } catch (Exception x) {
                         if (Debugger.IsAttached && x?.GetType() != typeof(System.OperationCanceledException)) {
                             Debugger.Break();

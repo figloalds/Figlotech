@@ -171,7 +171,7 @@ namespace Figlotech.Data {
                         return retv;
                     } catch (Exception x) {
                         transaction.Rollback();
-                        throw x;
+                        throw;
                     }
                 }
             }
@@ -189,7 +189,7 @@ namespace Figlotech.Data {
                         transaction.Commit();
                     } catch (Exception x) {
                         transaction.Rollback();
-                        throw x;
+                        throw;
                     }
                 }
             }

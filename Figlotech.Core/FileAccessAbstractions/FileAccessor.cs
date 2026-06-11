@@ -38,7 +38,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                     absMkDirs(RootDirectory);
                 }
             } catch (Exception x) {
-                throw x;
+                throw;
             }
         }
 
@@ -54,7 +54,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 }
             } catch (Exception x) {
                 Console.Error.WriteLine($"Error creating directory tree for {dir}: {x.Message}");
-                throw x;
+                throw;
             }
             try {
                 Directory.CreateDirectory(dir);

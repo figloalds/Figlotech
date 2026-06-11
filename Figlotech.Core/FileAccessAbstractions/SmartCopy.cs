@@ -464,7 +464,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return hashList;
             } catch (Exception x) {
                 if (ThrowOnError) {
-                    throw x;
+                    throw;
                 }
                 return new List<FileData>();
             }

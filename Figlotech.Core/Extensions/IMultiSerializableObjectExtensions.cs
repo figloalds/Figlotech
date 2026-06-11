@@ -58,7 +58,7 @@ namespace Figlotech.Core.Extensions {
                             Fi.Tech.MemberwiseCopy(parse, obj);
                         } catch (Exception x) {
                             Fi.Tech.WriteLine("Error parsing JSON File: " + x.Message);
-                            throw x;
+                            throw;
                         }
                     }
                 });
