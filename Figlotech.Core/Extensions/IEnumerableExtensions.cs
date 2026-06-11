@@ -116,6 +116,11 @@ namespace System {
                 yield return await promise;
             }
         }
+        public static async IAsyncEnumerable<ValueTuple<T1, T2>> ToResults<T1, T2>(this IEnumerable<ValueTuple<T1, Task<T2>>> promises) {
+            foreach (var promise in promises) {
+                yield return new ValueTuple<T1, T2>(promise.Item1, await promise.Item2);
+            }
+        }
 
         public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> self) {
             List<T> retv = new List<T>();

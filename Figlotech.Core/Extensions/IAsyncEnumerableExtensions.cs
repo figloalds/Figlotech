@@ -33,6 +33,12 @@ namespace Figlotech.Core.Extensions.AsyncEnumerable {
             }
         }
 
+        public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<Task<T>> enumerable) {
+            foreach (var item in enumerable) {
+                yield return await item;
+            }
+        }
+
         public static async IAsyncEnumerable<T> Where<T>(this IAsyncEnumerable<T> arraySegment, Func<T, bool> predicate) {
             await foreach (var item in arraySegment) {
                 if (predicate(item)) {
