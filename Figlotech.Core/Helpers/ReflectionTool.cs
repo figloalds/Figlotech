@@ -858,10 +858,7 @@ namespace Figlotech.Core.Helpers {
             // If nothing matched and dest == string, fallback to ToString()
             if (effectiveDest == typeof(string)) {
                 var toStringCall = Expression.Call(pObject, typeof(object).GetMethod(nameof(ToString))!);
-                // chain might be null if no candidates; safeguard
-                chain = chain == null ? (Expression)toStringCall : (Expression)Expression.Condition(isNull, Expression.Default(dest), chain);
-                // ensure final result is string
-                chain = Expression.Condition(Expression.Not(isNull), toStringCall, Expression.Default(dest));
+                chain = chain == null ? toStringCall : Expression.Condition(Expression.Not(isNull), toStringCall, chain);
             } else {
                 // Generic IConvertible fallback: Convert.ChangeType(pObject, effectiveDest) then box/wrap to dest
                 var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;

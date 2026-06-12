@@ -89,28 +89,6 @@ namespace Figlotech.Core {
             } catch (Exception) { }
         }
 
-        private void writeExInternal(string message, Exception x, StringBuilder sw, bool isRoot) {
-            if (isRoot) {
-                sw.AppendLine($"-> {{");
-                sw.AppendLine($" -- [{message}] -- {{");
-            }
-            sw.AppendLine($"[{x.Source}]--[{x.TargetSite}]--[{x.Message}]");
-            sw.AppendLine(x.StackTrace);
-            sw.AppendLine(new String('-', 20));
-            if (x.InnerException != null) {
-                writeExInternal(message, x.InnerException, sw, false);
-            }
-            if (x is AggregateException ag) {
-                foreach (var agex in ag.InnerExceptions) {
-                    writeExInternal(message, agex, sw, false);
-                }
-            }
-            if (isRoot) {
-                sw.AppendLine($"}} // {message} ");
-                WriteLog(sw.ToString());
-            }
-        }
-
         public void WriteEx(String message, Exception x) {
             WriteLog(message);
             WriteLog(JsonConvert.SerializeObject(x.ToExceptionArray(), Formatting.Indented));
