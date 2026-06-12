@@ -665,6 +665,17 @@ namespace Figlotech.Core.Helpers {
             // Identidade
             if (src == dest) return (true, p);
 
+            if (TryGetValueBoxElementType(dest, out var valueBoxElementType)) {
+                var innerBodyResult = BuildConversionBody(src, valueBoxElementType, p);
+                if (!innerBodyResult.Success) return (false, null);
+                var valueBoxCtor = dest.GetConstructor(new[] { valueBoxElementType });
+                if (valueBoxCtor == null) return (false, null);
+                var innerValue = innerBodyResult.Expression.Type == valueBoxElementType
+                    ? innerBodyResult.Expression
+                    : Expression.Convert(innerBodyResult.Expression, valueBoxElementType);
+                return (true, Expression.New(valueBoxCtor, innerValue));
+            }
+
             var effectiveDest = Nullable.GetUnderlyingType(dest) ?? dest;
             if (effectiveDest.IsEnum) {
                 var effectiveSrc = Nullable.GetUnderlyingType(src) ?? src;
@@ -773,6 +784,27 @@ namespace Figlotech.Core.Helpers {
             //return Expression.Convert(p, dest);
         }
 
+        private static bool TryGetValueBoxElementType(Type type, out Type elementType) {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueBox<>)) {
+                elementType = type.GetGenericArguments()[0];
+                return true;
+            }
+            elementType = null;
+            return false;
+        }
+
+        private static Expression WrapConvertedValue(Expression value, Type dest, Type effectiveDest, bool isValueBox) {
+            if (isValueBox) {
+                var ctor = dest.GetConstructor(new[] { effectiveDest });
+                if (ctor == null) {
+                    throw new InvalidOperationException($"Cannot construct {dest} from {effectiveDest}.");
+                }
+                var innerValue = value.Type == effectiveDest ? value : Expression.Convert(value, effectiveDest);
+                return Expression.New(ctor, innerValue);
+            }
+            return effectiveDest == dest ? value : Expression.Convert(value, dest);
+        }
+
         private static Expression BuildObjectRuntimeAwareConversion(Expression pObject, Type dest) {
             // null => default(dest)
             var isNull = Expression.Equal(pObject, Expression.Constant(null));
@@ -787,6 +819,10 @@ namespace Figlotech.Core.Helpers {
             // Prepare candidate source types to test at runtime
             var candidates = new List<Type>();
             var effectiveDest = Nullable.GetUnderlyingType(dest) ?? dest;
+            var isValueBox = TryGetValueBoxElementType(dest, out var valueBoxElementType);
+            if (isValueBox) {
+                effectiveDest = Nullable.GetUnderlyingType(valueBoxElementType) ?? valueBoxElementType;
+            }
 
             // Prefer exact destination type first (handles assignable casts fast)
             candidates.Add(effectiveDest);
@@ -836,9 +872,7 @@ namespace Figlotech.Core.Helpers {
                 );
                 var elseCast = Expression.Convert(pObject, effectiveDest); // last resort (may throw)
                 var fallbackCore = Expression.Condition(convertibleTest, changeTypeCall, elseCast);
-                var fallback = effectiveDest == dest
-                    ? (Expression)fallbackCore
-                    : Expression.Convert(fallbackCore, dest);
+                var fallback = WrapConvertedValue(fallbackCore, dest, effectiveDest, isValueBox);
 
                 chain = chain == null ? fallback : Expression.Condition(isNull, Expression.Default(dest), chain);
                 // ensure value type null-safety: when null -> default(dest)
