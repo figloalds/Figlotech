@@ -14,6 +14,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -147,9 +148,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         static readonly ConcurrentDictionary<(Type, string), object> MaterializerCache = new ConcurrentDictionary<(Type, string), object>();
         public static Func<DbDataReader, T> GetSimpleLoadAllMaterializerFor<T>(IDataReader reader) where T : new() {
-            var fieldNames = Fi.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToArray();
-            var fieldTypes = Fi.Range(0, reader.FieldCount).Select(i => reader.GetFieldType(i).Name).ToArray();
-            var tag = String.Join(";", fieldNames.Zip(fieldTypes, (n, t) => $"{n}:{t}")) + $"|{typeof(T).FullName}";
+            var fieldCount = reader.FieldCount;
+            var typeName = typeof(T).FullName;
+            var estimatedCapacity = Math.Max(fieldCount * 32, 64) + typeName.Length + 1;
+            using var tagBuilder = new ValueStringBuilder(estimatedCapacity);
+            for (int i = 0; i < fieldCount; i++) {
+                if (i > 0) {
+                    tagBuilder.Append(';');
+                }
+                tagBuilder.Append(reader.GetName(i));
+                tagBuilder.Append(':');
+                tagBuilder.Append(reader.GetFieldType(i).Name);
+            }
+            tagBuilder.Append('|');
+            tagBuilder.Append(typeName);
+            var tag = tagBuilder.ToString();
+
             return (Func<DbDataReader, T>)MaterializerCache.GetOrAddWithLocking((typeof(T), tag), t => {
                 var cols = new string[reader.FieldCount];
                 for (int i = 0; i < cols.Length; i++)

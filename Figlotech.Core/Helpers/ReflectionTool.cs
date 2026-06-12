@@ -50,21 +50,13 @@ namespace Figlotech.Core.Helpers {
 
     public sealed class ReflectionTool {
 
-        private static LenientDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new LenientDictionary<Type, MemberInfo[]>();
+        private static ConcurrentDictionary<Type, MemberInfo[]> MembersCache { get; set; } = new ConcurrentDictionary<Type, MemberInfo[]>();
 
         public static bool StrictMode { get; set; } = false;
         public static MemberInfo[] FieldsAndPropertiesOf(Type type) {
             if (type == null)
                 throw new ArgumentNullException("Cannot get fields and properties of null type!");
-            lock (String.Intern($"ACCESS_MEMBER_CACHE_{type.Name}")) {
-                if (!MembersCache.ContainsKey(type)) {
-                    MembersCache[type] = CollectMembers(type).ToArray();
-                }
-                // It is not clear rather the .Net Runtime caches or not 
-                // the member info or if they do lookups all the time
-                // It could be good to cache this, but I'm not sure yet.
-                return MembersCache[type];
-            }
+            return MembersCache.GetOrAdd(type, (t)=> CollectMembers(t).ToArray());
         }
 
         static readonly ConcurrentDictionary<(Type, Type), object> AttributedMembersCache = new ConcurrentDictionary<(Type, Type), object>();
@@ -589,16 +581,49 @@ namespace Figlotech.Core.Helpers {
             });
         }
 
+        /// <summary>
+        /// Builds an expression that converts an <see cref="object"/> value to <paramref name="targetType"/>
+        /// inline, handling null/DBNull, nullable wrapping, enum/numeric/bool/DateTime fast paths,
+        /// user-defined conversions and the IConvertible fallback. Use this to avoid a delegate
+        /// invocation when materializing values inside a compiled expression tree.
+        /// </summary>
+        public static Expression BuildObjectToTargetConversionExpression(Expression objectValue, Type targetType) {
+            if (objectValue == null)
+                throw new ArgumentNullException(nameof(objectValue));
+            if (targetType == null)
+                throw new ArgumentNullException(nameof(targetType));
+            if (objectValue.Type != typeof(object))
+                throw new ArgumentException("Expression must be of type object.", nameof(objectValue));
+
+            // If the source is already a simple variable, use it directly to avoid an extra local.
+            // Otherwise, cache the source in a local variable so that expressions that use it
+            // multiple times (e.g. reader.GetValue(ordinal) with SequentialAccess) are evaluated once.
+            if (objectValue is ParameterExpression) {
+                var bodyResult = BuildConversionBody(typeof(object), targetType, objectValue);
+                if (!bodyResult.Success) throw new InvalidOperationException($"Cannot build conversion from {typeof(object)} to {targetType}.");
+                return bodyResult.Expression;
+            }
+
+            var local = Expression.Variable(typeof(object), "objValue");
+            var bodyResultLocal = BuildConversionBody(typeof(object), targetType, local);
+            if (!bodyResultLocal.Success) throw new InvalidOperationException($"Cannot build conversion from {typeof(object)} to {targetType}.");
+            return Expression.Block(
+                new[] { local },
+                Expression.Assign(local, objectValue),
+                bodyResultLocal.Expression);
+        }
+
         // ====== BUILDER ======
         private static Delegate BuildStrongConverter(Type src, Type dest) {
             // Build a Func<TSrc, TDest>
             var funcType = typeof(Func<,>).MakeGenericType(src, dest);
             var p = Expression.Parameter(src, "v");
 
-            Expression body = BuildConversionBody(src, dest, p);
+            var bodyResult = BuildConversionBody(src, dest, p);
+            if (!bodyResult.Success) throw new InvalidOperationException($"Cannot build conversion from {src} to {dest}.");
 
             // If dest is value type, body already of dest; otherwise ensure cast
-            var lambda = Expression.Lambda(funcType, body, p);
+            var lambda = Expression.Lambda(funcType, bodyResult.Expression, p);
             return lambda.Compile();
         }
 
@@ -628,72 +653,124 @@ namespace Figlotech.Core.Helpers {
 
             return null;
         }
-        private static Expression BuildConversionBody(Type src, Type dest, Expression p) {
+        private static (bool Success, Expression Expression) BuildConversionBody(Type src, Type dest, Expression p) {
             // Se src for object, construa uma cadeia de conversão em tempo de execução
             if (src == typeof(object)) {
-                return BuildObjectRuntimeAwareConversion(p, dest);
+                return (true, BuildObjectRuntimeAwareConversion(p, dest));
             }
             if (dest == typeof(object)) {
-                return Expression.Convert(p, typeof(object));
+                return (true, Expression.Convert(p, typeof(object)));
             }
 
             // Identidade
-            if (src == dest) return p;
+            if (src == dest) return (true, p);
 
-            // (mantenha seus casos especiais existentes)
-            if (dest.IsEnum) {
-                var u = Enum.GetUnderlyingType(dest);
-                Expression toUnderlying = src == u ? p : Expression.Convert(p, u);
-                return Expression.Convert(toUnderlying, dest);
+            var effectiveDest = Nullable.GetUnderlyingType(dest) ?? dest;
+            if (effectiveDest.IsEnum) {
+                var effectiveSrc = Nullable.GetUnderlyingType(src) ?? src;
+                if (IsIntegralType(effectiveSrc)) {
+                    Expression value = src == effectiveSrc ? p : Expression.Property(p, "Value");
+                    Expression enumValue = Expression.Convert(value, effectiveDest);
+                    if (effectiveDest != dest) {
+                        var nullableCtor = dest.GetConstructor(new[] { effectiveDest })!;
+                        enumValue = Expression.New(nullableCtor, enumValue);
+                    }
+                    return (true, enumValue);
+                }
             }
-            if (dest == typeof(int) && src == typeof(long)) return Expression.Convert(p, typeof(int));
-            if (dest == typeof(long) && src == typeof(int)) return Expression.Convert(p, typeof(long));
+
+            var effectiveSrcForEnum = Nullable.GetUnderlyingType(src) ?? src;
+            if (effectiveSrcForEnum.IsEnum) {
+                var effectiveDestForEnum = Nullable.GetUnderlyingType(dest) ?? dest;
+                if (IsIntegralType(effectiveDestForEnum)) {
+                    Expression value = src == effectiveSrcForEnum ? p : Expression.Property(p, "Value");
+                    var underlyingType = Enum.GetUnderlyingType(effectiveSrcForEnum);
+                    var castFromEnum = Expression.Convert(value, underlyingType);
+                    Expression numericValue = Expression.Convert(castFromEnum, effectiveDestForEnum);
+                    if (effectiveDestForEnum != dest) {
+                        var nullableCtor = dest.GetConstructor(new[] { effectiveDestForEnum })!;
+                        numericValue = Expression.New(nullableCtor, numericValue);
+                    }
+                    return (true, numericValue);
+                }
+            }
+
+            // 3. Conversões normais entre inteiros (int <-> long)
+            if ((dest == typeof(int) && src == typeof(long)) || (dest == typeof(long) && src == typeof(int))) {
+                Expression safeParam = p.Type == typeof(object) ? Expression.Convert(p, src) : p;
+                return (true, Expression.Convert(safeParam, dest));
+            }
             if (dest == typeof(DateTime) && src == typeof(DateTimeOffset)) {
                 var dtProp = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DateTime))!;
-                return Expression.Property(p, dtProp);
+                return (true, Expression.Property(p, dtProp));
             }
-            if (dest == typeof(bool) && src == typeof(sbyte)) return Expression.NotEqual(p, Expression.Constant((sbyte)0));
-            if (dest == typeof(ulong) && src == typeof(long)) return Expression.Convert(p, typeof(ulong));
+            if (dest == typeof(bool) && src == typeof(sbyte)) return (true, Expression.NotEqual(p, Expression.Constant((sbyte)0)));
+            if (dest == typeof(ulong) && src == typeof(long)) return (true, Expression.Convert(p, typeof(ulong)));
             if (dest == typeof(bool) && src == typeof(string)) {
                 var cmp = Expression.Constant(StringComparison.OrdinalIgnoreCase);
                 var equals = typeof(string).GetMethod(nameof(string.Equals), new[] { typeof(string), typeof(StringComparison) })!;
                 var isTrue = Expression.Call(p, equals, Expression.Constant("true"), cmp);
                 var isYes = Expression.Call(p, equals, Expression.Constant("yes"), cmp);
                 var isOne = Expression.Equal(p, Expression.Constant("1"));
-                return Expression.OrElse(Expression.OrElse(isTrue, isYes), isOne);
+                return (true, Expression.OrElse(Expression.OrElse(isTrue, isYes), isOne));
             }
             if (dest == typeof(TimeSpan) && src == typeof(string)) {
                 var parse = typeof(TimeSpan).GetMethod(nameof(TimeSpan.Parse), new[] { typeof(string) })!;
-                return Expression.Call(parse, p);
+                return (true, Expression.Call(parse, p));
             }
 
             // Atribuível (referência ou boxing)
             if (dest.IsAssignableFrom(src))
-                return p;
+                return (true, p);
 
             // >>> CORREÇÃO: conversão definida pelo usuário
             if (TryGetUserDefinedConversion(src, dest, out var op)) {
                 // Use Expression.Convert com MethodInfo para vincular o operador
-                return Expression.Convert(p, dest, op);
+                return (true, Expression.Convert(p, dest, op));
             }
 
             // fallback IConvertible
-            if (typeof(IConvertible).IsAssignableFrom(src) && typeof(IConvertible).IsAssignableFrom(dest)) {
-                var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;
-                var asObj = Expression.Convert(p, typeof(object));
-                var call = Expression.Call(changeType, asObj, Expression.Constant(dest, typeof(Type)));
-                return Expression.Convert(call, dest);
+            if (src.Implements(typeof(IConvertible)) && dest.Implements(typeof(IConvertible))) {
+                var srcType = Nullable.GetUnderlyingType(src) ?? src;
+                var destType = Nullable.GetUnderlyingType(dest) ?? dest;
+
+                var canUseChangeType =
+                    Type.GetTypeCode(srcType) != TypeCode.Object &&
+                    Type.GetTypeCode(destType) != TypeCode.Object &&
+                    !destType.IsEnum;
+
+                if (canUseChangeType) {
+                    var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;
+                    var asObj = Expression.Convert(p, typeof(object));
+                    var call = Expression.Call(changeType, asObj, Expression.Constant(destType, typeof(Type)));
+                    return (true, Expression.Convert(call, dest));
+                }
+            }
+
+            if (src.Implements(typeof(IConvertible)) && dest.IsGenericType && dest.GetGenericTypeDefinition() == typeof(FnVal<>)) {
+                var fnArg = dest.GetGenericArguments()[0];
+                var fc = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) });
+                if (fc != null) {
+                    var asObj = Expression.Convert(p, typeof(object));
+                    var toArgType = Expression.Call(fc, asObj, Expression.Constant(fnArg, typeof(Type)));
+                    var ctor = dest.GetConstructor(new[] { fnArg });
+                    if (ctor != null) {
+                        var newDest = Expression.New(ctor, toArgType);
+                        return (true, newDest);
+                    }
+                }
             }
 
             if (dest == typeof(string)) {
                 var toString = src.GetMethod(nameof(ToString), Type.EmptyTypes);
                 if (toString != null) {
-                    return Expression.Call(p, toString);
+                    return (true, Expression.Call(p, toString));
                 }
             }
 
+            return (false, null);
             // Último recurso: cast explícito (pode lançar se não suportado)
-            return Expression.Convert(p, dest);
+            //return Expression.Convert(p, dest);
         }
 
         private static Expression BuildObjectRuntimeAwareConversion(Expression pObject, Type dest) {
@@ -732,9 +809,11 @@ namespace Figlotech.Core.Helpers {
                 var asType = Expression.Convert(pObject, c);
                 var test = Expression.TypeIs(pObject, c);
                 try {
-                    var body = BuildConversionBody(c, dest, asType);
-                    chain = chain == null ? (Expression)Expression.Condition(test, body, Expression.Default(dest))
-                                          : (Expression)Expression.Condition(test, body, chain);
+                    var bodyResult = BuildConversionBody(c, dest, asType);
+                    if(!bodyResult.Success) continue; // skip unsupported conversions
+                    chain = chain == null 
+                        ? (Expression)Expression.Condition(test, bodyResult.Expression, Expression.Default(dest)) 
+                        : (Expression)Expression.Condition(test, bodyResult.Expression, chain);
                 } catch (Exception) {
                     // ignore non-sensical conversions
                 }
@@ -748,7 +827,7 @@ namespace Figlotech.Core.Helpers {
                 // ensure final result is string
                 chain = Expression.Condition(Expression.Not(isNull), toStringCall, Expression.Default(dest));
             } else {
-                // Generic IConvertible fallback: Convert.ChangeType(pObject, dest)
+                // Generic IConvertible fallback: Convert.ChangeType(pObject, effectiveDest) then box/wrap to dest
                 var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;
                 var convertibleTest = Expression.TypeIs(pObject, typeof(IConvertible));
                 var changeTypeCall = Expression.Convert(
@@ -756,17 +835,14 @@ namespace Figlotech.Core.Helpers {
                     effectiveDest
                 );
                 var elseCast = Expression.Convert(pObject, effectiveDest); // last resort (may throw)
-                var fallback = Expression.Condition(convertibleTest, changeTypeCall, elseCast);
+                var fallbackCore = Expression.Condition(convertibleTest, changeTypeCall, elseCast);
+                var fallback = effectiveDest == dest
+                    ? (Expression)fallbackCore
+                    : Expression.Convert(fallbackCore, dest);
 
-                chain = chain == null ? (Expression)fallback : (Expression)Expression.Condition(isNull, Expression.Default(dest), chain);
+                chain = chain == null ? fallback : Expression.Condition(isNull, Expression.Default(dest), chain);
                 // ensure value type null-safety: when null -> default(dest)
                 chain = Expression.Condition(isNull, Expression.Default(dest), chain);
-                // Append fallback if previous chain didn't handle the type
-                chain = Expression.Condition(
-                    Expression.Constant(true), // always reach; chain sub-branches have conditions inside
-                    chain,
-                    fallback
-                );
             }
 
             // Wrap with DBNull/null guards
@@ -929,13 +1005,14 @@ namespace Figlotech.Core.Helpers {
                 }
                 // Generic conversion path using BuildConversionBody
                 else {
-                    var innerBody = BuildConversionBody(src, underlyingDest, p);
+                    var innerBodyResult = BuildConversionBody(src, underlyingDest, p);
+                    if (!innerBodyResult.Success) throw new InvalidOperationException($"Cannot build conversion from {src} to {underlyingDest}.");
                     Expression result;
                     if (isNullable) {
                         var nullableCtor = effectiveDest.GetConstructor(new[] { underlyingDest });
-                        result = Expression.New(nullableCtor, innerBody);
+                        result = Expression.New(nullableCtor, innerBodyResult.Expression);
                     } else {
-                        result = innerBody;
+                        result = innerBodyResult.Expression;
                     }
 
                     if (isValueBox) {
@@ -957,6 +1034,14 @@ namespace Figlotech.Core.Helpers {
                    t == typeof(long) || t == typeof(ulong) ||
                    t == typeof(float) || t == typeof(double) ||
                    t == typeof(decimal);
+        }
+
+        private static bool IsIntegralType(Type t) {
+            return t == typeof(byte) || t == typeof(sbyte) ||
+                   t == typeof(short) || t == typeof(ushort) ||
+                   t == typeof(int) || t == typeof(uint) ||
+                   t == typeof(long) || t == typeof(ulong) ||
+                   t == typeof(char);
         }
 
         // Função que gera as expressões para ler, converter e atribuir sem tratamento adicional (modo release)
@@ -999,18 +1084,12 @@ namespace Figlotech.Core.Helpers {
 
             Expression convertedValue;
             if (ShouldReadAsObject(b.typeAtReader, b.targetType)) {
-                // Safe path for cross-numeric conversions: read as object, convert via object->target converter.
+                // Safe path for cross-numeric conversions: read as object, convert inline.
                 // This avoids InvalidCastException when GetFieldType lies about the actual runtime type
-                // (e.g., computed columns returning Double when schema says Int64).
-                var converter = GetOrCreateTypedConverter(typeof(object), b.targetType);
-                var converterFuncType = converter.GetType();
-                var invokeMethod = converterFuncType.GetMethod("Invoke");
-
-                // r.GetValue(ordinal) - returns object, safe for any type
+                // (e.g., computed columns returning Double when schema says Int64), and avoids a
+                // per-field delegate invocation by inlining the conversion into the materializer.
                 var rawValue = Expression.Call(dr, _dbReaderGetValueMethod, ordinalExpression);
-
-                var converterConstant = Expression.Constant(converter, converterFuncType);
-                convertedValue = Expression.Call(converterConstant, invokeMethod, rawValue);
+                convertedValue = BuildObjectToTargetConversionExpression(rawValue, b.targetType);
             } else {
                 // Fast path: types match or non-numeric conversion, use GetFieldValue<T> for zero-boxing
                 var converter = GetOrCreateTypedConverter(b.typeAtReader, b.targetType);

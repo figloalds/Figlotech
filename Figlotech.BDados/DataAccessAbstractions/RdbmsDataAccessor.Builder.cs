@@ -44,6 +44,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public bool HasAggregateList;
     }
 
+    public struct AggregateConstructionContext {
+        public Dictionary<(Type Type, object Rid), object> ObjectCache;
+        public Dictionary<(int ParentHash, int ChildIndex), object> ListCache;
+    }
+
     public sealed class AggregateMaterializerPlan {
         public Action<object, object[]>[] FieldPopulators;
         public AggregateRelationPlan[][] RelationPlans;
@@ -128,33 +133,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     _ => throw new NotSupportedException()
                 };
 
-                // Check for DBNull: values[ordinal] is DBNull || values[ordinal] == null
-                var isDbNull = Expression.OrElse(
-                    Expression.TypeIs(rawValue, typeof(DBNull)),
-                    Expression.ReferenceEqual(rawValue, Expression.Constant(null, typeof(object))));
-
-                // Get converter from object -> targetType
-                var converter = ReflectionTool.GetConverterDelegate(typeof(object), targetType);
-                var converterFuncType = converter.GetType();
-                var invokeMethod = converterFuncType.GetMethod("Invoke");
-                var converterConst = Expression.Constant(converter, converterFuncType);
-                Expression convertedValue = Expression.Call(converterConst, invokeMethod, rawValue);
-
-                // GetConverterDelegate unwraps Nullable<T> -> T, so the return type may differ from targetType
+                // Inline object->target conversion (handles null/DBNull internally)
+                Expression convertedValue = ReflectionTool.BuildObjectToTargetConversionExpression(rawValue, targetType);
                 if (convertedValue.Type != targetType) {
                     convertedValue = Expression.Convert(convertedValue, targetType);
                 }
-
-                if (!targetType.IsValueType || Nullable.GetUnderlyingType(targetType) != null) {
-                    var conditionalExpr = Expression.Condition(
-                        isDbNull,
-                        Expression.Default(targetType),
-                        convertedValue);
-                    block.Add(Expression.Assign(memberExpr, conditionalExpr));
-                } else {
-                    var assign = Expression.Assign(memberExpr, convertedValue);
-                    block.Add(Expression.IfThen(Expression.Not(isDbNull), assign));
-                }
+                block.Add(Expression.Assign(memberExpr, convertedValue));
             }
 
             block.Add(Expression.Empty());
@@ -210,28 +194,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 _ => throw new NotSupportedException()
             };
 
-            // Handle DBNull/null
-            var isDbNull = Expression.OrElse(
-                Expression.TypeIs(pValue, typeof(DBNull)),
-                Expression.ReferenceEqual(pValue, Expression.Constant(null, typeof(object))));
-
-            var converter = ReflectionTool.GetConverterDelegate(typeof(object), memberType);
-            var converterFuncType = converter.GetType();
-            var invokeMethod = converterFuncType.GetMethod("Invoke");
-            var converterConst = Expression.Constant(converter, converterFuncType);
-            Expression convertedValue = Expression.Call(converterConst, invokeMethod, pValue);
+            // Inline object->memberType conversion (handles null/DBNull internally)
+            Expression convertedValue = ReflectionTool.BuildObjectToTargetConversionExpression(pValue, memberType);
             if (convertedValue.Type != memberType) {
                 convertedValue = Expression.Convert(convertedValue, memberType);
             }
-
-            Expression body;
-            if (!memberType.IsValueType || Nullable.GetUnderlyingType(memberType) != null) {
-                body = Expression.Assign(memberExpr,
-                    Expression.Condition(isDbNull, Expression.Default(memberType), convertedValue));
-            } else {
-                body = Expression.IfThen(Expression.Not(isDbNull),
-                    Expression.Assign(memberExpr, convertedValue));
-            }
+            var body = Expression.Assign(memberExpr, convertedValue);
 
             var lambda = Expression.Lambda<Action<object, object>>(body, pTarget, pValue);
             return lambda.Compile();
@@ -293,9 +261,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 case AggregateBuildOptions.AggregateList: {
                         string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                        var objectType = ReflectionTool.GetTypeOf(
-                            ReflectionTool.FieldsAndPropertiesOf(parentType)
-                                .Where(m => m.Name == fieldAlias).FirstOrDefault());
+                        var member = ReflectionTool.GetMember(parentType, fieldAlias);
+                        var objectType = member != null ? ReflectionTool.GetTypeOf(member) : null;
                         if (objectType == null) break;
                         var ulType = objectType.GetGenericArguments().FirstOrDefault();
                         if (ulType == null) break;
@@ -318,9 +285,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 case AggregateBuildOptions.AggregateObject: {
                         string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                        var ulType = ReflectionTool.GetTypeOf(
-                            ReflectionTool.FieldsAndPropertiesOf(parentType)
-                                .Where(m => m.Name == fieldAlias).FirstOrDefault());
+                        var member = ReflectionTool.GetMember(parentType, fieldAlias);
+                        var ulType = member != null ? ReflectionTool.GetTypeOf(member) : null;
                         if (ulType == null) break;
 
                         plan.ChildType = ulType;
@@ -350,9 +316,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable, IAsyncDisposable {
-
-        private readonly object _aggregateBuildSyncLock = new object();
-
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
             using var handle = transaction.Lock();
@@ -467,25 +430,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         static readonly ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
 
-        public (string, string) cacheId(IDataReader reader, string myRidCol, Type t) {
-            var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
-            return (t.Name, rid);
+        public (Type, object) cacheId(IDataReader reader, string myRidCol, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
+            return (t, rid);
         }
-        public (string, string) cacheId(object[] reader, int myRidCol, Type t) {
-            var rid = ReflectionTool.DbDeNull(reader[myRidCol])?.ToString();
-            return (t.Name, rid);
+        public (Type, object) cacheId(object[] reader, int myRidCol, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
+            return (t, rid);
         }
 
-        private (string, string) cacheId(IDataReader reader, int ordinal, Type t) {
-            var rid = ReflectionTool.DbDeNull(reader.GetValue(ordinal))?.ToString();
-            return (t.Name, rid);
+        private (Type, object) cacheId(IDataReader reader, int ordinal, Type t) {
+            var rid = ReflectionTool.DbDeNull(reader.GetValue(ordinal));
+            return (t, rid);
         }
 
         public void BuildAggregateObject(
             AggregateMaterializerPlan plan,
             object[] reader, object obj,
             int thisIndex, bool isNew,
-            Dictionary<(string, string), object> constructionCache, int recDepth) {
+            AggregateConstructionContext ctx, int recDepth) {
 
             if (isNew) {
                 var populator = plan.FieldPopulators[thisIndex];
@@ -519,27 +482,27 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     continue;
 
                                 // Get or create the list on this parent instance
-                                var listCacheId = ("AGLIST_REF", $"{obj.GetHashCode()}_{rel.ChildIndex}");
+                                var listCacheId = (obj.GetHashCode(), rel.ChildIndex);
                                 object list;
-                                if (!constructionCache.TryGetValue(listCacheId, out list)) {
+                                if (!ctx.ListCache.TryGetValue(listCacheId, out list)) {
                                     list = rel.GetList(obj);
                                     if (list == null) {
                                         list = rel.CreateListInstance();
                                         rel.SetList(obj, list);
                                     }
-                                    constructionCache[listCacheId] = list;
+                                    ctx.ListCache[listCacheId] = list;
                                 }
 
                                 var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType);
                                 bool isUlNew = false;
-                                if (!constructionCache.TryGetValue(childRidCacheId, out var newObj)) {
+                                if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
                                     newObj = rel.CreateChildInstance();
                                     rel.AddToList(list, newObj);
-                                    constructionCache[childRidCacheId] = newObj;
+                                    ctx.ObjectCache[childRidCacheId] = newObj;
                                     isUlNew = true;
                                 }
 
-                                BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+                                BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, ctx, recDepth + 1);
                                 break;
                             }
 
@@ -554,15 +517,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                                 var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType);
                                 bool isUlNew = false;
-                                if (!constructionCache.TryGetValue(childRidCacheId, out var newObj)) {
+                                if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
                                     newObj = rel.CreateInstance();
-                                    constructionCache[childRidCacheId] = newObj;
+                                    ctx.ObjectCache[childRidCacheId] = newObj;
                                     isUlNew = true;
                                 }
-                                rel.SetObject(obj, newObj);
+                                if (rel.SetObject != null && (isNew || isUlNew)) {
+                                    rel.SetObject(obj, newObj);
+                                }
 
                                 if (isUlNew || rel.HasAggregateList) {
-                                    BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, constructionCache, recDepth + 1);
+                                    BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, ctx, recDepth + 1);
                                 }
                                 break;
                             }
@@ -599,7 +564,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var myRidCol = $"{myPrefix}_{ridcol}";
                 var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
-                var constructionCache = new Dictionary<(string, string), object>();
+                var ctx = new AggregateConstructionContext {
+                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
+                    ListCache = new Dictionary<(int ParentHash, int ChildIndex), object>()
+                };
                 if (myRidCol == null && Debugger.IsAttached) {
                     Debugger.Break();
                 }
@@ -614,15 +582,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     isNew = true;
                     T iterationObject;
                     var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
-                    if (!constructionCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
+                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
                         iterationObject = new T();
                         if (currentObject != null) {
                             objs++;
                             yield return currentObject;
                         }
-                        constructionCache.Clear();
+                        ctx.ObjectCache.Clear();
+                        ctx.ListCache.Clear();
                         currentObject = iterationObject;
-                        constructionCache[thisCacheId] = iterationObject;
+                        ctx.ObjectCache[thisCacheId] = iterationObject;
                     } else {
                         iterationObject = (T)iterationObjectObj;
                         isNew = false;
@@ -630,7 +599,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                     reader.GetValues(objArray);
 
-                    BuildAggregateObject(plan, objArray, iterationObject, thisIndex, isNew, constructionCache, 0);
+                    BuildAggregateObject(plan, objArray, iterationObject, thisIndex, isNew, ctx, 0);
 
                     row++;
                 }
@@ -642,7 +611,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)objs).ToString("0.00")}ms/obj | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                 transaction?.Benchmarker?.Mark("Clear cache");
-                constructionCache.Clear();
+                ctx.ObjectCache.Clear();
+                ctx.ListCache.Clear();
             }
         }
 
@@ -678,11 +648,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var myRidCol = $"{myPrefix}_{ridcol}";
                 var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
-                var constructionCache = new Dictionary<(string, string), object>();
+                var ctx = new AggregateConstructionContext {
+                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
+                    ListCache = new Dictionary<(int ParentHash, int ChildIndex), object>()
+                };
                 if (myRidCol == null && Debugger.IsAttached) {
                     Debugger.Break();
                 }
-                constructionCache.Add(("_INIT_", myRidCol), new Dictionary<string, object>());
                 transaction?.Benchmarker?.Mark("Enter Build Result");
                 int row = 0;
 
@@ -697,9 +669,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     isNew = true;
                     T newObj;
                     var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
-                    if (!constructionCache.TryGetValue(thisCacheId, out var newObjObj)) {
+                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
                         newObj = new T();
-                        constructionCache[thisCacheId] = newObj;
+                        ctx.ObjectCache[thisCacheId] = newObj;
                         if (implementsAfterLoad || implementsAfterAggregateLoad) {
                             if (retv.Count >= AfterLoadInlineThreshold) {
                                 useInlineAfterLoad = true;
@@ -731,7 +703,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
 
                     reader.GetValues(objArray);
-                    BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, constructionCache, 0);
+                    BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, ctx, 0);
 
                     row++;
                 }
@@ -743,7 +715,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
                 transaction?.Benchmarker?.Mark("Clear cache");
-                constructionCache.Clear();
+                ctx.ObjectCache.Clear();
+                ctx.ListCache.Clear();
             }
             transaction?.Benchmarker?.Mark("Run afterloads");
 
@@ -774,55 +747,56 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
                 Debugger.Break();
             }
-            lock (_aggregateBuildSyncLock) {
-                transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
-                using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
-                    transaction?.Benchmarker?.Mark("Prepare caches");
+            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+            using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
+                transaction?.Benchmarker?.Mark("Prepare caches");
                 Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
                 Benchmarker.Assert(() => join != null);
                 fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
 
-                    var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
-                        return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
-                    });
+                var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
+                    return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
+                });
 
-                    var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
+                var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
 
-                    var myRidCol = $"{myPrefix}_{ridcol}";
-                    var myRidOrdinal = reader.GetOrdinal(myRidCol);
-                    bool isNew;
-                    var constructionCache = new Dictionary<(string, string), object>();
-                    if (myRidCol == null && Debugger.IsAttached) {
-                        Debugger.Break();
-                    }
-                    constructionCache.Add(("_INIT_", myRidCol), new Dictionary<string, object>());
-                    transaction?.Benchmarker?.Mark("Enter Build Result");
-                    int row = 0;
-                    var objArray = new object[reader.FieldCount];
-                    while (reader.Read()) {
-                        isNew = true;
-                        T newObj;
-                        var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
-                        if (!constructionCache.TryGetValue(thisCacheId, out var newObjObj)) {
-                            newObj = new T();
-                            constructionCache[thisCacheId] = newObj;
-                            retv.Add(newObj);
-                        } else {
-                            newObj = (T)newObjObj;
-                            isNew = false;
-                        }
-
-                        reader.GetValues(objArray);
-                        BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, constructionCache, 0);
-
-                        row++;
-                    }
-                    var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
-                    transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-
-                    transaction?.Benchmarker?.Mark("Clear cache");
-                    constructionCache.Clear();
+                var myRidCol = $"{myPrefix}_{ridcol}";
+                var myRidOrdinal = reader.GetOrdinal(myRidCol);
+                bool isNew;
+                var ctx = new AggregateConstructionContext {
+                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
+                    ListCache = new Dictionary<(int ParentHash, int ChildIndex), object>()
+                };
+                if (myRidCol == null && Debugger.IsAttached) {
+                    Debugger.Break();
                 }
+                transaction?.Benchmarker?.Mark("Enter Build Result");
+                int row = 0;
+                var objArray = new object[reader.FieldCount];
+                while (reader.Read()) {
+                    isNew = true;
+                    T newObj;
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
+                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
+                        newObj = new T();
+                        ctx.ObjectCache[thisCacheId] = newObj;
+                        retv.Add(newObj);
+                    } else {
+                        newObj = (T)newObjObj;
+                        isNew = false;
+                    }
+
+                    reader.GetValues(objArray);
+                    BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, ctx, 0);
+
+                    row++;
+                }
+                var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
+                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
+
+                transaction?.Benchmarker?.Mark("Clear cache");
+                ctx.ObjectCache.Clear();
+                ctx.ListCache.Clear();
             }
             var dlc = new DataLoadContext {
                 DataAccessor = this,
@@ -851,6 +825,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return retv;
         }
 
+        private static readonly ConcurrentDictionary<Type, (Func<object> Constructor, Action<object, object>[] Setters)> _stateUpdateMetadataCache = new ConcurrentDictionary<Type, (Func<object>, Action<object, object>[])>();
+
         private List<ILegacyDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
             var retv = new List<ILegacyDataObject>();
             transaction?.Benchmarker?.Mark("Init Build Result");
@@ -862,15 +838,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             foreach (var type in workingTypes) {
                 typeByName[type.Name] = type;
-                constructors[type] = AggregateMaterializerPlan.BuildConstructor(type);
-                var typeFields = fields[type];
-                var typeSetters = new Action<object, object>[typeFields.Length];
-                var ordinals = new int[typeFields.Length];
-                for (int i = 0; i < typeFields.Length; i++) {
-                    typeSetters[i] = AggregateMaterializerPlan.BuildConvertingSetter(type, typeFields[i].Name);
+                var metadata = _stateUpdateMetadataCache.GetOrAdd(type, t => {
+                    var typeFields = fields[t];
+                    var typeSetters = new Action<object, object>[typeFields.Length];
+                    for (int i = 0; i < typeFields.Length; i++) {
+                        typeSetters[i] = AggregateMaterializerPlan.BuildConvertingSetter(t, typeFields[i].Name);
+                    }
+                    return (AggregateMaterializerPlan.BuildConstructor(t), typeSetters);
+                });
+                constructors[type] = metadata.Constructor;
+                setters[type] = metadata.Setters;
+                var typeFieldsLocal = fields[type];
+                var ordinals = new int[typeFieldsLocal.Length];
+                for (int i = 0; i < typeFieldsLocal.Length; i++) {
                     ordinals[i] = reader.GetOrdinal($"data_{i}");
                 }
-                setters[type] = typeSetters;
                 dataOrdinals[type] = ordinals;
             }
 

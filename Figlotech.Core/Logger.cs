@@ -89,7 +89,7 @@ namespace Figlotech.Core {
             } catch (Exception) { }
         }
 
-        private void writeExInternal(string message, Exception x, ValueStringBuilder sw, bool isRoot) {
+        private void writeExInternal(string message, Exception x, StringBuilder sw, bool isRoot) {
             if (isRoot) {
                 sw.AppendLine($"-> {{");
                 sw.AppendLine($" -- [{message}] -- {{");
