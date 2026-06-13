@@ -290,6 +290,32 @@ namespace Figlotech.Core.Tests {
             await queuer.Stop(true);
             queuer.Dispose();
         }
+        [Fact]
+        public void ChannelCapacity_Default_IsBounded() {
+            var queuer = new WorkQueuer("BoundedTest", 2);
+            // default capacity = MaxParallelTasks * 4 = 8
+            for (int i = 0; i < 8; i++) {
+                queuer.Enqueue(async () => await Task.Delay(Timeout.Infinite, CancellationToken.None));
+            }
+            Assert.Throws<InvalidOperationException>(() => queuer.Enqueue(() => Fi.EmptyValueTask));
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task EnqueueAsync_Waits_When_Channel_Full() {
+            var queuer = new WorkQueuer("EnqueueAsyncTest", 1) { ChannelCapacity = 1 };
+            var gate = new TaskCompletionSource<object>();
+            queuer.Enqueue(async () => await gate.Task);
+
+            var secondJobTask = queuer.EnqueueTaskAsync(async (ct) => { });
+            // give the worker time to pick the first job
+            await Task.Delay(100);
+            Assert.Equal(1, queuer.InQueue);
+
+            gate.SetResult(null);
+            await secondJobTask;
+            queuer.Dispose();
+        }
     }
 
     public class ScheduleTaskTests {
