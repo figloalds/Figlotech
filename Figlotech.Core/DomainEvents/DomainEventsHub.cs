@@ -33,6 +33,8 @@ namespace Figlotech.Core.DomainEvents {
         private ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> _listenersByType
             = ImmutableDictionary<Type, ImmutableArray<ListenerEntry>>.Empty;
 
+        private ImmutableArray<ListenerEntry> _catchAllListeners = ImmutableArray<ListenerEntry>.Empty;
+
         private ImmutableList<IExtension> _extensions = ImmutableList<IExtension>.Empty;
 
 
@@ -80,10 +82,22 @@ namespace Figlotech.Core.DomainEvents {
             }
 
             var listeners = _listenersByType;
+            var catchAll = _catchAllListeners;
             Dispatch(domainEvent, listeners);
+            DispatchCatchAll(domainEvent, catchAll);
 
             if (domainEvent.AllowPropagation) {
                 parentHub?.Raise(domainEvent);
+            }
+        }
+
+        private void DispatchCatchAll(IDomainEvent domainEvent, ImmutableArray<ListenerEntry> catchAll) {
+            for (int i = 0; i < catchAll.Length; i++) {
+                var listener = catchAll[i].Listener;
+                if (!listener.CanHandle(domainEvent)) {
+                    continue;
+                }
+                EnqueueListenerWork(domainEvent, listener);
             }
         }
 
@@ -130,7 +144,8 @@ namespace Figlotech.Core.DomainEvents {
             }
 
             var listeners = _listenersByType;
-            var task = DispatchAndWait(domainEvent, listeners);
+            var catchAll = _catchAllListeners;
+            var task = DispatchAndWait(domainEvent, listeners, catchAll);
 
             if (domainEvent.AllowPropagation) {
                 return AwaitWithPropagation(task, domainEvent);
@@ -146,25 +161,43 @@ namespace Figlotech.Core.DomainEvents {
             }
         }
 
-        private ValueTask DispatchAndWait(IDomainEvent domainEvent, ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> listeners) {
-            if (listeners == null || listeners.IsEmpty || MainQueuer == null) {
+        private ValueTask DispatchAndWait(IDomainEvent domainEvent, ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> listeners, ImmutableArray<ListenerEntry> catchAll) {
+            if (MainQueuer == null) {
                 return default;
             }
 
             var eventType = domainEvent.GetType();
-            if (!listeners.TryGetValue(eventType, out var entries) || entries.IsEmpty) {
+            listeners.TryGetValue(eventType, out var entries);
+            var catchAllCount = catchAll.IsDefaultOrEmpty ? 0 : catchAll.Length;
+            var totalCount = entries.IsDefaultOrEmpty ? 0 : entries.Length;
+            totalCount += catchAllCount;
+
+            if (totalCount == 0) {
                 return default;
             }
 
-            if (entries.Length == 1) {
-                var request = EnqueueListenerWorkWithRequest(domainEvent, entries[0].Listener);
+            if (totalCount == 1) {
+                var listener = entries.IsDefaultOrEmpty ? catchAll[0].Listener : entries[0].Listener;
+                var request = EnqueueListenerWorkWithRequest(domainEvent, listener);
                 return request != null ? new ValueTask(request.TaskCompletionSource.Task) : default;
             }
 
-            var tasks = new Task[entries.Length];
-            for (int i = 0; i < entries.Length; i++) {
-                var request = EnqueueListenerWorkWithRequest(domainEvent, entries[i].Listener);
-                tasks[i] = request?.TaskCompletionSource.Task ?? Task.CompletedTask;
+            var tasks = new Task[totalCount];
+            int taskIndex = 0;
+            if (!entries.IsDefaultOrEmpty) {
+                for (int i = 0; i < entries.Length; i++) {
+                    var request = EnqueueListenerWorkWithRequest(domainEvent, entries[i].Listener);
+                    tasks[taskIndex++] = request?.TaskCompletionSource.Task ?? Task.CompletedTask;
+                }
+            }
+            for (int i = 0; i < catchAllCount; i++) {
+                var listener = catchAll[i].Listener;
+                if (!listener.CanHandle(domainEvent)) {
+                    tasks[taskIndex++] = Task.CompletedTask;
+                    continue;
+                }
+                var request = EnqueueListenerWorkWithRequest(domainEvent, listener);
+                tasks[taskIndex++] = request?.TaskCompletionSource.Task ?? Task.CompletedTask;
             }
 
             return new ValueTask(Task.WhenAll(tasks));
@@ -190,18 +223,27 @@ namespace Figlotech.Core.DomainEvents {
         public IDisposable SubscribeListener(IDomainEventListener listener) {
             if (listener == null) throw new ArgumentNullException(nameof(listener));
 
-            ImmutableInterlocked.Update(ref _listenersByType, (current, l) => {
-                var handledTypes = GetHandledTypes(l);
-                var next = current;
-                foreach (var type in handledTypes) {
-                    var entries = next.GetValueOrDefault(type, ImmutableArray<ListenerEntry>.Empty);
-                    if (entries.Any(e => ReferenceEquals(e.Listener, l))) {
-                        continue;
+            if (listener is ICatchAllDomainEventListener) {
+                ImmutableInterlocked.Update(ref _catchAllListeners, (current, l) => {
+                    if (current.Any(e => ReferenceEquals(e.Listener, l))) {
+                        return current;
                     }
-                    next = next.SetItem(type, entries.Add(new ListenerEntry(l)));
-                }
-                return next;
-            }, listener);
+                    return current.Add(new ListenerEntry(l));
+                }, listener);
+            } else {
+                ImmutableInterlocked.Update(ref _listenersByType, (current, l) => {
+                    var handledTypes = GetHandledTypes(l);
+                    var next = current;
+                    foreach (var type in handledTypes) {
+                        var entries = next.GetValueOrDefault(type, ImmutableArray<ListenerEntry>.Empty);
+                        if (entries.Any(e => ReferenceEquals(e.Listener, l))) {
+                            continue;
+                        }
+                        next = next.SetItem(type, entries.Add(new ListenerEntry(l)));
+                    }
+                    return next;
+                }, listener);
+            }
 
             return new DomainEventListenerSubscription(this, listener);
         }
@@ -224,6 +266,10 @@ namespace Figlotech.Core.DomainEvents {
         public void RemoveListener(IDomainEventListener listener) {
             if (listener == null) throw new ArgumentNullException(nameof(listener));
 
+            ImmutableInterlocked.Update(ref _catchAllListeners, (current, l) => {
+                return current.RemoveAll(e => ReferenceEquals(e.Listener, l));
+            }, listener);
+
             ImmutableInterlocked.Update(ref _listenersByType, (current, l) => {
                 var next = current;
                 foreach (var type in current.Keys.ToList()) {
@@ -241,6 +287,7 @@ namespace Figlotech.Core.DomainEvents {
 
         public void ClearListeners() {
             _listenersByType = ImmutableDictionary<Type, ImmutableArray<ListenerEntry>>.Empty;
+            _catchAllListeners = ImmutableArray<ListenerEntry>.Empty;
         }
     }
 }

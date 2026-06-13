@@ -1,11 +1,19 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
+    public interface ICatchAllDomainEventListener : IDomainEventListener {
+    }
+
     public interface IDomainEventListener {
         ValueTask OnEventTriggered(IDomainEvent evt);
         ValueTask OnEventHandlingError(IDomainEvent evt, Exception x);
         bool CanHandle(IDomainEvent evt);
+    }
+
+    public interface IGenericDomainEventListener : IDomainEventListener {
+        IEnumerable<Type> HandledTypes { get; }
     }
 
     public abstract class DomainEventListener<T> : IDomainEventListener where T : IDomainEvent {

@@ -49,6 +49,35 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
+        public async Task CatchAllListener_ReceivesAllEventTypes() {
+            var hub = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
+            var tcs = new TaskCompletionSource<IDomainEvent>();
+            using (hub.SubscribeListener(new CatchAllRelay(e => {
+                tcs.TrySetResult(e);
+                return default(ValueTask);
+            }))) {
+                var evt = new TestEvent();
+                hub.Raise(evt);
+                var result = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(evt, result);
+            }
+        }
+
+        private sealed class CatchAllRelay : ICatchAllDomainEventListener {
+            private readonly Func<IDomainEvent, ValueTask> _onEvent;
+
+            public CatchAllRelay(Func<IDomainEvent, ValueTask> onEvent) {
+                _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
+            }
+
+            public bool CanHandle(IDomainEvent evt) => true;
+
+            public ValueTask OnEventTriggered(IDomainEvent evt) => _onEvent(evt);
+
+            public ValueTask OnEventHandlingError(IDomainEvent evt, Exception x) => default;
+        }
+
+        [Fact]
         public void SubscriptionHandle_Dispose_UnsubscribesListener() {
             var hub = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
             int counter = 0;
