@@ -210,9 +210,15 @@ namespace Figlotech.Core.DomainEvents {
             if (listener is IGenericDomainEventListener generic) {
                 return generic.HandledTypes;
             }
-            return listener.GetType().GetInterfaces()
-                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(DomainEventListener<>))
-                .Select(i => i.GetGenericArguments()[0]);
+            var type = listener.GetType();
+            var handledTypes = new List<Type>();
+            while (type != null && type != typeof(object)) {
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(DomainEventListener<>)) {
+                    handledTypes.Add(type.GetGenericArguments()[0]);
+                }
+                type = type.BaseType;
+            }
+            return handledTypes;
         }
 
         public void RemoveListener(IDomainEventListener listener) {
