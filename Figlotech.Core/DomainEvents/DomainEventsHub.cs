@@ -13,10 +13,6 @@ namespace Figlotech.Core.DomainEvents {
         }
     }
 
-    public sealed class EventRaiseResponse {
-        public List<TaskCompletionSource<int>> CompletionSources { get; internal set; }
-    }
-
     public sealed class DomainEventsHub {
 
         public static DomainEventsHub Global = new DomainEventsHub(FiTechCoreExtensions.GlobalQueuer);
@@ -29,12 +25,19 @@ namespace Figlotech.Core.DomainEvents {
             MainQueuer = queuer ?? FiTechCoreExtensions.GlobalQueuer;
         }
 
-        private ImmutableArray<IDomainEventListener> _listeners = ImmutableArray<IDomainEventListener>.Empty;
+        private sealed class ListenerEntry {
+            public IDomainEventListener Listener { get; }
+            public ListenerEntry(IDomainEventListener listener) => Listener = listener;
+        }
 
-        private readonly List<IExtension> Extensions = new List<IExtension>();
+        private ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> _listenersByType
+            = ImmutableDictionary<Type, ImmutableArray<ListenerEntry>>.Empty;
+
+        private ImmutableList<IExtension> _extensions = ImmutableList<IExtension>.Empty;
 
 
         public void Raise<T>(IEnumerable<T> domainEvents) where T : IDomainEvent {
+            if (domainEvents == null) throw new ArgumentNullException(nameof(domainEvents));
             foreach (var domainEvent in domainEvents) {
                 Raise(domainEvent);
             }
@@ -45,29 +48,23 @@ namespace Figlotech.Core.DomainEvents {
         }
 
         public void RegisterExtension(IExtension Extension) {
-            if (Extension == null) {
-                throw new ArgumentNullException("Trying to register null extension");
-            }
-            if (!Extensions.Contains(Extension)) {
-                Extensions.Add(Extension);
-            }
+            if (Extension == null) throw new ArgumentNullException(nameof(Extension));
+            ImmutableInterlocked.Update(ref _extensions, (current, e) => current.Contains(e) ? current : current.Add(e), Extension);
         }
 
         public void RegisterExtension<TOpCode, T>(Extension<TOpCode, T> Extension) {
-            if (Extension == null) {
-                throw new ArgumentNullException("Trying to register null extension");
-            }
+            if (Extension == null) throw new ArgumentNullException(nameof(Extension));
             RegisterExtension((IExtension)Extension);
         }
 
-        public async Task ExecuteExtensionsAsync<TOpCode, T>(TOpCode opcode, T input) {
-
-            foreach (var Extension in Extensions) {
+        public async ValueTask ExecuteExtensionsAsync<TOpCode, T>(TOpCode opcode, T input) {
+            var extensions = _extensions;
+            foreach (var Extension in extensions) {
                 if (Extension is Extension<TOpCode, T> ext) {
                     try {
-                        await ext.Execute(opcode, input);
+                        await ext.Execute(opcode, input).ConfigureAwait(false);
                     } catch (Exception x) {
-                        await ext.OnError(opcode, input, x);
+                        await ext.OnError(opcode, input, x).ConfigureAwait(false);
                     }
                 }
             }
@@ -75,68 +72,169 @@ namespace Figlotech.Core.DomainEvents {
 
         public bool AllowTelemetry { get; set; } = false;
 
-        public EventRaiseResponse Raise(IDomainEvent domainEvent) {
+        public void Raise(IDomainEvent domainEvent) {
             WriteLog($"Raising Event {domainEvent.GetType()}");
-            
+
             if (FiTechCoreExtensions.StdoutEventHubLogs) {
                 domainEvent.d_RaiseOrigin = Environment.StackTrace;
             }
-            
-            // Atomic snapshot of listeners - no locks, no allocation
-            var listeners = _listeners;
-            
-            var tcsList = new List<TaskCompletionSource<int>>();
-            for (int i = 0; i < listeners.Length; i++) {
-                var listener = listeners[i];
-                if (!listener.CanHandle(domainEvent)) {
-                    continue;
-                }
-                if (MainQueuer != null) {
-                    var req = MainQueuer.Enqueue(new WorkJob(async () => {
+
+            var listeners = _listenersByType;
+            Dispatch(domainEvent, listeners);
+
+            if (domainEvent.AllowPropagation) {
+                parentHub?.Raise(domainEvent);
+            }
+        }
+
+        private void Dispatch(IDomainEvent domainEvent, ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> listeners) {
+            if (listeners == null || listeners.IsEmpty) {
+                return;
+            }
+
+            var eventType = domainEvent.GetType();
+            if (!listeners.TryGetValue(eventType, out var entries)) {
+                return;
+            }
+
+            for (int i = 0; i < entries.Length; i++) {
+                var listener = entries[i].Listener;
+                EnqueueListenerWork(domainEvent, listener);
+            }
+        }
+
+        private void EnqueueListenerWork(IDomainEvent domainEvent, IDomainEventListener listener) {
+            if (MainQueuer != null) {
+                MainQueuer.Enqueue(new WorkJob(async () => {
+                    try {
                         await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
-                    }, async x => {
+                    } catch (Exception x) {
                         try {
                             await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
                         } catch {
                             Fi.Tech.SwallowException(x);
                         }
-                    }, (b) => {
-                        return Fi.Result();
-                    }) {
-                        Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
-                        AllowTelemetry = AllowTelemetry,
-                    });
-                    tcsList.Add(req.TaskCompletionSource);
-                }
+                    }
+                }, (b) => Fi.Result()) {
+                    Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
+                    AllowTelemetry = AllowTelemetry,
+                });
             }
-            if (domainEvent.AllowPropagation) {
-                parentHub?.Raise(domainEvent);
-            }
-
-            return new EventRaiseResponse() {
-                CompletionSources = tcsList,
-            };
         }
 
-        public void SubscribeListener(IDomainEventListener listener) {
-            if(listener == null) throw new ArgumentNullException(nameof(listener));
-            
-            ImmutableInterlocked.Update(ref _listeners, (current, l) => {
-                if (current.Contains(l)) {
-                    return current;
+        public ValueTask RaiseAndWaitForHandlers(IDomainEvent domainEvent) {
+            WriteLog($"Raising Event {domainEvent.GetType()}");
+
+            if (FiTechCoreExtensions.StdoutEventHubLogs) {
+                domainEvent.d_RaiseOrigin = Environment.StackTrace;
+            }
+
+            var listeners = _listenersByType;
+            var task = DispatchAndWait(domainEvent, listeners);
+
+            if (domainEvent.AllowPropagation) {
+                return AwaitWithPropagation(task, domainEvent);
+            }
+
+            return task;
+        }
+
+        private async ValueTask AwaitWithPropagation(ValueTask current, IDomainEvent domainEvent) {
+            await current.ConfigureAwait(false);
+            if (parentHub != null) {
+                await parentHub.RaiseAndWaitForHandlers(domainEvent).ConfigureAwait(false);
+            }
+        }
+
+        private ValueTask DispatchAndWait(IDomainEvent domainEvent, ImmutableDictionary<Type, ImmutableArray<ListenerEntry>> listeners) {
+            if (listeners == null || listeners.IsEmpty || MainQueuer == null) {
+                return default;
+            }
+
+            var eventType = domainEvent.GetType();
+            if (!listeners.TryGetValue(eventType, out var entries) || entries.IsEmpty) {
+                return default;
+            }
+
+            if (entries.Length == 1) {
+                var request = EnqueueListenerWorkWithRequest(domainEvent, entries[0].Listener);
+                return request != null ? new ValueTask(request.TaskCompletionSource.Task) : default;
+            }
+
+            var tasks = new Task[entries.Length];
+            for (int i = 0; i < entries.Length; i++) {
+                var request = EnqueueListenerWorkWithRequest(domainEvent, entries[i].Listener);
+                tasks[i] = request?.TaskCompletionSource.Task ?? Task.CompletedTask;
+            }
+
+            return new ValueTask(Task.WhenAll(tasks));
+        }
+
+        private WorkJobExecutionRequest EnqueueListenerWorkWithRequest(IDomainEvent domainEvent, IDomainEventListener listener) {
+            return MainQueuer?.Enqueue(new WorkJob(async () => {
+                try {
+                    await listener.OnEventTriggered(domainEvent).ConfigureAwait(false);
+                } catch (Exception x) {
+                    try {
+                        await listener.OnEventHandlingError(domainEvent, x).ConfigureAwait(false);
+                    } catch {
+                        Fi.Tech.SwallowException(x);
+                    }
                 }
-                return current.Add(l);
+            }, (b) => Fi.Result()) {
+                Name = $"Raising Event {domainEvent.GetType().Name} on {listener.GetType().Name}",
+                AllowTelemetry = AllowTelemetry,
+            });
+        }
+
+        public IDisposable SubscribeListener(IDomainEventListener listener) {
+            if (listener == null) throw new ArgumentNullException(nameof(listener));
+
+            ImmutableInterlocked.Update(ref _listenersByType, (current, l) => {
+                var handledTypes = GetHandledTypes(l);
+                var next = current;
+                foreach (var type in handledTypes) {
+                    var entries = next.GetValueOrDefault(type, ImmutableArray<ListenerEntry>.Empty);
+                    if (entries.Any(e => ReferenceEquals(e.Listener, l))) {
+                        continue;
+                    }
+                    next = next.SetItem(type, entries.Add(new ListenerEntry(l)));
+                }
+                return next;
+            }, listener);
+
+            return new DomainEventListenerSubscription(this, listener);
+        }
+
+        private IEnumerable<Type> GetHandledTypes(IDomainEventListener listener) {
+            if (listener is IGenericDomainEventListener generic) {
+                return generic.HandledTypes;
+            }
+            return listener.GetType().GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(DomainEventListener<>))
+                .Select(i => i.GetGenericArguments()[0]);
+        }
+
+        public void RemoveListener(IDomainEventListener listener) {
+            if (listener == null) throw new ArgumentNullException(nameof(listener));
+
+            ImmutableInterlocked.Update(ref _listenersByType, (current, l) => {
+                var next = current;
+                foreach (var type in current.Keys.ToList()) {
+                    var entries = current[type];
+                    var filtered = entries.RemoveAll(e => ReferenceEquals(e.Listener, l));
+                    if (filtered.IsEmpty) {
+                        next = next.Remove(type);
+                    } else if (filtered.Length != entries.Length) {
+                        next = next.SetItem(type, filtered);
+                    }
+                }
+                return next;
             }, listener);
         }
 
         public void ClearListeners() {
-            _listeners = ImmutableArray<IDomainEventListener>.Empty;
-        }
-
-        public void RemoveListener(IDomainEventListener listener) {
-            if(listener == null) throw new ArgumentNullException(nameof(listener));
-            
-            ImmutableInterlocked.Update(ref _listeners, (current, l) => current.Remove(l), listener);
+            _listenersByType = ImmutableDictionary<Type, ImmutableArray<ListenerEntry>>.Empty;
         }
     }
 }
