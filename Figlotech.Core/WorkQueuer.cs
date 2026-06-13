@@ -129,8 +129,6 @@ namespace Figlotech.Core {
             private set => _additionalTelemetryTags = value;
         }
 
-        public ValueTask ActionTask { get; internal set; }
-
         public WorkJob(Func<CancellationToken, ValueTask> method, Func<Exception, ValueTask> errorHandling = null, Func<bool, ValueTask> actionWhenFinished = null) {
             action = method;
             finished = actionWhenFinished;
@@ -189,6 +187,11 @@ namespace Figlotech.Core {
             ActiveJobs.Values.Select(x => new WorkJobExecutionStat(x)).ToArray();
 
         public int MaxParallelTasks { get; set; } = 0;
+
+        // Cached effective parallel limit; invalidated when MaxParallelTasks or AbsoluteMaxParallelLimit changes
+        private int _cachedEffectiveParallelLimit;
+        private int _cachedMaxParallelTasksForLimit;
+        private int _cachedAbsoluteMaxParallelLimitForLimit;
         public static int DefaultSleepInterval = 25;
 
         // Volatile-backed state flags for cross-thread visibility
@@ -209,6 +212,7 @@ namespace Figlotech.Core {
         private volatile bool _drainOnStop;
         private int _numberOfActualWorkers;
         private int _nextWorkerId;
+        private int _disposed;
 
         // Signaled when all queued and active work has drained (used by Stop)
         private volatile TaskCompletionSource<bool> _drainTcs;
@@ -234,7 +238,15 @@ namespace Figlotech.Core {
         // Use long for thread-safe atomic operations (stores milliseconds as ticks)
         private long _totalTaskResolutionTimeTicks;
         public TimeSpan TotalTaskResolutionTime => TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks));
-        public TimeSpan AverageTaskResolutionTime => WorkDone > 0 ? TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks) / WorkDone) : TimeSpan.Zero;
+        public TimeSpan AverageTaskResolutionTime {
+            get {
+                var done = Volatile.Read(ref _workDoneInternal);
+                return done > 0 ? TimeSpan.FromTicks(Interlocked.Read(ref _totalTaskResolutionTimeTicks) / done) : TimeSpan.Zero;
+            }
+        }
+
+        // Cached Stopwatch-to-TimeSpan conversion ratio (avoids recomputing in hot path)
+        private static readonly double StopwatchTickToTimeSpanTicks = (double)TimeSpan.TicksPerSecond / Stopwatch.Frequency;
 
         // Worker scaling rate limiting
         private long _lastWorkerScaleTicks = DateTime.UtcNow.Ticks;
@@ -398,7 +410,8 @@ namespace Figlotech.Core {
 
 
         private int InitialWorkerCount() {
-            return Math.Max(1, Math.Min(Environment.ProcessorCount, EffectiveParallelLimit()));
+            var limit = EffectiveParallelLimit();
+            return Math.Max(1, Math.Min(Environment.ProcessorCount, limit));
         }
 
         private void EnsureMinimumWorkers() {
@@ -417,9 +430,9 @@ namespace Figlotech.Core {
             var currentWorkers = Volatile.Read(ref _numberOfActualWorkers);
             var demand = Volatile.Read(ref _executingInternal) + Volatile.Read(ref _inQueueInternal);
 
-            // Only scale if demand exceeds current capacity by 50% or more
+            // Only scale if demand exceeds current capacity by 50% or more (integer math)
             var desiredWorkers = Math.Max(InitialWorkerCount(), Math.Min(limit, demand));
-            if (desiredWorkers > currentWorkers && desiredWorkers > currentWorkers * 1.5) {
+            if (desiredWorkers > currentWorkers && desiredWorkers * 2 > currentWorkers * 3) {
                 Interlocked.Exchange(ref _lastWorkerScaleTicks, DateTime.UtcNow.Ticks);
                 EnsureWorkers(desiredWorkers);
             }
@@ -496,7 +509,9 @@ namespace Figlotech.Core {
                 if (Debugger.IsAttached) {
                     Debugger.Break();
                 }
-                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} terminated unexpectedly: {ex.Message}");
+                if (IsWorkQueuerLogEnabled()) {
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} terminated unexpectedly: {ex.Message}");
+                }
             } finally {
                 ActiveJobs.TryRemove(job.id, out _);
                 Interlocked.Decrement(ref _executingInternal);
@@ -504,11 +519,17 @@ namespace Figlotech.Core {
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsWorkQueuerLogEnabled() =>
+            FiTechCoreExtensions.EnableStdoutLogs && FiTechCoreExtensions.EnabledSystemLogs.TryGetValue("FTH:WorkQueuer", out var enabled) && enabled;
+
         private void SignalDrainIfComplete() {
             var tcs = _drainTcs;
             var inQueue = Volatile.Read(ref _inQueueInternal);
             if (inQueue < 0) {
-                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"WARNING: _inQueueInternal went negative ({inQueue}), indicating a counting bug");
+                if (IsWorkQueuerLogEnabled()) {
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"WARNING: _inQueueInternal went negative ({inQueue}), indicating a counting bug");
+                }
             }
             if (tcs != null && inQueue <= 0 && ActiveJobs.IsEmpty) {
                 tcs.TrySetResult(true);
@@ -518,7 +539,16 @@ namespace Figlotech.Core {
         // Maximum absolute parallel limit to prevent resource exhaustion
         public static int AbsoluteMaxParallelLimit { get; set; } = 500;
 
-        private int EffectiveParallelLimit() => Math.Min(AbsoluteMaxParallelLimit, Math.Max(MaxParallelTasks, 1));
+        private int EffectiveParallelLimit() {
+            var maxTasks = MaxParallelTasks;
+            var absoluteLimit = AbsoluteMaxParallelLimit;
+            if (_cachedMaxParallelTasksForLimit != maxTasks || _cachedAbsoluteMaxParallelLimitForLimit != absoluteLimit) {
+                _cachedMaxParallelTasksForLimit = maxTasks;
+                _cachedAbsoluteMaxParallelLimitForLimit = absoluteLimit;
+                _cachedEffectiveParallelLimit = Math.Min(absoluteLimit, Math.Max(maxTasks, 1));
+            }
+            return _cachedEffectiveParallelLimit;
+        }
 
         private int EffectiveChannelCapacity() {
             if (ChannelCapacity <= 0) {
@@ -671,10 +701,17 @@ namespace Figlotech.Core {
 
                 if (job.WorkJob.action != null) {
                     CancellationTokenSource ctsLinked = null;
-                    try {
+                    CancellationToken actionToken;
+                    if (job.RequestCancellation.CanBeCanceled) {
                         ctsLinked = CancellationTokenSource.CreateLinkedTokenSource(job.Cancellation.Token, job.RequestCancellation);
-                        job.WorkJob.ActionTask = job.WorkJob.action(ctsLinked.Token);
-                        await job.WorkJob.ActionTask.ConfigureAwait(false);
+                        actionToken = ctsLinked.Token;
+                    } else {
+                        actionToken = job.Cancellation.Token;
+                    }
+
+                    try {
+                        var actionTask = job.WorkJob.action(actionToken);
+                        await actionTask.ConfigureAwait(false);
                     } finally {
                         ctsLinked?.Dispose();
                     }
@@ -691,7 +728,9 @@ namespace Figlotech.Core {
                     }
                 }
 
-                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} executed OK");
+                if (IsWorkQueuerLogEnabled()) {
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} executed OK");
+                }
             } catch (Exception execEx) {
                 job.Status = WorkJobRequestStatus.Failed;
                 if (job.WorkJob.AllowTelemetry && job.LoggingActivity != null) {
@@ -746,12 +785,14 @@ namespace Figlotech.Core {
                         : execEx;
                 }
 
-                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} thrown an Exception: {execEx.Message}");
+                if (IsWorkQueuerLogEnabled()) {
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} thrown an Exception: {execEx.Message}");
+                }
             } finally {
                 try {
                     var endTimestamp = Stopwatch.GetTimestamp();
                     var elapsedTicks = endTimestamp - startTimestamp;
-                    var elapsed = TimeSpan.FromTicks((long)(elapsedTicks * ((double)TimeSpan.TicksPerSecond / Stopwatch.Frequency)));
+                    var elapsed = TimeSpan.FromTicks((long)(elapsedTicks * StopwatchTickToTimeSpanTicks));
                     var completedTime = now + elapsed;
                     job.CompletedTime = completedTime;
                     job.TimeToComplete = elapsed;
@@ -783,9 +824,13 @@ namespace Figlotech.Core {
                     Interlocked.Exchange(ref _wentIdleTicks, completedTime.Ticks);
                 } catch (Exception cleanupEx) {
                     if (Debugger.IsAttached) Debugger.Break();
-                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker cleanup error: {cleanupEx.Message}");
+                    if (IsWorkQueuerLogEnabled()) {
+                        Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker cleanup error: {cleanupEx.Message}");
+                    }
                 }
-                Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} cleanup OK");
+                if (IsWorkQueuerLogEnabled()) {
+                    Fi.Tech.WriteLineInternal("FTH:WorkQueuer", () => $"Worker {workerId} cleanup OK");
+                }
             }
         }
 
@@ -850,8 +895,7 @@ namespace Figlotech.Core {
         private void RescheduleConsolidatedTimerUnsafe() {
             // Must be called within _scheduledTasksLock
             if (_scheduledTaskQueue.Count == 0) {
-                _consolidatedTimer?.Dispose();
-                _consolidatedTimer = null;
+                _consolidatedTimer?.Change(Timeout.Infinite, Timeout.Infinite);
                 return;
             }
 
@@ -864,13 +908,16 @@ namespace Figlotech.Core {
             const int maxTimerIntervalMs = 60000;
             var timerDelay = (int)Math.Min(delayMs, maxTimerIntervalMs);
 
-            _consolidatedTimer?.Dispose();
-            _consolidatedTimer = new Timer(
-                _ => OnConsolidatedTimerFired(),
-                null,
-                timerDelay,
-                Timeout.Infinite
-            );
+            if (_consolidatedTimer == null) {
+                _consolidatedTimer = new Timer(
+                    _ => OnConsolidatedTimerFired(),
+                    null,
+                    timerDelay,
+                    Timeout.Infinite
+                );
+            } else {
+                _consolidatedTimer.Change(timerDelay, Timeout.Infinite);
+            }
         }
 
         private void OnConsolidatedTimerFired() {
@@ -1109,7 +1156,10 @@ namespace Figlotech.Core {
             }
         }
 
+        private bool TakeDisposeOwnership() => Interlocked.Exchange(ref _disposed, 1) == 0;
+
         public void Dispose() {
+            if (!TakeDisposeOwnership()) return;
             IsClosed = true;
             // Use a synchronous wait with timeout to avoid deadlocks
             // when Dispose() is called from a sync context
@@ -1120,21 +1170,32 @@ namespace Figlotech.Core {
             } catch (OperationCanceledException) {
                 // Timeout - force shutdown: cancel remaining work
                 try { _runCts?.Cancel(); } catch { }
+            } catch (AggregateException aex) when (aex.InnerExceptions.All(e => e is OperationCanceledException)) {
+                // Stop() was cancelled via Wait(cts.Token) wrapped in AggregateException
+                try { _runCts?.Cancel(); } catch { }
             } catch (Exception) {
                 // Ignore other exceptions during dispose
             }
-            DisposeHeldJobs();
-            DisposeScheduledTasks();
-            GetOrCreateChannel().Writer.TryComplete();
-            _runCts?.Dispose();
+
+            try { DisposeHeldJobs(); } catch { }
+            try { DisposeScheduledTasks(); } catch { }
+            try { GetOrCreateChannel().Writer.TryComplete(); } catch { }
+            try { _runCts?.Dispose(); } catch { }
         }
+
         public async ValueTask DisposeAsync() {
+            if (!TakeDisposeOwnership()) return;
             IsClosed = true;
-            await Stop(true).ConfigureAwait(false);
-            DisposeHeldJobs();
-            DisposeScheduledTasks();
-            GetOrCreateChannel().Writer.TryComplete();
-            _runCts?.Dispose();
+            try {
+                await Stop(true).ConfigureAwait(false);
+            } catch (Exception) {
+                // Ignore exceptions during async dispose
+            }
+
+            try { DisposeHeldJobs(); } catch { }
+            try { DisposeScheduledTasks(); } catch { }
+            try { GetOrCreateChannel().Writer.TryComplete(); } catch { }
+            try { _runCts?.Dispose(); } catch { }
         }
     }
 }
