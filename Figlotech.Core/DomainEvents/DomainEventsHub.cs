@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
     public static class DomainEventsHubExtensions {
-        public static void SubscribeInline<T>(this DomainEventsHub self, Func<T, Task> fn, Func<T, Exception, Task> handler = null) where T : IDomainEvent {
+        public static void SubscribeInline<T>(this DomainEventsHub self, Func<T, ValueTask> fn, Func<T, Exception, ValueTask> handler = null) where T : IDomainEvent {
             self.SubscribeListener(InlineLambdaListener.Create<T>(fn, handler));
         }
     }

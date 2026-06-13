@@ -3,30 +3,31 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
     public interface IDomainEventListener {
-        Task OnEventTriggered(IDomainEvent evt);
-        Task OnEventHandlingError(IDomainEvent evt, Exception x);
+        ValueTask OnEventTriggered(IDomainEvent evt);
+        ValueTask OnEventHandlingError(IDomainEvent evt, Exception x);
         bool CanHandle(IDomainEvent evt);
     }
 
     public abstract class DomainEventListener<T> : IDomainEventListener where T : IDomainEvent {
-
-        public abstract Task OnEventTriggered(T evt);
-        public abstract Task OnEventHandlingError(T evt, Exception x);
+        public abstract ValueTask OnEventTriggered(T evt);
+        public abstract ValueTask OnEventHandlingError(T evt, Exception x);
 
         public bool CanHandle(IDomainEvent evt) {
             return evt is T;
         }
 
-        public async Task OnEventTriggered(IDomainEvent evt) {
+        public ValueTask OnEventTriggered(IDomainEvent evt) {
             if (evt is T t) {
-                await OnEventTriggered(t);
+                return OnEventTriggered(t);
             }
+            return default;
         }
 
-        public async Task OnEventHandlingError(IDomainEvent evt, Exception x) {
+        public ValueTask OnEventHandlingError(IDomainEvent evt, Exception x) {
             if (evt is T t) {
-                await OnEventHandlingError(t, x);
+                return OnEventHandlingError(t, x);
             }
+            return default;
         }
     }
 }

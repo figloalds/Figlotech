@@ -3,32 +3,40 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
     public static class InlineLambdaListener {
-        public static InlineLambdaListener<T> Create<T>(Func<T, Task> action, Func<T, Exception, Task> handler) where T : IDomainEvent {
+        public static InlineLambdaListener<T> Create<T>(Func<T, ValueTask> action, Func<T, Exception, ValueTask> handler = null) where T : IDomainEvent {
             return new InlineLambdaListener<T>(action, handler);
         }
     }
 
     public sealed class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
-        public Func<T, Task> OnRaise;
-        public Func<T, Exception, Task> OnHandle;
+        public Func<T, ValueTask> OnRaise;
+        public Func<T, Exception, ValueTask> OnHandle;
         public DomainEventsHub EventsHub { get; set; }
-        public InlineLambdaListener(Func<T, Task> action, Func<T, Exception, Task> handler = null) {
+
+        public InlineLambdaListener(Func<T, ValueTask> action, Func<T, Exception, ValueTask> handler = null) {
             OnRaise = action;
             OnHandle = handler;
         }
 
-        public override async Task OnEventTriggered(T evt) {
-            await OnRaise?.Invoke(evt);
+        public override ValueTask OnEventTriggered(T evt) {
+            var raise = OnRaise;
+            if (raise != null) {
+                return raise(evt);
+            }
+            return default;
         }
 
-        public override async Task OnEventHandlingError(T evt, Exception x) {
-            if (OnHandle == null) {
-                Fi.Tech.SwallowException(x);
+        public override ValueTask OnEventHandlingError(T evt, Exception x) {
+            var handle = OnHandle;
+            if (handle != null) {
+                return handle(evt, x);
             }
-            await OnHandle?.Invoke(evt, x);
+            Fi.Tech.SwallowException(x);
+            return default;
         }
 
         private DomainEventsHub _registeredHub = null;
+
         public void Subscribe(DomainEventsHub hub = null) {
             if (hub == null)
                 hub = DomainEventsHub.Global;
