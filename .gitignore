@@ -299,3 +299,4 @@ __pycache__/
 fitech\.version
 
 .claude/
+.worktrees/
