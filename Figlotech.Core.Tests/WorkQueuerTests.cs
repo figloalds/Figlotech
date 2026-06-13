@@ -291,13 +291,24 @@ namespace Figlotech.Core.Tests {
             queuer.Dispose();
         }
         [Fact]
-        public void ChannelCapacity_Default_IsBounded() {
-            var queuer = new WorkQueuer("BoundedTest", 2);
-            // default capacity = MaxParallelTasks * 4 = 8
-            for (int i = 0; i < 8; i++) {
-                queuer.Enqueue(async () => await Task.Delay(Timeout.Infinite, CancellationToken.None));
-            }
-            Assert.Throws<InvalidOperationException>(() => queuer.Enqueue(() => Fi.EmptyValueTask));
+        public async Task ChannelCapacity_ExplicitlySet_BlocksAsyncEnqueueWhenFull() {
+            var queuer = new WorkQueuer("BoundedTest", 1, init_started: false) { ChannelCapacity = 1 };
+            queuer.Start();
+            var gate = new TaskCompletionSource<object>();
+
+            var r1 = queuer.EnqueueTask(async () => await gate.Task);
+            await r1.WaitForDequeue();
+
+            // Worker is blocked; fill the channel
+            queuer.Enqueue(() => Fi.EmptyValueTask);
+
+            // Async enqueue should wait because channel is full
+            var asyncEnqueue = queuer.EnqueueTaskAsync(async (ct) => { });
+            await Task.Delay(100);
+            Assert.False(asyncEnqueue.IsCompleted);
+
+            gate.SetResult(null);
+            await asyncEnqueue;
             queuer.Dispose();
         }
 

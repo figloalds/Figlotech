@@ -287,7 +287,6 @@ namespace Figlotech.Core {
             _runCts = new CancellationTokenSource();
             EnsureMinimumWorkers();
 
-            GetOrCreateChannel();
             FlushHeldJobsToQueue();
             ProcessMissedSchedules();
             EnsureWorkerCapacityForDemand();
@@ -536,13 +535,21 @@ namespace Figlotech.Core {
                 if (_workChannel != null) {
                     return _workChannel;
                 }
-                var capacity = EffectiveChannelCapacity();
-                _workChannel = Channel.CreateBounded<WorkJobExecutionRequest>(new BoundedChannelOptions(capacity) {
-                    FullMode = BoundedChannelFullMode.Wait,
-                    SingleReader = false,
-                    SingleWriter = false,
-                    AllowSynchronousContinuations = false
-                });
+                if (ChannelCapacity > 0) {
+                    var capacity = EffectiveChannelCapacity();
+                    _workChannel = Channel.CreateBounded<WorkJobExecutionRequest>(new BoundedChannelOptions(capacity) {
+                        FullMode = BoundedChannelFullMode.Wait,
+                        SingleReader = false,
+                        SingleWriter = false,
+                        AllowSynchronousContinuations = false
+                    });
+                } else {
+                    _workChannel = Channel.CreateUnbounded<WorkJobExecutionRequest>(new UnboundedChannelOptions {
+                        SingleReader = false,
+                        SingleWriter = false,
+                        AllowSynchronousContinuations = false
+                    });
+                }
                 return _workChannel;
             }
         }
