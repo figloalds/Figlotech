@@ -11,17 +11,17 @@ namespace Figlotech.Core.DomainEvents {
     }
 
     public static class IExtensibleExtensions {
-        public static async Task ExecuteExtensionsAsync<TOpCode, T>(this T self, TOpCode opcode) where T : IExtensible<TOpCode> {
+        public static async ValueTask ExecuteExtensionsAsync<TOpCode, T>(this T self, TOpCode opcode) where T : IExtensible<TOpCode> {
             if (self == null || self.EventsHub == null) {
                 throw new NullReferenceException($"EventHub was null when trying to execute opcode {opcode} for item of type {typeof(T)}");
             }
-            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, T>(opcode, self);
+            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, T>(opcode, self).ConfigureAwait(false);
         }
-        public static async Task ExecuteExtensionsAsync<TOpCode, T, TOther>(this T self, TOpCode opcode, TOther other) where T : IExtensible<TOpCode> {
+        public static async ValueTask ExecuteExtensionsAsync<TOpCode, T, TOther>(this T self, TOpCode opcode, TOther other) where T : IExtensible<TOpCode> {
             if (self == null || self.EventsHub == null) {
                 throw new NullReferenceException($"EventHub was null when trying to execute opcode {opcode} for item of type {typeof(T)}");
             }
-            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, TOther>(opcode, other);
+            await self.EventsHub.ExecuteExtensionsAsync<TOpCode, TOther>(opcode, other).ConfigureAwait(false);
         }
     }
 
