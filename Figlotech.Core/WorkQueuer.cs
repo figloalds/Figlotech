@@ -342,6 +342,7 @@ namespace Figlotech.Core {
 
             // Cancel workers so WaitToReadAsync unblocks and loops can exit
             _runCts.Cancel();
+            _channelReadyTcs.TrySetCanceled();
 
             Task[] workers;
             lock (_workersLock) {

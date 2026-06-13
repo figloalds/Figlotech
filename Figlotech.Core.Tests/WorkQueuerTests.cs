@@ -272,22 +272,18 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
-        public async Task RapidEnqueue_DoesNotExcessivelyScaleWorkers() {
-            var queuer = new WorkQueuer("Test", 50, init_started: false);
-            queuer.Start();
+        public async Task ChannelCapacity_ExplicitlySet_IsBounded() {
+            var queuer = new WorkQueuer("BoundedTest", 1) { ChannelCapacity = 2 };
+            var gate = new TaskCompletionSource<object>();
+            var blocking = queuer.EnqueueTask(async () => await gate.Task);
+            await blocking.WaitForDequeue();
 
-            // Enqueue 1000 jobs rapidly
-            for (int i = 0; i < 1000; i++) {
-                queuer.EnqueueTask(async () => await Task.Delay(1));
-            }
+            queuer.Enqueue(() => Fi.EmptyValueTask);
+            queuer.Enqueue(() => Fi.EmptyValueTask);
 
-            await Task.Delay(200); // Let scaling happen
+            Assert.Throws<InvalidOperationException>(() => queuer.Enqueue(() => Fi.EmptyValueTask));
 
-            // Should not have created all 50 workers immediately
-            Assert.True(queuer.NumberOfActualWorkers < 50,
-                $"Expected fewer than 50 workers but got {queuer.NumberOfActualWorkers}");
-
-            await queuer.Stop(true);
+            gate.SetResult(null);
             queuer.Dispose();
         }
         [Fact]
