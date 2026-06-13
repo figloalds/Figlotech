@@ -248,7 +248,6 @@ namespace Figlotech.Core {
             if (_workChannel != null) return _workChannel;
             return await _channelReadyTcs.Task.ConfigureAwait(false);
         }
-
         private CancellationTokenSource _runCts;
         private readonly object _workersLock = new object();
         private readonly List<Task> _workerTasks = new List<Task>();
@@ -333,6 +332,7 @@ namespace Figlotech.Core {
             _runCts = new CancellationTokenSource();
             EnsureMinimumWorkers();
 
+            GetOrCreateChannel();
             FlushHeldJobsToQueue();
             ProcessMissedSchedules();
             EnsureWorkerCapacityForDemand();
@@ -425,6 +425,21 @@ namespace Figlotech.Core {
                 throw;
             }
 
+            EnsureWorkerCapacityForDemand();
+        }
+
+        private async Task WriteQueuedJobAsync(WorkJobExecutionRequest job) {
+            Interlocked.Increment(ref _inQueueInternal);
+            try {
+                var channel = await GetChannelAsync(_runCts.Token).ConfigureAwait(false);
+                await channel.Writer.WaitToWriteAsync(_runCts.Token).ConfigureAwait(false);
+                if (!channel.Writer.TryWrite(job)) {
+                    throw new InvalidOperationException($"Unable to queue work item on \"{Name}\".");
+                }
+            } catch {
+                Interlocked.Decrement(ref _inQueueInternal);
+                throw;
+            }
             EnsureWorkerCapacityForDemand();
         }
 
@@ -590,6 +605,38 @@ namespace Figlotech.Core {
             return request;
         }
 
+        public async Task<WorkJobExecutionRequest> EnqueueAsync(WorkJob job, CancellationToken? requestCancellation = null) {
+            var request = new WorkJobExecutionRequest(job, requestCancellation) {
+                EnqueuedTime = DateTime.UtcNow,
+                Status = WorkJobRequestStatus.Queued,
+                WorkQueuer = this
+            };
+            if (FiTechCoreExtensions.DebugTasks) {
+                request.StackTrace = new StackTrace();
+            }
+
+            Interlocked.Increment(ref _totalWorkInternal);
+
+            if (IsClosed) {
+                request.Status = WorkJobRequestStatus.Failed;
+                request._tcsNotifyDequeued.TrySetException(
+                    new ObjectDisposedException(nameof(WorkQueuer), $"WorkQueuer \"{Name}\" has been disposed."));
+                request.TaskCompletionSource.TrySetException(
+                    new ObjectDisposedException(nameof(WorkQueuer), $"WorkQueuer \"{Name}\" has been disposed."));
+                return request;
+            }
+
+            if (Active) {
+                await WriteQueuedJobAsync(request).ConfigureAwait(false);
+            } else {
+                HeldJobs.Enqueue(request);
+            }
+
+            _ = SafeInvoke(OnWorkEnqueued, request);
+            return request;
+        }
+
+
         public void Enqueue(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var retv = new WorkJob(a, exceptionHandler, finished) { Name = "Annonymous Work Item" };
             _ = Enqueue(retv);
@@ -602,6 +649,11 @@ namespace Figlotech.Core {
             var retv = new WorkJob(a, exceptionHandler, finished);
             return Enqueue(retv);
         }
+        public Task<WorkJobExecutionRequest> EnqueueTaskAsync(Func<CancellationToken, ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
+            var retv = new WorkJob(a, exceptionHandler, finished);
+            return EnqueueAsync(retv);
+        }
+
 
         private async Task ExecuteJob(WorkJobExecutionRequest job, int workerId) {
             var now = DateTime.UtcNow;
@@ -940,7 +992,7 @@ namespace Figlotech.Core {
                             nextRun = nextRun.Add(interval);
                         } while (nextRun <= now);
                         entry.ScheduledTime = nextRun;
-                        
+
                         _scheduledTaskQueue.Add(entry);
                         RescheduleConsolidatedTimerUnsafe();
                     } else {
@@ -964,7 +1016,7 @@ namespace Figlotech.Core {
             } while (nextRun <= now);
 
             entry.ScheduledTime = nextRun;
-            
+
             lock (_scheduledTasksLock) {
                 _scheduledTaskQueue.Add(entry);
                 RescheduleConsolidatedTimerUnsafe();
