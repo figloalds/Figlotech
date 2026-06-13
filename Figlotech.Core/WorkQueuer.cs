@@ -200,11 +200,55 @@ namespace Figlotech.Core {
         public bool IsRunning { get => _isRunning; private set => _isRunning = value; }
         public bool Active { get => _active; private set => _active = value; }
 
-        private readonly Channel<WorkJobExecutionRequest> _workChannel = Channel.CreateUnbounded<WorkJobExecutionRequest>(new UnboundedChannelOptions {
-            SingleReader = false,
-            SingleWriter = false,
-            AllowSynchronousContinuations = false
-        });
+        private Channel<WorkJobExecutionRequest> _workChannel;
+        private readonly object _channelLock = new object();
+        private readonly TaskCompletionSource<Channel<WorkJobExecutionRequest>> _channelReadyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _channelCapacity;
+        public int ChannelCapacity {
+            get => _channelCapacity;
+            set {
+                _channelCapacity = value;
+                lock (_channelLock) {
+                    if (_workChannel == null) {
+                        _workChannel = CreateChannel(value);
+                        _channelReadyTcs.TrySetResult(_workChannel);
+                    }
+                }
+            }
+        }
+
+        private Channel<WorkJobExecutionRequest> CreateChannel(int capacity) {
+            if (capacity > 0) {
+                return Channel.CreateBounded<WorkJobExecutionRequest>(new BoundedChannelOptions(capacity) {
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = false,
+                    SingleWriter = false,
+                    AllowSynchronousContinuations = false
+                });
+            }
+            return Channel.CreateUnbounded<WorkJobExecutionRequest>(new UnboundedChannelOptions {
+                SingleReader = false,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            });
+        }
+
+        private Channel<WorkJobExecutionRequest> GetOrCreateChannel() {
+            if (_workChannel != null) return _workChannel;
+            lock (_channelLock) {
+                if (_workChannel != null) return _workChannel;
+                _workChannel = CreateChannel(_channelCapacity);
+                _channelReadyTcs.TrySetResult(_workChannel);
+                return _workChannel;
+            }
+        }
+
+        private async Task<Channel<WorkJobExecutionRequest>> GetChannelAsync(CancellationToken ct) {
+            if (_workChannel != null) return _workChannel;
+            return await _channelReadyTcs.Task.ConfigureAwait(false);
+        }
+
         private CancellationTokenSource _runCts;
         private readonly object _workersLock = new object();
         private readonly List<Task> _workerTasks = new List<Task>();
@@ -332,6 +376,7 @@ namespace Figlotech.Core {
 
             // Cancel workers so WaitToReadAsync unblocks and loops can exit
             _runCts.Cancel();
+            _channelReadyTcs.TrySetCanceled();
 
             Task[] workers;
             lock (_workersLock) {
@@ -372,7 +417,7 @@ namespace Figlotech.Core {
             }
 
             try {
-                if (!_workChannel.Writer.TryWrite(job)) {
+                if (!GetOrCreateChannel().Writer.TryWrite(job)) {
                     throw new InvalidOperationException($"Unable to queue work item on \"{Name}\".");
                 }
             } catch {
@@ -432,12 +477,13 @@ namespace Figlotech.Core {
 
         private async Task RunWorkerLoop(int workerId, CancellationToken ct) {
             try {
+                var channel = await GetChannelAsync(ct).ConfigureAwait(false);
                 while (!ct.IsCancellationRequested) {
                     if (!ShouldWorkersProcessQueuedItems()) {
                         break;
                     }
 
-                    if (!await _workChannel.Reader.WaitToReadAsync(ct).ConfigureAwait(false)) {
+                    if (!await channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false)) {
                         break;
                     }
 
@@ -445,7 +491,7 @@ namespace Figlotech.Core {
                         continue;
                     }
 
-                    if (!_workChannel.Reader.TryRead(out var job)) {
+                    if (!channel.Reader.TryRead(out var job)) {
                         continue;
                     }
 
@@ -505,6 +551,8 @@ namespace Figlotech.Core {
         public static int AbsoluteMaxParallelLimit { get; set; } = 500;
 
         private int EffectiveParallelLimit() => Math.Min(AbsoluteMaxParallelLimit, Math.Max(MaxParallelTasks, 1));
+
+        private int EffectiveChannelCapacity() => Math.Max(1, EffectiveParallelLimit()) * 4;
 
         public async Task AccompanyJob(Func<ValueTask> a, Func<Exception, ValueTask> exceptionHandler = null, Func<bool, ValueTask> finished = null) {
             var wj = EnqueueTask(a, exceptionHandler, finished);
@@ -1040,7 +1088,8 @@ namespace Figlotech.Core {
             }
             DisposeHeldJobs();
             DisposeScheduledTasks();
-            _workChannel.Writer.TryComplete();
+            _channelReadyTcs.TrySetCanceled();
+            GetOrCreateChannel().Writer.TryComplete();
             _runCts?.Dispose();
         }
         public async ValueTask DisposeAsync() {
@@ -1048,7 +1097,8 @@ namespace Figlotech.Core {
             await Stop(true).ConfigureAwait(false);
             DisposeHeldJobs();
             DisposeScheduledTasks();
-            _workChannel.Writer.TryComplete();
+            _channelReadyTcs.TrySetCanceled();
+            GetOrCreateChannel().Writer.TryComplete();
             _runCts?.Dispose();
         }
     }
