@@ -514,15 +514,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         bool Errored = false;
         internal void MarkAsErrored(Exception x) {
             Errored = true;
-            LoggerActivity?.AddTag("Exception", x.ToExceptionArray());
+            LoggerActivity?.AddTag("Exception", JsonConvert.SerializeObject(x.ToExceptionArray()));
             LoggerActivity?.SetStatus(ActivityStatusCode.Error);
         }
 
         public void Throw(Exception x) {
-            Errored = true;
-            LoggerActivity?.AddTag("Exception",
-                JsonConvert.SerializeObject(ExceptionExtensions.ToRecursiveInnerExceptions(x))
-            );
+            MarkAsErrored(x);
             throw Exception(x);
         }
 

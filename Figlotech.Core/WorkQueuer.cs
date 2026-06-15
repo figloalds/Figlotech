@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -734,7 +735,7 @@ namespace Figlotech.Core {
             } catch (Exception execEx) {
                 job.Status = WorkJobRequestStatus.Failed;
                 if (job.WorkJob.AllowTelemetry && job.LoggingActivity != null) {
-                    job.LoggingActivity.AddTag("Exception", execEx.ToString());
+                    job.LoggingActivity.AddTag("Exception", JsonConvert.SerializeObject(execEx.ToExceptionArray()));
                     job.LoggingActivity.SetStatus(ActivityStatusCode.Error);
                 }
 
