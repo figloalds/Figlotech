@@ -654,6 +654,9 @@ namespace Figlotech.Core.Helpers {
             return null;
         }
         private static (bool Success, Expression Expression) BuildConversionBody(Type src, Type dest, Expression p) {
+            // Identidade primeiro: evita recursão infinita quando src e dest são object
+            if (src == dest) return (true, p);
+
             // Se src for object, construa uma cadeia de conversão em tempo de execução
             if (src == typeof(object)) {
                 return (true, BuildObjectRuntimeAwareConversion(p, dest));
@@ -661,9 +664,6 @@ namespace Figlotech.Core.Helpers {
             if (dest == typeof(object)) {
                 return (true, Expression.Convert(p, typeof(object)));
             }
-
-            // Identidade
-            if (src == dest) return (true, p);
 
             if (TryGetValueBoxElementType(dest, out var valueBoxElementType)) {
                 var innerBodyResult = BuildConversionBody(src, valueBoxElementType, p);
