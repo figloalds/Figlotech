@@ -9,7 +9,7 @@ namespace Figlotech.Core {
             public T Current { get; set; }
 
             public ValueTask DisposeAsync() {
-                throw new NotImplementedException();
+                return default;
             }
 
             public async ValueTask<bool> MoveNextAsync() {

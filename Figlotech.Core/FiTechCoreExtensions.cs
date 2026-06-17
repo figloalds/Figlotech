@@ -1925,9 +1925,10 @@ namespace Figlotech.Core {
                 await input(yield);
             }, null, maxParallelism);
 
-            Fi.Tech.FireAndForget(async () => {
+            _ = Task.Run(async () => {
                 await Task.Yield();
                 retv.Put(default(TIn));
+                await retv.NotifyDoneQueueing().ConfigureAwait(false);
             });
 
             return retv;
