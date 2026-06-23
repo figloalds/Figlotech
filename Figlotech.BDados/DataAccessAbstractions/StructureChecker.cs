@@ -708,6 +708,24 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 field,
                                 $"Column {field} does not exist in structure state"
                             );
+                            var fieldAtt = field.GetCustomAttribute<FieldAttribute>();
+                            if (field.GetCustomAttribute<PrimaryKeyAttribute>() != null) {
+                                keys.Add(new ScStructuralLink {
+                                    Table = type.Name,
+                                    Column = field.Name,
+                                    Type = ScStructuralKeyType.PrimaryKey,
+                                    KeyName = $"pk_{type.Name.ToLower()}",
+                                    IsUnique = true
+                                });
+                            } else if (fieldAtt != null && fieldAtt.Unique) {
+                                keys.Add(new ScStructuralLink {
+                                    Table = type.Name,
+                                    Column = field.Name,
+                                    Type = ScStructuralKeyType.Index,
+                                    KeyName = $"uk_{type.Name.ToLower()}_{field.Name.ToLower()}",
+                                    IsUnique = true
+                                });
+                            }
                         }
 
                     } else {
@@ -1116,14 +1134,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         case ScStructuralKeyType.ForeignKey:
                             foreach (var x in EnumeratePurgesFor(fk, neededKeys)) {
                                 yield return x;
-                            }
-                            var foreignIndex = new ScStructuralLink {
-                                Type = ScStructuralKeyType.Index,
-                                Table = fk.Table,
-                                Column = fk.Column,
-                            };
-                            if (!keys.Any(n => CheckMatch(foreignIndex, n))) {
-                                yield return new CreateIndexScAction(DataAccessor, foreignIndex, $"Need to create an index for {fk.RefTable}.{fk.RefColumn} for {fk.KeyName}");
                             }
                             yield return new CreateForeignKeyScAction(DataAccessor, fk, $"Key absent in structure state {fk.KeyName}");
                             break;
