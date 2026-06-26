@@ -376,7 +376,8 @@ namespace Figlotech.Core {
         }
 
         public async Task<bool> Check(string Url, CancellationToken? cancellationToken = null) {
-            var st = (int)(await (Get(Url, cancellationToken)).ConfigureAwait(false)).StatusCode;
+            using var result = await Get(Url, cancellationToken).ConfigureAwait(false);
+            var st = (int)result.StatusCode;
             return st >= 200 && st < 300;
         }
 
@@ -584,12 +585,12 @@ namespace Figlotech.Core {
 
         public async Task<T> SendRequest<T>(HttpMethod method, string url, CancellationToken? cancellationToken = null) {
 
-            var result = await SendRequest(method, url, cancellationToken).ConfigureAwait(false);
+            using var result = await SendRequest(method, url, cancellationToken).ConfigureAwait(false);
 
             if (result.IsSuccess) {
                 return await result.As<T>().ConfigureAwait(false);
             } else {
-                throw new NonSuccessResponseException(result.Response);
+                throw new NonSuccessResponseException(result.StatusCode, result.StatusDescription);
             }
         }
 

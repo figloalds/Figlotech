@@ -180,7 +180,7 @@ namespace Figlotech.Core {
         }
 
         public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
-            var timeoutCancellation = new CancellationTokenSource(timeout);
+            using var timeoutCancellation = new CancellationTokenSource(timeout);
 
             try {
                 await _semaphore.WaitAsync(timeoutCancellation.Token).ConfigureAwait(false);
@@ -193,7 +193,7 @@ namespace Figlotech.Core {
         }
 
         public FiAsyncDisposableLock LockWithTimeoutSync(TimeSpan timeout) {
-            var timeoutCancellation = new CancellationTokenSource(timeout);
+            using var timeoutCancellation = new CancellationTokenSource(timeout);
 
             try {
                 _semaphore.Wait(timeoutCancellation.Token);
