@@ -482,6 +482,7 @@ namespace Figlotech.Core.Helpers {
                 if (method != null) {
                     method(target, value);
                 }
+                return;
             }
 
             var pi = member as PropertyInfo;
@@ -688,6 +689,18 @@ namespace Figlotech.Core.Helpers {
                     }
                     return (true, enumValue);
                 }
+                if (effectiveSrc == typeof(string)) {
+                    var parse = typeof(Enum).GetMethod(nameof(Enum.Parse), new[] { typeof(Type), typeof(string), typeof(bool) })!;
+                    Expression value = src == effectiveSrc ? p : Expression.Property(p, "Value");
+                    Expression enumValue = Expression.Convert(
+                        Expression.Call(parse, Expression.Constant(effectiveDest, typeof(Type)), value, Expression.Constant(true)),
+                        effectiveDest);
+                    if (effectiveDest != dest) {
+                        var nullableCtor = dest.GetConstructor(new[] { effectiveDest })!;
+                        enumValue = Expression.New(nullableCtor, enumValue);
+                    }
+                    return (true, enumValue);
+                }
             }
 
             var effectiveSrcForEnum = Nullable.GetUnderlyingType(src) ?? src;
@@ -838,27 +851,10 @@ namespace Figlotech.Core.Helpers {
                 if (!candidates.Contains(c)) candidates.Add(c);
             }
 
-            // Build cascading "if (v is T) convert((T)v) else ..." chain
-            Expression chain = null!;
-            foreach (var c in candidates.Distinct()) {
-                // if (pObject is c) BuildConversionBody(c -> dest) using (c)pObject
-                var asType = Expression.Convert(pObject, c);
-                var test = Expression.TypeIs(pObject, c);
-                try {
-                    var bodyResult = BuildConversionBody(c, dest, asType);
-                    if(!bodyResult.Success) continue; // skip unsupported conversions
-                    chain = chain == null 
-                        ? (Expression)Expression.Condition(test, bodyResult.Expression, Expression.Default(dest)) 
-                        : (Expression)Expression.Condition(test, bodyResult.Expression, chain);
-                } catch (Exception) {
-                    // ignore non-sensical conversions
-                }
-            }
-
-            // If nothing matched and dest == string, fallback to ToString()
+            Expression fallback;
             if (effectiveDest == typeof(string)) {
                 var toStringCall = Expression.Call(pObject, typeof(object).GetMethod(nameof(ToString))!);
-                chain = chain == null ? toStringCall : Expression.Condition(Expression.Not(isNull), toStringCall, chain);
+                fallback = Expression.Condition(Expression.Not(isNull), toStringCall, Expression.Default(dest));
             } else {
                 // Generic IConvertible fallback: Convert.ChangeType(pObject, effectiveDest) then box/wrap to dest
                 var changeType = typeof(Convert).GetMethod(nameof(Convert.ChangeType), new[] { typeof(object), typeof(Type) })!;
@@ -869,11 +865,23 @@ namespace Figlotech.Core.Helpers {
                 );
                 var elseCast = Expression.Convert(pObject, effectiveDest); // last resort (may throw)
                 var fallbackCore = Expression.Condition(convertibleTest, changeTypeCall, elseCast);
-                var fallback = WrapConvertedValue(fallbackCore, dest, effectiveDest, isValueBox);
+                fallback = WrapConvertedValue(fallbackCore, dest, effectiveDest, isValueBox);
+            }
 
-                chain = chain == null ? fallback : Expression.Condition(isNull, Expression.Default(dest), chain);
-                // ensure value type null-safety: when null -> default(dest)
-                chain = Expression.Condition(isNull, Expression.Default(dest), chain);
+            // Build cascading "if (v is T) convert((T)v) else fallback" chain.
+            // Iterate in reverse so earlier candidates retain priority in the final expression.
+            Expression chain = fallback;
+            foreach (var c in candidates.Distinct().Reverse()) {
+                // if (pObject is c) BuildConversionBody(c -> dest) using (c)pObject
+                var asType = Expression.Convert(pObject, c);
+                var test = Expression.TypeIs(pObject, c);
+                try {
+                    var bodyResult = BuildConversionBody(c, dest, asType);
+                    if(!bodyResult.Success) continue; // skip unsupported conversions
+                    chain = Expression.Condition(test, bodyResult.Expression, chain);
+                } catch (Exception) {
+                    // ignore non-sensical conversions
+                }
             }
 
             // Wrap with DBNull/null guards

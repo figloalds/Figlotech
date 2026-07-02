@@ -46,8 +46,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     }
 
     internal struct AggregateConstructionContext {
-        public Dictionary<(Type Type, object Rid), object> ObjectCache;
+        public Dictionary<(int TableIndex, Type Type, object Rid), object> ObjectCache;
         public ConditionalWeakTable<object, object[]> ListCache;
+        public ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>> ListMembershipCache;
     }
 
     public sealed class AggregateMaterializerPlan {
@@ -113,8 +114,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 memberDict[m.Name] = m;
             }
 
-            var dbNullValue = Expression.Field(null, typeof(DBNull).GetField(nameof(DBNull.Value)));
-
             for (int i = 0; i < ordinals.Length; i++) {
                 if (!memberDict.TryGetValue(fieldNames[i], out var member))
                     continue;
@@ -139,13 +138,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (convertedValue.Type != targetType) {
                     convertedValue = Expression.Convert(convertedValue, targetType);
                 }
-                block.Add(Expression.Assign(memberExpr, convertedValue));
+                var assign = Expression.Assign(memberExpr, convertedValue);
+                if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) == null) {
+                    block.Add(Expression.IfThen(Expression.Not(BuildIsDbNullOrNullExpression(rawValue)), assign));
+                } else {
+                    block.Add(assign);
+                }
             }
 
             block.Add(Expression.Empty());
             var body = Expression.Block(new[] { typed }, block);
             var lambda = Expression.Lambda<Action<object, object[]>>(body, pTarget, pValues);
             return lambda.Compile();
+        }
+
+        static Expression BuildIsDbNullOrNullExpression(Expression objectValue) {
+            var dbNullValue = Expression.Field(null, typeof(DBNull).GetField(nameof(DBNull.Value)));
+            return Expression.OrElse(
+                Expression.Equal(objectValue, Expression.Constant(null)),
+                Expression.ReferenceEqual(objectValue, dbNullValue)
+            );
         }
 
         static internal Func<object> BuildConstructor(Type type) {
@@ -202,7 +214,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var body = Expression.Assign(memberExpr, convertedValue);
 
-            var lambda = Expression.Lambda<Action<object, object>>(body, pTarget, pValue);
+            Expression finalBody = body;
+            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) == null) {
+                finalBody = Expression.IfThen(Expression.Not(BuildIsDbNullOrNullExpression(pValue)), body);
+            }
+
+            var lambda = Expression.Lambda<Action<object, object>>(finalBody, pTarget, pValue);
             return lambda.Compile();
         }
 
@@ -440,9 +457,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return (t, rid);
         }
 
-        private (Type, object) cacheId(IDataReader reader, int ordinal, Type t) {
+        public (int, Type, object) cacheId(IDataReader reader, string myRidCol, Type t, int tableIndex) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
+            return (tableIndex, t, rid);
+        }
+        public (int, Type, object) cacheId(object[] reader, int myRidCol, Type t, int tableIndex) {
+            var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
+            return (tableIndex, t, rid);
+        }
+
+        private (int, Type, object) cacheId(IDataReader reader, int ordinal, Type t, int tableIndex) {
             var rid = ReflectionTool.DbDeNull(reader.GetValue(ordinal));
-            return (t, rid);
+            return (tableIndex, t, rid);
         }
 
         internal void BuildAggregateObject(
@@ -498,13 +524,21 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     lists[rel.ChildIndex] = list;
                                 }
 
-                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType);
+                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType, rel.ChildIndex);
                                 bool isUlNew = false;
                                 if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
                                     newObj = rel.CreateChildInstance();
-                                    rel.AddToList(list, newObj);
                                     ctx.ObjectCache[childRidCacheId] = newObj;
                                     isUlNew = true;
+                                }
+
+                                HashSet<(int ChildIndex, object ChildRid)> listMembership;
+                                if (!ctx.ListMembershipCache.TryGetValue(obj, out listMembership)) {
+                                    listMembership = new HashSet<(int ChildIndex, object ChildRid)>();
+                                    ctx.ListMembershipCache.Add(obj, listMembership);
+                                }
+                                if (listMembership.Add((rel.ChildIndex, childRid))) {
+                                    rel.AddToList(list, newObj);
                                 }
 
                                 BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, ctx, recDepth + 1);
@@ -520,7 +554,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                 if (parentRid == null || childRid == null)
                                     continue;
 
-                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType);
+                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType, rel.ChildIndex);
                                 bool isUlNew = false;
                                 if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
                                     newObj = rel.CreateInstance();
@@ -570,8 +604,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
                 var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>()
+                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
+                    ListCache = new ConditionalWeakTable<object, object[]>(),
+                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
                 };
                 if (myRidCol == null && Debugger.IsAttached) {
                     Debugger.Break();
@@ -586,7 +621,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     combinedToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T iterationObject;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
                     if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
                         iterationObject = new T();
                         if (currentObject != null) {
@@ -595,6 +630,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         }
                         ctx.ObjectCache.Clear();
                         ctx.ListCache.Clear();
+                        ctx.ListMembershipCache.Clear();
                         currentObject = iterationObject;
                         ctx.ObjectCache[thisCacheId] = iterationObject;
                     } else {
@@ -617,6 +653,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 ctx.ObjectCache.Clear();
+                ctx.ListMembershipCache.Clear();
             }
         }
 
@@ -653,8 +690,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
                 var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>()
+                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
+                    ListCache = new ConditionalWeakTable<object, object[]>(),
+                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
                 };
                 if (myRidCol == null && Debugger.IsAttached) {
                     Debugger.Break();
@@ -672,7 +710,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction.CancellationToken.ThrowIfCancellationRequested();
                     isNew = true;
                     T newObj;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
                     if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
                         newObj = new T();
                         ctx.ObjectCache[thisCacheId] = newObj;
@@ -720,6 +758,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 ctx.ObjectCache.Clear();
+                ctx.ListMembershipCache.Clear();
             }
             transaction?.Benchmarker?.Mark("Run afterloads");
 
@@ -767,8 +806,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var myRidOrdinal = reader.GetOrdinal(myRidCol);
                 bool isNew;
                 var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>()
+                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
+                    ListCache = new ConditionalWeakTable<object, object[]>(),
+                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
                 };
                 if (myRidCol == null && Debugger.IsAttached) {
                     Debugger.Break();
@@ -779,7 +819,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 while (reader.Read()) {
                     isNew = true;
                     T newObj;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T));
+                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
                     if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
                         newObj = new T();
                         ctx.ObjectCache[thisCacheId] = newObj;
@@ -799,6 +839,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
                 transaction?.Benchmarker?.Mark("Clear cache");
                 ctx.ObjectCache.Clear();
+                ctx.ListMembershipCache.Clear();
             }
             var dlc = new DataLoadContext {
                 DataAccessor = this,
