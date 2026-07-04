@@ -3,7 +3,6 @@ using Figlotech.Core;
 using Figlotech.Core.Extensions;
 using Figlotech.Core.Helpers;
 using Figlotech.Core.Interfaces;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -377,44 +376,90 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark("- Starting Execute Query");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
-                var existingKeys = new string[reader.FieldCount];
-                var jsonKeyPrefixes = new string[reader.FieldCount];
+
+                // Precompute per-ordinal bindings: whether the column maps to a T member,
+                // its name (JSON property name), and its reader-side type for typed access.
+                var bindings = new (bool mapped, string name, Type fieldType)[reader.FieldCount];
                 for (int i = 0; i < reader.FieldCount; i++) {
                     var name = reader.GetName(i);
-                    if (name != null) {
-                        if (ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
-                            existingKeys[i] = name;
-                            jsonKeyPrefixes[i] = $"\"{name}\":";
-                        }
+                    if (name != null && ReflectionTool.DoesTypeHaveFieldOrProperty(typeof(T), name)) {
+                        bindings[i] = (true, name, reader.GetFieldType(i) ?? typeof(object));
+                    } else {
+                        bindings[i] = (false, null, null);
                     }
                 }
-                await writer.WriteAsync("[").ConfigureAwait(false);
-                var isFirst = true;
-                var sb = new System.Text.StringBuilder(256);
+
+                // Utf8JsonWriter emits UTF-8 bytes; bridge them to the caller\'s TextWriter
+                // via a small Stream adapter that decodes and forwards incrementally.
+                // This eliminates per-row StringBuilder + string allocations and the
+                // per-field JsonConvert.SerializeObject reflection cost.
+                using var bridge = new TextWriterUtf8Stream(writer);
+                var jsonOpts = new System.Text.Json.JsonWriterOptions { Indented = false };
+                using var json = new System.Text.Json.Utf8JsonWriter(bridge, jsonOpts);
+                json.WriteStartArray();
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                     transaction.CancellationToken.ThrowIfCancellationRequested();
-                    sb.Clear();
-                    if (!isFirst) {
-                        sb.Append(',');
-                    }
-                    sb.Append('{');
-                    bool isFirstField = true;
-                    for (int i = 0; i < existingKeys.Length; i++) {
-                        if (existingKeys[i] != null) {
-                            var o = reader.GetValue(i);
-                            if (!isFirstField) {
-                                sb.Append(',');
-                            }
-                            sb.Append(jsonKeyPrefixes[i]);
-                            sb.Append(JsonConvert.SerializeObject(o));
-                            isFirstField = false;
+                    json.WriteStartObject();
+                    for (int i = 0; i < bindings.Length; i++) {
+                        var b = bindings[i];
+                        if (!b.mapped)
+                            continue;
+                        if (reader.IsDBNull(i)) {
+                            json.WriteNull(b.name);
+                            continue;
                         }
+                        WriteJsonValue(json, reader, i, b.name, b.fieldType);
                     }
-                    sb.Append('}');
-                    await writer.WriteAsync(sb.ToString()).ConfigureAwait(false);
-                    isFirst = false;
+                    json.WriteEndObject();
                 }
-                await writer.WriteAsync("]").ConfigureAwait(false);
+                json.WriteEndArray();
+                await json.FlushAsync(transaction.CancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private static void WriteJsonValue(System.Text.Json.Utf8JsonWriter w, DbDataReader reader, int ordinal, string name, Type fieldType) {
+            // Typed fast paths avoid boxing and JsonConvert reflection. Order: common DB types first.
+            if (fieldType == typeof(string)) {
+                w.WriteString(name, reader.GetString(ordinal));
+            } else if (fieldType == typeof(int)) {
+                w.WriteNumber(name, reader.GetInt32(ordinal));
+            } else if (fieldType == typeof(long)) {
+                w.WriteNumber(name, reader.GetInt64(ordinal));
+            } else if (fieldType == typeof(decimal)) {
+                w.WriteNumber(name, reader.GetDecimal(ordinal));
+            } else if (fieldType == typeof(double)) {
+                w.WriteNumber(name, reader.GetDouble(ordinal));
+            } else if (fieldType == typeof(float)) {
+                w.WriteNumber(name, reader.GetFloat(ordinal));
+            } else if (fieldType == typeof(bool)) {
+                w.WriteBoolean(name, reader.GetBoolean(ordinal));
+            } else if (fieldType == typeof(DateTime)) {
+                w.WriteString(name, reader.GetDateTime(ordinal));
+            } else if (fieldType == typeof(DateTimeOffset)) {
+                w.WriteString(name, (DateTimeOffset)reader.GetValue(ordinal));
+            } else if (fieldType == typeof(Guid)) {
+                w.WriteString(name, reader.GetGuid(ordinal));
+            } else if (fieldType == typeof(short)) {
+                w.WriteNumber(name, reader.GetInt16(ordinal));
+            } else if (fieldType == typeof(byte)) {
+                w.WriteNumber(name, reader.GetByte(ordinal));
+            } else {
+                // Fallback for uncommon types: boxed object dispatch.
+                var value = reader.GetValue(ordinal);
+                switch (value) {
+                    case null: w.WriteNull(name); break;
+                    case string s: w.WriteString(name, s); break;
+                    case int ii: w.WriteNumber(name, ii); break;
+                    case long ll: w.WriteNumber(name, ll); break;
+                    case decimal dd: w.WriteNumber(name, dd); break;
+                    case double db: w.WriteNumber(name, db); break;
+                    case float f: w.WriteNumber(name, f); break;
+                    case bool bb: w.WriteBoolean(name, bb); break;
+                    case DateTime dt: w.WriteString(name, dt); break;
+                    case DateTimeOffset dto: w.WriteString(name, dto); break;
+                    case Guid g: w.WriteString(name, g); break;
+                    default: w.WriteString(name, value.ToString()); break;
+                }
             }
         }
 
@@ -699,12 +744,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
                 transaction?.Benchmarker?.Mark("Enter Build Result");
                 int row = 0;
-
-                var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
-                var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
-                const int AfterLoadInlineThreshold = 1000;
-                WorkQueuer afterLoads = implementsAfterLoad || implementsAfterAggregateLoad ? new WorkQueuer("AfterLoads") : null;
-                bool useInlineAfterLoad = false;
                 var objArray = new object[reader.FieldCount];
                 while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                     transaction.CancellationToken.ThrowIfCancellationRequested();
@@ -714,30 +753,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
                         newObj = new T();
                         ctx.ObjectCache[thisCacheId] = newObj;
-                        if (implementsAfterLoad || implementsAfterAggregateLoad) {
-                            if (retv.Count >= AfterLoadInlineThreshold) {
-                                useInlineAfterLoad = true;
-                            }
-                            if (useInlineAfterLoad) {
-                                if (implementsAfterLoad) {
-                                    ((IBusinessObject)newObj).OnAfterLoad(dlc);
-                                }
-                                if (implementsAfterAggregateLoad) {
-                                    await ((IBusinessObject<T>)newObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
-                                }
-                            } else {
-                                var capturedNewObj = newObj;
-                                afterLoads.Enqueue(async () => {
-                                    if (implementsAfterLoad) {
-                                        ((IBusinessObject)capturedNewObj).OnAfterLoad(dlc);
-                                    }
-
-                                    if (implementsAfterAggregateLoad) {
-                                        await ((IBusinessObject<T>)capturedNewObj).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
-                                    }
-                                });
-                            }
-                        }
                         retv.Add(newObj);
                     } else {
                         newObj = (T)newObjObj;
@@ -750,9 +765,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     row++;
                 }
 
-                if (afterLoads != null) {
-                    await afterLoads.Stop(true).ConfigureAwait(false);
-                }
                 var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
                 transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
 
@@ -760,10 +772,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 ctx.ObjectCache.Clear();
                 ctx.ListMembershipCache.Clear();
             }
+
             transaction?.Benchmarker?.Mark("Run afterloads");
 
+            // Unified ordering: List-level hook FIRST, then per-item hooks.
             if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
                 await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false);
+            }
+
+            var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+            var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+            if (implementsAfterLoad || implementsAfterAggregateLoad) {
+                using var afterLoads = new WorkQueuer("AfterLoads");
+                foreach (var item in retv) {
+                    var captured = item;
+                    afterLoads.Enqueue(async () => {
+                        if (implementsAfterAggregateLoad) {
+                            await ((IBusinessObject<T>)captured).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
+                        }
+                        if (implementsAfterLoad) {
+                            ((IBusinessObject)captured).OnAfterLoad(dlc);
+                        }
+                    });
+                }
+                await afterLoads.Stop(true).ConfigureAwait(false);
             }
 
             transaction?.Benchmarker?.Mark("Build process finished");

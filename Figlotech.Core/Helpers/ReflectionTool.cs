@@ -86,25 +86,17 @@ namespace Figlotech.Core.Helpers {
         }
 
         private static IEnumerable<MemberInfo> CollectMembers(Type type) {
-            foreach (var a in type.GetFields(BindingFlags.Instance).Where(m => !m.IsStatic && m.IsPublic)) {
-                yield return a;
+            // BindingFlags.Instance alone returns 0 members (no access flag); the previous code
+            // had 4 loops where 2 were dead and 2 were duplicates. Reduced to one source each.
+            // A property is included if either accessor is public (matches original semantics).
+            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance)) {
+                yield return f;
             }
-            foreach (var a in type.GetFields().Where(m => !m.IsStatic && m.IsPublic)) {
-                yield return a;
-            }
-            foreach (var a in type.GetProperties(BindingFlags.Instance).Where(
-                m =>
-                    (!(m.GetGetMethod()?.IsStatic ?? true) && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                    (!(m.GetSetMethod()?.IsStatic ?? true) && (m.GetSetMethod()?.IsPublic ?? false))
-            )) {
-                yield return a;
-            }
-            foreach (var a in type.GetProperties().Where(
-                m =>
-                    (!(m.GetGetMethod()?.IsStatic ?? true) && (m.GetGetMethod()?.IsPublic ?? false)) ||
-                    (!(m.GetSetMethod()?.IsStatic ?? true) && (m.GetSetMethod()?.IsPublic ?? false))
-            )) {
-                yield return a;
+            foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
+                if ((p.GetMethod != null && p.GetMethod.IsPublic) ||
+                    (p.SetMethod != null && p.SetMethod.IsPublic)) {
+                    yield return p;
+                }
             }
         }
 
@@ -124,14 +116,12 @@ namespace Figlotech.Core.Helpers {
                 (t.BaseType == ancestorType || TypeDerivesFrom(t.BaseType, ancestorType));
         }
         public static Type? TypeAsDerivingFromGeneric(Type t, Type ancestorType) {
-            if (t == typeof(Object)) {
+            if (t == null || t == typeof(Object)) {
                 return null;
             }
-            return (t != null && t != typeof(Object)) &&
-                (
-                    t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType
-
-                ) ? t : TypeAsDerivingFromGeneric(t.BaseType, ancestorType);
+            return t.IsGenericType && t.GetGenericTypeDefinition() == ancestorType
+                ? t
+                : TypeAsDerivingFromGeneric(t.BaseType, ancestorType);
         }
 
         private static readonly ConcurrentDictionary<(Type t, Type ancestor), bool> TypeDerivesFromGenericResponseCache = new ConcurrentDictionary<(Type t, Type ancestor), bool>();
@@ -202,8 +192,9 @@ namespace Figlotech.Core.Helpers {
             var enumerator = ListEnumeratorCache[list.GetType()].Invoke(list, Array.Empty<object>());
             var enumeratorType = enumerator.GetType();
             var moveNext = EnumeratorMoveNextCache[enumeratorType];
+            var currentProp = EnumeratorPropCurrentCache[enumeratorType];
             while ((bool)moveNext.Invoke(enumerator, Array.Empty<object>())) {
-                yield return EnumeratorPropCurrentCache[enumeratorType];
+                yield return currentProp.GetValue(enumerator);
             }
         }
 
@@ -354,7 +345,6 @@ namespace Figlotech.Core.Helpers {
         }
 
         public static object TryCast(object value, Type t) {
-            try {
                 value = DbEvalValue(value, t);
                 (var typeIsNullable, t) = ToUnderlying(t);
                 if (t == null)
@@ -452,10 +442,6 @@ namespace Figlotech.Core.Helpers {
                 }
 
                 return Activator.CreateInstance(t);
-            } catch (Exception x) {
-
-                throw;
-            }
         }
 
 
@@ -1295,7 +1281,7 @@ namespace Figlotech.Core.Helpers {
                     }
                 } else {
                     if (value is string str && type == typeof(bool)) {
-                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, str.ToLower() == "true" || str.ToLower() == "yes" || str == "1");
+                        _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, ((string)v).ToLower() == "true" || ((string)v).ToLower() == "yes" || (string)v == "1");
                         value = str.ToLower() == "true" || str.ToLower() == "yes" || str == "1";
                         _setMemberValueInternal(member, target, value);
                         return;
