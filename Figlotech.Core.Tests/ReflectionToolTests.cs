@@ -92,6 +92,24 @@ namespace Figlotech.Core.Tests {
             Assert.False(second.Flag);
         }
 
+        // ==== Sibling of #3: long -> ulong conversion must use the runtime argument v,
+        // not the captured first-call value `l`.
+        class SampleForUlongCapture {
+            public ulong Value;
+        }
+
+        [Fact]
+        public void SetMemberValue_LongToUlong_DoesNotStaleCapture() {
+            var first = new SampleForUlongCapture();
+            ReflectionTool.SetValue(first, "Value", 10L);
+            Assert.Equal(10UL, first.Value);
+
+            // Second call with a DIFFERENT long must convert THAT value, not the first.
+            var second = new SampleForUlongCapture();
+            ReflectionTool.SetValue(second, "Value", 99L);
+            Assert.Equal(99UL, second.Value);
+        }
+
         // ==== Fix #4: TypeAsDerivingFromGeneric must not NRE on null input.
         [Fact]
         public void TypeAsDerivingFromGeneric_NullInput_ReturnsNull_NotNre() {

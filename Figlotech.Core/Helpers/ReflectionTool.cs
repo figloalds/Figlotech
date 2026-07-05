@@ -1267,7 +1267,7 @@ namespace Figlotech.Core.Helpers {
             }
 
             if (value is long l && type == typeof(UInt64)) {
-                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (ulong)l);
+                _setterConversionCache[(member, value?.GetType())] = (t, v) => _setMemberValueInternal(member, t, (ulong)(long)v);
                 _setMemberValueInternal(member, target, (ulong)l);
                 return;
             }
