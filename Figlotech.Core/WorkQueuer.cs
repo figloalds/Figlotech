@@ -465,7 +465,21 @@ namespace Figlotech.Core {
                         break;
                     }
 
-                    if (!await GetOrCreateChannel().Reader.WaitToReadAsync(ct).ConfigureAwait(false)) {
+                    // Read the channel WITHOUT creating it. The channel is created lazily on
+                    // the first write (see WriteQueuedJob / WriteQueuedJobAsync) so that a
+                    // ChannelCapacity assigned through an object initializer is honored even
+                    // when the queuer is started from the constructor (init_started: true).
+                    // Creating it here would read ChannelCapacity before the initializer has
+                    // run, producing an unbounded channel and silently defeating the bound.
+                    var channel = Volatile.Read(ref _workChannel);
+                    if (channel == null) {
+                        // No channel yet: nothing to read. Wait briefly for the first
+                        // enqueue rather than busy-spinning.
+                        await Task.Delay(2, ct).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    if (!await channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false)) {
                         break;
                     }
 
@@ -473,7 +487,7 @@ namespace Figlotech.Core {
                         continue;
                     }
 
-                    if (!GetOrCreateChannel().Reader.TryRead(out var job)) {
+                    if (!channel.Reader.TryRead(out var job)) {
                         continue;
                     }
 
