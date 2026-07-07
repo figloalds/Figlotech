@@ -64,7 +64,7 @@ namespace Figlotech.BDados {
             };
             Dictionary.OnFree = async (key) => {
                 var obj = Dictionary[key];
-                if (obj.IsDirty) {
+                if (obj != null && obj.IsDirty) {
                     await SaveToPersistentStorage(obj.Object);
                 }
             };

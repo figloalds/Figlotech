@@ -2194,8 +2194,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 var xlist = new List<T>(Math.Min(rs.Count, chunkSz));
                 var legacyChunk = x.ToList();
                 xlist.AddRange(x.Cast<T>());
-                var ridMap = legacyChunk.ToDictionary(item => item.RID, item => item);
-                var idMap = legacyChunk.Where(item => item.Id > 0).ToDictionary(item => item.Id, item => item);
+                // Last-wins: duplicate RID/Id in the input list must not crash the save.
+                // These maps are fallback lookups for matching DB-returned IDs back to objects.
+                var ridMap = legacyChunk.ToDictionaryIgnoreDuplicates(item => item.RID, item => item);
+                var idMap = legacyChunk.Where(item => item.Id > 0).ToDictionaryIgnoreDuplicates(item => item.Id, item => item);
                 await QueryReaderAsync(transaction, Plugin.QueryGenerator.QueryIds(legacyChunk), async reader => {
                     var areader = reader as DbDataReader;
                     while (await areader.ReadAsync().ConfigureAwait(false)) {
