@@ -123,7 +123,7 @@ namespace Figlotech.Core {
                     var respData = ToMaybeJsonDynamic(await this.AsString().ConfigureAwait(false));
 
                     await this.Caller.Logging.FileSystem.WriteAllTextAsync(
-                        $"{this.Caller.Logging.RelativePath}/{DateTime.UtcNow:yyyyMMddHHmmssfff}{IntEx.GenerateShortRid()}-{(int)StatusCode}-{this.Response.RequestMessage.Method}-{this.Response.RequestMessage.RequestUri.PathAndQuery.Replace("/", "-").RegExReplace("\\W", "-")}.json",
+                        $"{this.Caller.Logging.RelativePath}/{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:HHmmssfff}{IntEx.GenerateShortRid()}-{(int)StatusCode}-{this.Response.RequestMessage.Method}-{this.Response.RequestMessage.RequestUri.PathAndQuery.Replace("/", "-").RegExReplace("\\W", "-")}.json",
                         JsonConvert.SerializeObject(new {
                             Method = Response.RequestMessage.Method.ToString(),
                             Uri = Response.RequestMessage.RequestUri.ToString(),
