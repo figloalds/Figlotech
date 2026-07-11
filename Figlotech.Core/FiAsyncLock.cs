@@ -135,7 +135,7 @@ namespace Figlotech.Core {
         readonly SemaphoreSlim _semaphore;
         internal FiAsyncMultiLock _multiLock;
         internal string _key;
-        bool _isDisposed;
+        int _isDisposed;
 
         /// <summary>
         /// Public ctor. Prefer obtaining a handle via <see cref="FiAsyncLock.Lock"/> /
@@ -146,27 +146,34 @@ namespace Figlotech.Core {
             _semaphore = semaphore;
         }
 
+        ~FiAsyncDisposableLock() {
+            DisposeCore();
+        }
+
         public void Dispose() {
-            if (_isDisposed) {
-                return;
-            }
-            _isDisposed = true;
-            ReleaseCore();
+            DisposeCore();
+            GC.SuppressFinalize(this);
         }
 
         public ValueTask DisposeAsync() {
-            if (_isDisposed) {
-                return Fi.CompletedValueTask;
-            }
-            _isDisposed = true;
-            ReleaseCore();
+            DisposeCore();
+            GC.SuppressFinalize(this);
             return Fi.CompletedValueTask;
+        }
+
+        void DisposeCore() {
+            // The finalizer is a last-resort compatibility safety net for abandoned handles.
+            // Interlocked keeps explicit disposal and finalization from releasing twice.
+            if (Interlocked.Exchange(ref _isDisposed, 1) != 0) {
+                return;
+            }
+            ReleaseCore();
         }
 
         void ReleaseCore() {
             // Real release: this handle acquired the semaphore, so release it exactly once.
-            // No racy CurrentCount pre-check — release is deterministic via the _isDisposed
-            // double-dispose guard above.
+            // No racy CurrentCount pre-check — release is deterministic via the atomic
+            // double-dispose/finalizer guard above.
             try {
                 _semaphore.Release();
             } catch (SemaphoreFullException x) {
@@ -234,23 +241,22 @@ namespace Figlotech.Core {
         internal SemaphoreSlim Semaphore => _semaphore;
 
         /// <summary>
-        /// Default timeout applied by <see cref="Lock"/>/<see cref="LockSync"/> so that an
-        /// abandoned or dead holder cannot block waiters forever. Use
-        /// <see cref="LockWithTimeout(TimeSpan)"/> for an explicit timeout.
+        /// Acquire the lock with an unbounded wait. <b>NOT reentrant</b> — see class remarks.
+        /// Use <see cref="LockWithTimeout(TimeSpan)"/> when a bounded wait is required.
         /// </summary>
-        static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(1);
+        public async Task<FiAsyncDisposableLock> Lock() {
+            await _semaphore.WaitAsync().ConfigureAwait(false);
+            return new FiAsyncDisposableLock(_semaphore);
+        }
 
         /// <summary>
-        /// Acquire the lock. Applies a default one-minute timeout so an abandoned holder cannot
-        /// block forever. <b>NOT reentrant</b> — see class remarks.
+        /// Acquire the lock synchronously with an unbounded wait. <b>NOT reentrant</b> — see
+        /// class remarks. Use <see cref="LockWithTimeoutSync(TimeSpan)"/> when bounded.
         /// </summary>
-        public Task<FiAsyncDisposableLock> Lock() => LockWithTimeout(DefaultTimeout);
-
-        /// <summary>
-        /// Acquire the lock synchronously. Applies a default one-minute timeout.
-        /// <b>NOT reentrant</b> — see class remarks.
-        /// </summary>
-        public FiAsyncDisposableLock LockSync() => LockWithTimeoutSync(DefaultTimeout);
+        public FiAsyncDisposableLock LockSync() {
+            _semaphore.Wait();
+            return new FiAsyncDisposableLock(_semaphore);
+        }
 
         public async Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
             using var timeoutCancellation = new CancellationTokenSource(timeout);
