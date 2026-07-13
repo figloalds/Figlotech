@@ -379,6 +379,19 @@ namespace Figlotech.BDados.Tests {
         public new ObjectAggregate? ShadowedAggregate { get; set; }
     }
 
+    public sealed class RootBoundedCycleParcel : PlanDataObject<Guid> {
+        [Field]
+        public Guid PaymentId { get; set; }
+
+        [AggregateObject(nameof(PaymentId), Flags = "root")]
+        public RootBoundedCyclePayment? Payment { get; set; }
+    }
+
+    public sealed class RootBoundedCyclePayment : PlanDataObject<Guid> {
+        [AggregateList(typeof(RootBoundedCycleParcel), nameof(RootBoundedCycleParcel.PaymentId))]
+        public List<RootBoundedCycleParcel> Parcels { get; set; } = new List<RootBoundedCycleParcel>();
+    }
+
     public sealed class WhitespaceFlagRoot : PlanDataObject<Guid> {
         [AggregateField(typeof(ScalarAggregate), nameof(Id), nameof(ScalarAggregate.Name), Flags = " \t ")]
         public string? Name { get; set; }

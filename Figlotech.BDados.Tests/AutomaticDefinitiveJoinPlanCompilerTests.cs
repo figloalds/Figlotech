@@ -123,6 +123,19 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void CompileAutomaticAllowsRootTypeToRepeatAsChildWhenRootOnlyEdgeStopsTraversal() {
+            DefinitiveJoinPlan plan = DefinitiveJoinPlanCompiler.Compile(typeof(RootBoundedCycleParcel), AggregateJoinShape.FullGraph);
+
+            Assert.Equal(new[] { typeof(RootBoundedCycleParcel), typeof(RootBoundedCyclePayment), typeof(RootBoundedCycleParcel) }, plan.Tables.Select(x => x.EntityType));
+            Assert.Equal("tba", plan.AliasByPath[new AggregatePath(Array.Empty<string>())]);
+            Assert.Equal("tbb", plan.AliasByPath[new AggregatePath(new[] { nameof(RootBoundedCycleParcel.Payment) })]);
+            Assert.Equal("tbc", plan.AliasByPath[new AggregatePath(new[] { nameof(RootBoundedCycleParcel.Payment), nameof(RootBoundedCyclePayment.Parcels) })]);
+            Assert.DoesNotContain(plan.AliasByPath.Keys, x => x.Segments.SequenceEqual(new[] { nameof(RootBoundedCycleParcel.Payment), nameof(RootBoundedCyclePayment.Parcels), nameof(RootBoundedCycleParcel.Payment) }));
+            Assert.Single(plan.Relations.Where(x => x.BuildKind == AggregateBuildOptions.AggregateObject));
+            Assert.Single(plan.Relations.Where(x => x.BuildKind == AggregateBuildOptions.AggregateList));
+        }
+
+        [Fact]
         public void CompileAutomaticFullGraphRejectsCyclesButScalarGraphDoesNotTraverseThem() {
             ArgumentException exception = Assert.Throws<ArgumentException>(() => DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.FullGraph));
             DefinitiveJoinPlan scalar = DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.ScalarAggregatesOnly);

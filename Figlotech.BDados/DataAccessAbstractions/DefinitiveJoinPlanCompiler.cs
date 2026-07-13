@@ -135,6 +135,29 @@ public static class DefinitiveJoinPlanCompiler {
             }
         }
 
+        private readonly struct TraversalState : IEquatable<TraversalState> {
+            public Type EntityType { get; }
+
+            public bool IsRoot { get; }
+
+            public TraversalState(Type entityType, bool isRoot) {
+                EntityType = entityType;
+                IsRoot = isRoot;
+            }
+
+            public bool Equals(TraversalState other) {
+                return IsRoot == other.IsRoot && EntityType == other.EntityType;
+            }
+
+            public override bool Equals(object obj) {
+                return obj is TraversalState other && Equals(other);
+            }
+
+            public override int GetHashCode() {
+                return (EntityType.GetHashCode() * 397) ^ (IsRoot ? 1 : 0);
+            }
+        }
+
         private readonly Type _rootType;
 
         private readonly AggregateJoinShape _shape;
@@ -162,12 +185,12 @@ public static class DefinitiveJoinPlanCompiler {
             string alias = _aliases.GetAlias("root", _rootType, string.Empty);
             EnsureTable(_rootType, alias, JoinType.LEFT, null, GetFieldNames(_rootType), RootContext());
             _aliases.Bind(new AggregatePath(Array.Empty<string>()), alias);
-            Visit(_rootType, alias, new AggregatePath(Array.Empty<string>()), isRoot: true, new List<Type> { _rootType });
+            Visit(_rootType, alias, new AggregatePath(Array.Empty<string>()), isRoot: true, new List<TraversalState> { new TraversalState(_rootType, isRoot: true) });
             DefinitiveJoinPlan definitiveJoinPlan = DefinitiveJoinPlanCompiler.Compile(_definition, _rootType, _shape);
             return new DefinitiveJoinPlan(definitiveJoinPlan.RootType, definitiveJoinPlan.Shape, definitiveJoinPlan.RootTableIndex, definitiveJoinPlan.Tables, definitiveJoinPlan.Relations, definitiveJoinPlan.Projection, _aliases.SnapshotAliasesByPath(), definitiveJoinPlan.TableIndexByAlias, definitiveJoinPlan.RootOrdering, definitiveJoinPlan.FormatVersion);
         }
 
-        private void Visit(Type currentType, string currentAlias, AggregatePath currentPath, bool isRoot, List<Type> ancestry) {
+        private void Visit(Type currentType, string currentAlias, AggregatePath currentPath, bool isRoot, List<TraversalState> ancestry) {
             List<AggregateMetadata> list = new List<AggregateMetadata>();
             foreach (MemberInfo orderedMember in GetOrderedMembers(currentType)) {
                 list.Add(new AggregateMetadata(orderedMember, orderedMember.GetCustomAttribute<AggregateFieldAttribute>(inherit: true), orderedMember.GetCustomAttribute<AggregateFarFieldAttribute>(inherit: true), orderedMember.GetCustomAttribute<AggregateObjectAttribute>(inherit: true), orderedMember.GetCustomAttribute<AggregateListAttribute>(inherit: true)));
@@ -228,7 +251,7 @@ public static class DefinitiveJoinPlanCompiler {
             _aliases.Bind(Append(currentPath, target.Name), alias2);
         }
 
-        private void EmitAggregateObject(Type currentType, string currentAlias, AggregatePath currentPath, MemberInfo target, AggregateObjectAttribute metadata, List<Type> ancestry) {
+        private void EmitAggregateObject(Type currentType, string currentAlias, AggregatePath currentPath, MemberInfo target, AggregateObjectAttribute metadata, List<TraversalState> ancestry) {
             ValidateWritableMember(target, Context(currentPath, target));
             Type memberType = GetMemberType(target, Context(currentPath, target));
             if (memberType == typeof(string) || typeof(IEnumerable).IsAssignableFrom(memberType)) {
@@ -247,7 +270,7 @@ public static class DefinitiveJoinPlanCompiler {
             VisitChild(memberType, alias, aggregatePath, ancestry, target);
         }
 
-        private void EmitAggregateList(Type currentType, string currentAlias, AggregatePath currentPath, MemberInfo target, AggregateListAttribute metadata, List<Type> ancestry) {
+        private void EmitAggregateList(Type currentType, string currentAlias, AggregatePath currentPath, MemberInfo target, AggregateListAttribute metadata, List<TraversalState> ancestry) {
             ValidateWritableMember(target, Context(currentPath, target));
             Type type = RequireType(metadata.RemoteObjectType, "list remote object type", currentPath, target);
             if (!IsCollectionOf(GetMemberType(target, Context(currentPath, target)), type)) {
@@ -263,11 +286,12 @@ public static class DefinitiveJoinPlanCompiler {
             VisitChild(type, alias, aggregatePath, ancestry, target);
         }
 
-        private void VisitChild(Type childType, string alias, AggregatePath childPath, List<Type> ancestry, MemberInfo sourceMember) {
-            if (ancestry.Contains(childType)) {
-                throw new ArgumentException(string.Format("Automatic aggregate cycle for root type '{0}': ancestry '{1}' repeats type '{2}' at aggregate path '{3}' (member '{4}').", _rootType, string.Join(" -> ", ancestry.Select((Type x) => x.Name)), childType, childPath, sourceMember.Name));
+        private void VisitChild(Type childType, string alias, AggregatePath childPath, List<TraversalState> ancestry, MemberInfo sourceMember) {
+            TraversalState candidate = new TraversalState(childType, isRoot: false);
+            if (ancestry.Any(x => x.Equals(candidate))) {
+                throw new ArgumentException(string.Format("Automatic aggregate cycle for root type '{0}': ancestry '{1}' repeats type '{2}' at aggregate path '{3}' (member '{4}').", _rootType, string.Join(" -> ", ancestry.Select((TraversalState x) => x.EntityType.Name)), childType, childPath, sourceMember.Name));
             }
-            List<Type> ancestry2 = new List<Type>(ancestry) { childType };
+            List<TraversalState> ancestry2 = new List<TraversalState>(ancestry) { candidate };
             Visit(childType, alias, childPath, isRoot: false, ancestry2);
         }
 

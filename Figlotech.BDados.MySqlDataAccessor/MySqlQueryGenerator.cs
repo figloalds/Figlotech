@@ -413,7 +413,11 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             if (orderingMember != null) {
                 DefinitiveProjectionColumn orderingColumn = plan.Projection.FirstOrDefault(column =>
                     column.TableIndex == plan.RootTableIndex
-                    && Equals(column.DestinationMember, orderingMember));
+                    // The ordering column must be in the root table,
+                    // otherwise we cannot guarantee that the ordering will be consistent with the root table's ordering.
+                    // orderingMember comes from a Parameter Expression it has to belong in the aggregate root
+                    // We cannot compare directly because inheritance breaks it
+                    && orderingMember.Name == column.DestinationMember.Name);
                 if (orderingColumn == null) {
                     throw new ArgumentException("Ordering member must be a projected member of the frozen root table.", nameof(orderingMember));
                 }
