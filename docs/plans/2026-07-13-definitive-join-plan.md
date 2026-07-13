@@ -84,7 +84,7 @@ Use the same test package versions as `Figlotech.Core.Tests` and reference the c
 **Step 2: Add representative test models**
 
 Create models covering:
-- a root with a non-string identifier type,
+- roots with at least two non-string identifier CLR types,
 - `AggregateField`,
 - `AggregateFarField`,
 - `AggregateObject`,
@@ -232,9 +232,9 @@ Expected: 0 errors, 0 warnings in the new files.
 
 **Files:**
 - Create: `Figlotech.BDados/DataAccessAbstractions/JoinDefinitionFreezer.cs`
+- Create: `Figlotech.BDados/DataAccessAbstractions/IDefinitiveJoinBuilder.cs` or an equivalent extension-only seam
 - Modify: `Figlotech.BDados/DataAccessAbstractions/JoinDefinition.cs`
 - Modify: `Figlotech.BDados/Builders/JoinObjectBuilder.cs:60-65`
-- Modify: `Figlotech.BDados/DataAccessAbstractions/IJoinBuilder.cs`
 - Create: `Figlotech.BDados.Tests/JoinDefinitionFreezerTests.cs`
 
 **Step 1: Write failing custom-freeze tests**
@@ -258,13 +258,13 @@ Add:
 public DefinitiveJoinPlan Freeze(Type rootType, AggregateJoinShape shape)
 ```
 
-and update `IJoinBuilder` with:
+Add this through a companion interface or extension:
 
 ```csharp
 DefinitiveJoinPlan BuildPlan(Type rootType, AggregateJoinShape shape);
 ```
 
-Keep `GetJoin()` temporarily for source compatibility, mark it obsolete, and prevent executable internal paths from accepting its result once migration completes.
+Do not add a required member to `IJoinBuilder`, because external implementations must continue to compile. Keep `GetJoin()` temporarily for source compatibility, mark concrete built-in access paths obsolete where appropriate, and prevent executable internal paths from accepting its result once migration completes.
 
 The freezer must add required identifier/relation-key projections before assigning ordinals. It must not call a provider to finish the plan.
 
@@ -393,7 +393,8 @@ Expected: green and deterministic under concurrency.
 ### Task 7: Make provider query generation consume frozen projections
 
 **Files:**
-- Modify: `Figlotech.BDados/DataAccessAbstractions/IQueryGenerator.cs:19`
+- Create: `Figlotech.BDados/DataAccessAbstractions/IDefinitiveJoinQueryGenerator.cs`
+- Modify: `Figlotech.BDados/DataAccessAbstractions/IQueryGenerator.cs:19` only where source-compatible documentation or obsolete annotations are appropriate
 - Modify: `Figlotech.BDados.MySqlDataAccessor/MySqlQueryGenerator.cs:322-405`
 - Modify: `Figlotech.BDados.PostgreSQLDataAccessor/PgSQLQueryGenerator.cs:295-373`
 - Modify: `Figlotech.BDados.SQLiteDataAccessor/SqliteQueryGenerator.cs:235-312`
@@ -416,22 +417,24 @@ For one frozen custom plan and one automatic plan per shape, verify each provide
 
 Capture the plan before and after query generation and assert structural signature and immutable collection references/content are unchanged.
 
-**Step 3: Add the frozen-plan interface method**
+**Step 3: Add the frozen-plan companion contract**
 
-Add:
+Add a companion interface implemented by built-in providers:
 
 ```csharp
-IQueryBuilder GenerateJoinQuery(
-    DefinitiveJoinPlan plan,
-    IQueryBuilder conditions,
-    int? skip = 0,
-    int? limit = 100,
-    MemberInfo orderingMember = null,
-    OrderingType ordering = OrderingType.Asc,
-    IQueryBuilder rootConditions = null);
+public interface IDefinitiveJoinQueryGenerator {
+    IQueryBuilder GenerateJoinQuery(
+        DefinitiveJoinPlan plan,
+        IQueryBuilder conditions,
+        int? skip = 0,
+        int? limit = 100,
+        MemberInfo orderingMember = null,
+        OrderingType ordering = OrderingType.Asc,
+        IQueryBuilder rootConditions = null);
+}
 ```
 
-Retain the old method as an obsolete adapter that freezes before delegating. Do not keep two independent SQL implementations.
+Do not add a required method to `IQueryGenerator`, because external provider implementations would break. Retain the old public method. Add an extension/dispatcher that uses `IDefinitiveJoinQueryGenerator` when available. For a legacy external provider, create an ephemeral mutable `JoinDefinition` copy from the frozen plan and call the old method; never expose the canonical plan to mutation, and validate the returned schema. Do not keep two independent SQL implementations inside built-in providers.
 
 **Step 4: Refactor each provider**
 
@@ -579,7 +582,7 @@ Expected: green.
 **Files:**
 - Modify: `Figlotech.BDados/DataAccessAbstractions/RdbmsDataAccessor.Builder.cs:53-64`, `:494`, `:954-983`
 - Modify: `Figlotech.BDados/Builders/JoinObjectBuilder.cs`
-- Modify: `Figlotech.BDados/DataAccessAbstractions/IJoinBuilder.cs`
+- Modify: `Figlotech.BDados/DataAccessAbstractions/IDefinitiveJoinBuilder.cs` or the chosen extension seam
 - Modify: provider query generators
 - Modify: `docs/plans/2026-07-13-definitive-join-plan-design.md` only if implementation deviations were approved
 

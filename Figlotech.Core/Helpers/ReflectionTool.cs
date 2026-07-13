@@ -642,7 +642,15 @@ namespace Figlotech.Core.Helpers {
         }
         private static (bool Success, Expression Expression) BuildConversionBody(Type src, Type dest, Expression p) {
             // Identidade primeiro: evita recursão infinita quando src e dest são object
-            if (src == dest) return (true, p);
+            if (src == dest) {
+                if (src == typeof(object)) {
+                    var dbNullField = typeof(DBNull).GetField(nameof(DBNull.Value))!;
+                    var dbNullValue = Expression.Field(null, dbNullField);
+                    var isDbNull = Expression.ReferenceEqual(p, dbNullValue);
+                    return (true, Expression.Condition(isDbNull, Expression.Default(dest), p));
+                }
+                return (true, p);
+            }
 
             // Se src for object, construa uma cadeia de conversão em tempo de execução
             if (src == typeof(object)) {
@@ -771,6 +779,11 @@ namespace Figlotech.Core.Helpers {
                 }
             }
 
+            if (src == typeof(byte[]) && dest == typeof(string)) {
+                var utf8 = Expression.Property(null, typeof(Encoding).GetProperty(nameof(Encoding.UTF8))!);
+                var getString = typeof(Encoding).GetMethod(nameof(Encoding.GetString), new[] { typeof(byte[]) })!;
+                return (true, Expression.Call(utf8, getString, p));
+            }
             if (dest == typeof(string)) {
                 var toString = src.GetMethod(nameof(ToString), Type.EmptyTypes);
                 if (toString != null) {

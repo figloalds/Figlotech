@@ -1,12 +1,12 @@
 ﻿using Figlotech.Core.Interfaces;
 using Figlotech.Data;
+using System;
 using System.Reflection;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IJoinBuilder {
         IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = null, int? limit = null, IQueryBuilder conditionsRoot = null);
-        //DataTable GenerateDataTable(ConnectionInfo transaction, IQueryGenerator generator, IQueryBuilder conditions, int? p = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null);
-        //List<T> BuildObject<T>(ConnectionInfo transaction, Action<BuildParametersHelper> fn, IQueryBuilder conditions, int? skip = 1, int? limit = 200, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder conditionsRoot = null) where T: IDataObject, new();
+        [Obsolete("Legacy mutable construction access is not safe for execution. Use DefinitiveJoinPlanExtensions.BuildPlan or the frozen GenerateQuery overloads instead.")]
         JoinDefinition GetJoin();
     }
 }

@@ -1,4 +1,5 @@
 using Figlotech.BDados.Builders;
+using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Exceptions;
 using Figlotech.Core;
@@ -13,8 +14,10 @@ using System.Reflection;
 namespace Figlotech.BDados.Helpers {
     public sealed class ConditionParser {
         private Type rootType;
-
-        private readonly PrefixMaker prefixer = new PrefixMaker();
+        private readonly AggregateJoinShape _shape;
+        private readonly DefinitiveJoinPlan _configuredPlan;
+        private readonly DefinitiveAliasResolver _configuredResolver;
+        private DefinitiveAliasResolver _resolver;
 
         // Static caches for performance optimization
         private static readonly ConcurrentDictionary<Expression, Func<object>> _compiledExpressionCache = new ConcurrentDictionary<Expression, Func<object>>();
@@ -25,10 +28,24 @@ namespace Figlotech.BDados.Helpers {
         private static readonly object _missingAttribute = new object();
 
         public ConditionParser() {
-
+            _shape = AggregateJoinShape.FullGraph;
+        }
+        public ConditionParser(AggregateJoinShape shape) {
+            if (!Enum.IsDefined(typeof(AggregateJoinShape), shape)) {
+                throw new ArgumentOutOfRangeException(nameof(shape), shape, "Aggregate join shape must be a defined value.");
+            }
+            _shape = shape;
+        }
+        public ConditionParser(DefinitiveJoinPlan plan) {
+            _configuredPlan = plan ?? throw new ArgumentNullException(nameof(plan));
+            _shape = plan.Shape;
+        }
+        public ConditionParser(DefinitiveAliasResolver resolver) {
+            _configuredResolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+            _shape = resolver.Shape;
         }
         public ConditionParser(PrefixMaker prefixMaker) {
-            prefixer = prefixMaker;
+            _shape = AggregateJoinShape.FullGraph;
         }
 
         // Cached attribute retrieval helper
@@ -42,7 +59,7 @@ namespace Figlotech.BDados.Helpers {
                 return ReferenceEquals(cached, _missingAttribute) ? null : cached as T;
             }
 
-            var attr = member.GetCustomAttribute<T>();
+            var attr = member.GetCustomAttribute<T>(true);
             _attributeCache.TryAdd(key, (object)attr ?? _missingAttribute);
             return attr;
         }
@@ -67,42 +84,165 @@ namespace Figlotech.BDados.Helpers {
             return members.FirstOrDefault(m => m.Name == memberName);
         }
 
-        private String GetPrefixOfExpression(Expression expression) {
-            if (expression == null)
-                return "";
-            if (expression is UnaryExpression u) {
-                return GetPrefixOfExpression(u.Operand);
+        private void SelectResolver(Type type) {
+            rootType = type ?? throw new ArgumentNullException(nameof(type));
+            if (_configuredResolver != null) {
+                if (_configuredResolver.RootType != type) {
+                    throw new ArgumentException($"Configured frozen alias resolver root type '{_configuredResolver.RootType}' does not match expression root type '{type}'.", nameof(type));
+                }
+                _resolver = _configuredResolver;
+                return;
             }
-            if (expression is ParameterExpression p) {
-                return prefixer.GetAliasFor("root", p.Type.Name, String.Empty);
+            if (_configuredPlan != null) {
+                if (_configuredPlan.RootType != type) {
+                    throw new ArgumentException($"Configured frozen join plan root type '{_configuredPlan.RootType}' does not match expression root type '{type}'.", nameof(type));
+                }
+                _resolver = new DefinitiveAliasResolver(_configuredPlan);
+                return;
             }
-            var exp = (expression as MemberExpression).Expression;
-            var agT = exp.Type;
-            Expression subexp = expression;
-            var thisAlias = "tba"; // prefixer.GetAliasFor("tba", agT.Name, String.Empty);
-            while (subexp.NodeType == ExpressionType.MemberAccess) {
-                if (subexp is MemberExpression smex) {
-                    var mt = ReflectionTool.GetTypeOf(smex.Member);
-                    var smexMember = (smex.Expression as MemberExpression)?.Member;
-                    var f1 = smex.Member.GetCustomAttribute<AggregateFieldAttribute>();
-                    var f2 = smexMember?.GetCustomAttribute<AggregateObjectAttribute>();
-                    var f3 = smex.Member.GetCustomAttribute<AggregateFarFieldAttribute>();
-                    var f4 = smexMember?.GetCustomAttribute<AggregateListAttribute>();
-                    if (f1 != null) {
-                        thisAlias = prefixer.GetAliasFor(thisAlias, f1.RemoteObjectType.Name, f1.ObjectKey);
-                    } else if (f2 != null) {
-                        thisAlias = prefixer.GetAliasFor(thisAlias, ReflectionTool.GetTypeOf(smexMember)?.Name, f2.ObjectKey);
-                    } else if (f3 != null) {
-                        thisAlias = prefixer.GetAliasFor(thisAlias, f3.ImediateType.Name, f3.ImediateKey);
-                        thisAlias = prefixer.GetAliasFor(thisAlias, f3.FarType.Name, f3.FarKey);
-                    } else if (f4 != null) {
-                        thisAlias = prefixer.GetAliasFor(thisAlias, f4.RemoteObjectType.Name, f4.RemoteField);
-                    }
-                    subexp = (subexp as MemberExpression).Expression;
+            _resolver = new DefinitiveAliasResolver(AutomaticJoinPlanCache.GetOrAdd(type, _shape));
+        }
+
+        private string GetPrefixOfExpression(Expression expression) {
+            if (_resolver == null) {
+                throw new InvalidOperationException("A frozen alias resolver must be selected before parsing an expression.");
+            }
+            return _resolver.Resolve(GetAggregatePath(expression));
+        }
+
+        private AggregatePath GetAggregatePath(Expression expression) {
+            var members = new System.Collections.Generic.List<MemberInfo>();
+            Expression current = StripExpression(expression);
+            while (current is MemberExpression member) {
+                members.Add(member.Member);
+                current = StripExpression(member.Expression);
+            }
+            if (!(current is ParameterExpression parameter) || parameter.Type != rootType) {
+                throw new ArgumentException($"Expression '{expression}' is not rooted at parameter type '{rootType}' and cannot be resolved to a frozen alias.", nameof(expression));
+            }
+            members.Reverse();
+            var segments = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < members.Count; i++) {
+                MemberInfo member = members[i];
+                if (member.GetCustomAttribute<AggregateFieldAttribute>(true) != null
+                    || member.GetCustomAttribute<AggregateFarFieldAttribute>(true) != null
+                    || member.GetCustomAttribute<AggregateObjectAttribute>(true) != null
+                    || member.GetCustomAttribute<AggregateListAttribute>(true) != null) {
+                    segments.Add(member.Name);
                 }
             }
+            return new AggregatePath(segments);
+        }
 
-            return thisAlias;
+        private sealed class ForcedCollectionContext {
+            public ForcedCollectionContext(string alias, AggregatePath semanticBasePath, ParameterExpression parameter) {
+                Alias = alias;
+                SemanticBasePath = semanticBasePath;
+                Parameter = parameter;
+            }
+
+            public string Alias { get; }
+            public AggregatePath SemanticBasePath { get; }
+            public ParameterExpression Parameter { get; }
+        }
+
+        private static bool IsAggregateMember(MemberInfo member) {
+            return member.GetCustomAttribute<AggregateFieldAttribute>(true) != null
+                || member.GetCustomAttribute<AggregateFarFieldAttribute>(true) != null
+                || member.GetCustomAttribute<AggregateObjectAttribute>(true) != null
+                || member.GetCustomAttribute<AggregateListAttribute>(true) != null;
+        }
+
+        private static AggregatePath AppendAggregatePath(AggregatePath basePath, System.Collections.Generic.IEnumerable<string> segments) {
+            return new AggregatePath(basePath.Segments.Concat(segments));
+        }
+
+        private static bool TryGetLocalAggregatePath(Expression expression, ForcedCollectionContext context, out AggregatePath path) {
+            path = default;
+            if (context == null) {
+                return false;
+            }
+
+            var members = new System.Collections.Generic.List<MemberInfo>();
+            Expression current = StripExpression(expression);
+            while (current is MemberExpression member) {
+                members.Add(member.Member);
+                current = StripExpression(member.Expression);
+            }
+            if (!(current is ParameterExpression parameter) || parameter != context.Parameter) {
+                return false;
+            }
+
+            members.Reverse();
+            path = AppendAggregatePath(context.SemanticBasePath, members.Where(IsAggregateMember).Select(member => member.Name));
+            return true;
+        }
+
+        private bool TryGetForcedPrefix(Expression expression, ForcedCollectionContext context, out string prefix) {
+            prefix = null;
+            if (!TryGetLocalAggregatePath(expression, context, out AggregatePath path)) {
+                return false;
+            }
+            prefix = path == context.SemanticBasePath ? context.Alias : _resolver.Resolve(path);
+            return true;
+        }
+
+        private string GetMemberPrefix(Expression expression, string forceAlias, ForcedCollectionContext forcedContext) {
+            if (TryGetForcedPrefix(expression, forcedContext, out string forcedPrefix)) {
+                return forcedPrefix;
+            }
+            return forcedContext == null && forceAlias != null
+                ? forceAlias
+                : GetPrefixOfExpression(expression);
+        }
+
+        private ForcedCollectionContext GetCollectionContext(Expression collection, LambdaExpression lambda, ForcedCollectionContext parentContext) {
+            if (lambda == null || lambda.Parameters.Count != 1) {
+                throw new ArgumentException("Collection predicate must have exactly one parameter.", nameof(lambda));
+            }
+            if (TryGetLocalAggregatePath(collection, parentContext, out AggregatePath localPath)) {
+                return new ForcedCollectionContext(_resolver.Resolve(localPath), localPath, lambda.Parameters[0]);
+            }
+
+            AggregatePath path = GetAggregatePath(collection);
+            return new ForcedCollectionContext(_resolver.Resolve(path), path, lambda.Parameters[0]);
+        }
+
+        private static Expression StripExpression(Expression expression) {
+            while (expression is UnaryExpression unary
+                && (unary.NodeType == ExpressionType.Convert || unary.NodeType == ExpressionType.ConvertChecked || unary.NodeType == ExpressionType.Quote)) {
+                expression = unary.Operand;
+            }
+            return expression;
+        }
+
+        private static string RemoveExactQualifiedPrefix(string text, string qualifiedPrefix) {
+            if (String.IsNullOrEmpty(text) || String.IsNullOrEmpty(qualifiedPrefix)) {
+                return text;
+            }
+
+            var result = new System.Text.StringBuilder(text.Length);
+            int position = 0;
+            while (position < text.Length) {
+                int match = text.IndexOf(qualifiedPrefix, position, StringComparison.Ordinal);
+                if (match < 0) {
+                    result.Append(text, position, text.Length - position);
+                    break;
+                }
+
+                bool isQualifiedToken = match == 0 || !IsSqlIdentifierCharacter(text[match - 1]);
+                if (isQualifiedToken) {
+                    result.Append(text, position, match - position);
+                } else {
+                    result.Append(text, position, match - position + qualifiedPrefix.Length);
+                }
+                position = match + qualifiedPrefix.Length;
+            }
+            return result.ToString();
+        }
+
+        private static bool IsSqlIdentifierCharacter(char value) {
+            return Char.IsLetterOrDigit(value) || value == '_';
         }
 
         //private String GetPrefixOfAgField(Expression expression, AggregateFieldAttribute info) {
@@ -177,6 +317,7 @@ namespace Figlotech.BDados.Helpers {
 
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
             try {
+                SelectResolver(typeof(T));
                 var retv = ParseExpression(c.expression, typeof(T));
                 return retv;
             } catch (Exception x) {
@@ -189,8 +330,8 @@ namespace Figlotech.BDados.Helpers {
                 if (foofun == null) {
                     return new QbFmt("TRUE");
                 }
-                rootType = typeof(T);
-                var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions);
+                SelectResolver(typeof(T));
+                var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions, forcedContext: null);
                 return retv;
             } catch (Exception x) {
                 throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
@@ -278,7 +419,7 @@ namespace Figlotech.BDados.Helpers {
         int idGeneration = -1;
         string GenerateParameterId => $"_p{++idGeneration}";
 
-        private QueryBuilder ParseExpression(Expression foofun, Type typeOfT, String ForceAlias = null, QueryBuilder strBuilder = null, bool fullConditions = true) {
+        private QueryBuilder ParseExpression(Expression foofun, Type typeOfT, String ForceAlias = null, QueryBuilder strBuilder = null, bool fullConditions = true, ForcedCollectionContext forcedContext = null) {
             //if(strBuilder == null)
             strBuilder = new QueryBuilder();
 
@@ -287,14 +428,14 @@ namespace Figlotech.BDados.Helpers {
                 if (expr.NodeType == ExpressionType.Equal &&
                     expr.Right is ConstantExpression rightConst && rightConst.Value == null) {
                     strBuilder.Append("(");
-                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                     strBuilder.Append("IS NULL");
                     strBuilder.Append(")");
                 } else
                     if (expr.NodeType == ExpressionType.NotEqual &&
                         expr.Right is ConstantExpression rightConst2 && rightConst2.Value == null) {
                         strBuilder.Append("(");
-                        strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                        strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                         strBuilder.Append("IS NOT NULL");
                         strBuilder.Append(")");
                     } else
@@ -307,7 +448,7 @@ namespace Figlotech.BDados.Helpers {
                             var comparisonType = GetCachedAttribute<QueryComparisonAttribute>(member)?.Type;
 
                             strBuilder.Append("(");
-                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                             var appendFragment = comparisonType switch {
                                 DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%')",
                                 DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId})",
@@ -319,7 +460,7 @@ namespace Figlotech.BDados.Helpers {
                             strBuilder.Append(")");
                         } else {
                             strBuilder.Append("(");
-                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                             strBuilder.Append(
                                 expr.NodeType == ExpressionType.AndAlso ? "AND" :
                                 expr.NodeType == ExpressionType.OrElse ? "OR" :
@@ -331,7 +472,7 @@ namespace Figlotech.BDados.Helpers {
                                 expr.NodeType == ExpressionType.LessThan ? "<" :
                                 expr.NodeType == ExpressionType.LessThanOrEqual ? "<=" :
                                 "");
-                            strBuilder.Append(ParseExpression(expr.Right, typeOfT, ForceAlias, strBuilder, fullConditions));
+                            strBuilder.Append(ParseExpression(expr.Right, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                             strBuilder.Append(")");
                         }
             } else
@@ -350,7 +491,7 @@ namespace Figlotech.BDados.Helpers {
                             return new QbFmt("1");
                         }
                         if (aList.Length > 0) {
-                            strBuilder.Append($"{ForceAlias ?? GetPrefixOfExpression(expr.Expression)}.{expr.Member.Name.Replace("_", "")}");
+                            strBuilder.Append($"{GetMemberPrefix(expr, ForceAlias, forcedContext)}.{expr.Member.Name.Replace("_", "")}");
                         } else {
                             // oh hell.
                             MemberInfo member;
@@ -363,14 +504,12 @@ namespace Figlotech.BDados.Helpers {
                             }
                             var info = GetCachedAttribute<AggregateFieldAttribute>(member);
                             if (info != null) {
-                                var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                                                                        //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                var prefix = GetMemberPrefix(expr, ForceAlias, forcedContext);
                                 strBuilder.Append($"{prefix}.{info.RemoteField}");
                             } else {
                                 var info2 = GetCachedAttribute<AggregateFarFieldAttribute>(expr.Member);
                                 if (info2 != null) {
-                                    var prefix = ForceAlias ?? GetPrefixOfExpression(expr); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                                                                            //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                    var prefix = GetMemberPrefix(expr, ForceAlias, forcedContext);
                                     strBuilder.Append($"{prefix}.{info2.FarField}");
                                 } else {
                                     var mem = GetCachedMember((expr.Expression).Type, expr.Member.Name) ?? expr.Member;
@@ -378,11 +517,10 @@ namespace Figlotech.BDados.Helpers {
                                     var altName = GetCachedAttribute<OverrideColumnNameOnWhere>(mem);
                                     var memberName = altName?.Name ?? member?.Name ?? expr.Member.Name;
                                     if (info3 != null) {
-                                        var prefix = ForceAlias ?? GetPrefixOfExpression(expr.Expression); // prefixer.GetAliasFor("root", subexp.Type.Name);
-                                                                                                           //var alias = prefixer.GetAliasFor(prefix, expr.Member.Name);
+                                        var prefix = GetMemberPrefix(expr, ForceAlias, forcedContext);
                                         strBuilder.Append($"{prefix}.{memberName}");
                                     } else {
-                                        var prefix = GetPrefixOfExpression(expr);
+                                        var prefix = GetMemberPrefix(expr, ForceAlias, forcedContext);
                                         strBuilder.Append($"{prefix}.{memberName}");
                                     }
 
@@ -390,7 +528,7 @@ namespace Figlotech.BDados.Helpers {
                             }
                         }
                     } else if (subexp is MethodCallExpression) {
-                        strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions).GetCommandText()}.{expr.Member.Name}");
+                        strBuilder.Append($"{ParseExpression(subexp, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext).GetCommandText()}.{expr.Member.Name}");
                     } else {
                         strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
                     }
@@ -402,12 +540,12 @@ namespace Figlotech.BDados.Helpers {
                             var expr = uexpr;
                             if (expr.NodeType == ExpressionType.Not) {
                                 strBuilder.Append("!(");
-                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                 strBuilder.Append(")");
                             }
                             if (expr.NodeType == ExpressionType.Convert) {
                                 //strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
-                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                             }
                         } else
                             if (!fullConditions) {
@@ -419,11 +557,11 @@ namespace Figlotech.BDados.Helpers {
                                     if (expr.Method.DeclaringType == typeof(StringExtensions)) {
                                         if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
                                             var retv = Qb.Fmt("REGEXP_REPLACE(")
-                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[2], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[2], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(")");
                                             return retv;
                                         }
@@ -431,11 +569,11 @@ namespace Figlotech.BDados.Helpers {
                                     if (expr.Method.DeclaringType == typeof(String)) {
                                         if (expr.Method.Name == nameof(String.Replace)) {
                                             var retv = Qb.Fmt("REPLACE(")
-                                                + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(")");
                                             return retv;
                                         }
@@ -443,7 +581,7 @@ namespace Figlotech.BDados.Helpers {
                                     if (expr.Method.DeclaringType == typeof(Int32) || expr.Method.DeclaringType == typeof(Int64)) {
                                         if (expr.Method.Name == nameof(Int32.Parse)) {
                                             var retv = Qb.Fmt("CAST(")
-                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions)
+                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt("AS")
                                                 + Qb.Fmt("SIGNED")
                                                 + Qb.Fmt(")");
@@ -481,68 +619,91 @@ namespace Figlotech.BDados.Helpers {
                                     if (expr.Method.Name == "Any") {
                                         if (expr.Arguments.Count > 0) {
                                             if (expr.Arguments[0] is MemberExpression) {
-                                                strBuilder.Append($"{GetPrefixOfExpression(expr.Arguments[0])}.RID IS NOT NULL");
+                                                var pathExpression = (MemberExpression)expr.Arguments[0];
+                                                AggregatePath path;
+                                                string alias;
+                                                if (TryGetLocalAggregatePath(pathExpression, forcedContext, out AggregatePath localPath)) {
+                                                    path = localPath;
+                                                    alias = _resolver.Resolve(path);
+                                                } else {
+                                                    path = GetAggregatePath(pathExpression);
+                                                    alias = _resolver.Resolve(path);
+                                                }
+                                                string identifier = _resolver.ResolveTable(path).Identifier.ColumnName;
+                                                strBuilder.Append($"{alias}.{identifier} IS NOT NULL");
+
+                                                LambdaExpression predicate = expr.Arguments.Count > 1
+                                                    ? StripExpression(expr.Arguments[1]) as LambdaExpression
+                                                    : null;
+                                                if (predicate != null && predicate.Parameters.Count == 1) {
+                                                    ForcedCollectionContext collectionContext = GetCollectionContext(pathExpression, predicate, forcedContext);
+                                                    strBuilder.Append(" AND ");
+                                                    strBuilder.Append(ParseExpression(predicate.Body, typeOfT, collectionContext.Alias, strBuilder, fullConditions, collectionContext));
+                                                }
                                             } else {
-                                                strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                                strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                             }
                                         }
                                     }
                                     if (expr.Method.Name == "Equals") {
                                         var memberEx = expr.Object as MemberExpression;
-                                        var pre = GetPrefixOfExpression(memberEx);
+                                        var pre = GetMemberPrefix(memberEx, ForceAlias, forcedContext);
                                         var column = memberEx.Member.Name;
                                         strBuilder.Append($"{pre}.{column}=(");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append(")");
                                     }
                                     if (expr.Method.Name == nameof(String.Contains)) {
-                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append(", '%')");
                                     }
                                     if (expr.Method.Name == nameof(String.StartsWith)) {
-                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append(")");
                                     }
                                     if (expr.Method.Name == nameof(String.EndsWith)) {
-                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions));
+                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append(", '%')");
                                     }
                                     if (expr.Method.Name == nameof(String.ToUpper)) {
-                                        strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                        strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
                                     if (expr.Method.Name == nameof(String.ToLower)) {
-                                        strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                        strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
                                     if (expr.Method.Name == nameof(String.Trim)) {
-                                        strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions)).Append(")");
+                                        strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
                                     if (expr.Method.Name == nameof(String.Replace)) {
                                         strBuilder
                                             .Append($"REPLACE(")
-                                            .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext))
                                             .Append(",")
-                                            .Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext))
                                             .Append(",")
-                                            .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions))
+                                            .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext))
                                             .Append(")");
                                     }
                                     if (expr.Method.Name == "Where") {
                                         if (expr.Arguments.Count > 1) {
-                                            var prevV = ForceAlias;
-                                            ForceAlias = GetPrefixOfExpression(expr.Arguments[0] as MemberExpression);
-                                            strBuilder.Append(ParseExpression((expr.Arguments[1] as LambdaExpression).Body, typeOfT, ForceAlias, strBuilder, fullConditions));
-                                            ForceAlias = prevV;
+                                            var predicate = expr.Arguments[1] as LambdaExpression;
+                                            var collectionContext = GetCollectionContext(expr.Arguments[0], predicate, forcedContext);
+                                            strBuilder.Append(ParseExpression(predicate.Body, typeOfT, collectionContext.Alias, strBuilder, fullConditions, collectionContext));
                                         }
                                     }
                                     if (expr.Method.Name == "First") {
                                         if (expr.Arguments.Count > 0) {
-                                            strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
+                                            if (TryGetLocalAggregatePath(expr.Arguments[0], forcedContext, out AggregatePath localPath)) {
+                                                strBuilder.Append(_resolver.Resolve(localPath));
+                                            } else {
+                                                strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
+                                            }
                                         }
                                     }
                                 }
@@ -553,7 +714,8 @@ namespace Figlotech.BDados.Helpers {
             if (fullConditions) {
                 return strBuilder;
             } else {
-                return (QueryBuilder)new QueryBuilder().Append(strBuilder.GetCommandText().Replace("tba.", ""), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
+                string rootPrefix = _resolver.Resolve(default(AggregatePath)) + ".";
+                return (QueryBuilder)new QueryBuilder().Append(RemoveExactQualifiedPrefix(strBuilder.GetCommandText(), rootPrefix), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
             }
         }
     }

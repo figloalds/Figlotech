@@ -20,318 +20,6 @@ using System.Threading.Tasks;
 
 namespace Figlotech.BDados.DataAccessAbstractions {
 
-    public sealed class AggregateRelationPlan {
-        public AggregateBuildOptions BuildOption;
-        public int ChildIndex;
-        public int ParentRIDOrdinal;
-        public int ChildRIDOrdinal;
-        public Type ChildType;
-
-        // AggregateField
-        public int ValueOrdinal;
-        public Action<object, object> SetField;
-
-        // AggregateList
-        public Action<object, object> SetList;
-        public Func<object, object> GetList;
-        public Func<object> CreateListInstance;
-        public Func<object> CreateChildInstance;
-        public Action<object, object> AddToList;
-
-        // AggregateObject
-        public Action<object, object> SetObject;
-        public Func<object> CreateInstance;
-        public bool HasAggregateList;
-    }
-
-    internal struct AggregateConstructionContext {
-        public Dictionary<(int TableIndex, Type Type, object Rid), object> ObjectCache;
-        public ConditionalWeakTable<object, object[]> ListCache;
-        public ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>> ListMembershipCache;
-    }
-
-    public sealed class AggregateMaterializerPlan {
-        public Action<object, object[]>[] FieldPopulators;
-        public AggregateRelationPlan[][] RelationPlans;
-
-        static readonly ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan> _planCache = new ConcurrentDictionary<JoinDefinition, AggregateMaterializerPlan>();
-
-        public static AggregateMaterializerPlan GetOrCreate(
-            JoinDefinition join,
-            Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict,
-            IDictionary<int, Relation[]> cachedRelations) {
-            return _planCache.GetOrAddWithLocking(join, _ => Build(join, fieldNamesDict, cachedRelations));
-        }
-
-        static AggregateMaterializerPlan Build(
-            JoinDefinition join,
-            Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict,
-            IDictionary<int, Relation[]> cachedRelations) {
-
-            var joinTables = join.Joins;
-            int tableCount = joinTables.Count;
-
-            var fieldPopulators = new Action<object, object[]>[tableCount];
-            var relationPlans = new AggregateRelationPlan[tableCount][];
-
-            for (int ti = 0; ti < tableCount; ti++) {
-                var prefix = joinTables[ti].Prefix;
-                var type = joinTables[ti].ValueObject;
-
-                // Build field populator
-                if (fieldNamesDict.TryGetValue(prefix, out var fieldInfo)) {
-                    fieldPopulators[ti] = BuildFieldPopulator(type, fieldInfo.Item1, fieldInfo.Item2);
-                }
-
-                // Build relation plans
-                var relations = cachedRelations[ti];
-                var plans = new AggregateRelationPlan[relations.Length];
-                for (int ri = 0; ri < relations.Length; ri++) {
-                    var rel = relations[ri];
-                    plans[ri] = BuildRelationPlan(type, rel, joinTables, fieldNamesDict, cachedRelations);
-                }
-                relationPlans[ti] = plans;
-            }
-
-            return new AggregateMaterializerPlan {
-                FieldPopulators = fieldPopulators,
-                RelationPlans = relationPlans
-            };
-        }
-
-        static Action<object, object[]> BuildFieldPopulator(Type type, int[] ordinals, string[] fieldNames) {
-            // Build: (object target, object[] values) => { ((T)target).Field1 = convert(values[ord1]); ... }
-            var pTarget = Expression.Parameter(typeof(object), "target");
-            var pValues = Expression.Parameter(typeof(object[]), "values");
-            var typed = Expression.Variable(type, "obj");
-            var block = new List<Expression>();
-            block.Add(Expression.Assign(typed, Expression.Convert(pTarget, type)));
-
-            var members = ReflectionTool.FieldsAndPropertiesOf(type);
-            var memberDict = new Dictionary<string, MemberInfo>(StringComparer.OrdinalIgnoreCase);
-            foreach (var m in members) {
-                memberDict[m.Name] = m;
-            }
-
-            for (int i = 0; i < ordinals.Length; i++) {
-                if (!memberDict.TryGetValue(fieldNames[i], out var member))
-                    continue;
-                if (member is PropertyInfo pi && pi.SetMethod == null)
-                    continue;
-                if (member is FieldInfo fi && fi.IsInitOnly)
-                    continue;
-
-                var targetType = member is PropertyInfo p ? p.PropertyType : ((FieldInfo)member).FieldType;
-                var ordinalConst = Expression.Constant(ordinals[i]);
-                // values[ordinal]
-                var rawValue = Expression.ArrayIndex(pValues, ordinalConst);
-
-                MemberExpression memberExpr = member switch {
-                    PropertyInfo prop => Expression.Property(typed, prop),
-                    FieldInfo field => Expression.Field(typed, field),
-                    _ => throw new NotSupportedException()
-                };
-
-                // Inline object->target conversion (handles null/DBNull internally)
-                Expression convertedValue = ReflectionTool.BuildObjectToTargetConversionExpression(rawValue, targetType);
-                if (convertedValue.Type != targetType) {
-                    convertedValue = Expression.Convert(convertedValue, targetType);
-                }
-                var assign = Expression.Assign(memberExpr, convertedValue);
-                if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) == null) {
-                    block.Add(Expression.IfThen(Expression.Not(BuildIsDbNullOrNullExpression(rawValue)), assign));
-                } else {
-                    block.Add(assign);
-                }
-            }
-
-            block.Add(Expression.Empty());
-            var body = Expression.Block(new[] { typed }, block);
-            var lambda = Expression.Lambda<Action<object, object[]>>(body, pTarget, pValues);
-            return lambda.Compile();
-        }
-
-        static Expression BuildIsDbNullOrNullExpression(Expression objectValue) {
-            var dbNullValue = Expression.Field(null, typeof(DBNull).GetField(nameof(DBNull.Value)));
-            return Expression.OrElse(
-                Expression.Equal(objectValue, Expression.Constant(null)),
-                Expression.ReferenceEqual(objectValue, dbNullValue)
-            );
-        }
-
-        static internal Func<object> BuildConstructor(Type type) {
-            var newExpr = Expression.New(type);
-            var lambda = Expression.Lambda<Func<object>>(Expression.Convert(newExpr, typeof(object)));
-            return lambda.Compile();
-        }
-
-        static Action<object, object> BuildSetter(Type ownerType, string memberName) {
-            var member = ReflectionTool.GetMember(ownerType, memberName);
-            if (member == null) return null;
-
-            var pTarget = Expression.Parameter(typeof(object), "target");
-            var pValue = Expression.Parameter(typeof(object), "value");
-            var typed = Expression.Convert(pTarget, ownerType);
-            var memberType = member is PropertyInfo pi ? pi.PropertyType : ((FieldInfo)member).FieldType;
-            var typedValue = Expression.Convert(pValue, memberType);
-
-            MemberExpression memberExpr;
-            if (member is PropertyInfo prop) {
-                if (prop.SetMethod == null) return null;
-                memberExpr = Expression.Property(typed, prop);
-            } else {
-                memberExpr = Expression.Field(typed, (FieldInfo)member);
-            }
-
-            var assign = Expression.Assign(memberExpr, typedValue);
-            var lambda = Expression.Lambda<Action<object, object>>(assign, pTarget, pValue);
-            return lambda.Compile();
-        }
-
-        static internal Action<object, object> BuildConvertingSetter(Type ownerType, string memberName) {
-            var member = ReflectionTool.GetMember(ownerType, memberName);
-            if (member == null) return null;
-            if (member is PropertyInfo prop && prop.SetMethod == null) return null;
-            if (member is FieldInfo fi && fi.IsInitOnly) return null;
-
-            var memberType = member is PropertyInfo pi2 ? pi2.PropertyType : ((FieldInfo)member).FieldType;
-
-            var pTarget = Expression.Parameter(typeof(object), "target");
-            var pValue = Expression.Parameter(typeof(object), "value");
-            var typed = Expression.Convert(pTarget, ownerType);
-
-            MemberExpression memberExpr = member switch {
-                PropertyInfo p => Expression.Property(typed, p),
-                FieldInfo f => Expression.Field(typed, f),
-                _ => throw new NotSupportedException()
-            };
-
-            // Inline object->memberType conversion (handles null/DBNull internally)
-            Expression convertedValue = ReflectionTool.BuildObjectToTargetConversionExpression(pValue, memberType);
-            if (convertedValue.Type != memberType) {
-                convertedValue = Expression.Convert(convertedValue, memberType);
-            }
-            var body = Expression.Assign(memberExpr, convertedValue);
-
-            Expression finalBody = body;
-            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) == null) {
-                finalBody = Expression.IfThen(Expression.Not(BuildIsDbNullOrNullExpression(pValue)), body);
-            }
-
-            var lambda = Expression.Lambda<Action<object, object>>(finalBody, pTarget, pValue);
-            return lambda.Compile();
-        }
-
-        static Func<object, object> BuildGetter(Type ownerType, string memberName) {
-            var member = ReflectionTool.GetMember(ownerType, memberName);
-            if (member == null) return null;
-
-            var pTarget = Expression.Parameter(typeof(object), "target");
-            var typed = Expression.Convert(pTarget, ownerType);
-
-            Expression access;
-            if (member is PropertyInfo prop) {
-                access = Expression.Property(typed, prop);
-            } else {
-                access = Expression.Field(typed, (FieldInfo)member);
-            }
-
-            var lambda = Expression.Lambda<Func<object, object>>(Expression.Convert(access, typeof(object)), pTarget);
-            return lambda.Compile();
-        }
-
-        static Action<object, object> BuildListAdd(Type listType, Type elementType) {
-            var addMethod = listType.GetMethod("Add", new[] { elementType });
-            if (addMethod == null) return null;
-
-            var pList = Expression.Parameter(typeof(object), "list");
-            var pItem = Expression.Parameter(typeof(object), "item");
-            var typedList = Expression.Convert(pList, listType);
-            var typedItem = Expression.Convert(pItem, elementType);
-            var call = Expression.Call(typedList, addMethod, typedItem);
-
-            var lambda = Expression.Lambda<Action<object, object>>(call, pList, pItem);
-            return lambda.Compile();
-        }
-
-        static AggregateRelationPlan BuildRelationPlan(
-            Type parentType,
-            Relation rel,
-            List<JoiningTable> joinTables,
-            Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict,
-            IDictionary<int, Relation[]> cachedRelations) {
-
-            var plan = new AggregateRelationPlan {
-                BuildOption = rel.AggregateBuildOption,
-                ChildIndex = rel.ChildIndex,
-            };
-
-            switch (rel.AggregateBuildOption) {
-                case AggregateBuildOptions.AggregateField: {
-                        string childPrefix = joinTables[rel.ChildIndex].Prefix;
-                        string name = rel.NewName ?? (childPrefix + "_" + rel.Fields[0]);
-                        var childFields = fieldNamesDict[childPrefix];
-                        plan.ValueOrdinal = childFields.Item3[rel.Fields[0]];
-                        plan.SetField = BuildConvertingSetter(parentType, name);
-                        break;
-                    }
-
-                case AggregateBuildOptions.AggregateList: {
-                        string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                        var member = ReflectionTool.GetMember(parentType, fieldAlias);
-                        var objectType = member != null ? ReflectionTool.GetTypeOf(member) : null;
-                        if (objectType == null) break;
-                        var ulType = objectType.GetGenericArguments().FirstOrDefault();
-                        if (ulType == null) break;
-
-                        plan.ChildType = ulType;
-                        plan.SetList = BuildSetter(parentType, fieldAlias);
-                        plan.GetList = BuildGetter(parentType, fieldAlias);
-                        plan.CreateListInstance = BuildConstructor(objectType);
-                        plan.CreateChildInstance = BuildConstructor(ulType);
-                        plan.AddToList = BuildListAdd(objectType, ulType);
-
-                        var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
-                        var parentPrefix = joinTables[rel.ParentIndex].Prefix;
-                        var parentFields = fieldNamesDict[parentPrefix];
-                        plan.ParentRIDOrdinal = parentFields.Item3[rel.ParentKey];
-                        var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
-                        plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
-                        break;
-                    }
-
-                case AggregateBuildOptions.AggregateObject: {
-                        string fieldAlias = rel.NewName ?? joinTables[rel.ChildIndex].Alias;
-                        var member = ReflectionTool.GetMember(parentType, fieldAlias);
-                        var ulType = member != null ? ReflectionTool.GetTypeOf(member) : null;
-                        if (ulType == null) break;
-
-                        plan.ChildType = ulType;
-                        plan.SetObject = BuildSetter(parentType, fieldAlias);
-                        plan.CreateInstance = BuildConstructor(ulType);
-
-                        var ridCol = FiTechBDadosExtensions.RidColumnNameOf[ulType];
-                        var parentFieldsLookup = fieldNamesDict[joinTables[rel.ParentIndex].Prefix];
-                        plan.ParentRIDOrdinal = parentFieldsLookup.Item3[rel.ParentKey];
-                        var childFieldsLookup = fieldNamesDict[joinTables[rel.ChildIndex].Prefix];
-                        plan.ChildRIDOrdinal = childFieldsLookup.Item3[ridCol];
-
-                        var childRelations = cachedRelations[rel.ChildIndex];
-                        plan.HasAggregateList = false;
-                        for (int ci = 0; ci < childRelations.Length; ci++) {
-                            if (childRelations[ci].AggregateBuildOption == AggregateBuildOptions.AggregateList) {
-                                plan.HasAggregateList = true;
-                                break;
-                            }
-                        }
-                        break;
-                    }
-            }
-
-            return plan;
-        }
-    }
-
     public partial class RdbmsDataAccessor : IRdbmsDataAccessor, IDisposable, IAsyncDisposable {
         public List<T> GetObjectList<T>(BDadosTransaction transaction, IDbCommand command) where T : new() {
             transaction?.Benchmarker.Mark("Enter lock command");
@@ -491,8 +179,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        static readonly ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>> _autoAggregateCache = new ConcurrentDictionary<JoinDefinition, Dictionary<string, (int[], string[], Dictionary<string, int>)>>();
-
         public (Type, object) cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
             return (t, rid);
@@ -511,295 +197,125 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return (tableIndex, t, rid);
         }
 
-        private (int, Type, object) cacheId(IDataReader reader, int ordinal, Type t, int tableIndex) {
-            var rid = ReflectionTool.DbDeNull(reader.GetValue(ordinal));
-            return (tableIndex, t, rid);
-        }
-
-        internal void BuildAggregateObject(
-            AggregateMaterializerPlan plan,
-            object[] reader, object obj,
-            int thisIndex, bool isNew,
-            AggregateConstructionContext ctx, int recDepth) {
-
-            if (isNew) {
-                var populator = plan.FieldPopulators[thisIndex];
-                if (populator != null) {
-                    populator(obj, reader);
-                }
-            }
-
-            var relations = plan.RelationPlans[thisIndex];
-
-            for (var i = 0; i < relations.Length; i++) {
-                var rel = relations[i];
-                if (isNew
-                    || rel.BuildOption == AggregateBuildOptions.AggregateList
-                    || rel.BuildOption == AggregateBuildOptions.AggregateObject) {
-                    switch (rel.BuildOption) {
-                        case AggregateBuildOptions.AggregateField: {
-                                if (rel.SetField != null) {
-                                    rel.SetField(obj, reader[rel.ValueOrdinal]);
-                                }
-                                break;
-                            }
-
-                        case AggregateBuildOptions.AggregateList: {
-                                if (rel.AddToList == null || rel.CreateChildInstance == null)
-                                    continue;
-
-                                var parentRid = ReflectionTool.DbDeNull(reader[rel.ParentRIDOrdinal]);
-                                var childRid = ReflectionTool.DbDeNull(reader[rel.ChildRIDOrdinal]);
-                                if (parentRid == null || childRid == null)
-                                    continue;
-
-                                // Get or create the list on this parent instance
-                                object[] lists;
-                                if (!ctx.ListCache.TryGetValue(obj, out lists)) {
-                                    lists = new object[plan.RelationPlans.Length];
-                                    ctx.ListCache.Add(obj, lists);
-                                }
-                                object list = lists[rel.ChildIndex];
-                                if (list == null) {
-                                    list = rel.GetList(obj);
-                                    if (list == null) {
-                                        list = rel.CreateListInstance();
-                                        rel.SetList(obj, list);
-                                    }
-                                    lists[rel.ChildIndex] = list;
-                                }
-
-                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType, rel.ChildIndex);
-                                bool isUlNew = false;
-                                if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
-                                    newObj = rel.CreateChildInstance();
-                                    ctx.ObjectCache[childRidCacheId] = newObj;
-                                    isUlNew = true;
-                                }
-
-                                HashSet<(int ChildIndex, object ChildRid)> listMembership;
-                                if (!ctx.ListMembershipCache.TryGetValue(obj, out listMembership)) {
-                                    listMembership = new HashSet<(int ChildIndex, object ChildRid)>();
-                                    ctx.ListMembershipCache.Add(obj, listMembership);
-                                }
-                                if (listMembership.Add((rel.ChildIndex, childRid))) {
-                                    rel.AddToList(list, newObj);
-                                }
-
-                                BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, ctx, recDepth + 1);
-                                break;
-                            }
-
-                        case AggregateBuildOptions.AggregateObject: {
-                                if (rel.ChildType == null || rel.CreateInstance == null)
-                                    continue;
-
-                                var parentRid = ReflectionTool.DbDeNull(reader[rel.ParentRIDOrdinal]);
-                                var childRid = ReflectionTool.DbDeNull(reader[rel.ChildRIDOrdinal]);
-                                if (parentRid == null || childRid == null)
-                                    continue;
-
-                                var childRidCacheId = cacheId(reader, rel.ChildRIDOrdinal, rel.ChildType, rel.ChildIndex);
-                                bool isUlNew = false;
-                                if (!ctx.ObjectCache.TryGetValue(childRidCacheId, out var newObj)) {
-                                    newObj = rel.CreateInstance();
-                                    ctx.ObjectCache[childRidCacheId] = newObj;
-                                    isUlNew = true;
-                                }
-                                if (rel.SetObject != null && (isNew || isUlNew)) {
-                                    rel.SetObject(obj, newObj);
-                                }
-
-                                if (isUlNew || rel.HasAggregateList) {
-                                    BuildAggregateObject(plan, reader, newObj, rel.ChildIndex, isUlNew, ctx, recDepth + 1);
-                                }
-                                break;
-                            }
-                    }
-                }
-            }
-        }
-
-        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : IDataObject, new() {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(transaction.CancellationToken, cancellationToken);
-            var combinedToken = cts.Token;
-            var myPrefix = join.Joins[thisIndex].Prefix;
-            var joinTables = join.Joins;
-            var joinRelations = join.Relations;
-            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
-            if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
-                Debugger.Break();
-            }
+        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : IDataObject, new() {
+            ValidateFrozenAggregateInputs<T>(command, plan, materializer);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(transaction?.CancellationToken ?? CancellationToken.None, cancellationToken);
+            CancellationToken combinedToken = cts.Token;
+            combinedToken.ThrowIfCancellationRequested();
 
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, combinedToken).ConfigureAwait(false)) {
-                transaction?.Benchmarker?.Mark("Prepare caches");
-                combinedToken.ThrowIfCancellationRequested();
-                Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
-                Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-
-                var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
-                    return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
-                });
-
-                var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
-
-                var myRidCol = $"{myPrefix}_{ridcol}";
-                var myRidOrdinal = reader.GetOrdinal(myRidCol);
-                bool isNew;
-                var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>(),
-                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
-                };
-                if (myRidCol == null && Debugger.IsAttached) {
-                    Debugger.Break();
-                }
-
-                transaction?.Benchmarker?.Mark("Enter Build Result");
+            using (DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, combinedToken).ConfigureAwait(false)) {
+                ReaderSchemaValidator.Validate(reader, plan);
+                var context = materializer.CreateContext();
+                object currentIdentifier = null;
+                T currentRoot = default(T);
                 int row = 0;
-                int objs = 0;
-                T currentObject = default(T);
-                var objArray = new object[reader.FieldCount];
+                int objects = 0;
+                var values = new object[materializer.ProjectionLength];
                 while (await reader.ReadAsync(combinedToken).ConfigureAwait(false)) {
                     combinedToken.ThrowIfCancellationRequested();
-                    isNew = true;
-                    T iterationObject;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
-                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var iterationObjectObj)) {
-                        iterationObject = new T();
-                        if (currentObject != null) {
-                            objs++;
-                            yield return currentObject;
-                        }
-                        ctx.ObjectCache.Clear();
-                        ctx.ListCache.Clear();
-                        ctx.ListMembershipCache.Clear();
-                        currentObject = iterationObject;
-                        ctx.ObjectCache[thisCacheId] = iterationObject;
-                    } else {
-                        iterationObject = (T)iterationObjectObj;
-                        isNew = false;
+                    reader.GetValues(values);
+                    object identifier = materializer.ReadRootIdentifier(values, row);
+                    if (identifier == null) {
+                        row++;
+                        continue;
                     }
 
-                    reader.GetValues(objArray);
+                    if (currentRoot != null && !Equals(currentIdentifier, identifier)) {
+                        objects++;
+                        yield return currentRoot;
+                        context = materializer.CreateContext();
+                        currentRoot = default(T);
+                    }
 
-                    BuildAggregateObject(plan, objArray, iterationObject, thisIndex, isNew, ctx, 0);
-
+                    object root = materializer.GetOrCreateRoot(identifier, context, out bool isNew);
+                    currentRoot = (T)root;
+                    currentIdentifier = identifier;
+                    materializer.PopulateRoot(values, root, isNew, context);
                     row++;
                 }
-                if (currentObject != null) {
-                    objs++;
-                    yield return currentObject;
+                if (currentRoot != null) {
+                    objects++;
+                    yield return currentRoot;
                 }
-                var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {objs} / {row} rows");
-                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)objs).ToString("0.00")}ms/obj | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-
-                transaction?.Benchmarker?.Mark("Clear cache");
-                ctx.ObjectCache.Clear();
-                ctx.ListMembershipCache.Clear();
+                transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {objects} / {row} rows");
             }
         }
 
-        public async Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : ILegacyDataObject, new() {
-            List<T> retv = new List<T>();
-            var myPrefix = join.Joins[thisIndex].Prefix;
-            var joinTables = join.Joins;
-            var joinRelations = join.Relations.ToArray();
-            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
-            if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
-                Debugger.Break();
+        [Obsolete("Legacy JoinDefinition execution is not safe for execution. Freeze to DefinitiveJoinPlan and call the frozen overload.")]
+        public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : IDataObject, new() {
+            DefinitiveJoinPlan plan = join.Freeze(typeof(T), AggregateJoinShape.FullGraph);
+            ValidateLegacyRootIndex(plan, thisIndex);
+            CompiledAggregateMaterializerPlan materializer = CompiledAggregateMaterializerPlan.GetOrCreate(plan);
+            await foreach (T item in BuildAggregateListDirectCoroutinely<T>(transaction, command, plan, materializer, cancellationToken).ConfigureAwait(false)) {
+                yield return item;
             }
+        }
 
-            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+        public async Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer, object overrideContext) where T : IDataObject, new() {
+            ValidateFrozenAggregateInputs<T>(command, plan, materializer);
+            CancellationToken token = transaction?.CancellationToken ?? CancellationToken.None;
+            var retv = new List<T>();
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
                 Transaction = transaction,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
-            using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
-                transaction?.Benchmarker?.Mark("Prepare caches");
-                Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
-                Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-
-                var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
-                    return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
-                });
-
-                var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
-
-                var myRidCol = $"{myPrefix}_{ridcol}";
-                var myRidOrdinal = reader.GetOrdinal(myRidCol);
-                bool isNew;
-                var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>(),
-                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
-                };
-                if (myRidCol == null && Debugger.IsAttached) {
-                    Debugger.Break();
-                }
-                transaction?.Benchmarker?.Mark("Enter Build Result");
+            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+            using (DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, token).ConfigureAwait(false)) {
+                ReaderSchemaValidator.Validate(reader, plan);
+                var context = materializer.CreateContext();
+                var values = new object[materializer.ProjectionLength];
                 int row = 0;
-                var objArray = new object[reader.FieldCount];
-                while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
-                    transaction.CancellationToken.ThrowIfCancellationRequested();
-                    isNew = true;
-                    T newObj;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
-                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
-                        newObj = new T();
-                        ctx.ObjectCache[thisCacheId] = newObj;
-                        retv.Add(newObj);
-                    } else {
-                        newObj = (T)newObjObj;
-                        isNew = false;
+                while (await reader.ReadAsync(token).ConfigureAwait(false)) {
+                    token.ThrowIfCancellationRequested();
+                    reader.GetValues(values);
+                    object identifier = materializer.ReadRootIdentifier(values, row);
+                    if (identifier != null) {
+                        object root = materializer.GetOrCreateRoot(identifier, context, out bool isNew);
+                        if (isNew) {
+                            retv.Add((T)root);
+                        }
+                        materializer.PopulateRoot(values, root, isNew, context);
                     }
-
-                    reader.GetValues(objArray);
-                    BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, ctx, 0);
-
                     row++;
                 }
-
-                var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
-                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-
-                transaction?.Benchmarker?.Mark("Clear cache");
-                ctx.ObjectCache.Clear();
-                ctx.ListMembershipCache.Clear();
+                transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
             }
 
             transaction?.Benchmarker?.Mark("Run afterloads");
-
-            // Unified ordering: List-level hook FIRST, then per-item hooks.
             if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
                 await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false);
             }
 
-            var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
-            var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+            bool implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+            bool implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
             if (implementsAfterLoad || implementsAfterAggregateLoad) {
                 using var afterLoads = new WorkQueuer("AfterLoads");
-                foreach (var item in retv) {
-                    var captured = item;
-                    afterLoads.Enqueue(async () => {
+                var requests = new List<WorkJobExecutionRequest>();
+                foreach (T item in retv) {
+                    T captured = item;
+                    requests.Add(afterLoads.Enqueue(new WorkJob(async () => {
                         if (implementsAfterAggregateLoad) {
                             await ((IBusinessObject<T>)captured).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
                         }
                         if (implementsAfterLoad) {
                             ((IBusinessObject)captured).OnAfterLoad(dlc);
                         }
-                    });
+                    })));
                 }
                 await afterLoads.Stop(true).ConfigureAwait(false);
+                await Task.WhenAll(requests.Select(request => request.GetAwaiterInternal())).ConfigureAwait(false);
             }
-
-            transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
+        }
+
+        [Obsolete("Legacy JoinDefinition execution is not safe for execution. Freeze to DefinitiveJoinPlan and call the frozen overload.")]
+        public Task<List<T>> BuildAggregateListDirectAsync<T>(BDadosTransaction transaction, DbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+            DefinitiveJoinPlan plan = join.Freeze(typeof(T), AggregateJoinShape.FullGraph);
+            ValidateLegacyRootIndex(plan, thisIndex);
+            return BuildAggregateListDirectAsync<T>(transaction, command, plan, CompiledAggregateMaterializerPlan.GetOrCreate(plan), overrideContext);
         }
 
         private readonly SelfInitializerDictionary<Type, bool> CacheImplementsAfterLoad = new SelfInitializerDictionary<Type, bool>(
@@ -812,95 +328,121 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             t => t.Implements(typeof(IBusinessObject<>).MakeGenericType(t)) && t.GetMethod("OnAfterListAggregateLoadAsync").DeclaringType == t
         );
 
-        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : ILegacyDataObject, new() {
-            List<T> retv = new List<T>();
-            var myPrefix = join.Joins[thisIndex].Prefix;
-            var joinTables = join.Joins;
-            var joinRelations = join.Relations.ToArray();
-            var ridcol = FiTechBDadosExtensions.RidColumnNameOf[typeof(T)];
-            if (Debugger.IsAttached && string.IsNullOrEmpty(ridcol)) {
-                Debugger.Break();
-            }
-            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
-            using (var reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
-                transaction?.Benchmarker?.Mark("Prepare caches");
-                Dictionary<string, (int[], string[], Dictionary<string, int>)> fieldNamesDict;
-                Benchmarker.Assert(() => join != null);
-                fieldNamesDict = _autoAggregateCache.GetOrAddWithLocking(join, _ => CreateFieldNamesDict(reader, join));
-
-                var cachedRelations = new SelfInitializerDictionary<int, Relation[]>(rel => {
-                    return joinRelations.Where(a => a.ParentIndex == rel).ToArray();
-                });
-
-                var plan = AggregateMaterializerPlan.GetOrCreate(join, fieldNamesDict, cachedRelations);
-
-                var myRidCol = $"{myPrefix}_{ridcol}";
-                var myRidOrdinal = reader.GetOrdinal(myRidCol);
-                bool isNew;
-                var ctx = new AggregateConstructionContext {
-                    ObjectCache = new Dictionary<(int TableIndex, Type Type, object Rid), object>(),
-                    ListCache = new ConditionalWeakTable<object, object[]>(),
-                    ListMembershipCache = new ConditionalWeakTable<object, HashSet<(int ChildIndex, object ChildRid)>>()
-                };
-                if (myRidCol == null && Debugger.IsAttached) {
-                    Debugger.Break();
-                }
-                transaction?.Benchmarker?.Mark("Enter Build Result");
-                int row = 0;
-                var objArray = new object[reader.FieldCount];
-                while (reader.Read()) {
-                    isNew = true;
-                    T newObj;
-                    var thisCacheId = cacheId(reader, myRidOrdinal, typeof(T), thisIndex);
-                    if (!ctx.ObjectCache.TryGetValue(thisCacheId, out var newObjObj)) {
-                        newObj = new T();
-                        ctx.ObjectCache[thisCacheId] = newObj;
-                        retv.Add(newObj);
-                    } else {
-                        newObj = (T)newObjObj;
-                        isNew = false;
-                    }
-
-                    reader.GetValues(objArray);
-                    BuildAggregateObject(plan, objArray, newObj, thisIndex, isNew, ctx, 0);
-
-                    row++;
-                }
-                var elaps = transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
-                transaction.Benchmarker.Mark($"[{transaction.Id}] Avg Build speed: {((double)elaps / (double)retv.Count).ToString("0.00")}ms/item | {((double)elaps / (double)row).ToString("0.00")}ms/row");
-
-                transaction?.Benchmarker?.Mark("Clear cache");
-                ctx.ObjectCache.Clear();
-                ctx.ListMembershipCache.Clear();
-            }
+        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer, object overrideContext) where T : IDataObject, new() {
+            ValidateFrozenAggregateInputs<T>(command, plan, materializer);
+            var retv = new List<T>();
             var dlc = new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
                 Transaction = transaction,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
-            transaction?.Benchmarker?.Mark("Run afterloads");
+            transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
+            using (IDataReader reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
+                ReaderSchemaValidator.Validate(reader, plan);
+                var context = materializer.CreateContext();
+                var values = new object[materializer.ProjectionLength];
+                int row = 0;
+                while (reader.Read()) {
+                    transaction?.CancellationToken.ThrowIfCancellationRequested();
+                    reader.GetValues(values);
+                    object identifier = materializer.ReadRootIdentifier(values, row);
+                    if (identifier != null) {
+                        object root = materializer.GetOrCreateRoot(identifier, context, out bool isNew);
+                        if (isNew) {
+                            retv.Add((T)root);
+                        }
+                        materializer.PopulateRoot(values, root, isNew, context);
+                    }
+                    row++;
+                }
+                transaction?.Benchmarker?.Mark($"[{transaction.Id}] Built List Size: {retv.Count} / {row} rows");
+            }
 
+            transaction?.Benchmarker?.Mark("Run afterloads");
             if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
                 ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false).GetAwaiter().GetResult();
             }
             if (CacheImplementsAfterAggregateLoad[typeof(T)]) {
-                foreach (var a in retv) {
-                    ((IBusinessObject<T>)a).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
+                foreach (T item in retv) {
+                    ((IBusinessObject<T>)item).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
             }
-
             if (CacheImplementsAfterLoad[typeof(T)]) {
-                foreach (var a in retv) {
-                    ((IBusinessObject)a).OnAfterLoad(dlc);
+                foreach (T item in retv) {
+                    ((IBusinessObject)item).OnAfterLoad(dlc);
                 }
             }
-
-            transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
 
+        [Obsolete("Legacy JoinDefinition execution is not safe for execution. Freeze to DefinitiveJoinPlan and call the frozen overload.")]
+        public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, int thisIndex, object overrideContext) where T : IDataObject, new() {
+            DefinitiveJoinPlan plan = join.Freeze(typeof(T), AggregateJoinShape.FullGraph);
+            ValidateLegacyRootIndex(plan, thisIndex);
+            return BuildAggregateListDirect<T>(transaction, command, plan, CompiledAggregateMaterializerPlan.GetOrCreate(plan), overrideContext);
+        }
+
+        private static void ValidateFrozenAggregateInputs<T>(IDbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer) where T : IDataObject, new() {
+            if (plan == null) {
+                throw new ArgumentNullException(nameof(plan));
+            }
+            if (materializer == null) {
+                throw new ArgumentNullException(nameof(materializer));
+            }
+            materializer.ValidateSourcePlan(plan);
+            materializer.ValidateRootType<T>();
+            if (command == null) {
+                throw new ArgumentNullException(nameof(command));
+            }
+        }
+
+        private static void ValidateLegacyRootIndex(DefinitiveJoinPlan plan, int thisIndex) {
+            if (thisIndex != plan.RootTableIndex) {
+                throw new ArgumentOutOfRangeException(nameof(thisIndex), thisIndex, $"Legacy aggregate builder root index must match frozen plan root table index {plan.RootTableIndex}.");
+            }
+        }
+
         private static readonly ConcurrentDictionary<Type, (Func<object> Constructor, Action<object, object>[] Setters)> _stateUpdateMetadataCache = new ConcurrentDictionary<Type, (Func<object>, Action<object, object>[])>();
+
+        private static Func<object> BuildStateUpdateConstructor(Type type) {
+            NewExpression constructor = Expression.New(type);
+            return Expression.Lambda<Func<object>>(Expression.Convert(constructor, typeof(object))).Compile();
+        }
+
+        private static Action<object, object> BuildStateUpdateSetter(Type ownerType, string memberName) {
+            MemberInfo member = ReflectionTool.GetMember(ownerType, memberName);
+            if (member == null
+                || member is PropertyInfo property && property.SetMethod == null
+                || member is FieldInfo field && field.IsInitOnly) {
+                return null;
+            }
+
+            Type memberType = member is PropertyInfo memberProperty
+                ? memberProperty.PropertyType
+                : ((FieldInfo)member).FieldType;
+            ParameterExpression target = Expression.Parameter(typeof(object), "target");
+            ParameterExpression value = Expression.Parameter(typeof(object), "value");
+            UnaryExpression typedTarget = Expression.Convert(target, ownerType);
+            MemberExpression memberAccess = member is PropertyInfo writableProperty
+                ? Expression.Property(typedTarget, writableProperty)
+                : Expression.Field(typedTarget, (FieldInfo)member);
+            Expression convertedValue = ReflectionTool.BuildObjectToTargetConversionExpression(value, memberType);
+            if (convertedValue.Type != memberType) {
+                convertedValue = Expression.Convert(convertedValue, memberType);
+            }
+
+            BinaryExpression assignment = Expression.Assign(memberAccess, convertedValue);
+            Expression body = assignment;
+            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) == null) {
+                MemberExpression dbNull = Expression.Field(null, typeof(DBNull).GetField(nameof(DBNull.Value)));
+                BinaryExpression isNull = Expression.Equal(value, Expression.Constant(null));
+                BinaryExpression isDbNull = Expression.ReferenceEqual(value, dbNull);
+                body = Expression.IfThen(Expression.Not(Expression.OrElse(isNull, isDbNull)), assignment);
+            }
+
+            return Expression.Lambda<Action<object, object>>(body, target, value).Compile();
+        }
 
         private List<ILegacyDataObject> BuildStateUpdateQueryResult(BDadosTransaction transaction, IDataReader reader, List<Type> workingTypes, Dictionary<Type, MemberInfo[]> fields) {
             var retv = new List<ILegacyDataObject>();
@@ -917,9 +459,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var typeFields = fields[t];
                     var typeSetters = new Action<object, object>[typeFields.Length];
                     for (int i = 0; i < typeFields.Length; i++) {
-                        typeSetters[i] = AggregateMaterializerPlan.BuildConvertingSetter(t, typeFields[i].Name);
+                        typeSetters[i] = BuildStateUpdateSetter(t, typeFields[i].Name);
                     }
-                    return (AggregateMaterializerPlan.BuildConstructor(t), typeSetters);
+                    return (BuildStateUpdateConstructor(t), typeSetters);
                 });
                 constructors[type] = metadata.Constructor;
                 setters[type] = metadata.Setters;
@@ -951,35 +493,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker?.Mark("Build process finished");
             return retv;
         }
-        private Dictionary<string, (int[], string[], Dictionary<string, int>)> CreateFieldNamesDict(IDataReader reader, JoinDefinition join) {
-            var groups = new Dictionary<string, List<(int Index, string FieldName)>>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < reader.FieldCount; i++) {
-                var name = reader.GetName(i);
-                if (name == null) continue;
-                var underscoreIdx = name.IndexOf('_');
-                var prefix = underscoreIdx >= 0 ? name.Substring(0, underscoreIdx).ToLowerInvariant() : name.ToLowerInvariant();
-                var fieldName = underscoreIdx >= 0 ? name.Substring(underscoreIdx + 1) : name;
-                if (!groups.TryGetValue(prefix, out var list)) {
-                    list = new List<(int, string)>();
-                    groups[prefix] = list;
-                }
-                list.Add((i, fieldName));
-            }
 
-            var result = new Dictionary<string, (int[], string[], Dictionary<string, int>)>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kvp in groups) {
-                var list = kvp.Value;
-                var indices = new int[list.Count];
-                var names = new string[list.Count];
-                var lookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < list.Count; i++) {
-                    indices[i] = list[i].Index;
-                    names[i] = list[i].FieldName;
-                    lookup[names[i]] = indices[i];
-                }
-                result[kvp.Key] = (indices, names, lookup);
-            }
-            return result;
-        }
     }
 }

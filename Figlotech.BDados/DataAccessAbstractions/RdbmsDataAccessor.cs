@@ -1769,303 +1769,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return default(T);
         }
 
-        //private PrefixMaker prefixer = new PrefixMaker();
-        /*
-         * HERE BE DRAGONS
-         * jk.
-         * It works and it is actually really good
-         * But the logic behind this is crazy,
-         * it took a lot of coffee to achieve.
-         */
-        private static void MakeQueryAggregations(ref JoinDefinition query, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
-
-            //var reflectedJoinMethod = query.GetType().GetMethod("Join");
-
-            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
-            var selfRIDColumn = FiTechBDadosExtensions.RidColumnNameOf[theType];
-
-            // Iterating through AggregateFields
-            var aggregateFieldAttributes = ReflectionTool.GetAttributedMemberValues<AggregateFieldAttribute>(theType);
-            for (int i = 0; i < aggregateFieldAttributes.Length; i++) {
-                var refl = aggregateFieldAttributes[i];
-                var field = refl.Member;
-                var info = refl.Attribute;
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                var type = info?.RemoteObjectType;
-                var key = info?.ObjectKey;
-                String childAlias;
-                var tname = type.Name;
-                var pkey = key;
-                // This inversion principle might be fucktastic.
-                childAlias = prefixer.GetNewAliasFor(thisAlias,
-                    tname,
-                    pkey);
-
-                String OnClause = $"{thisAlias}.{key}={childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[type]}";
-
-                if (!ReflectionTool.TypeContains(theType, key)) {
-                    OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
-                }
-                var joh = query.Join(type, childAlias, OnClause, JoinType.LEFT);
-
-                joh.As(childAlias);
-
-                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
-                if (qjoins.Any() && !qjoins.First().Columns.Contains(info?.RemoteField)) {
-                    qjoins.First().Columns.Add(info?.RemoteField);
-                    //continue;
-                }
-
-                if (field.GetCustomAttribute<AggregateFieldAttribute>() != null) {
-                    joh.GetType().GetMethod("OnlyFields").Invoke(joh, new object[] { new string[] { field.GetCustomAttribute<AggregateFieldAttribute>().RemoteField } });
-                }
-            }
-
-            // Iterating through AggregateFarFields
-            var aggregateFarFieldAttributes = ReflectionTool.GetAttributedMemberValues<AggregateFarFieldAttribute>(theType);
-            for (int i = 0; i < aggregateFarFieldAttributes.Length; i++) {
-                var refl = aggregateFarFieldAttributes[i];
-                var field = refl.Member;
-                var info = refl.Attribute;
-                var memberType = ReflectionTool.GetTypeOf(field);
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
-                String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
-
-                var qimediate = query.Joins.Where((j) => j.Alias == childAlias);
-                if (!qimediate.Any()) {
-
-                    string OnClause = $"{thisAlias}.{info.ImediateKey}={childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.ImediateType]}";
-                    // This inversion principle will be fucktastic.
-                    // But has to be this way for now.
-                    if (!ReflectionTool.TypeContains(theType, info.ImediateKey)) {
-                        OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{info.ImediateKey}";
-                    }
-                    if (query.Joins.Where((a) => a.Alias == childAlias).Any())
-                        continue;
-
-                    var joh1 = query.Join(info.ImediateType, childAlias, OnClause, JoinType.LEFT);
-
-                    // Parent Alias is typeof(T).Name
-                    // Child Alias is field.Name
-                    // The ultra supreme gimmick mode reigns supreme here.
-                    joh1.As(childAlias);
-                    joh1.OnlyFields(new string[] { info.FarKey });
-
-                }
-
-                var qfar = query.Joins.Where((j) => j.Alias == farAlias);
-                if (qfar.Any() && !qfar.First().Columns.Contains(info.FarField)) {
-                    qfar.First().Columns.Add(info.FarField);
-                    continue;
-                } else {
-                    String OnClause2 = $"{childAlias}.{info.FarKey}={farAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.FarType]}";
-                    // This inversion principle will be fucktastic.
-                    // But has to be this way for now.
-                    if (!ReflectionTool.TypeContains(info.ImediateType, info.FarKey)) {
-                        OnClause2 = $"{childAlias}.{FiTechBDadosExtensions.RidColumnNameOf[info.ImediateType]}={farAlias}.{info.FarKey}";
-                    }
-
-                    var joh2 = query.Join(info.FarType, farAlias, OnClause2, JoinType.LEFT);
-                    // Parent Alias is typeof(T).Name
-                    // Child Alias is field.Name
-                    // The ultra supreme gimmick mode reigns supreme here.
-                    joh2.As(farAlias);
-                    joh2.OnlyFields(new string[] { info.FarField });
-                }
-            }
-            // We want to skip aggregate objects and lists 
-            // When doing linear aggregate loads
-            // The linear option is just to provide faster
-            // and shallower information.
-            if (Linear)
-                return;
-            // Iterating through AggregateObjects
-
-            var aggregateObjectAttributes = ReflectionTool.GetAttributedMemberValues<AggregateObjectAttribute>(theType);
-            for (int i = 0; i < aggregateObjectAttributes.Length; i++) {
-                var refl = aggregateObjectAttributes[i];
-                var field = refl.Member;
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var type = ReflectionTool.GetTypeOf(field);
-                var key = field.GetCustomAttribute<AggregateObjectAttribute>()?.ObjectKey;
-                var info = refl.Attribute;
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias;
-                var tname = type.Name;
-                var pkey = key;
-                // This inversion principle might be fucktastic.
-                childAlias = prefixer.GetAliasFor(thisAlias,
-                    tname,
-                    pkey);
-
-                var childRidColumn = FiTechBDadosExtensions.RidColumnNameOf[type];
-                String OnClause = $"{thisAlias}.{key}={childAlias}.{childRidColumn}";
-
-                if (!ReflectionTool.TypeContains(theType, key)) {
-                    OnClause = $"{thisAlias}.{selfRIDColumn}={childAlias}.{key}";
-                }
-
-                var joh = query.Join(type, childAlias, OnClause, JoinType.LEFT);
-
-                joh.As(childAlias);
-
-                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
-                if (qjoins.Any()) {
-                    var members = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(memberType);
-                    qjoins.First().Columns.AddRange(
-                        members
-                            .Select(m => m.Member.Name)
-                            .Where(i => !qjoins.First().Columns.Contains(i))
-                    );
-                    //continue;
-                }
-
-                var ago = field.GetCustomAttribute<AggregateObjectAttribute>();
-                if (ago != null) {
-                    MakeQueryAggregations(ref query, type, thisAlias, tname, pkey, prefixer);
-                }
-            }
-            // Iterating through AggregateLists
-            var aggregateListAttributes = ReflectionTool.GetAttributedMemberValues<AggregateListAttribute>(theType);
-            for (int i = 0; i < aggregateListAttributes.Length; i++) {
-                var refl = aggregateListAttributes[i];
-                var field = refl.Member;
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var info = refl.Attribute;
-                if (
-                     (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                     (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
-
-                var childRidColumn = FiTechBDadosExtensions.RidColumnNameOf[info.RemoteObjectType];
-                String OnClause = $"{childAlias}.{info.RemoteField}={thisAlias}.{selfRIDColumn}";
-                // Yuck
-                if (!ReflectionTool.TypeContains(info.RemoteObjectType, info.RemoteField)) {
-                    OnClause = $"{childAlias}.{childRidColumn}={thisAlias}.{info.RemoteField}";
-                }
-                var joh = query.Join(info.RemoteObjectType, childAlias, OnClause, JoinType.RIGHT);
-                // The ultra supreme gimmick mode reigns supreme here.
-                joh.GetType().GetMethod("As").Invoke(joh, new object[] { childAlias });
-
-                var qjoins = query.Joins.Where((a) => a.Alias == childAlias);
-                if (qjoins.Any()) {
-                    var members = ReflectionTool.GetAttributedMemberValues<FieldAttribute>(info.RemoteObjectType);
-                    qjoins.First().Columns.AddRange(
-                        members
-                            .Select(m => m.Member.Name)
-                            .Where(i => !qjoins.First().Columns.Contains(i))
-                    );
-                    //continue;
-                }
-
-                if (!Linear) {
-                    MakeQueryAggregations(ref query, info.RemoteObjectType, thisAlias, info.RemoteObjectType.Name, info.RemoteField, prefixer);
-                }
-            }
-        }
-
-        private static void MakeBuildAggregations(BuildParametersHelper build, Type theType, String parentAlias, String nameofThis, String pKey, PrefixMaker prefixer, bool Linear = false) {
-            var membersOfT = ReflectionTool.FieldsAndPropertiesOf(theType);
-
-            String thisAlias = prefixer.GetAliasFor(parentAlias, nameofThis, pKey);
-            // Iterating through AggregateFields
-            foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateFieldAttribute>() != null)) {
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var info = field.GetCustomAttribute<AggregateFieldAttribute>();
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.ObjectKey);
-                build.AggregateField(thisAlias, childAlias, info.RemoteField, field.Name);
-            }
-            // Iterating through AggregateFarFields
-            foreach (var field in membersOfT.Where(
-                    (f) =>
-                        f.GetCustomAttribute<AggregateFarFieldAttribute>() != null)) {
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var info = field.GetCustomAttribute<AggregateFarFieldAttribute>();
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.ImediateType.Name, info.ImediateKey);
-                String farAlias = prefixer.GetAliasFor(childAlias, info.FarType.Name, info.FarKey);
-                build.AggregateField(thisAlias, farAlias, info.FarField, field.Name);
-            }
-            // Iterating through ComputeFields
-            //foreach (var field in membersOfT.Where((f) => ReflectionTool.GetTypeOf(f) == typeof(ComputeField))) {
-            //    var memberType = ReflectionTool.GetTypeOf(field);
-            //    String childAlias = prefixer.GetAliasFor(thisAlias, field.Name);
-            //    if (field is FieldInfo) {
-            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((FieldInfo)field).GetValue(null));
-            //    }
-            //    if (field is PropertyInfo) {
-            //        build.ComputeField(thisAlias, field.Name.Replace("Compute", ""), (ComputeField)((PropertyInfo)field).GetValue(null));
-            //    }
-            //}
-            // We want to skip aggregate lists 
-            // When doing linear aggregate loads
-            // To avoid LIMIT ORDER BY MySQL dead-lock
-            if (Linear)
-                return;
-            // Iterating through AggregateObjects
-            foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateObjectAttribute>() != null)) {
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var info = field.GetCustomAttribute<AggregateObjectAttribute>();
-                if (
-                     (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                     (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, memberType.Name, info.ObjectKey);
-                build.AggregateObject(thisAlias, childAlias, field.Name);
-                if (!Linear) {
-                    MakeBuildAggregations(build, ReflectionTool.GetTypeOf(field), thisAlias, memberType.Name, info.ObjectKey, prefixer);
-                }
-            }
-            // Iterating through AggregateLists
-            foreach (var field in membersOfT.Where((f) => f.GetCustomAttribute<AggregateListAttribute>() != null)) {
-                var memberType = ReflectionTool.GetTypeOf(field);
-                var info = field.GetCustomAttribute<AggregateListAttribute>();
-                if (
-                    (info.ExplodedFlags.Contains("root") && parentAlias != "root") ||
-                    (info.ExplodedFlags.Contains("child") && parentAlias == "root")
-                ) {
-                    continue;
-                }
-                String childAlias = prefixer.GetAliasFor(thisAlias, info.RemoteObjectType.Name, info.RemoteField);
-                build.AggregateList(thisAlias, childAlias, field.Name);
-                if (!Linear) {
-                    MakeBuildAggregations(build, info.RemoteObjectType, thisAlias, info.RemoteObjectType.Name, info.RemoteField, prefixer);
-                }
-            }
-        }
-
         public List<T> AggregateLoad<T>(LoadAllArgs<T> args = null) where T : IDataObject, new() {
             return Access((transaction) => AggregateLoad(transaction, args), null);
         }
@@ -3308,36 +3011,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return SaveGenericItem(transaction, input);
         }
 
-        static readonly SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixer = new SelfInitializerDictionary<Type, PrefixMaker>(
-            type => {
-                return new PrefixMaker();
-            }
-        );
-        static readonly SelfInitializerDictionary<Type, PrefixMaker> CacheAutoPrefixerLinear = new SelfInitializerDictionary<Type, PrefixMaker>(
-            type => {
-                return new PrefixMaker();
-            }
-        );
-
-        static readonly SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoinLinear = new SelfInitializerDictionary<Type, JoinDefinition>(
-            type => {
-                var retv = CacheAutomaticJoinBuilderLinear[type].GetJoin();
-                var _buildParameters = new BuildParametersHelper(retv);
-                MakeBuildAggregations(_buildParameters, type, "root", type.Name, String.Empty, CacheAutoPrefixerLinear[type], true);
-
-                return retv;
-            }
-        );
-        static readonly SelfInitializerDictionary<Type, JoinDefinition> CacheAutoJoin = new SelfInitializerDictionary<Type, JoinDefinition>(
-            type => {
-                var retv = CacheAutomaticJoinBuilder[type].GetJoin();
-                var _buildParameters = new BuildParametersHelper(retv);
-                MakeBuildAggregations(_buildParameters, type, "root", type.Name, String.Empty, CacheAutoPrefixer[type], false);
-
-                return retv;
-            }
-        );
-
         public async Task<bool> ExistsByRIDAsync<T>(BDadosTransaction transaction, string RID) where T : IDataObject {
             if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
                 return false;
@@ -3362,40 +3035,66 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
 
-        static readonly SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilder = new SelfInitializerDictionary<Type, IJoinBuilder>(
-            type => {
-                var prefixer = CacheAutoPrefixer[type];
-                var retv = MakeJoin(
-                    (query) => {
-                        // Starting with T itself
-                        var jh = query.AggregateRoot(type, prefixer.GetAliasFor("root", type.Name, String.Empty)).As(prefixer.GetAliasFor("root", type.Name, String.Empty));
-                        jh.OnlyFields(
-                            ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                            .Select(a => a.Member.Name)
-                            .ToArray()
-                        );
-                        MakeQueryAggregations(ref query, type, "root", type.Name, String.Empty, prefixer, false);
-                    });
+        private static AggregateJoinShape ResolveAutomaticAggregateShape<T>(LoadAllArgs<T> args) where T : IDataObject, new() {
+            return args.Linear ? AggregateJoinShape.ScalarAggregatesOnly : AggregateJoinShape.FullGraph;
+        }
 
-                return retv;
+        private static DefinitiveJoinPlan GetAutomaticAggregatePlan<T>(LoadAllArgs<T> args) where T : IDataObject, new() {
+            return AutomaticJoinPlanCache.GetOrAdd(typeof(T), ResolveAutomaticAggregateShape(args));
+        }
+
+        private static bool HasAggregateRelations(DefinitiveJoinPlan plan) {
+            return plan.Relations.Any(relation => relation.BuildKind != AggregateBuildOptions.None);
+        }
+
+        private IQueryBuilder BuildAutomaticAggregateQuery<T>(DefinitiveJoinPlan plan, LoadAllArgs<T> args, int? querySkip, int? queryLimit) where T : IDataObject, new() {
+            var parser = new ConditionParser(plan);
+            var conditions = args.Conditions == null ? Qb.Fmt("TRUE") : parser.ParseExpression(args.Conditions);
+            var rootConditions = args.Conditions == null ? Qb.Fmt("TRUE") : parser.ParseExpression(args.Conditions, false);
+            return Plugin.QueryGenerator.GenerateJoinQuery(plan, conditions, querySkip, queryLimit,
+                plan.Tables[plan.RootTableIndex].Identifier.Member, args.OrderingType, rootConditions);
+        }
+
+        private DataLoadContext CreateAggregateDataLoadContext(BDadosTransaction transaction, object overrideContext) {
+            return new DataLoadContext {
+                DataAccessor = this,
+                IsAggregateLoad = true,
+                Transaction = transaction,
+                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
+            };
+        }
+
+        private async Task RunAutomaticAggregateListHookAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext) where T : IDataObject, new() {
+            if (items.Count == 0 || !CacheImplementsAfterListAggregateLoad[typeof(T)]) {
+                return;
             }
-        );
-        static readonly SelfInitializerDictionary<Type, IJoinBuilder> CacheAutomaticJoinBuilderLinear = new SelfInitializerDictionary<Type, IJoinBuilder>(
-            type => {
-                var prefixer = CacheAutoPrefixerLinear[type];
-                return MakeJoin(
-                    (query) => {
-                        // Starting with T itself
-                        var jh = query.AggregateRoot(type, prefixer.GetAliasFor("root", type.Name, String.Empty)).As(prefixer.GetAliasFor("root", type.Name, String.Empty));
-                        jh.OnlyFields(
-                            ReflectionTool.GetAttributedMemberValues<FieldAttribute>(type)
-                            .Select(a => a.Member.Name)
-                            .ToArray()
-                        );
-                        MakeQueryAggregations(ref query, type, "root", type.Name, String.Empty, prefixer, true);
-                    });
+            var dlc = CreateAggregateDataLoadContext(transaction, overrideContext);
+            await ((IBusinessObject<T>)items.First()).OnAfterListAggregateLoadAsync(dlc, items).ConfigureAwait(false);
+        }
+
+        private async Task RunAutomaticAggregateHooksAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext) where T : IDataObject, new() {
+            await RunAutomaticAggregateListHookAsync(transaction, items, overrideContext).ConfigureAwait(false);
+            bool implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
+            bool implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
+            if (implementsAfterLoad || implementsAfterAggregateLoad) {
+                var dlc = CreateAggregateDataLoadContext(transaction, overrideContext);
+                using var afterLoads = new WorkQueuer("AfterLoads");
+                var requests = new List<WorkJobExecutionRequest>();
+                foreach (T item in items) {
+                    T captured = item;
+                    requests.Add(afterLoads.Enqueue(new WorkJob(async () => {
+                        if (implementsAfterAggregateLoad) {
+                            await ((IBusinessObject<T>)captured).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
+                        }
+                        if (implementsAfterLoad) {
+                            ((IBusinessObject)captured).OnAfterLoad(dlc);
+                        }
+                    })));
+                }
+                await afterLoads.Stop(true).ConfigureAwait(false);
+                await Task.WhenAll(requests.Select(request => request.GetAwaiterInternal())).ConfigureAwait(false);
             }
-        );
+        }
 
         public async IAsyncEnumerable<T> AggregateLoadAsyncCoroutinely<T>(
             BDadosTransaction transaction,
@@ -3406,42 +3105,18 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int? querySkip = args.Linear ? args.RowSkip : null;
 
             transaction?.Benchmarker?.Mark($"Begin AggregateLoad<{typeof(T).Name}>");
-            var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            var prefixer = args.Linear ? CacheAutoPrefixerLinear[typeof(T)] : CacheAutoPrefixer[typeof(T)];
-            bool hasAnyAggregations = false;
-            transaction?.Benchmarker?.Mark("Check if model is Aggregate");
-            foreach (var a in Members) {
-                hasAnyAggregations =
-                    a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (hasAnyAggregations)
-                    break;
-            }
+            DefinitiveJoinPlan plan = GetAutomaticAggregatePlan(args);
+            bool hasAnyAggregations = HasAggregateRelations(plan);
 
             WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {args.Linear}");
             // CLUMSY
             if (hasAnyAggregations) {
 
-                transaction?.Benchmarker?.Mark("Construct Join Definition");
-
-                transaction?.Benchmarker?.Mark("Resolve ordering Member");
-                var om = FiTechBDadosExtensions.IdColumnOf[typeof(T)];
-
                 transaction?.Benchmarker?.Mark("--");
 
                 using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
-                    var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
-
-                    var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
-                    var builtConditionsRoot = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions, false));
-
-                    transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
-
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, querySkip, queryLimit, om, args.OrderingType, builtConditionsRoot);
+                    IQueryBuilder query = BuildAutomaticAggregateQuery(plan, args, querySkip, queryLimit);
                     transaction?.Benchmarker?.Mark($"Generate Join Query");
-                    //var _buildParameters = Linear ? CacheBuildParamsLinear[typeof(T)] : CacheBuildParams[typeof(T)];
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                     transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
 
@@ -3455,14 +3130,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                     var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
 
+                    CompiledAggregateMaterializerPlan materializer = CompiledAggregateMaterializerPlan.GetOrCreate(plan);
                     var yieldedItems = 0;
                     var rowSkip = args.Linear ? 0 : (args.RowSkip ?? 0);
-                    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, join, 0).ConfigureAwait(false)) {
-                        if (implementsAfterLoad) {
-                            ((IBusinessObject)item).OnAfterLoad(dlc);
-                        }
+                    await foreach (var item in BuildAggregateListDirectCoroutinely<T>(transaction, command, plan, materializer, transaction.CancellationToken).ConfigureAwait(false)) {
                         if (implementsAfterAggregateLoad) {
                             await ((IBusinessObject<T>)item).OnAfterAggregateLoadAsync(dlc).ConfigureAwait(false);
+                        }
+                        if (implementsAfterLoad) {
+                            ((IBusinessObject)item).OnAfterLoad(dlc);
                         }
                         if (rowSkip > 0) {
                             rowSkip--;
@@ -3487,29 +3163,42 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public async Task<List<T>> AggregateLoadAsync<T>
             (BDadosTransaction transaction,
             LoadAllArgs<T> args = null) where T : IDataObject, new() {
-            List<T> retv = new List<T>();
-
-            await foreach (var item in AggregateLoadAsyncCoroutinely(transaction, args).ConfigureAwait(false)) {
-                retv.Add(item);
+            await transaction.StepAsync().ConfigureAwait(false);
+            args ??= new LoadAllArgs<T>();
+            DefinitiveJoinPlan plan = GetAutomaticAggregatePlan(args);
+            if (!HasAggregateRelations(plan)) {
+                List<T> fallback = new List<T>();
+                await foreach (T item in FetchAsync<T>(transaction, args).ConfigureAwait(false)) {
+                    fallback.Add(item);
+                }
+                await RunAutomaticAggregateListHookAsync(transaction, fallback, args.ContextObject).ConfigureAwait(false);
+                return fallback;
             }
 
-            var dlc = new DataLoadContext {
-                DataAccessor = this,
-                IsAggregateLoad = true,
-                Transaction = transaction,
-                ContextTransferObject = args?.ContextObject ?? transaction?.ContextTransferObject
-            };
-            if (retv.Count > 0 && CacheImplementsAfterListAggregateLoad[typeof(T)]) {
-                await ((IBusinessObject<T>)retv.First()).OnAfterListAggregateLoadAsync(dlc, retv).ConfigureAwait(false);
+            int? queryLimit = args.Linear ? args.RowLimit : null;
+            int? querySkip = args.Linear ? args.RowSkip : null;
+            await using var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false);
+            IQueryBuilder query = BuildAutomaticAggregateQuery(plan, args, querySkip, queryLimit);
+            query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+            CompiledAggregateMaterializerPlan materializer = CompiledAggregateMaterializerPlan.GetOrCreate(plan);
+            if (args.Linear || (!args.RowSkip.HasValue && !args.RowLimit.HasValue)) {
+                return await BuildAggregateListDirectAsync<T>(transaction, command, plan, materializer, args.ContextObject ?? transaction?.ContextTransferObject).ConfigureAwait(false);
             }
 
-            return retv;
-        }
-
-        private List<T> InvokeBuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, JoinDefinition join, object overrideContext) where T : IDataObject, new() {
-            var method = typeof(RdbmsDataAccessor).GetMethod("BuildAggregateListDirect", BindingFlags.Public | BindingFlags.Instance);
-            var generic = method.MakeGenericMethod(typeof(T));
-            return (List<T>)generic.Invoke(this, new object[] { transaction, command, join, 0, overrideContext });
+            var selected = new List<T>();
+            int remainingSkip = args.RowSkip ?? 0;
+            await foreach (T item in BuildAggregateListDirectCoroutinely<T>(transaction, command, plan, materializer, transaction.CancellationToken).ConfigureAwait(false)) {
+                if (remainingSkip > 0) {
+                    remainingSkip--;
+                    continue;
+                }
+                selected.Add(item);
+                if (args.RowLimit.HasValue && selected.Count >= args.RowLimit.Value) {
+                    break;
+                }
+            }
+            await RunAutomaticAggregateHooksAsync(transaction, selected, args.ContextObject).ConfigureAwait(false);
+            return selected;
         }
 
         public List<T> AggregateLoad<T>
@@ -3519,55 +3208,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             args = args ?? new LoadAllArgs<T>();
             int? queryLimit = args.Linear ? args.RowLimit : null;
             int? querySkip = args.Linear ? args.RowSkip : null;
-
-            transaction?.Benchmarker?.Mark($"Begin AggregateLoad<{typeof(T).Name}>");
-            var Members = ReflectionTool.FieldsAndPropertiesOf(typeof(T));
-            var prefixer = args.Linear ? CacheAutoPrefixerLinear[typeof(T)] : CacheAutoPrefixer[typeof(T)];
-            bool hasAnyAggregations = false;
-            transaction?.Benchmarker?.Mark("Check if model is Aggregate");
-            foreach (var a in Members) {
-                hasAnyAggregations =
-                    a.GetCustomAttribute<AggregateFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateFarFieldAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateObjectAttribute>() != null ||
-                    a.GetCustomAttribute<AggregateListAttribute>() != null;
-                if (hasAnyAggregations)
-                    break;
+            DefinitiveJoinPlan plan = GetAutomaticAggregatePlan(args);
+            if (!HasAggregateRelations(plan)) {
+                return Fetch<T>(transaction, args).ToList();
             }
 
-            WriteLog($"Running Aggregate Load All for {typeof(T).Name}? {hasAnyAggregations}. Linear? {args.Linear}");
-
-            List<T> retv = new List<T>();
-
-            if (hasAnyAggregations) {
-                transaction?.Benchmarker?.Mark("Construct Join Definition");
-                transaction?.Benchmarker?.Mark("Resolve ordering Member");
-                var om = FiTechBDadosExtensions.IdColumnOf[typeof(T)];
-                transaction?.Benchmarker?.Mark("--");
-
-                using (var command = transaction.CreateCommand()) {
-                    var join = args.Linear ? CacheAutoJoinLinear[typeof(T)] : CacheAutoJoin[typeof(T)];
-
-                    var builtConditions = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions));
-                    var builtConditionsRoot = (args.Conditions == null ? Qb.Fmt("TRUE") : new ConditionParser(prefixer).ParseExpression(args.Conditions, false));
-
-                    transaction?.Benchmarker?.Mark($"Parsed Conditions: {builtConditions.GetCommandText()}");
-
-                    var query = Plugin.QueryGenerator.GenerateJoinQuery(join, builtConditions, querySkip, queryLimit, om, args.OrderingType, builtConditionsRoot);
-                    transaction?.Benchmarker?.Mark($"Generate Join Query");
-                    query.ApplyToCommand(command, Plugin.ProcessParameterValue);
-                    transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
-
-                    retv = InvokeBuildAggregateListDirect<T>(transaction, command, join, args.ContextObject ?? transaction?.ContextTransferObject);
-
-                    transaction?.Benchmarker?.Mark($"Finished building the result AggregateListDirect<{typeof(T).Name}> ({query.Id})");
-                }
-            } else {
-                WriteLog(args.Conditions?.ToString());
-                retv = Fetch<T>(transaction, args).ToList();
+            using (var command = transaction.CreateCommand()) {
+                IQueryBuilder query = BuildAutomaticAggregateQuery(plan, args, querySkip, queryLimit);
+                query.ApplyToCommand(command, Plugin.ProcessParameterValue);
+                CompiledAggregateMaterializerPlan materializer = CompiledAggregateMaterializerPlan.GetOrCreate(plan);
+                return BuildAggregateListDirect<T>(transaction, command, plan, materializer, args.ContextObject ?? transaction?.ContextTransferObject);
             }
-
-            return retv;
         }
 
         public T LoadFirstOrDefault<T>(BDadosTransaction transaction, LoadAllArgs<T> args = null) where T : IDataObject, new() {

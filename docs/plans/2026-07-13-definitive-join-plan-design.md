@@ -157,7 +157,9 @@ The expected upper bound is two plans per aggregate root type for the current fo
 The plan is the canonical cache value and runtime contract. Downstream aggregate schema and materializer caches should be removed where the finalized plan already contains that information.
 
 ### 6. Custom joins
-Every custom join must freeze before execution. Query generators and aggregate builders accept `DefinitiveJoinPlan`, never a mutable `JoinDefinition`.
+Every custom join must freeze before execution. Built-in query generators and aggregate builders accept `DefinitiveJoinPlan`, never a mutable `JoinDefinition`.
+
+Do not add required members directly to the public `IJoinBuilder` or `IQueryGenerator` interfaces during migration because that would break external implementations. Introduce companion interfaces/extensions. A legacy external query generator may receive an ephemeral mutable projection adapter copied from the frozen plan; it must never receive or mutate the canonical plan, and its result schema remains subject to validation.
 
 Equivalent custom plans are not automatically placed in the global `(Type, Shape)` cache. A custom plan may own its compiled execution artifacts directly. Structural interning, if later needed, must use a bounded cache keyed by a canonical structural signature.
 
@@ -174,7 +176,7 @@ Alias allocation occurs only during plan compilation. The frozen plan stores pat
 The cached mutable `PrefixMaker` is removed from the runtime automatic-load path.
 
 ### 9. Provider query generation
-`IQueryGenerator.GenerateJoinQuery` consumes `DefinitiveJoinPlan` and dynamic invocation values:
+The built-in provider implementations consume `DefinitiveJoinPlan` through a companion query-generator contract plus dynamic invocation values:
 - conditions,
 - root conditions,
 - pagination,

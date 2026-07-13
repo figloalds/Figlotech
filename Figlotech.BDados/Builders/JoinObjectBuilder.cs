@@ -24,6 +24,8 @@ using System.Text.RegularExpressions;
 namespace Figlotech.BDados.Builders {
     public sealed class JoinObjectBuilder : IJoinBuilder {
         private readonly JoinDefinition _join = new JoinDefinition();
+        private readonly object _freezeLock = new object();
+        private DefinitiveJoinPlan _frozenPlan;
 
         private readonly BuildParametersHelper _buildParameters;
 
@@ -57,12 +59,26 @@ namespace Figlotech.BDados.Builders {
             }
         }
 
+        [Obsolete("Legacy mutable construction access is not safe for execution. Use DefinitiveJoinPlanExtensions.BuildPlan or the frozen GenerateQuery overloads instead.")]
         public JoinDefinition GetJoin() {
             return _join;
         }
 
         public IQueryBuilder GenerateQuery(IQueryGenerator generator, IQueryBuilder conditions, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, int? p = null, int? limit = null, IQueryBuilder conditionsRoot = null) {
-            return generator.GenerateJoinQuery(_join, conditions, p, limit, orderingMember, otype, conditionsRoot);
+            if (generator == null) {
+                throw new ArgumentNullException(nameof(generator));
+            }
+            return generator.GenerateJoinQuery(GetFrozenPlan(), conditions, p, limit, orderingMember, otype, conditionsRoot);
+        }
+
+        private DefinitiveJoinPlan GetFrozenPlan() {
+            lock (_freezeLock) {
+                if (_frozenPlan == null) {
+                    Type rootType = _join.Joins.Count == 0 ? null : _join.Joins[0]?.ValueObject;
+                    _frozenPlan = _join.Freeze(rootType, AggregateJoinShape.FullGraph);
+                }
+                return _frozenPlan;
+            }
         }
 
         internal List<Relation> ValidateRelations() {

@@ -34,6 +34,41 @@ namespace Figlotech.Core.Tests {
             Assert.Null(result);
         }
 
+        [Fact]
+        public void BuildObjectToTargetConversionExpression_ConvertsDbNullToNullObject() {
+            var parameter = Expression.Parameter(typeof(object), "value");
+            var conversion = ReflectionTool.BuildObjectToTargetConversionExpression(parameter, typeof(object));
+            var converter = Expression.Lambda<Func<object, object>>(conversion, parameter).Compile();
+
+            var result = converter(DBNull.Value);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void BuildObjectToTargetConversionExpression_ConvertsByteArrayToUtf8String() {
+            var parameter = Expression.Parameter(typeof(object), "value");
+            var conversion = ReflectionTool.BuildObjectToTargetConversionExpression(parameter, typeof(string));
+            var converter = Expression.Lambda<Func<object, string>>(conversion, parameter).Compile();
+
+            var result = converter(new byte[] { 0xC3, 0xA7, 0xC3, 0xA3, 0x6F });
+
+            Assert.Equal("ção", result);
+        }
+
+        class SampleForDbNullAssignment {
+            public int Value = 42;
+        }
+
+        [Fact]
+        public void SetValue_DbNullForNonNullableValue_DoesNotAssignDefault() {
+            var target = new SampleForDbNullAssignment();
+
+            ReflectionTool.SetValue(target, "Value", DBNull.Value);
+
+            Assert.Equal(42, target.Value);
+        }
+
         // ==== Fix #1 (cleanup): CollectMembers has 4 loops; 2 are dead (BindingFlags.Instance
         // without an access flag returns 0), 2 are duplicates of each other. Result: no actual
         // duplication today, but 2 wasted reflection calls per type init. Test guards against

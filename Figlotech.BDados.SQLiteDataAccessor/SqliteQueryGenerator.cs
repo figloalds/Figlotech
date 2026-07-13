@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqliteQueryGenerator : IQueryGenerator {
@@ -232,83 +233,129 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return retv;
         }
 
-        public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
-            if (rootConditions == null)
-                rootConditions = new QbFmt("true");
-            if (inputJoin.Joins.Count < 1)
-                throw new BDadosException("This join needs 1 or more tables.");
+        private static void AppendFrozenCondition(QueryBuilder target, IQueryBuilder source, string scope) {
+            if (source == null || source.IsEmpty) {
+                return;
+            }
 
-            List<Type> tables = (from a in inputJoin.Joins select a.ValueObject).ToList();
-            List<String> tableNames = (from a in inputJoin.Joins select a.ValueObject.Name).ToList();
-            List<String> prefixes = (from a in inputJoin.Joins select a.Prefix).ToList();
-            List<String> aliases = (from a in inputJoin.Joins select a.Alias).ToList();
-            List<String> onclauses = (from a in inputJoin.Joins select a.Args).ToList();
-            List<List<String>> columns = (from a in inputJoin.Joins select a.Columns).ToList();
-            List<JoinType> joinTypes = (from a in inputJoin.Joins select a.Type).ToList();
+            Dictionary<string, object> parameters = source.GetParameters();
+            var usedNames = new HashSet<string>(target.GetParameters().Keys, StringComparer.OrdinalIgnoreCase);
+            var reservedNames = new HashSet<string>(target.GetParameters().Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (string name in parameters.Keys) {
+                reservedNames.Add(name);
+            }
 
-            QueryBuilder Query = new QbFmt("SELECT sub.*\n");
-            Query.Append($"\t FROM (SELECT\n");
-            for (int i = 0; i < tables.Count; i++) {
-                Query.Append($"\t\t-- Table {tableNames[i]}\n");
-                var fields = ReflectionTool.FieldsAndPropertiesOf(
-                    tables[i])
-                    .Where((a) => ReflectionTool.GetAttributeFrom<FieldAttribute>(a) != null)
-                    .ToArray();
-                var keyColumn = typeof(ILegacyDataObject).IsAssignableFrom(tables[i])
-                    ? FiTechBDadosExtensions.RidColumnNameOf[tables[i]]
-                    : FiTechBDadosExtensions.IdColumnNameOf[tables[i]];
-                if (!columns[i].Contains(keyColumn))
-                    columns[i].Add(keyColumn);
-                var nonexcl = columns[i];
-                for (int j = 0; j < nonexcl.Count; j++) {
-                    Query.Append($"\t\t{prefixes[i]}.{nonexcl[j]} AS {prefixes[i]}_{nonexcl[j]}");
-                    if (true || j < nonexcl.Count - 1 || i < tables.Count - 1) {
-                        Query.Append(",");
-                    }
-                    Query.Append("\n");
+            var mappings = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, object> parameter in parameters) {
+                if (!usedNames.Add(parameter.Key)) {
+                    string prefix = scope + "_" + parameter.Key;
+                    int suffix = 0;
+                    string candidate;
+                    do {
+                        candidate = prefix + "_" + suffix++;
+                    } while (reservedNames.Contains(candidate));
+                    mappings.Add(parameter.Key, candidate);
+                    reservedNames.Add(candidate);
+                    usedNames.Add(candidate);
                 }
-                Query.Append("\n");
             }
 
-            Query.Append($"\t\t1 FROM (SELECT * FROM {tableNames[0]}");
-            if (rootConditions != null) {
-                Query.Append("WHERE ");
-                Query.Append(rootConditions);
+            string renamed;
+            string fragment = mappings.Count == 0
+                ? source.GetCommandText()
+                : Regex.Replace(
+                    source.GetCommandText(),
+                    "@(?<name>[A-Za-z0-9_]+)(?![A-Za-z0-9_])",
+                    match => mappings.TryGetValue(match.Groups["name"].Value, out renamed)
+                        ? "@" + renamed
+                        : match.Value);
+            target.Append(fragment);
+            foreach (KeyValuePair<string, object> parameter in parameters) {
+                target.GetParameters().Add(
+                    mappings.TryGetValue(parameter.Key, out string mappedName) ? mappedName : parameter.Key,
+                    parameter.Value);
             }
-            if (orderingMember != null) {
-                Query.Append($"ORDER BY {orderingMember.Name} {otype.ToString().ToUpper()}");
-            }
-            if (limit != null) {
-                Query.Append($"LIMIT");
-                if (skip != null)
-                    Query.Append($"{skip},");
-                Query.Append($"{limit}");
-            }
-            Query.Append($"");
-            Query.Append($") AS {prefixes[0]}\n");
+        }
 
-            for (int i = 1; i < tables.Count; i++) {
+        public IQueryBuilder GenerateJoinQuery(DefinitiveJoinPlan plan, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
+            if (plan == null) {
+                throw new ArgumentNullException(nameof(plan));
+            }
+            if (!Enum.IsDefined(typeof(OrderingType), otype)) {
+                throw new ArgumentOutOfRangeException(nameof(otype), otype, "Ordering type must be a defined value.");
+            }
+            if (skip.HasValue && skip.Value < 0) {
+                throw new ArgumentOutOfRangeException(nameof(skip), skip, "Skip must be non-negative.");
+            }
+            if (take.HasValue && take.Value < 0) {
+                throw new ArgumentOutOfRangeException(nameof(take), take, "Take must be non-negative.");
+            }
 
-                Query.Append($"\t\t{"LEFT"} JOIN {tableNames[i]} AS {prefixes[i]} ON {onclauses[i]}\n");
+            DefinitiveJoinTable root = plan.Tables[plan.RootTableIndex];
+            QueryBuilder query = new QbFmt("SELECT sub.*");
+            query.Append("FROM (SELECT");
+            for (int i = 0; i < plan.Projection.Length; i++) {
+                DefinitiveProjectionColumn column = plan.Projection[i];
+                DefinitiveJoinTable table = plan.Tables[column.TableIndex];
+                query.Append((i > 0 ? "," : String.Empty) + table.Prefix + "." + column.SourceColumn + " AS " + column.ResultAlias);
+            }
+
+            query.Append("FROM (SELECT * FROM " + root.TableName);
+            if (rootConditions != null && !rootConditions.IsEmpty) {
+                query.Append("WHERE");
+                AppendFrozenCondition(query, rootConditions, "root");
+            }
+            query.Append(") AS " + root.Prefix);
+
+            for (int i = 0; i < plan.Tables.Length; i++) {
+                if (i == plan.RootTableIndex) {
+                    continue;
+                }
+                DefinitiveJoinTable table = plan.Tables[i];
+                query.Append("LEFT JOIN " + table.TableName + " AS " + table.Prefix + " ON " + table.JoinPredicate);
             }
 
             if (conditions != null && !conditions.IsEmpty) {
-                Query.Append("\tWHERE");
-                Query.Append(conditions);
-
+                query.Append("WHERE");
+                AppendFrozenCondition(query, conditions, "join");
             }
+            query.Append(") AS sub");
+
+            string direction = otype == OrderingType.Asc ? "ASC" : "DESC";
+            string rootOrdering = "sub." + plan.RootOrdering.ResultAlias;
             if (orderingMember != null) {
-                Query.Append($"ORDER BY {prefixes[0]}.{orderingMember.Name} {otype.ToString().ToUpper()}");
+                DefinitiveProjectionColumn orderingColumn = plan.Projection.FirstOrDefault(column =>
+                    column.TableIndex == plan.RootTableIndex
+                    && Equals(column.DestinationMember, orderingMember));
+                if (orderingColumn == null) {
+                    throw new ArgumentException("Ordering member must be a projected member of the frozen root table.", nameof(orderingMember));
+                }
+                query.Append("ORDER BY sub." + orderingColumn.ResultAlias + " " + direction);
+                if (!String.Equals(orderingColumn.ResultAlias, plan.RootOrdering.ResultAlias, StringComparison.Ordinal)) {
+                    query.Append(", " + rootOrdering + " " + direction);
+                }
+            } else {
+                query.Append("ORDER BY " + rootOrdering + " " + direction);
             }
-            if (limit != null) {
-                Query.Append($"LIMIT");
-                if ((skip ?? 0) > 0)
-                    Query.Append($"{skip}, ");
-                Query.Append($"{limit}");
-            }
-            Query.Append(") AS sub\n");
 
-            return Query;
+            if (skip.HasValue || take.HasValue) {
+                query.Append($"LIMIT {(skip.HasValue ? skip.Value + ", " : String.Empty)}{take ?? Int32.MaxValue}");
+            }
+            return query;
+        }
+
+        [Obsolete("Legacy JoinDefinition execution is not safe for execution. Freeze the definition and call GenerateJoinQuery(DefinitiveJoinPlan, ...).")]
+        public IQueryBuilder GenerateJoinQuery(JoinDefinition inputJoin, IQueryBuilder conditions, int? skip = null, int? take = null, MemberInfo orderingMember = null, OrderingType otype = OrderingType.Asc, IQueryBuilder rootConditions = null) {
+            if (inputJoin == null) {
+                throw new ArgumentNullException(nameof(inputJoin));
+            }
+            if (inputJoin.Joins == null || inputJoin.Joins.Count == 0) {
+                throw new BDadosException("This join needs 1 or more tables.");
+            }
+            Type rootType = inputJoin.Joins[0]?.ValueObject
+                ?? throw new BDadosException("Root table type could not be inferred from the join definition.");
+            DefinitiveJoinPlan plan = inputJoin.Freeze(rootType, AggregateJoinShape.FullGraph);
+            return GenerateJoinQuery(plan, conditions, skip, take, orderingMember, otype, rootConditions);
         }
 
         public IQueryBuilder GenerateSaveQuery(IDataObject tabelaInput) {

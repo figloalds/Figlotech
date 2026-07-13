@@ -1,0 +1,7 @@
+GraphSize,Shape,Mean,Error,StdDev,Allocated
+Small,ScalarAggregatesOnly,33.02 μs,4.258 μs,0.233 μs,63 KB
+Small,FullGraph,32.76 μs,2.203 μs,0.121 μs,63 KB
+Medium,ScalarAggregatesOnly,88.90 μs,17.577 μs,0.963 μs,194 KB
+Medium,FullGraph,91.53 μs,17.114 μs,0.938 μs,194 KB
+Large,ScalarAggregatesOnly,101.60 μs,29.543 μs,1.619 μs,211 KB
+Large,FullGraph,233.46 μs,56.941 μs,3.121 μs,480 KB
