@@ -224,7 +224,7 @@ namespace Figlotech.BDados.Helpers {
             var result = new System.Text.StringBuilder(text.Length);
             int position = 0;
             while (position < text.Length) {
-                int match = text.IndexOf(qualifiedPrefix, position, StringComparison.Ordinal);
+                int match = text.IndexOf(qualifiedPrefix, position, StringComparison.OrdinalIgnoreCase);
                 if (match < 0) {
                     result.Append(text, position, text.Length - position);
                     break;

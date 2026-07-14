@@ -268,6 +268,22 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void RootProjectionStripsCaseVariedRootAliasFromQhIn() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            Guid allowedId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+            var allowed = new List<Guid> { allowedId };
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => Qh.In(x, "TBA.ScalarAggregateId", allowed, item => item),
+                fullConditions: false);
+
+            Assert.Contains("ScalarAggregateId IN", root.GetCommandText(), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("TBA.", root.GetCommandText(), StringComparison.OrdinalIgnoreCase);
+            Assert.Single(root.GetParameters());
+            Assert.Equal(allowedId, root.GetParameters().Single().Value);
+        }
+
+        [Fact]
         public void RootProjectionDropsAggregateListConjunctWithoutLeavingAnEmptyOperand() {
             DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
             Guid rootValue = Guid.Parse("33333333-3333-3333-3333-333333333333");
