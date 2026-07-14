@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.MySqlDataAccessor;
@@ -166,6 +167,21 @@ namespace Figlotech.BDados.Tests {
 
         [Theory]
         [MemberData(nameof(Generators))]
+        public void FrozenPlanAcceptsInheritedRootIdentifierLookedUpFromDerivedType(string providerName, IQueryGenerator generator) {
+            Assert.NotEmpty(providerName);
+            DefinitiveJoinPlan plan = FullGraphPlan();
+            MemberInfo inheritedId = typeof(GuidRoot).GetProperty("Id")!;
+            DefinitiveProjectionColumn idProjection = plan.Projection.Single(column =>
+                column.TableIndex == plan.RootTableIndex && column.SourceColumn == "Id");
+            Assert.NotEqual(inheritedId, idProjection.DestinationMember);
+
+            string sql = Normalize(generator.GenerateJoinQuery(plan, null, orderingMember: inheritedId).GetCommandText());
+
+            AssertFinalOrdering(sql, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+        }
+
+        [Theory]
+        [MemberData(nameof(Generators))]
         public void FrozenPlanPagingFollowsDeterministicOrdering(string providerName, IQueryGenerator generator) {
             Assert.NotEmpty(providerName);
             DefinitiveJoinPlan plan = FullGraphPlan();
@@ -235,6 +251,35 @@ namespace Figlotech.BDados.Tests {
             Assert.Equal(rootConditionText, rootConditions.GetCommandText());
             Assert.Equal(conditionParameters, conditions.GetParameters().ToArray());
             Assert.Equal(rootParameters, rootConditions.GetParameters().ToArray());
+        }
+
+        [Theory]
+        [MemberData(nameof(Generators))]
+        public void FrozenProviderConsumesProjectedConsumerRootConditionWithoutMalformedOperands(string providerName, IQueryGenerator generator) {
+            Assert.NotEmpty(providerName);
+            DefinitiveJoinPlan plan = FullGraphPlan();
+            Guid allowedId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+            Guid objectId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+            var allowed = new List<Guid> { allowedId };
+            var parser = new ConditionParser(plan);
+            var expression = (System.Linq.Expressions.Expression<Func<GuidRoot, bool>>)(x =>
+                Qh.In(x, "tba.ScalarAggregateId", allowed, item => item)
+                    && x.ObjectAggregateId == objectId);
+            QueryBuilder conditions = parser.ParseExpression(expression);
+            QueryBuilder rootConditions = parser.ParseExpression(expression, fullConditions: false);
+
+            IQueryBuilder result = generator.GenerateJoinQuery(plan, conditions, rootConditions: rootConditions);
+            string sql = Normalize(result.GetCommandText());
+
+            Assert.DoesNotMatch(@"WHERE\s*\(\s*(AND|OR)\b", sql);
+            Assert.Contains("ScalarAggregateId IN", rootConditions.GetCommandText(), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ObjectAggregateId", rootConditions.GetCommandText(), StringComparison.Ordinal);
+            int rootConditionIndex = sql.IndexOf(Normalize(rootConditions.GetCommandText()), StringComparison.Ordinal);
+            int firstJoinIndex = sql.IndexOf("LEFT JOIN", StringComparison.Ordinal);
+            Assert.True(rootConditionIndex >= 0);
+            Assert.True(firstJoinIndex >= 0);
+            Assert.True(rootConditionIndex < firstJoinIndex);
+            Assert.Equal(conditions.GetParameters().Count + rootConditions.GetParameters().Count, result.GetParameters().Count);
         }
 
         [Theory]

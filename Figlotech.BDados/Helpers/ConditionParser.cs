@@ -245,6 +245,92 @@ namespace Figlotech.BDados.Helpers {
             return Char.IsLetterOrDigit(value) || value == '_';
         }
 
+        private readonly struct RootConditionProjection {
+            public RootConditionProjection(Expression expression, bool isExact) {
+                Expression = expression;
+                IsExact = isExact;
+            }
+
+            public Expression Expression { get; }
+            public bool IsExact { get; }
+        }
+
+        private sealed class AggregateReferenceVisitor : ExpressionVisitor {
+            public bool HasAggregateReference { get; private set; }
+
+            protected override Expression VisitMember(MemberExpression node) {
+                if (IsAggregateMember(node.Member)) {
+                    HasAggregateReference = true;
+                    return node;
+                }
+                return base.VisitMember(node);
+            }
+        }
+
+        private static bool IsTrue(Expression expression) {
+            return expression is ConstantExpression constant
+                && constant.Type == typeof(bool)
+                && Equals(constant.Value, true);
+        }
+
+        private bool IsRootOnlyAtomicCondition(Expression expression) {
+            var visitor = new AggregateReferenceVisitor();
+            visitor.Visit(expression);
+            if (visitor.HasAggregateReference) {
+                return false;
+            }
+
+            if (expression is MethodCallExpression method
+                && method.Method.DeclaringType == typeof(Qh)
+                && method.Arguments.Count > 1
+                && GetValue(method.Arguments[1]) is string column) {
+                int separator = column.IndexOf('.');
+                if (separator > 0) {
+                    string alias = column.Substring(0, separator);
+                    string rootAlias = _resolver.Resolve(default(AggregatePath));
+                    return String.Equals(alias, rootAlias, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            return true;
+        }
+
+        private RootConditionProjection ProjectRootCondition(Expression expression) {
+            expression = StripExpression(expression);
+            if (expression is BinaryExpression binary
+                && (binary.NodeType == ExpressionType.AndAlso || binary.NodeType == ExpressionType.And)) {
+                RootConditionProjection left = ProjectRootCondition(binary.Left);
+                RootConditionProjection right = ProjectRootCondition(binary.Right);
+                Expression projected = IsTrue(left.Expression)
+                    ? right.Expression
+                    : IsTrue(right.Expression)
+                        ? left.Expression
+                        : Expression.MakeBinary(binary.NodeType, left.Expression, right.Expression);
+                return new RootConditionProjection(projected, left.IsExact && right.IsExact);
+            }
+            if (expression is BinaryExpression orBinary
+                && (orBinary.NodeType == ExpressionType.OrElse || orBinary.NodeType == ExpressionType.Or)) {
+                RootConditionProjection left = ProjectRootCondition(orBinary.Left);
+                RootConditionProjection right = ProjectRootCondition(orBinary.Right);
+                if (IsTrue(left.Expression) || IsTrue(right.Expression)) {
+                    return new RootConditionProjection(Expression.Constant(true), left.IsExact && right.IsExact);
+                }
+                return new RootConditionProjection(
+                    Expression.MakeBinary(orBinary.NodeType, left.Expression, right.Expression),
+                    left.IsExact && right.IsExact);
+            }
+            if (expression is UnaryExpression unary && unary.NodeType == ExpressionType.Not) {
+                RootConditionProjection operand = ProjectRootCondition(unary.Operand);
+                return operand.IsExact
+                    ? new RootConditionProjection(Expression.Not(operand.Expression), true)
+                    : new RootConditionProjection(Expression.Constant(true), false);
+            }
+
+            return IsRootOnlyAtomicCondition(expression)
+                ? new RootConditionProjection(expression, true)
+                : new RootConditionProjection(Expression.Constant(true), false);
+        }
+
         //private String GetPrefixOfAgField(Expression expression, AggregateFieldAttribute info) {
         //    if (expression == null)
         //        return "";
@@ -331,6 +417,17 @@ namespace Figlotech.BDados.Helpers {
                     return new QbFmt("TRUE");
                 }
                 SelectResolver(typeof(T));
+                if (!fullConditions) {
+                    RootConditionProjection projection = ProjectRootCondition(foofun.Body);
+                    if (IsTrue(projection.Expression)) {
+                        return new QbFmt("TRUE");
+                    }
+                    QueryBuilder projected = ParseExpression(projection.Expression, typeof(T), null, strBuilder, true, forcedContext: null);
+                    string rootPrefix = _resolver.Resolve(default(AggregatePath)) + ".";
+                    return (QueryBuilder)new QueryBuilder().Append(
+                        RemoveExactQualifiedPrefix(projected.GetCommandText(), rootPrefix),
+                        projected.GetParameters().Select(parameter => parameter.Value).ToArray());
+                }
                 var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions, forcedContext: null);
                 return retv;
             } catch (Exception x) {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
+using Figlotech.BDados.Builders;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Exceptions;
 using Figlotech.BDados.Helpers;
@@ -245,6 +246,102 @@ namespace Figlotech.BDados.Tests {
             Assert.Contains("ScalarAggregateId", sql);
             Assert.DoesNotContain("tba.ScalarAggregateId", sql);
         }
+
+        [Fact]
+        public void RootProjectionPreservesRootQhInAndFollowingRootPredicate() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            Guid allowedId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            Guid objectId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+            var allowed = new List<Guid> { allowedId };
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => Qh.In(x, "tba.ScalarAggregateId", allowed, item => item)
+                    && x.ObjectAggregateId == objectId,
+                fullConditions: false);
+            string sql = root.GetCommandText();
+
+            Assert.Contains("ScalarAggregateId IN", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ObjectAggregateId", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("tba.", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotMatch(@"\(\s*(AND|OR)\b", sql);
+            Assert.Equal(new[] { allowedId, objectId }.OrderBy(value => value), root.GetParameters().Values.Cast<Guid>().OrderBy(value => value));
+        }
+
+        [Fact]
+        public void RootProjectionDropsAggregateListConjunctWithoutLeavingAnEmptyOperand() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            Guid rootValue = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => x.AggregateList.Any() && x.ScalarAggregateId == rootValue,
+                fullConditions: false);
+            string sql = root.GetCommandText();
+
+            Assert.Contains("ScalarAggregateId", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("IS NOT NULL", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotMatch(@"\(\s*(AND|OR)\b", sql);
+            Assert.DoesNotContain("1 =", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(root.GetParameters());
+            Assert.Equal(rootValue, root.GetParameters().Single().Value);
+        }
+
+        [Fact]
+        public void RootProjectionDropsAggregateScalarConjunctWithoutDataDependentSentinel() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            Guid objectId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => x.AggregateName == "joined" && x.ObjectAggregateId == objectId,
+                fullConditions: false);
+            string sql = root.GetCommandText();
+
+            Assert.Contains("ObjectAggregateId", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("AggregateName", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("1 =", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(root.GetParameters());
+            Assert.Equal(objectId, root.GetParameters().Single().Value);
+        }
+
+        [Fact]
+        public void RootProjectionOfOrWithJoinedBranchIsUnconstrainedTrue() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => x.AggregateList.Any() || x.ScalarAggregateId == Guid.Empty,
+                fullConditions: false);
+
+            Assert.Equal("TRUE", root.GetCommandText());
+            Assert.Empty(root.GetParameters());
+        }
+
+        [Fact]
+        public void RootProjectionOfNegatedJoinedPredicateIsUnconstrainedTrue() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+
+            var root = new ConditionParser(plan).ParseExpression<GuidRoot>(
+                x => !x.AggregateList.Any(),
+                fullConditions: false);
+
+            Assert.Equal("TRUE", root.GetCommandText());
+            Assert.Empty(root.GetParameters());
+        }
+
+        [Fact]
+        public void RootProjectionPreservesSupportedRootStringMethod() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(HiddenEffectiveAggregateRoot), AggregateJoinShape.FullGraph);
+
+            var root = new ConditionParser(plan).ParseExpression<HiddenEffectiveAggregateRoot>(
+                x => x.ShadowedColumn!.Contains("needle"),
+                fullConditions: false);
+            string sql = root.GetCommandText();
+
+            Assert.Contains("ShadowedColumn", sql, StringComparison.Ordinal);
+            Assert.Contains("LIKE", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(plan.Tables[plan.RootTableIndex].Prefix + ".", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(root.GetParameters());
+            Assert.Equal("needle", root.GetParameters().Single().Value);
+        }
+
         private static void AssertOnlyPlanAliases(DefinitiveJoinPlan plan, string sql) {
             string[] aliases = plan.AliasByPath.Values.Distinct().ToArray();
             foreach (Match match in Regex.Matches(sql, @"\btb[a-z]+\b")) {

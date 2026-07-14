@@ -386,7 +386,9 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (orderingMember != null) {
                 DefinitiveProjectionColumn orderingColumn = plan.Projection.FirstOrDefault(column =>
                     column.TableIndex == plan.RootTableIndex
-                    && Equals(column.DestinationMember, orderingMember));
+                    && column.DestinationMember != null
+                    && Equals(column.DestinationMember.Module, orderingMember.Module)
+                    && column.DestinationMember.MetadataToken == orderingMember.MetadataToken);
                 if (orderingColumn == null) {
                     throw new ArgumentException("Ordering member must be a projected member of the frozen root table.", nameof(orderingMember));
                 }
