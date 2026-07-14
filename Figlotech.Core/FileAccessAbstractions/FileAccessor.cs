@@ -16,29 +16,24 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public bool UseCriptography;
 
-        public String RootDirectory { get; set; }
+        private string _rootDirectory;
+        public String RootDirectory {
+            get => _rootDirectory;
+            set => _rootDirectory = NormalizeRootPath(value);
+        }
         public int MaxStreamBufferLength { get; set; } = 64 * 1024 * 1024;
 
         public String FixRel(ref string relative) {
-            return relative = relative?.Replace(Path.DirectorySeparatorChar, '/')
-                .Replace("//", "/")
-                .Replace('/', S);
+            return relative = NormalizeInputPath(relative);
         }
         public String UnFixRel(ref string relative) {
-            return relative = relative?.Replace(S, '/')
-                .Replace($"{S}", "/");
+            return relative = NormalizeOutputPath(relative);
         }
 
         public FileAccessor(String workingPath) {
-            RootDirectory = Path.GetFullPath(workingPath);
-
-            FixRel(ref workingPath);
-            try {
-                if (!Directory.Exists(RootDirectory)) {
-                    absMkDirs(RootDirectory);
-                }
-            } catch (Exception x) {
-                throw;
+            RootDirectory = workingPath ?? throw new ArgumentNullException(nameof(workingPath));
+            if (!Directory.Exists(RootDirectory)) {
+                absMkDirs(RootDirectory);
             }
         }
 
@@ -46,31 +41,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
             if (string.IsNullOrEmpty(dir)) {
                 return;
             }
-            FixRel(ref dir);
-
-            try {
-                if (!Directory.Exists(Path.GetDirectoryName(dir))) {
-                    absMkDirs(Path.GetDirectoryName(dir));
-                }
-            } catch (Exception x) {
-                Console.Error.WriteLine($"Error creating directory tree for {dir}: {x.Message}");
-                throw;
-            }
-            try {
-                Directory.CreateDirectory(dir);
-            } catch (Exception) {
-                //Fi.Tech.WriteLine(x.Message);
-            }
+            Directory.CreateDirectory(NormalizeInputPath(dir));
         }
-        private async Task absMkDirsAsync(string dir) {
-            await Task.Run(() => {
-                absMkDirs(dir);
-            }).ConfigureAwait(false);
+        private Task absMkDirsAsync(string dir) {
+            absMkDirs(dir);
+            return Task.CompletedTask;
         }
 
         public async Task MkDirsAsync(string dir) {
-            FixRel(ref dir);
-            await absMkDirsAsync(dir).ConfigureAwait(false);
+            var workingDirectory = AssemblePath(RootDirectory, dir);
+            await absMkDirsAsync(workingDirectory).ConfigureAwait(false);
         }
 
         public async Task Write(String relative, Func<Stream, Task> func) {
@@ -194,12 +174,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return;
             }
             Parallel.ForEach(Directory.GetFiles(WorkingDirectory), (Action<string>)((s) => {
-                s = s.Substring(RootDirectory.Length);
-                if (s.StartsWith("\\")) {
-                    s = s.Substring(1);
-                }
-                s = this.UnFixRel(ref s);
-                execFunc(s);
+                execFunc(ToSelfRelativePath(s));
             }));
         }
 
@@ -213,11 +188,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
             foreach (var s1 in Directory.GetFiles(WorkingDirectory)) {
                 String s = s1;
                 try {
-                    s = s1.Substring(RootDirectory.Length);
-                    if (s.StartsWith("\\")) {
-                        s = s.Substring(1);
-                    }
-                    s = this.UnFixRel(ref s);
+                    s = ToSelfRelativePath(s1);
                     execFunc?.Invoke(s);
                 } catch (Exception x) {
                     if (handler != null) {
@@ -232,20 +203,14 @@ namespace Figlotech.Core.FileAcessAbstractions {
             }
         }
         public IEnumerable<string> GetFilesIn(String relative) {
-            relative = relative.Replace('/', Path.DirectorySeparatorChar);
+            FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
-            if (!WorkingDirectory.EndsWith(Path.DirectorySeparatorChar.ToString())) {
-                WorkingDirectory += Path.DirectorySeparatorChar.ToString();
-            }
-            return new DirectoryInfo(WorkingDirectory).EnumerateFiles().Select(
-                    ((info) => {
-                        var a = info.FullName.Substring(RootDirectory.Length + 1);
-                        var s = a.Replace(Path.DirectorySeparatorChar, '/');
-                        return this.UnFixRel(ref s);
-                    }));
+            return Directory.EnumerateFiles(WorkingDirectory)
+                .Select(ToSelfRelativePath)
+                .ToArray();
         }
 
         public void ParallelForDirectoriesIn(String relative, Action<String> execFunc) {
@@ -255,12 +220,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return;
             }
             Parallel.ForEach(Directory.GetDirectories(WorkingDirectory), (Action<string>)((s) => {
-                s = s.Substring(RootDirectory.Length);
-                if (s.StartsWith("\\")) {
-                    s = s.Substring(1);
-                }
-                s = this.UnFixRel(ref s);
-                execFunc(s);
+                execFunc(ToSelfRelativePath(s));
             }));
         }
         public void ForDirectoriesIn(String relative, Action<String> execFunc) {
@@ -271,26 +231,18 @@ namespace Figlotech.Core.FileAcessAbstractions {
                 return;
             }
             foreach (var s1 in Directory.GetDirectories(WorkingDirectory)) {
-                var s = s1.Substring(RootDirectory.Length);
-                if (s.StartsWith("\\")) {
-                    s = s.Substring(1);
-                }
-                s = this.UnFixRel(ref s);
-                execFunc(s);
+                execFunc(ToSelfRelativePath(s1));
             }
         }
         public IEnumerable<string> GetDirectoriesIn(String relative) {
-            relative = relative.Replace('/', Path.DirectorySeparatorChar);
+            FixRel(ref relative);
             var WorkingDirectory = AssemblePath(RootDirectory, relative);
             if (!Directory.Exists(WorkingDirectory)) {
                 return new string[0];
             }
-            return new DirectoryInfo(WorkingDirectory).EnumerateDirectories()
-                .Select((info) => {
-                    var a = info.FullName.Substring(RootDirectory.Length + 1);
-                    a = a.Replace(Path.DirectorySeparatorChar, '/');
-                    return a;
-                });
+            return Directory.EnumerateDirectories(WorkingDirectory)
+                .Select(ToSelfRelativePath)
+                .ToArray();
         }
 
         public async Task<bool> Read(String relative, Func<Stream, Task> func) {
@@ -420,20 +372,54 @@ namespace Figlotech.Core.FileAcessAbstractions {
             return await Task.Run(() => File.Exists(AssemblePath(RootDirectory, relative))).ConfigureAwait(false);
         }
 
-        private string AssemblePath(params string[] segments) {
-            var seg = segments.Select(s => s.Split(S))
-                .Flatten()
-                .Where(s => !string.IsNullOrEmpty(s))
-                .ToArray();
-            var retv = string.Join(S.ToString(), seg);
-            if (segments[0].StartsWith($"{S}")) {
-                retv = S + retv;
+        private static string NormalizeInputPath(string path) {
+            return path?.Replace('\\', S).Replace('/', S);
+        }
+
+        private static string NormalizeOutputPath(string path) {
+            return path?.Replace('\\', '/').Replace(S, '/');
+        }
+
+        private static string NormalizeRootPath(string path) {
+            if (path == null) {
+                throw new ArgumentNullException(nameof(path));
             }
-            retv = Path.GetFullPath(retv);
-            if (!retv.StartsWith(RootDirectory)) {
-                throw new Exception("Relative path must be within the FileSystem's Root Directory");
+
+            var fullPath = Path.GetFullPath(NormalizeInputPath(path));
+            var pathRoot = Path.GetPathRoot(fullPath);
+            if (string.Equals(fullPath, pathRoot, StringComparison.OrdinalIgnoreCase)) {
+                return fullPath;
             }
-            return retv;
+            return fullPath.TrimEnd('\\', '/');
+        }
+
+        private string ToSelfRelativePath(string fullPath) {
+            return NormalizeOutputPath(Path.GetRelativePath(RootDirectory, fullPath));
+        }
+
+        private string AssemblePath(string root, string relative) {
+            if (relative == null) {
+                throw new ArgumentNullException(nameof(relative));
+            }
+
+            var normalizedRoot = NormalizeRootPath(root);
+            var normalizedRelative = NormalizeInputPath(relative).TrimStart('\\', '/');
+            if (Path.IsPathRooted(normalizedRelative)) {
+                throw new ArgumentException("Path must be relative to the FileSystem root.", nameof(relative));
+            }
+
+            var fullPath = Path.GetFullPath(Path.Combine(normalizedRoot, normalizedRelative));
+            var rootPrefix = normalizedRoot.EndsWith(S.ToString())
+                ? normalizedRoot
+                : normalizedRoot + S;
+            var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!string.Equals(fullPath, normalizedRoot, comparison) &&
+                !fullPath.StartsWith(rootPrefix, comparison)) {
+                throw new ArgumentException("Relative path must be within the FileSystem's Root Directory.", nameof(relative));
+            }
+            return fullPath;
         }
 
         public async Task<bool> ExistsAsync(String relative) {
