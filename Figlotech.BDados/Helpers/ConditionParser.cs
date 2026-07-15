@@ -17,6 +17,7 @@ namespace Figlotech.BDados.Helpers {
         private readonly AggregateJoinShape _shape;
         private readonly DefinitiveJoinPlan _configuredPlan;
         private readonly DefinitiveAliasResolver _configuredResolver;
+        private readonly PrefixMaker _prefixMaker;
         private DefinitiveAliasResolver _resolver;
 
         // Static caches for performance optimization
@@ -29,6 +30,7 @@ namespace Figlotech.BDados.Helpers {
 
         public ConditionParser() {
             _shape = AggregateJoinShape.FullGraph;
+            _prefixMaker = new PrefixMaker();
         }
         public ConditionParser(AggregateJoinShape shape) {
             if (!Enum.IsDefined(typeof(AggregateJoinShape), shape)) {
@@ -46,6 +48,7 @@ namespace Figlotech.BDados.Helpers {
         }
         public ConditionParser(PrefixMaker prefixMaker) {
             _shape = AggregateJoinShape.FullGraph;
+            _prefixMaker = prefixMaker ?? new PrefixMaker();
         }
 
         // Cached attribute retrieval helper
@@ -84,7 +87,7 @@ namespace Figlotech.BDados.Helpers {
             return members.FirstOrDefault(m => m.Name == memberName);
         }
 
-        private void SelectResolver(Type type) {
+        private void SelectResolver(Type type, Expression expression) {
             rootType = type ?? throw new ArgumentNullException(nameof(type));
             if (_configuredResolver != null) {
                 if (_configuredResolver.RootType != type) {
@@ -100,14 +103,32 @@ namespace Figlotech.BDados.Helpers {
                 _resolver = new DefinitiveAliasResolver(_configuredPlan);
                 return;
             }
+            if (_prefixMaker != null && !HasAggregateReference(expression)) {
+                _resolver = null;
+                return;
+            }
             _resolver = new DefinitiveAliasResolver(AutomaticJoinPlanCache.GetOrAdd(type, _shape));
         }
 
         private string GetPrefixOfExpression(Expression expression) {
-            if (_resolver == null) {
-                throw new InvalidOperationException("A frozen alias resolver must be selected before parsing an expression.");
+            AggregatePath path = GetAggregatePath(expression);
+            if (_resolver != null) {
+                return _resolver.Resolve(path);
             }
-            return _resolver.Resolve(GetAggregatePath(expression));
+            if (path.Segments.Length != 0 || _prefixMaker == null) {
+                throw new InvalidOperationException("A frozen alias resolver must be selected before parsing an aggregate expression.");
+            }
+            return GetRootAlias();
+        }
+
+        private string GetRootAlias() {
+            if (_resolver != null) {
+                return _resolver.Resolve(default(AggregatePath));
+            }
+            if (_prefixMaker != null) {
+                return _prefixMaker.GetAliasFor("root", rootType.Name, String.Empty);
+            }
+            throw new InvalidOperationException("An alias resolver must be selected before parsing an expression.");
         }
 
         private AggregatePath GetAggregatePath(Expression expression) {
@@ -267,6 +288,15 @@ namespace Figlotech.BDados.Helpers {
             }
         }
 
+        private static bool HasAggregateReference(Expression expression) {
+            if (expression == null) {
+                return false;
+            }
+            var visitor = new AggregateReferenceVisitor();
+            visitor.Visit(expression);
+            return visitor.HasAggregateReference;
+        }
+
         private static bool IsTrue(Expression expression) {
             return expression is ConstantExpression constant
                 && constant.Type == typeof(bool)
@@ -274,9 +304,7 @@ namespace Figlotech.BDados.Helpers {
         }
 
         private bool IsRootOnlyAtomicCondition(Expression expression) {
-            var visitor = new AggregateReferenceVisitor();
-            visitor.Visit(expression);
-            if (visitor.HasAggregateReference) {
+            if (HasAggregateReference(expression)) {
                 return false;
             }
 
@@ -287,7 +315,7 @@ namespace Figlotech.BDados.Helpers {
                 int separator = column.IndexOf('.');
                 if (separator > 0) {
                     string alias = column.Substring(0, separator);
-                    string rootAlias = _resolver.Resolve(default(AggregatePath));
+                    string rootAlias = GetRootAlias();
                     return String.Equals(alias, rootAlias, StringComparison.OrdinalIgnoreCase);
                 }
             }
@@ -403,7 +431,7 @@ namespace Figlotech.BDados.Helpers {
 
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
             try {
-                SelectResolver(typeof(T));
+                SelectResolver(typeof(T), c.expression);
                 var retv = ParseExpression(c.expression, typeof(T));
                 return retv;
             } catch (Exception x) {
@@ -416,14 +444,14 @@ namespace Figlotech.BDados.Helpers {
                 if (foofun == null) {
                     return new QbFmt("TRUE");
                 }
-                SelectResolver(typeof(T));
+                SelectResolver(typeof(T), foofun.Body);
                 if (!fullConditions) {
                     RootConditionProjection projection = ProjectRootCondition(foofun.Body);
                     if (IsTrue(projection.Expression)) {
                         return new QbFmt("TRUE");
                     }
                     QueryBuilder projected = ParseExpression(projection.Expression, typeof(T), null, strBuilder, true, forcedContext: null);
-                    string rootPrefix = _resolver.Resolve(default(AggregatePath)) + ".";
+                    string rootPrefix = GetRootAlias() + ".";
                     return (QueryBuilder)new QueryBuilder().Append(
                         RemoveExactQualifiedPrefix(projected.GetCommandText(), rootPrefix),
                         projected.GetParameters().Select(parameter => parameter.Value).ToArray());
@@ -811,7 +839,7 @@ namespace Figlotech.BDados.Helpers {
             if (fullConditions) {
                 return strBuilder;
             } else {
-                string rootPrefix = _resolver.Resolve(default(AggregatePath)) + ".";
+                string rootPrefix = GetRootAlias() + ".";
                 return (QueryBuilder)new QueryBuilder().Append(RemoveExactQualifiedPrefix(strBuilder.GetCommandText(), rootPrefix), strBuilder.GetParameters().Select((pm) => pm.Value).ToArray());
             }
         }

@@ -102,6 +102,9 @@ namespace Figlotech.BDados.Tests {
     }
 
     public sealed class InvalidAggregateRoot : PlanDataObject<Guid> {
+        [Field]
+        public string? RootValue { get; set; }
+
         [AggregateField(typeof(ScalarAggregate), nameof(Id), "NotASource")]
         public string? Invalid { get; set; }
     }

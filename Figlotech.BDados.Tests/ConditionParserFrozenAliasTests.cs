@@ -120,6 +120,30 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void LegacyParsersBindCapturedRootValueWithoutCompilingUnrelatedInvalidAggregate() {
+            string captured = "2026-07";
+            var parsers = new[] { new ConditionParser(), new ConditionParser(new PrefixMaker()) };
+
+            foreach (ConditionParser parser in parsers) {
+                var query = parser.ParseExpression<InvalidAggregateRoot>(x => x.RootValue == captured);
+
+                Assert.Contains("tba.RootValue", query.GetCommandText());
+                Assert.Equal(captured, Assert.Single(query.GetParameters()).Value);
+            }
+        }
+
+        [Fact]
+        public void ExplicitFrozenShapeStillValidatesUnrelatedInvalidAggregate() {
+            string captured = "2026-07";
+
+            BDadosException exception = Assert.Throws<BDadosException>(() =>
+                new ConditionParser(AggregateJoinShape.FullGraph)
+                    .ParseExpression<InvalidAggregateRoot>(x => x.RootValue == captured));
+
+            Assert.Contains(nameof(InvalidAggregateRoot.Invalid), exception.ToString());
+        }
+
+        [Fact]
         public void ScalarParserRejectsObjectPathThroughFrozenResolverAfterFullGraphPrewarm() {
             DefinitiveJoinPlan fullGraph = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
             var parser = new ConditionParser(AggregateJoinShape.ScalarAggregatesOnly);
