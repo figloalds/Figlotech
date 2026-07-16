@@ -72,11 +72,5 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods {
             rsa.ImportCspBlob(KeyPair.EncryptionKey);
             return rsa.Encrypt(en, false);
         }
-
-        private byte[] wrongEncrypt(byte[] en) {
-            var rsa = new RSACryptoServiceProvider();
-            rsa.ImportCspBlob(KeyPair.DecryptionKey);
-            return rsa.Encrypt(en, false);
-        }
     }
 }

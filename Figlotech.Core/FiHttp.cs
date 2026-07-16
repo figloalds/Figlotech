@@ -33,7 +33,7 @@ namespace Figlotech.Core {
         public long ContentLength { get; set; }
         public HttpResponseMessage Response { get; set; }
         private MemoryStream CachedResponseBody { get; set; }
-        public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>();
+        public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public Exception Exception { get; set; }
 
