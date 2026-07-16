@@ -105,6 +105,21 @@ namespace Figlotech.BDados.Tests {
             Assert.Equal("list:1", events[1]);
         }
 
+        [Fact]
+        public void AggregateLoadMaterializesListRowsUsingChildRemoteFieldWhenItMatchesParentIdentifierName() {
+            using var accessor = CreateAccessor(out _);
+            using BDadosTransaction transaction = accessor.CreateNewTransaction(CancellationToken.None, null);
+            SeedCollidingListKeys(transaction.Connection);
+
+            List<CollidingListKeyRoot> roots = accessor.AggregateLoad(transaction,
+                new LoadAllArgs<CollidingListKeyRoot>().Full().Where(root => root.ParentReference == RootId));
+
+            CollidingListKeyRoot root = Assert.Single(roots);
+            Assert.Equal(RootId, root.ParentReference);
+            Assert.Equal(new[] { "first", "second" }, root.Children.Select(child => child.Name));
+            Assert.All(root.Children, child => Assert.Equal(RootId, child.ParentReference));
+        }
+
         private static readonly Guid RootId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         private static readonly Guid ScalarId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
@@ -133,6 +148,14 @@ namespace Figlotech.BDados.Tests {
         private static void SeedNonAggregate(IDbConnection connection) {
             Execute(connection, "CREATE TABLE NonAggregateHookLongRoot (Id INTEGER NOT NULL)");
             Execute(connection, "INSERT INTO NonAggregateHookLongRoot (Id) VALUES (42)");
+        }
+
+        private static void SeedCollidingListKeys(IDbConnection connection) {
+            Execute(connection, "CREATE TABLE CollidingListKeyRoot (ParentReference TEXT NOT NULL)");
+            Execute(connection, "CREATE TABLE CollidingListKeyChild (ChildIdentifier TEXT NOT NULL, ParentReference TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "INSERT INTO CollidingListKeyRoot (ParentReference) VALUES ('" + RootId + "')");
+            Execute(connection, "INSERT INTO CollidingListKeyChild (ChildIdentifier, ParentReference, Name) VALUES ('33333333-3333-3333-3333-333333333333', '" + RootId + "', 'first')");
+            Execute(connection, "INSERT INTO CollidingListKeyChild (ChildIdentifier, ParentReference, Name) VALUES ('44444444-4444-4444-4444-444444444444', '" + RootId + "', 'second')");
         }
 
         private static void Execute(IDbConnection connection, string sql) {

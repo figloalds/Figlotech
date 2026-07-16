@@ -416,6 +416,51 @@ namespace Figlotech.BDados.Tests {
         public List<RuntimeList> Items { get; set; } = new List<RuntimeList>();
     }
 
+    public sealed class CollidingListKeyRoot : IDataObject {
+        [Field]
+        [PrimaryKey]
+        public Guid ParentReference { get; set; }
+
+        [AggregateList(typeof(CollidingListKeyChild), nameof(CollidingListKeyChild.ParentReference))]
+        public List<CollidingListKeyChild> Children { get; set; } = new List<CollidingListKeyChild>();
+
+        object IDataObject.Id {
+            get => ParentReference;
+            set => ParentReference = (Guid)value;
+        }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public sealed class CollidingListKeyChild : IDataObject {
+        [Field]
+        [PrimaryKey]
+        public Guid ChildIdentifier { get; set; }
+
+        [Field]
+        public Guid ParentReference { get; set; }
+
+        [Field]
+        public string? Name { get; set; }
+
+        object IDataObject.Id {
+            get => ChildIdentifier;
+            set => ChildIdentifier = (Guid)value;
+        }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public sealed class InvalidListRemoteFieldRoot : PlanDataObject<Guid> {
+        [Field]
+        public Guid DeceptiveParentField { get; set; }
+
+        [AggregateList(typeof(ListAggregate), nameof(DeceptiveParentField))]
+        public List<ListAggregate> Children { get; set; } = new List<ListAggregate>();
+    }
+
     public sealed class RuntimeScalar : PlanDataObject<Guid> {
         [Field]
         public string? Name { get; set; }

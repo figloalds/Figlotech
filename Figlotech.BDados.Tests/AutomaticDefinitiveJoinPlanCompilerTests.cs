@@ -100,6 +100,26 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void CompileAutomaticListUsesChildRemoteFieldWhenItSharesTheParentIdentifierName() {
+            DefinitiveJoinPlan plan = DefinitiveJoinPlanCompiler.Compile(typeof(CollidingListKeyRoot), AggregateJoinShape.FullGraph);
+
+            DefinitiveJoinRelation relation = Assert.Single(plan.Relations.Where(x => x.BuildKind == AggregateBuildOptions.AggregateList));
+            Assert.Equal(nameof(CollidingListKeyRoot.ParentReference), relation.ParentKey);
+            Assert.Equal(nameof(CollidingListKeyChild.ParentReference), relation.ChildKey);
+        }
+
+        [Fact]
+        public void CompileAutomaticListRejectsRemoteFieldMissingFromChildEvenWhenParentHasIt() {
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => DefinitiveJoinPlanCompiler.Compile(typeof(InvalidListRemoteFieldRoot), AggregateJoinShape.FullGraph));
+
+            Assert.Contains(nameof(InvalidListRemoteFieldRoot), exception.Message);
+            Assert.Contains(nameof(InvalidListRemoteFieldRoot.Children), exception.Message);
+            Assert.Contains(nameof(InvalidListRemoteFieldRoot.DeceptiveParentField), exception.Message);
+            Assert.Contains(nameof(ListAggregate), exception.Message);
+            Assert.Contains("list remote field", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public void CompileAutomaticIsDeterministicAcrossUncachedCalls() {
             DefinitiveJoinPlan first = DefinitiveJoinPlanCompiler.Compile(typeof(GuidRoot), AggregateJoinShape.FullGraph);
             DefinitiveJoinPlan second = DefinitiveJoinPlanCompiler.Compile(typeof(GuidRoot), AggregateJoinShape.FullGraph);

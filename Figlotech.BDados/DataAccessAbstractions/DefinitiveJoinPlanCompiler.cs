@@ -276,7 +276,7 @@ public static class DefinitiveJoinPlanCompiler {
             if (!IsCollectionOf(GetMemberType(target, Context(currentPath, target)), type)) {
                 throw new ArgumentException($"{Context(currentPath, target)} AggregateList target must be a collection of '{type}'.");
             }
-            JoinKeys keys = ResolveDirectJoinKeys(currentType, type, metadata.RemoteField, currentPath, target);
+            JoinKeys keys = ResolveAggregateListJoinKeys(currentType, type, metadata.RemoteField, currentPath, target);
             string alias = _aliases.GetAlias(currentAlias, type, metadata.RemoteField);
             string[] fieldNames = GetFieldNames(type);
             EnsureTable(type, alias, JoinType.RIGHT, BuildPredicate(currentAlias, alias, keys), fieldNames, Context(currentPath, target));
@@ -433,6 +433,12 @@ public static class DefinitiveJoinPlanCompiler {
             }
             MemberInfo memberInfo2 = ResolveMember(childType, name, Context(path, member));
             return new JoinKeys(ResolveAutomaticIdentifierMember(parentType, Context(path, member)).Name, memberInfo2.Name);
+        }
+
+        private JoinKeys ResolveAggregateListJoinKeys(Type parentType, Type childType, string remoteField, AggregatePath path, MemberInfo member) {
+            string name = RequireName(remoteField, "list remote field", path, member);
+            MemberInfo childMember = ResolveMember(childType, name, Context(path, member) + " list remote field '" + name + "'");
+            return new JoinKeys(ResolveAutomaticIdentifierMember(parentType, Context(path, member)).Name, childMember.Name);
         }
 
         private static string BuildPredicate(string parentAlias, string childAlias, JoinKeys keys) {
