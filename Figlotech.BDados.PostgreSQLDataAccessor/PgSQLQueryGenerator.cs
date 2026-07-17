@@ -35,6 +35,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             "HAVING", "DISTINCT", "CREATE", "ALTER", "DROP", "ADD", "COLUMN"
         };
 
+        public bool CanRetrieveIdOnInsert => false;
+
         private string QuoteIdent(string identifier) {
             if (string.IsNullOrEmpty(identifier))
                 return identifier;
@@ -43,11 +45,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             return identifier;
         }
 
-        public IQueryBuilder GenerateCreateSchema(string schemaName) {
-            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
-        }
         public IQueryBuilder CreateDatabase(string schemaName) {
-            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
+            return new QueryBuilder($"CREATE DATABASE {schemaName}");
         }
 
         public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
@@ -73,12 +72,28 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 members.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             }
             for (int i = 0; i < members.Count; i++) {
-                query.Append($"@{i + 1}", ReflectionTool.GetMemberValue(members[i], inputObject));
+                var val = ReflectionTool.GetMemberValue(members[i], inputObject);
+                if (val == null) {
+                    var pc = members[i].GetCustomAttribute<PreemptiveCounter>();
+                    var ic = members[i].GetCustomAttribute<IncrementalCounter>();
+                    if (pc != null) {
+                        query.Append(pc.OnInsertSubQuery(type, members[i]));
+                    } else if (ic != null) {
+                        query.Append(ic.OnInsertSubQuery(type, members[i]));
+                    } else {
+                        query.Append($"@{i + 1}", val);
+                    }
+                } else {
+                    query.Append($"@{i + 1}", val);
+                }
                 if (i < members.Count - 1) {
                     query.Append(",");
                 }
             }
             query.Append(")");
+            if (omitPk && GetMembers(type).Any(member => member.GetCustomAttribute<PrimaryKeyAttribute>() != null)) {
+                query.Append($" RETURNING {FiTechBDadosExtensions.IdColumnNameOf[type]}");
+            }
             //query.Append("ON CONFLICT (" + GenerateKeysString(type) + ") DO UPDATE SET ");
             //var Fields = GetMembers(inputObject.GetType());
             //for (int i = 0; i < Fields.Count; ++i) {
@@ -198,7 +213,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 retv += $"({(info.Size > 0 ? info.Size : 100)})";
             }
             if (retv == "FLOAT" || retv == "DOUBLE" || retv == "DECIMAL" || retv == "NUMERIC") {
-                retv += "(16,3)";
+                retv += info.Precision > 0 ? $"(20,{info.Precision})" : "(16,3)";
             }
 
             return retv;
@@ -438,7 +453,6 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
             var alias = new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty);
-            Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
             Query.Append(String.Format($"FROM {type.Name} AS {alias}"));
@@ -719,7 +733,7 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
             return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column} CASCADE;");
         }
         public IQueryBuilder DropUnique(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP KEY {constraint} CASCADE;");
+            return new QueryBuilder().Append($"ALTER TABLE {target} DROP CONSTRAINT {constraint};");
         }
         public IQueryBuilder DropIndex(string target, string constraint) {
             return new QueryBuilder().Append($"DROP INDEX {constraint} CASCADE;");
@@ -742,7 +756,7 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
         public IQueryBuilder AddIndexForUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
             column = column.ToLower();
-            return new QueryBuilder().Append($"ALTER TABLE {table} ADD INDEX {column} ({column});");
+            return new QueryBuilder().Append($"CREATE INDEX {constraintName} ON {table} ({column});");
         }
         public IQueryBuilder AddUniqueKey(string table, string column, string constraintName) {
             table = table.ToLower();
@@ -779,7 +793,7 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
         }
 
         public IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new() {
-            return new QbFmt("SELECT last_insert_id()");
+            throw new NotSupportedException("PostgreSQL does not support a separate last-insert-id query; ids are returned inline via INSERT ... RETURNING. This method should be unreachable because CanRetrieveIdOnInsert is false.");
         }
 
         public IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new() {

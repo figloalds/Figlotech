@@ -42,6 +42,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions);
         IQueryBuilder RenameColumn(string table, string column, MemberInfo newDefinition, FieldAttribute info);
         IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable);
+        /// <summary>
+        /// True when this RDBMS supports retrieving the auto-generated primary key after an INSERT
+        /// via <see cref="GetLastInsertId{T}"/> (e.g. MySQL LAST_INSERT_ID(), SQLite last_insert_rowid()).
+        /// False for engines where the id must be returned inline via INSERT ... RETURNING (e.g. PostgreSQL).
+        /// Callers must check this flag before invoking <see cref="GetLastInsertId{T}"/>.
+        /// </summary>
+        bool CanRetrieveIdOnInsert { get; }
         IQueryBuilder GetLastInsertId<T>() where T : IDataObject, new();
         IQueryBuilder GetIdFromRid<T>(object Rid) where T : IDataObject, new();
         IQueryBuilder GetCreationCommand(Type t);

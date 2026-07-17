@@ -27,8 +27,10 @@ using System.Text.RegularExpressions;
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqliteQueryGenerator : IQueryGenerator {
 
+        public bool CanRetrieveIdOnInsert => true;
+
         public IQueryBuilder CreateDatabase(string schemaName) {
-            return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName}");
+            return new QueryBuilder("SELECT 1;");
         }
 
         public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
@@ -374,7 +376,6 @@ namespace Figlotech.BDados.SqliteDataAccessor {
 
         public IQueryBuilder GenerateSelect<T>(IQueryBuilder condicoes = null, int? skip = null, int? limit = null, MemberInfo orderingMember = null, OrderingType ordering = OrderingType.Asc) where T : IDataObject, new() {
             var type = typeof(T);
-            Fi.Tech.WriteLine($"Generating SELECT {condicoes} {skip} {limit} {orderingMember?.Name} {ordering}");
             QueryBuilder Query = new QbFmt("SELECT ");
             Query.Append(GenerateFieldsString(type, false));
             Query.Append(String.Format($"FROM {type.Name} AS {new PrefixMaker().GetAliasFor("root", typeof(T).Name, String.Empty)}"));
@@ -535,7 +536,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             if (workingSet.Count < 1) return null;
             // -- 
             QueryBuilder Query = new QueryBuilder();
-            Query.Append($"INSERT OR IGNORE INTO {type.Name} (");
+            Query.Append($"INSERT INTO {type.Name} (");
             Query.Append(GenerateFieldsString(type, OmmitPk));
             Query.Append(") VALUES");
             // -- 
@@ -579,33 +580,33 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder InformationSchemaQueryTables(String schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.tables WHERE TABLE_SCHEMA=@1;", schema);
+            throw new NotSupportedException("SQLite does not have information_schema; schema introspection is not supported by this plugin. Use sqlite_master / PRAGMA table_info instead.");
         }
         public IQueryBuilder InformationSchemaQueryColumns(String schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.columns WHERE TABLE_SCHEMA=@1;", schema);
+            throw new NotSupportedException("SQLite does not have information_schema; schema introspection is not supported by this plugin. Use sqlite_master / PRAGMA table_info instead.");
         }
         public IQueryBuilder InformationSchemaQueryKeys(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.key_column_usage WHERE CONSTRAINT_SCHEMA=@1;", schema);
+            throw new NotSupportedException("SQLite does not have information_schema; schema introspection is not supported by this plugin. Use sqlite_master / PRAGMA table_info instead.");
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
-            return new QueryBuilder().Append("SELECT * FROM information_schema.statistics WHERE INDEX_SCHEMA=@1;", schema);
+            throw new NotSupportedException("SQLite does not have information_schema; schema introspection is not supported by this plugin. Use sqlite_master / PRAGMA table_info instead.");
         }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
-            return new QueryBuilder().Append($"RENAME TABLE {tabName} TO {newName};");
+            return new QueryBuilder().Append($"ALTER TABLE {tabName} RENAME TO {newName};");
         }
 
         public IQueryBuilder UpdateColumn(string table, string column, object value, IQueryBuilder conditions) {
             return new QueryBuilder().Append($"UPDATE {table} SET {column}=@value WHERE ").Append(conditions);
         }
         public IQueryBuilder RenameColumn(string table, string column, MemberInfo newDefinition, FieldAttribute info) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {column} {GetColumnDefinition(newDefinition, info)};");
+            throw new NotSupportedException("SQLite does not support ALTER COLUMN; column changes require table recreation.");
         }
         public IQueryBuilder AlterColumnDataType(string table, MemberInfo member, FieldAttribute fieldAttribute) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
+            throw new NotSupportedException("SQLite does not support ALTER COLUMN; column changes require table recreation.");
         }
         public IQueryBuilder AlterColumnNullability(string table, MemberInfo member, FieldAttribute fieldAttribute) {
-            return new QueryBuilder().Append($"ALTER TABLE {table} CHANGE COLUMN {member.Name} {GetColumnDefinition(member, fieldAttribute)};");
+            throw new NotSupportedException("SQLite does not support ALTER COLUMN; column changes require table recreation.");
         }
 
         public IQueryBuilder DropForeignKey(string target, string constraint) {
@@ -615,7 +616,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             return new QueryBuilder().Append($"ALTER TABLE {table} DROP COLUMN {column};");
         }
         public IQueryBuilder DropUnique(string target, string constraint) {
-            return new QueryBuilder().Append($"ALTER TABLE {target} DROP UNIQUE CONSTRAINT {constraint};");
+            return new QueryBuilder().Append($"DROP INDEX {constraint};");
         }
         public IQueryBuilder DropIndex(string target, string constraint) {
             return new QueryBuilder().Append($"ALTER TABLE {target} DROP INDEX {constraint};");

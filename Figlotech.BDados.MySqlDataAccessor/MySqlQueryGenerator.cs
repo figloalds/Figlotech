@@ -29,6 +29,8 @@ using System.Text.RegularExpressions;
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
 
+        public bool CanRetrieveIdOnInsert => true;
+
         public IQueryBuilder CreateDatabase(string schemaName) {
             return new QueryBuilder($"CREATE DATABASE IF NOT EXISTS {schemaName} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
         }
@@ -635,13 +637,6 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                     } else {
                         Query.Append($"WHEN {rid}=@r_{ridx}");
                     }
-                    if (legacySet[ridx].IsReceivedFromSync) {
-                        if (i == 0) {
-                            Query.Append($"AND {upd}<@u_{ridx}", legacySet[ridx].UpdatedAt);
-                        } else {
-                            Query.Append($"AND {upd}<@u_{ridx}");
-                        }
-                    }
                     var val = ReflectionTool.GetMemberValue(members[i], legacySet[ridx]);
                     Query.Append($"THEN @{ggid}_{++x}", val);
                 }
@@ -888,7 +883,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
         }
         public IQueryBuilder EnableForeignKeys() {
-            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=0;");
+            return Qb.Fmt("SET FOREIGN_KEY_CHECKS=1;");
         }
     }
 }

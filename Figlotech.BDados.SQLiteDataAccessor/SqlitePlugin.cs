@@ -7,6 +7,20 @@ using System.Data;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqlitePlugin : IRdbmsPluginAdapter {
+        private static readonly IReadOnlyDictionary<string, string> InfoSchemaColumns = new Dictionary<string, string>() {
+            { "TABLE_NAME"              , "TABLE_NAME"                  },
+            { "COLUMN_NAME"             , "COLUMN_NAME"                 },
+            { "COLUMN_DEFAULT"          , "COLUMN_DEFAULT"              },
+            { "IS_NULLABLE"             , "IS_NULLABLE"                 },
+            { "DATA_TYPE"               , "DATA_TYPE"                 },
+            { "CHARACTER_MAXIMUM_LENGTH", "CHARACTER_MAXIMUM_LENGTH"    },
+            { "NUMERIC_PRECISION"       , "NUMERIC_PRECISION"           },
+            { "CHARACTER_SET_NAME"      , "CHARACTER_SET_NAME"          },
+            { "COLLATION_NAME"          , "COLLATION_NAME"              },
+            { "COLUMN_COMMENT"          , "COLUMN_COMMENT"              },
+            { "GENERATION_EXPRESSION"   , "GENERATION_EXPRESSION"       },
+        };
+
         public SqlitePlugin(SqlitePluginConfiguration cfg) {
             Config = cfg;
         }
@@ -22,25 +36,13 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         public bool ContinuousConnection => true;
 
         public int PoolSize => Config.PoolSize;
-        public int CommandTimeout => throw new NotImplementedException();
-        public int ConnectTimeout => throw new NotImplementedException();
+        public TimeSpan CommandTimeout => TimeSpan.FromSeconds(30);
+        public TimeSpan ConnectTimeout => TimeSpan.FromSeconds(5);
 
         public string SchemaName => Config.Schema;
         public string DatabaseHost => Config.DataSource;
 
-        public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {
-            { "TABLE_NAME"              , "TABLE_NAME"                  },
-            { "COLUMN_NAME"             , "COLUMN_NAME"                 },
-            { "COLUMN_DEFAULT"          , "COLUMN_DEFAULT"              },
-            { "IS_NULLABLE"             , "IS_NULLABLE"                 },
-            { "DATA_TYPE"               , "DATA_TYPE"                 },
-            { "CHARACTER_MAXIMUM_LENGTH", "CHARACTER_MAXIMUM_LENGTH"    },
-            { "NUMERIC_PRECISION"       , "NUMERIC_PRECISION"           },
-            { "CHARACTER_SET_NAME"      , "CHARACTER_SET_NAME"          },
-            { "COLLATION_NAME"          , "COLLATION_NAME"              },
-            { "COLUMN_COMMENT"          , "COLUMN_COMMENT"              },
-            { "GENERATION_EXPRESSION"   , "GENERATION_EXPRESSION"       },
-        };
+        public IReadOnlyDictionary<string, string> InfoSchemaColumnsMap => InfoSchemaColumns;
 
         public IDbConnection GetNewConnection() {
             return new SqliteConnection(Config.GetConnectionString());

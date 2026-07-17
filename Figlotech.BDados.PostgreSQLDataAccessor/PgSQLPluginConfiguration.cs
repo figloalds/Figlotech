@@ -16,6 +16,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         public int PoolSize { get; set; } = 10;
         public bool UsePooling { get; set; } = true;
         public int Timeout { get; set; } = 1024;
+        public int ConnectTimeout { get; set; } = 30;
         public int Lifetime { get; set; } = 1024;
         public bool ResetConnection { get; set; } = true;
         public bool ContinuousConnection { get; set; } = false;
@@ -54,7 +55,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 MinPoolSize = 1,
                 MaxPoolSize = PoolSize,
                 Pooling = UsePooling,
-                Timeout = Timeout,
+                Timeout = ConnectTimeout,
                 ConnectionIdleLifetime = Lifetime,
                 CommandTimeout = Timeout,
                 SslMode = Npgsql.SslMode.Prefer,

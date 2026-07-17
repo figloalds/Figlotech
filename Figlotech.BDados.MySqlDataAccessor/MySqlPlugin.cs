@@ -21,14 +21,14 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public bool ContinuousConnection => Config.ContinuousConnection;
 
-        public int CommandTimeout => Config.Timeout;
-        public int ConnectTimeout => Config.ConnectTimeout;
+        public TimeSpan CommandTimeout => TimeSpan.FromMilliseconds(Config.Timeout);
+        public TimeSpan ConnectTimeout => TimeSpan.FromSeconds(Config.ConnectTimeout);
         public int PoolSize => Config.PoolSize;
 
         public string SchemaName => Config.Database;
         public string DatabaseHost => Config.Host;
 
-        public Dictionary<string, string> InfoSchemaColumnsMap => new Dictionary<string, string>() {
+        private static readonly IReadOnlyDictionary<string, string> InfoSchemaColumnsMapCache = new Dictionary<string, string>() {
             { "TABLE_NAME"              , "TABLE_NAME"                  },
             { "COLUMN_NAME"             , "COLUMN_NAME"                 },
             { "COLUMN_DEFAULT"          , "COLUMN_DEFAULT"              },
@@ -41,6 +41,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             { "COLUMN_COMMENT"          , "COLUMN_COMMENT"              },
             { "GENERATION_EXPRESSION"   , "GENERATION_EXPRESSION"       },
         };
+
+        public IReadOnlyDictionary<string, string> InfoSchemaColumnsMap => InfoSchemaColumnsMapCache;
 
         public IDbConnection GetNewConnection() {
             return new MySqlConnection(Config.GetConnectionString());

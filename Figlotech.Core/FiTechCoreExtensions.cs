@@ -661,7 +661,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static async Task<List<T>> ReaderToObjectListUsingMapAsync<T>(this Fi _selfie, DbDataReader reader, Dictionary<string, string> map) where T : new() {
+        public static async Task<List<T>> ReaderToObjectListUsingMapAsync<T>(this Fi _selfie, DbDataReader reader, IReadOnlyDictionary<string, string> map) where T : new() {
             var retv = new List<T>();
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
             while (await reader.ReadAsync()) {
@@ -675,7 +675,7 @@ namespace Figlotech.Core {
             }
             return retv;
         }
-        public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, Dictionary<string, string> map) where T : new() {
+        public static List<T> ReaderToObjectListUsingMap<T>(this Fi _selfie, IDataReader reader, IReadOnlyDictionary<string, string> map) where T : new() {
             var retv = new List<T>();
             var readerNames = Fi.Range(0, reader.FieldCount).Select(x => reader.GetName(x).ToUpper()).ToList();
             while (reader.Read()) {

@@ -120,13 +120,13 @@ namespace Figlotech.BDados.Benchmarks {
 
             public IQueryGenerator QueryGenerator { get; } = new SqliteQueryGenerator();
             public bool ContinuousConnection => false;
-            public int CommandTimeout => 30;
-            public int ConnectTimeout => 30;
+            public TimeSpan CommandTimeout => TimeSpan.FromSeconds(30);
+            public TimeSpan ConnectTimeout => TimeSpan.FromSeconds(30);
             public int PoolSize => 1;
             public string SchemaName => "main";
             public string DatabaseHost { get; }
             public string ConnectionString { get; }
-            public Dictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
+            public IReadOnlyDictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
 
             public IDbConnection GetNewConnection() {
                 return new SqliteConnection(ConnectionString);

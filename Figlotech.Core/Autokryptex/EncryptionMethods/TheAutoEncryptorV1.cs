@@ -8,6 +8,7 @@
 */
 
 namespace Figlotech.Core.Autokryptex {
+    [Obsolete("TheAutoEncryptorV1 is a legacy custom cipher retained only for backward compatibility with previously-encrypted configuration files. Do not use for new code; prefer a standard AEAD construction such as AES-GCM via System.Security.Cryptography.")]
     public sealed class TheAutoEncryptorV1 : IEncryptionMethod {
         readonly FiRandom[] rands = new FiRandom[16];
         readonly byte[,] map = new byte[16, 256];

@@ -1535,7 +1535,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         //FiAsyncMultiLock OpenConnectionLock = new FiAsyncMultiLock();
         private void ExclusiveOpenConnection(CancellationToken cancellation, IDbConnection connection) {
-            _concurrentConnectionsSemaphoreSlim.Wait(Plugin.CommandTimeout, cancellation);
+            if (!_concurrentConnectionsSemaphoreSlim.Wait(Plugin.ConnectTimeout, cancellation)) {
+                throw new TimeoutException($"Timed out acquiring a database connection slot (Using {Plugin.GetType().Name}).");
+            }
             try {
                 using (ExclusiveOpenConnectionLock.LockSync()) {
                     connection.Open();
@@ -1548,11 +1550,19 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         readonly FiAsyncLock ExclusiveOpenConnectionLock = new FiAsyncLock();
         private async ValueTask ExclusiveOpenConnectionAsync(CancellationToken cancellation, IDbConnection connection) {
-            await _concurrentConnectionsSemaphoreSlim.WaitAsync(Plugin.CommandTimeout, cancellation);
+            if (!await _concurrentConnectionsSemaphoreSlim.WaitAsync(Plugin.ConnectTimeout, cancellation).ConfigureAwait(false)) {
+                throw new TimeoutException($"Timed out acquiring a database connection slot (Using {Plugin.GetType().Name}).");
+            }
             try {
                 await using (var handle = await ExclusiveOpenConnectionLock.Lock().ConfigureAwait(false)) {
                     if (connection is DbConnection idbconn) {
-                        await idbconn.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+                        Task openTask = idbconn.OpenAsync(CancellationToken.None);
+                        Task timeoutTask = Task.Delay(Plugin.ConnectTimeout, cancellation);
+                        if (await Task.WhenAny(openTask, timeoutTask).ConfigureAwait(false) != openTask) {
+                            cancellation.ThrowIfCancellationRequested();
+                            throw new TimeoutException($"Timed out opening a database connection (Using {Plugin.GetType().Name}).");
+                        }
+                        await openTask.ConfigureAwait(false);
                     } else {
                         connection.Open();
                     }
@@ -2235,7 +2245,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
             using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
@@ -2277,7 +2287,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
             using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
@@ -2324,7 +2334,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
             using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
@@ -2369,7 +2379,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             var tName = typeof(T).Name;
             DateTime Inicio = DateTime.Now;
             using (var command = transaction.CreateCommand()) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 VerboseLogQueryParameterization(transaction, query);
                 // --
@@ -2714,7 +2724,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     await ExecuteAsync(transaction, query).ConfigureAwait(false);
                 } else {
                     var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
-                    await ExecuteAsync(transaction, query).ConfigureAwait(false);
+                    if (ShouldApplyInsertReturningId(input, query)) {
+                        await ApplyInsertReturningIdAsync(transaction, input, query).ConfigureAwait(false);
+                    } else {
+                        await ExecuteAsync(transaction, query).ConfigureAwait(false);
+                    }
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
@@ -2800,6 +2814,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private async Task TryLoadLastInsertIdAsync(BDadosTransaction transaction, IDataObject input) {
+            if (!Plugin.QueryGenerator.CanRetrieveIdOnInsert) {
+                return;
+            }
             var type = input.GetType();
             var method = Plugin.QueryGenerator.GetType().GetMethod("GetLastInsertId");
             var typed = method?.MakeGenericMethod(type);
@@ -2820,6 +2837,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             input.Id = Convert.ChangeType(result.Value, idType);
         }
 
+        private bool ShouldApplyInsertReturningId(IDataObject input, IQueryBuilder query) {
+            return !Plugin.QueryGenerator.CanRetrieveIdOnInsert
+                && IsDefaultId(input.Id)
+                && FiTechBDadosExtensions.IdColumnOf[input.GetType()] != null
+                && query.GetCommandText().IndexOf("RETURNING", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private async Task ApplyInsertReturningIdAsync(BDadosTransaction transaction, IDataObject input, IQueryBuilder query) {
+            ValueBox<long> result = (await QueryAsync<ValueBox<long>>(transaction, query)).FirstOrDefault();
+            if (result == null) {
+                return;
+            }
+            MemberInfo idMember = FiTechBDadosExtensions.IdColumnOf[input.GetType()];
+            input.Id = Convert.ChangeType(result.Value, ReflectionTool.GetTypeOf(idMember));
+        }
+
         private bool ExistsById(BDadosTransaction transaction, Type type, object id) {
             var method = Plugin.QueryGenerator.GetType().GetMethod("CheckExistsById");
             var typed = method?.MakeGenericMethod(type);
@@ -2831,6 +2864,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private void TryLoadLastInsertId(BDadosTransaction transaction, IDataObject input) {
+            if (!Plugin.QueryGenerator.CanRetrieveIdOnInsert) {
+                return;
+            }
             var type = input.GetType();
             var method = Plugin.QueryGenerator.GetType().GetMethod("GetLastInsertId");
             var typed = method?.MakeGenericMethod(type);
@@ -2849,6 +2885,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             var idType = ReflectionTool.GetTypeOf(idMember);
             input.Id = Convert.ChangeType(result.Value, idType);
+        }
+
+        private void ApplyInsertReturningId(BDadosTransaction transaction, IDataObject input, IQueryBuilder query) {
+            ValueBox<long> result = Query<ValueBox<long>>(transaction, query).FirstOrDefault();
+            if (result == null) {
+                return;
+            }
+            MemberInfo idMember = FiTechBDadosExtensions.IdColumnOf[input.GetType()];
+            input.Id = Convert.ChangeType(result.Value, ReflectionTool.GetTypeOf(idMember));
         }
 
         private bool SaveLegacyItem(BDadosTransaction transaction, ILegacyDataObject input) {
@@ -2957,7 +3002,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     Execute(transaction, query);
                 } else {
                     var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
-                    Execute(transaction, query);
+                    if (ShouldApplyInsertReturningId(input, query)) {
+                        ApplyInsertReturningId(transaction, input, query);
+                    } else {
+                        Execute(transaction, query);
+                    }
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
@@ -3284,7 +3333,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             Stopwatch sw = Stopwatch.StartNew();
             await using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 DbDataReader reader = null;
@@ -3370,7 +3419,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             Stopwatch sw = Stopwatch.StartNew();
             using (var command = (DbCommand)transaction.CreateCommand()) {
-                command.CommandTimeout = Plugin.CommandTimeout;
+                command.CommandTimeout = (int)Plugin.CommandTimeout.TotalSeconds;
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 DbDataReader reader = null;
@@ -3525,7 +3574,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int result = -1;
             transaction.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Prepare statement");
             transaction.Benchmarker?.Mark("--");
-            WriteLog($"[{Description}:{transaction.Id}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout}s timeout]");
+            WriteLog($"[{Description}:{transaction.Id}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout.TotalSeconds:0.#}s timeout]");
             using (var command = await transaction.CreateCommandAsync(null, true).ConfigureAwait(false)) {
                 try {
                     VerboseLogQueryParameterization(transaction, query);
@@ -3575,7 +3624,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int result = -1;
             transaction.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Prepare statement");
             transaction.Benchmarker?.Mark("--");
-            WriteLog($"[{Description}:{transaction.Id}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout}s timeout]");
+            WriteLog($"[{Description}:{transaction.Id}] -- Execute Statement <{query.Id}> [{Plugin.CommandTimeout.TotalSeconds:0.#}s timeout]");
             using (var command = transaction.CreateCommand(null, true)) {
                 try {
                     VerboseLogQueryParameterization(transaction, query);

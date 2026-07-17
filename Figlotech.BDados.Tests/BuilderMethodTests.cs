@@ -69,13 +69,13 @@ namespace Figlotech.BDados.Tests {
         private sealed class InMemorySqlitePlugin : IRdbmsPluginAdapter {
             public IQueryGenerator QueryGenerator { get; } = new SqliteQueryGenerator();
             public bool ContinuousConnection => true;
-            public int CommandTimeout => 30;
-            public int ConnectTimeout => 30;
+            public TimeSpan CommandTimeout => TimeSpan.FromSeconds(30);
+            public TimeSpan ConnectTimeout => TimeSpan.FromSeconds(30);
             public int PoolSize => 1;
             public string SchemaName => "main";
             public string DatabaseHost => ":memory:";
             public string ConnectionString => "Data Source=:memory:";
-            public Dictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
+            public IReadOnlyDictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
 
             public IDbConnection GetNewConnection() => new SqliteConnection(ConnectionString);
             public IDbConnection GetNewSchemalessConnection() => GetNewConnection();

@@ -326,13 +326,13 @@ namespace Figlotech.BDados.Tests {
             public IQueryGenerator QueryGenerator { get; } = new SqliteQueryGenerator();
             public void SetConfiguration(IDictionary<string, object> settings) { }
             public bool ContinuousConnection => true;
-            public int CommandTimeout => 30;
-            public int ConnectTimeout => 30;
+            public TimeSpan CommandTimeout => TimeSpan.FromSeconds(30);
+            public TimeSpan ConnectTimeout => TimeSpan.FromSeconds(30);
             public int PoolSize => 1;
             public string SchemaName => "main";
             public string DatabaseHost => ":memory:";
             public string ConnectionString => "Data Source=:memory:";
-            public Dictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
+            public IReadOnlyDictionary<string, string> InfoSchemaColumnsMap { get; } = new Dictionary<string, string>();
             public object ProcessParameterValue(object value) => value;
         }
     }
