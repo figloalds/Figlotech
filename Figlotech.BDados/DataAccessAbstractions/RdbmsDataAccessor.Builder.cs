@@ -38,11 +38,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             transaction?.Benchmarker.Mark("- Starting Execute Query");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, transaction.CancellationToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
-                if (!transaction.CancellationToken.IsCancellationRequested) {
-                    return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
-                } else {
-                    return new List<T>();
-                }
+                return await Fi.Tech.MapFromReaderAsync<T>(reader, transaction.CancellationToken).ToListAsync().ConfigureAwait(false);
             }
         }
 
@@ -50,6 +46,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(transaction.CancellationToken, cancellationToken);
             var combinedToken = cts.Token;
             transaction?.Benchmarker.Mark("Enter lock command");
+            await using var handle = await transaction.LockAsync().ConfigureAwait(false);
             transaction?.Benchmarker.Mark("- Starting Execute Query");
             using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SequentialAccess | CommandBehavior.KeyInfo, combinedToken).ConfigureAwait(false)) {
                 transaction?.Benchmarker.Mark("- Starting build");
@@ -155,19 +152,22 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             using var handle = transaction.Lock();
             using (var reader = command.ExecuteReader()) {
                 DataTable dt = new DataTable();
-                for (int i = 0; i < reader.FieldCount; i++) {
-                    dt.Columns.Add(new DataColumn(reader.GetName(i)));
+                int fieldCount = reader.FieldCount;
+                var fieldTypes = new Type[fieldCount];
+                for (int i = 0; i < fieldCount; i++) {
+                    fieldTypes[i] = reader.GetFieldType(i) ?? typeof(object);
+                    dt.Columns.Add(new DataColumn(reader.GetName(i), fieldTypes[i]));
                 }
 
                 while (reader.Read()) {
                     var dr = dt.NewRow();
-                    for (int i = 0; i < reader.FieldCount; i++) {
-                        var type = reader.GetFieldType(i);
+                    for (int i = 0; i < fieldCount; i++) {
                         if (reader.IsDBNull(i)) {
-                            dr[i] = null;
+                            dr[i] = DBNull.Value;
                         } else {
                             var val = reader.GetValue(i);
-                            dr[i] = Convert.ChangeType(val, type);
+                            var type = fieldTypes[i];
+                            dr[i] = type.IsInstanceOfType(val) ? val : Convert.ChangeType(val, type);
                         }
                     }
                     dt.Rows.Add(dr);
@@ -181,20 +181,20 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public (Type, object) cacheId(IDataReader reader, string myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
-            return (t, rid);
+            return (t, rid ?? throw new InvalidDataException($"Column '{myRidCol}' returned NULL for the record identifier; cannot build a cache/grouping key."));
         }
         public (Type, object) cacheId(object[] reader, int myRidCol, Type t) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
-            return (t, rid);
+            return (t, rid ?? throw new InvalidDataException($"Column '{myRidCol}' returned NULL for the record identifier; cannot build a cache/grouping key."));
         }
 
         public (int, Type, object) cacheId(IDataReader reader, string myRidCol, Type t, int tableIndex) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
-            return (tableIndex, t, rid);
+            return (tableIndex, t, rid ?? throw new InvalidDataException($"Column '{myRidCol}' returned NULL for the record identifier; cannot build a cache/grouping key."));
         }
         public (int, Type, object) cacheId(object[] reader, int myRidCol, Type t, int tableIndex) {
             var rid = ReflectionTool.DbDeNull(reader[myRidCol]);
-            return (tableIndex, t, rid);
+            return (tableIndex, t, rid ?? throw new InvalidDataException($"Column '{myRidCol}' returned NULL for the record identifier; cannot build a cache/grouping key."));
         }
 
         public async IAsyncEnumerable<T> BuildAggregateListDirectCoroutinely<T>(BDadosTransaction transaction, DbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer, [EnumeratorCancellation] CancellationToken cancellationToken = default) where T : IDataObject, new() {
@@ -477,6 +477,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
             while (reader.Read()) {
                 var typename = reader.GetValue(typeNameOrdinal) as string;
+                if (string.IsNullOrEmpty(typename)) {
+                    continue;
+                }
                 if (!typeByName.TryGetValue(typename, out var type)) {
                     continue;
                 }

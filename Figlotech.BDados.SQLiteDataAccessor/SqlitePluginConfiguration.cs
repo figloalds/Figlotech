@@ -34,7 +34,9 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public String GetConnectionString() {
-            return $"Data Source={DataSource};Pooling=True;Max Pool Size={PoolSize};";
+            // Microsoft.Data.Sqlite does not support the 'Max Pool Size' keyword; pooling is
+            // controlled by the 'Pooling' keyword alone and the ADO.NET pool has no size cap here.
+            return $"Data Source={DataSource};Pooling=True;";
         }
 
     }
