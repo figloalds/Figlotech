@@ -826,5 +826,136 @@ namespace Figlotech.BDados.Tests {
             Assert.Single(query.GetParameters());
             Assert.Equal(escapedValue, query.GetParameters().Single().Value);
         }
+
+        // ==== Regression: query-independent evaluable operand nodes (Conditional, Invocation)
+        // used to fall through every parser branch and emit an empty fragment, producing
+        // malformed SQL such as `( tba.Name = )` with the value silently dropped. The parser
+        // must evaluate these query-independent nodes and bind them as a parameter instead.
+
+        private sealed class ConditionalHolder {
+            public string? Name { get; set; }
+            public int Number { get; set; }
+        }
+
+        [Fact]
+        public void NullConditionalValueArmBindsParameterInsteadOfEmittingEmptyFragment() {
+            ConditionalHolder holder = new ConditionalHolder { Name = "abc" };
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => x.ExactValue == (holder == null ? null : holder.Name));
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"=\s*@\w+", sql);
+            Assert.Single(query.GetParameters());
+            Assert.Equal("abc", query.GetParameters().Single().Value);
+        }
+
+        [Fact]
+        public void NullConditionalNullArmEmitsIsNullAndBindsNoParameter() {
+            ConditionalHolder? holder = null;
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => x.ExactValue == (holder == null ? null : holder.Name));
+            string sql = query.GetCommandText();
+
+            Assert.Contains("IS NULL", sql);
+            Assert.Empty(query.GetParameters());
+        }
+
+        [Fact]
+        public void TernaryOnNonStringMemberBindsEvaluatedParameter() {
+            ConditionalHolder? holder = null;
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<LongRoot>(x => x.Id == (holder == null ? 5 : holder.Number));
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"=\s*@\w+", sql);
+            Assert.Single(query.GetParameters());
+            Assert.Equal(5L, System.Convert.ToInt64(query.GetParameters().Single().Value));
+        }
+
+        [Fact]
+        public void ReversedNullConditionalBindsParameterInsteadOfEmittingEmptyFragment() {
+            ConditionalHolder holder = new ConditionalHolder { Name = "abc" };
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => (holder == null ? null : holder.Name) == x.ExactValue);
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"@\w+\s*=", sql);
+            Assert.Single(query.GetParameters());
+            Assert.Equal("abc", query.GetParameters().Single().Value);
+        }
+
+        [Fact]
+        public void CapturedDelegateInvocationBindsEvaluatedParameter() {
+            Func<int> del = () => 42;
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<LongRoot>(x => x.Id == del());
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"=\s*@\w+", sql);
+            Assert.Single(query.GetParameters());
+            Assert.Equal(42L, System.Convert.ToInt64(query.GetParameters().Single().Value));
+        }
+
+        [Fact]
+        public void QueryDependentConditionalRemainsRejected() {
+            var parser = new ConditionParser();
+
+            Assert.Throws<BDadosException>(() =>
+                parser.ParseExpression<GuidRoot>(x => x.AggregateName == (x.ScalarAggregateId == Guid.Empty ? "a" : "b")));
+        }
+
+        // ==== Regression: Qh.In / Qh.NotIn with an unqualified column name used as a
+        // predicate emitted a bare `Name IN (...)` fragment with no table alias, which does
+        // not resolve to the root column. Unqualified Qh column names must be qualified with
+        // the resolved root alias; already-qualified names keep their explicit alias.
+
+        private sealed class QhHolder {
+            public string? Name { get; set; }
+        }
+
+        [Fact]
+        public void QhInWithUnqualifiedColumnIsQualifiedWithRootAlias() {
+            var list = new List<object> { "a", "b" };
+            object holder = new QhHolder { Name = "a" };
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => Qh.In(holder, "ExactValue", list, s => s));
+            string sql = query.GetCommandText();
+            string rootAlias = sql.Split('.')[0].TrimStart('(', ' ');
+
+            Assert.Matches(@"\btba\.ExactValue\s+IN\s*\(", sql);
+            Assert.Equal(2, query.GetParameters().Count);
+        }
+
+        [Fact]
+        public void QhNotInWithUnqualifiedColumnIsQualifiedWithRootAlias() {
+            var list = new List<object> { "a", "b" };
+            object holder = new QhHolder { Name = "a" };
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => Qh.NotIn(holder, "ExactValue", list, s => s));
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"\btba\.ExactValue\s+NOT\s+IN\s*\(", sql);
+            Assert.Equal(2, query.GetParameters().Count);
+        }
+
+        [Fact]
+        public void QhInWithAlreadyQualifiedColumnKeepsExplicitAlias() {
+            var list = new List<object> { "a", "b" };
+            object holder = new QhHolder { Name = "a" };
+            var parser = new ConditionParser();
+
+            var query = parser.ParseExpression<QueryComparisonRoot>(x => Qh.In(holder, "tba.ExactValue", list, s => s));
+            string sql = query.GetCommandText();
+
+            Assert.Matches(@"\btba\.ExactValue\s+IN\s*\(", sql);
+            Assert.DoesNotContain("tba.tba", sql);
+        }
     }
 }

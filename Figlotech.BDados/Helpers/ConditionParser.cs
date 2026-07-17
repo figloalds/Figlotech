@@ -444,9 +444,31 @@ namespace Figlotech.BDados.Helpers {
                 return CanGetValue(unaryEx.Operand);
             }
 
+            // Binary expressions (e.g. the `holder == null` test inside a ternary) are
+            // query-independent when both operands are query-independent.
+            if (member is BinaryExpression binaryEx) {
+                return CanGetValue(binaryEx.Left) && CanGetValue(binaryEx.Right);
+            }
+
             // New expressions can be evaluated
             if (member is NewExpression newEx) {
                 foreach (var arg in newEx.Arguments) {
+                    if (!CanGetValue(arg)) return false;
+                }
+                return true;
+            }
+
+            // Conditional (ternary / null-conditional) and delegate-invocation expressions
+            // are query-independent evaluable nodes. Their operands must themselves be
+            // query-independent for the whole node to be safely evaluable to a parameter.
+            if (member is ConditionalExpression conditionalEx) {
+                return CanGetValue(conditionalEx.Test)
+                    && CanGetValue(conditionalEx.IfTrue)
+                    && CanGetValue(conditionalEx.IfFalse);
+            }
+            if (member is InvocationExpression invocationEx) {
+                if (!CanGetValue(invocationEx.Expression)) return false;
+                foreach (var arg in invocationEx.Arguments) {
                     if (!CanGetValue(arg)) return false;
                 }
                 return true;
@@ -1090,7 +1112,14 @@ namespace Figlotech.BDados.Helpers {
                                                 var gmdefTypeArgs = expr.Method.GetGenericArguments();
                                                 equivalent = equivalent.MakeGenericMethod(gmdefTypeArgs);
                                             }
-                                            return (QueryBuilder)equivalent.Invoke(null, expr.Arguments.Skip(1).Select(a => GetValue(a)).ToArray());
+                                            object[] qhArguments = expr.Arguments.Skip(1).Select(a => GetValue(a)).ToArray();
+                                            // An unqualified column name carries no table alias; qualify it with the
+                                            // resolved root alias so the fragment resolves to a real column. An
+                                            // already-qualified "alias.column" keeps its explicit alias unchanged.
+                                            if (qhArguments.Length > 0 && qhArguments[0] is string qhColumn && !qhColumn.Contains(".")) {
+                                                qhArguments[0] = GetRootAlias() + "." + qhColumn;
+                                            }
+                                            return (QueryBuilder)equivalent.Invoke(null, qhArguments);
                                         }
                                     }
 
@@ -1237,7 +1266,17 @@ namespace Figlotech.BDados.Helpers {
                 var marshalledValue = newex.Constructor.Invoke(newex.Arguments.Select(arg => GetValue(arg)).ToArray());
                 return Qb.Fmt($"@{GenerateParameterId}", marshalledValue);
             }
+            if ((foofun is ConditionalExpression || foofun is InvocationExpression) && CanGetValue(foofun)) {
+                // Query-independent evaluable node (ternary / null-conditional / captured
+                // delegate invocation): evaluate it once and bind the result as a parameter
+                // rather than emitting an empty fragment. Query-dependent conditionals
+                // (CanGetValue == false) fall through to the unsupported-node throw below.
+                return Qb.Fmt($"@{GenerateParameterId}", GetValue(foofun));
+            }
             if (fullConditions) {
+                if (strBuilder.IsEmpty) {
+                    throw new NotSupportedException($"Expression node type '{foofun.NodeType}' is not supported in condition expressions.");
+                }
                 return strBuilder;
             } else {
                 string rootPrefix = GetRootAlias() + ".";
