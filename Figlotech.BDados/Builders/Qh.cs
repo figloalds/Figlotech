@@ -13,13 +13,11 @@ namespace Figlotech.BDados.Builders {
             if (o == null) {
                 return false;
             }
-            return o.Any(item => fn(item) == ReflectionTool.GetValue(input, column));
+            var inputValue = ReflectionTool.GetValue(input, column);
+            return o.Any(item => Object.Equals(fn(item), inputValue));
         }
         public static bool NotIn<T>(object input, string column, List<T> o, Func<T, object> fn) {
-            if (o == null) {
-                return true;
-            }
-            return o.Any(item => fn(item) == ReflectionTool.GetValue(input, column));
+            return !In(input, column, o, fn);
         }
     }
 }

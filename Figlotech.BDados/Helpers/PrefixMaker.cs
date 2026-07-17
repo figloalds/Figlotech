@@ -8,8 +8,15 @@ namespace Figlotech.BDados.Helpers {
         readonly Dictionary<string, string> dict = new Dictionary<string, string>();
 
         readonly Dictionary<string, (string parent, string child, string key)> revDict = new Dictionary<string, (string parent, string child, string key)>();
+        readonly object sync = new object();
 
         public string GetNewAliasFor(string parent, string child, string pkey) {
+            lock (sync) {
+                return GetNewAliasForCore(parent, child, pkey);
+            }
+        }
+
+        private string GetNewAliasForCore(string parent, string child, string pkey) {
             var k = $"{parent}_{child}_{pkey}".ToLower();
             string retv = null;
             if (dict.ContainsKey(k)) {
@@ -24,17 +31,17 @@ namespace Figlotech.BDados.Helpers {
             return retv;
         }
         public string GetAliasFor(string parent, string child, string pkey) {
-            if (revDict.ContainsKey(parent)) {
-                var rdparent = revDict[parent];
-                if (revDict.ContainsKey(rdparent.parent)) {
-                    var rdparent2 = revDict[rdparent.parent];
-                    if (rdparent.parent != "root" && rdparent2.child == child && pkey == rdparent.key) {
-                        return rdparent.parent;
+            lock (sync) {
+                if (revDict.ContainsKey(parent)) {
+                    var rdparent = revDict[parent];
+                    if (revDict.ContainsKey(rdparent.parent)) {
+                        var rdparent2 = revDict[rdparent.parent];
+                        if (rdparent.parent != "root" && rdparent2.child == child && pkey == rdparent.key) {
+                            return rdparent.parent;
+                        }
                     }
                 }
-            }
-            lock (dict) {
-                return GetNewAliasFor(parent, child, pkey);
+                return GetNewAliasForCore(parent, child, pkey);
             }
         }
     }

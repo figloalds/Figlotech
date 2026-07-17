@@ -6,10 +6,13 @@ using Figlotech.Core;
 using Figlotech.Core.Helpers;
 using Figlotech.Data;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Figlotech.BDados.Helpers {
     public sealed class ConditionParser {
@@ -19,9 +22,11 @@ namespace Figlotech.BDados.Helpers {
         private readonly DefinitiveAliasResolver _configuredResolver;
         private readonly PrefixMaker _prefixMaker;
         private DefinitiveAliasResolver _resolver;
+        private readonly object _parseSync = new object();
 
-        // Static caches for performance optimization
-        private static readonly ConcurrentDictionary<Expression, Func<object>> _compiledExpressionCache = new ConcurrentDictionary<Expression, Func<object>>();
+        // Static caches for performance optimization. The compiled expression cache uses weak
+        // keys so that expression trees are not kept alive indefinitely by the parser.
+        private static readonly ConditionalWeakTable<Expression, Func<object>> _compiledExpressionCache = new ConditionalWeakTable<Expression, Func<object>>();
         private static readonly ConcurrentDictionary<(MemberInfo member, Type attributeType), object> _attributeCache = new ConcurrentDictionary<(MemberInfo member, Type attributeType), object>();
         private static readonly ConcurrentDictionary<Type, MemberInfo[]> _attributedMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
         private static readonly ConcurrentDictionary<Type, MemberInfo[]> _allMembersCache = new ConcurrentDictionary<Type, MemberInfo[]>();
@@ -359,107 +364,53 @@ namespace Figlotech.BDados.Helpers {
                 : new RootConditionProjection(Expression.Constant(true), false);
         }
 
-        //private String GetPrefixOfAgField(Expression expression, AggregateFieldAttribute info) {
-        //    if (expression == null)
-        //        return "";
-        //    var s = expression.ToString().Split('.');
-        //    String rootType = "";
-        //    Expression subexp = expression;
-        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
-        //        if (subexp is MemberExpression)
-        //            subexp = (subexp as MemberExpression).Expression;
-        //    }
-        //    rootType = subexp.Type.Name;
-        //    int i = -1;
-        //    var thisAlias = "root";
-        //    s[0] = rootType;
-        //    while (++i < s.Length - 1) {
-        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-        //    }
-        //    thisAlias = prefixer.GetAliasFor(thisAlias, info.ObjectKey);
-
-        //    return thisAlias;
-        //}
-
-        //private String GetPrefixOfAgObj(Expression expression, AggregateObjectAttribute info) {
-        //    if (expression == null)
-        //        return "";
-        //    var s = expression.ToString().Split('.');
-        //    String rootType = "";
-        //    Expression subexp = expression;
-        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
-        //        if (subexp is MemberExpression)
-        //            subexp = (subexp as MemberExpression).Expression;
-        //    }
-        //    rootType = subexp.Type.Name;
-        //    int i = -1;
-        //    var thisAlias = "root";
-        //    s[0] = rootType;
-        //    while (++i < s.Length - 1) {
-        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-        //    }
-        //    thisAlias = prefixer.GetAliasFor(thisAlias, s[s.Length - 1]);
-
-        //    return thisAlias;
-        //}
-
-        //private String GetPrefixOf(Expression expression) {
-        //    if (expression == null)
-        //        return "";
-        //    var s = expression.ToString().Split('.');
-        //    String rootType = "";
-        //    Expression subexp = expression;
-        //    while (subexp.NodeType == ExpressionType.MemberAccess) {
-        //        if (subexp is MemberExpression) {
-        //            subexp = (subexp as MemberExpression).Expression;
-        //        }
-        //    }
-        //    if (subexp is UnaryExpression un && subexp.NodeType == ExpressionType.Convert) {
-        //        subexp = un.Operand;
-        //    }
-        //    rootType = subexp.Type.Name;
-        //    int i = -1;
-        //    var thisAlias = "root";
-        //    s[0] = rootType;
-        //    while (++i < s.Length) {
-        //        thisAlias = prefixer.GetAliasFor(thisAlias, s[i]);
-        //    }
-
-        //    return thisAlias;
-        //}
-
-
         public QueryBuilder ParseExpression<T>(Conditions<T> c) {
-            try {
-                SelectResolver(typeof(T), c.expression);
-                var retv = ParseExpression(c.expression, typeof(T));
-                return retv;
-            } catch (Exception x) {
-                throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}", x);
+            lock (_parseSync) {
+                try {
+                    ResetParameterReservation(null);
+                    if (c == null) {
+                        return new QbFmt("TRUE");
+                    }
+                    SelectResolver(typeof(T), c.expression);
+                    var retv = ParseExpression(c.expression, typeof(T));
+                    return retv;
+                } catch (Exception x) {
+                    throw new BDadosException($"Expression parsing failed for Conditions<T> {c?.expression?.ToString()}; the method/operator must be supported.", x);
+                }
             }
         }
 
         public QueryBuilder ParseExpression<T>(Expression<Func<T, bool>> foofun, bool fullConditions = true, QueryBuilder strBuilder = null) {
-            try {
-                if (foofun == null) {
-                    return new QbFmt("TRUE");
-                }
-                SelectResolver(typeof(T), foofun.Body);
-                if (!fullConditions) {
-                    RootConditionProjection projection = ProjectRootCondition(foofun.Body);
-                    if (IsTrue(projection.Expression)) {
-                        return new QbFmt("TRUE");
+            lock (_parseSync) {
+                try {
+                    ResetParameterReservation(strBuilder);
+                    if (foofun == null) {
+                        return strBuilder ?? new QbFmt("TRUE");
                     }
-                    QueryBuilder projected = ParseExpression(projection.Expression, typeof(T), null, strBuilder, true, forcedContext: null);
-                    string rootPrefix = GetRootAlias() + ".";
-                    return (QueryBuilder)new QueryBuilder().Append(
-                        RemoveExactQualifiedPrefix(projected.GetCommandText(), rootPrefix),
-                        projected.GetParameters().Select(parameter => parameter.Value).ToArray());
+                    SelectResolver(typeof(T), foofun.Body);
+                    if (!fullConditions) {
+                        RootConditionProjection projection = ProjectRootCondition(foofun.Body);
+                        if (IsTrue(projection.Expression)) {
+                            return strBuilder ?? new QbFmt("TRUE");
+                        }
+                        QueryBuilder projected = ParseExpression(projection.Expression, typeof(T), null, null, true, forcedContext: null);
+                        string rootPrefix = GetRootAlias() + ".";
+                        QueryBuilder result = (QueryBuilder)new QueryBuilder().Append(
+                            RemoveExactQualifiedPrefix(projected.GetCommandText(), rootPrefix),
+                            projected.GetParameters().Select(parameter => parameter.Value).ToArray());
+                        if (strBuilder != null) {
+                            return (QueryBuilder)strBuilder.Append(result);
+                        }
+                        return result;
+                    }
+                    QueryBuilder parsed = ParseExpression(foofun.Body, typeof(T), null, null, fullConditions, forcedContext: null);
+                    if (strBuilder != null) {
+                        return (QueryBuilder)strBuilder.Append(parsed);
+                    }
+                    return parsed;
+                } catch (Exception x) {
+                    throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
                 }
-                var retv = ParseExpression(foofun.Body, typeof(T), null, strBuilder, fullConditions, forcedContext: null);
-                return retv;
-            } catch (Exception x) {
-                throw new BDadosException($"Expression parsing failed for {foofun?.ToString()}", x);
             }
         }
 
@@ -509,19 +460,7 @@ namespace Figlotech.BDados.Helpers {
 
             // Try to get from cache first
             if (_compiledExpressionCache.TryGetValue(member, out var cachedGetter)) {
-                try {
-                    return cachedGetter();
-                } catch (NullReferenceException) {
-                    Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for cached member {member?.ToString()}");
-                    return null;
-                } catch (InvalidOperationException ioex) {
-                    if (ioex.Message == "Nullable object must have a value.") {
-                        return null;
-                    }
-                    return null;
-                } catch {
-                    return null;
-                }
+                return cachedGetter();
             }
 
             try {
@@ -529,20 +468,417 @@ namespace Figlotech.BDados.Helpers {
                 var getterLambda = Expression.Lambda<Func<object>>(objectMember);
                 var getter = getterLambda.Compile();
 
-                // Cache the compiled delegate
-                _compiledExpressionCache.TryAdd(member, getter);
+                // Cache the compiled delegate using a weak-key table so expression keys are not
+                // retained after the caller stops referencing them.
+                try {
+                    _compiledExpressionCache.Add(member, getter);
+                } catch (ArgumentException) {
+                    // Another thread already cached this expression; prefer the cached getter.
+                    if (_compiledExpressionCache.TryGetValue(member, out cachedGetter)) {
+                        getter = cachedGetter;
+                    }
+                }
 
                 return getter();
-            } catch (NullReferenceException) {
-                Fi.Tech.WriteLine("ConditionParser", $"NullReferenceException at Parser for member {member?.ToString()}");
-                return null;
-            } catch {
-                return null;
+            } catch (Exception ex) {
+                throw new BDadosException($"Expression evaluation failed for {member}", ex);
             }
         }
 
-        int idGeneration = -1;
-        string GenerateParameterId => $"_p{++idGeneration}";
+        private bool TryGetQueryIndependentValue(Expression expression, out object value) {
+            value = null;
+            if (IsCapturableMemberExpression(expression) && TryEvaluateNullIndependent(expression, out value)) {
+                return true;
+            }
+            if (!CanGetValue(expression)) {
+                return false;
+            }
+
+            value = GetValue(expression);
+            return true;
+        }
+
+        private bool IsCapturableMemberExpression(Expression expression) {
+            if (expression is MemberExpression member) {
+                if (member.Expression == null) {
+                    return member.Member is PropertyInfo property ? property.GetGetMethod()?.IsStatic == true
+                        : member.Member is FieldInfo field && field.IsStatic;
+                }
+                return IsCapturableMemberExpression(member.Expression);
+            }
+            if (expression is ConstantExpression) {
+                return true;
+            }
+            if (expression is MethodCallExpression method) {
+                if (method.Object != null && !IsCapturableMemberExpression(method.Object)) {
+                    return false;
+                }
+                foreach (var arg in method.Arguments) {
+                    if (!IsCapturableMemberExpression(arg)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (expression is NewExpression newEx) {
+                foreach (var arg in newEx.Arguments) {
+                    if (!IsCapturableMemberExpression(arg)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (expression is UnaryExpression unary) {
+                return IsCapturableMemberExpression(unary.Operand);
+            }
+            return false;
+        }
+
+        private bool TryEvaluateNullIndependent(Expression expression, out object value) {
+            value = null;
+            if (expression is ConstantExpression constant) {
+                value = constant.Value;
+                return true;
+            }
+            if (expression is MemberExpression member) {
+                if (member.Expression == null) {
+                    return TryEvaluateNullIndependent(member.Member as PropertyInfo, out value);
+                }
+                if (TryEvaluateNullIndependent(member.Expression, out object parent)) {
+                    if (parent == null) {
+                        return true;
+                    }
+                    if (member.Member is PropertyInfo property) {
+                        try {
+                            value = property.GetValue(parent);
+                            return true;
+                        } catch (Exception ex) {
+                            throw new BDadosException($"Expression evaluation failed for {expression}", ex);
+                        }
+                    }
+                    if (member.Member is FieldInfo field) {
+                        value = field.GetValue(parent);
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (expression is UnaryExpression unary && (unary.NodeType == ExpressionType.Convert || unary.NodeType == ExpressionType.ConvertChecked)) {
+                return TryEvaluateNullIndependent(unary.Operand, out value);
+            }
+            return false;
+        }
+
+        private static bool TryEvaluateNullIndependent(MemberInfo member, out object value) {
+            value = null;
+            if (member is PropertyInfo property) {
+                if (property.GetGetMethod()?.IsStatic != true) {
+                    return false;
+                }
+                try {
+                    value = property.GetValue(null);
+                    return true;
+                } catch (Exception ex) {
+                    throw new BDadosException($"Expression evaluation failed for static member {member}", ex);
+                }
+            }
+            if (member is FieldInfo field) {
+                if (!field.IsStatic) {
+                    return false;
+                }
+                value = field.GetValue(null);
+                return true;
+            }
+            return false;
+        }
+
+        #region Collection Membership (Contains -> IN)
+
+        private static readonly MethodInfo EnumerableContains2Definition = GetEnumerableContains2Definition();
+
+        private static MethodInfo GetEnumerableContains2Definition() {
+            return typeof(Enumerable).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == "Contains" && m.GetParameters().Length == 2)
+                .Single();
+        }
+
+        private bool TryBuildMembershipCondition(MethodCallExpression expr, Type typeOfT, string ForceAlias, bool fullConditions, ForcedCollectionContext forcedContext, bool negated, out QueryBuilder builder) {
+            builder = null;
+            if (!TryParseMembershipInvocation(expr, out Expression sourceExpression, out Expression testedExpression)) {
+                return false;
+            }
+
+            if (!TryEvaluateLocalCollectionSource(sourceExpression, out IEnumerable sourceValues)) {
+                return false;
+            }
+
+            testedExpression = StripNullableValue(testedExpression);
+            if (GetMemberFromExpression(testedExpression) == null) {
+                throw new NotSupportedException($"Contains membership requires a mapped member expression as the tested value; received '{testedExpression}' instead.");
+            }
+
+            if (sourceValues == null) {
+                builder = BuildEmptyMembershipCondition(negated);
+                return true;
+            }
+
+            var nonNullValues = new List<object>();
+            int nullCount = 0;
+            foreach (object value in sourceValues) {
+                if (value == null) {
+                    nullCount++;
+                } else {
+                    nonNullValues.Add(value);
+                }
+            }
+
+            if (nonNullValues.Count == 0 && nullCount == 0) {
+                builder = BuildEmptyMembershipCondition(negated);
+                return true;
+            }
+
+            MemberInfo member = GetMemberFromExpression(testedExpression);
+            bool memberIsNullable = IsNullableType(GetMemberType(member));
+            builder = BuildMembershipConditionSql(testedExpression, nonNullValues, nullCount, memberIsNullable, negated, ForceAlias, typeOfT, fullConditions, forcedContext);
+            return true;
+        }
+
+        private static bool TryParseMembershipInvocation(MethodCallExpression expr, out Expression sourceExpression, out Expression testedExpression) {
+            sourceExpression = null;
+            testedExpression = null;
+
+            // Static: System.Linq.Enumerable.Contains(source, value)
+            if (expr.Method.IsStatic && expr.Method.DeclaringType == typeof(Enumerable) && expr.Method.Name == "Contains") {
+                if (expr.Method.GetParameters().Length != 2 || expr.Method.GetGenericMethodDefinition() != EnumerableContains2Definition) {
+                    throw new NotSupportedException($"Enumerable.Contains overload with signature ({String.Join(", ", expr.Method.GetParameters().Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only Enumerable.Contains(source, value) is supported.");
+                }
+                sourceExpression = expr.Arguments[0];
+                testedExpression = expr.Arguments[1];
+                return true;
+            }
+
+            // Instance: standard collection Contains(item)
+            if (!expr.Method.IsStatic && expr.Method.Name == "Contains" && expr.Method.GetParameters().Length == 1 && expr.Method.ReturnType == typeof(bool)) {
+                Type declaringType = expr.Method.DeclaringType;
+                if (declaringType == typeof(string)) {
+                    return false;
+                }
+                if (declaringType != null && declaringType.IsGenericType) {
+                    Type genericDef = declaringType.GetGenericTypeDefinition();
+                    if (genericDef == typeof(ICollection<>) || genericDef == typeof(IList<>) || genericDef == typeof(ISet<>) || genericDef == typeof(List<>) || genericDef == typeof(HashSet<>)) {
+                        sourceExpression = expr.Object;
+                        testedExpression = expr.Arguments[0];
+                        return true;
+                    }
+                }
+                throw new NotSupportedException($"Method call '{expr.Method.Name}' on type '{declaringType?.Name}' is not a supported collection Contains in condition expressions; only standard collection Contains methods are supported.");
+            }
+
+            return false;
+        }
+
+        private static Expression StripNullableValue(Expression expression) {
+            expression = StripExpression(expression);
+            if (expression is MemberExpression member && member.Member.Name == "Value" && member.Member.DeclaringType != null && member.Member.DeclaringType.IsGenericType && member.Member.DeclaringType.GetGenericTypeDefinition() == typeof(Nullable<>)) {
+                return member.Expression;
+            }
+            return expression;
+        }
+
+        private static MemberInfo GetMemberFromExpression(Expression expression) {
+            expression = StripNullableValue(expression);
+            if (expression is MemberExpression member) {
+                return member.Member;
+            }
+            return null;
+        }
+
+        private static Type GetMemberType(MemberInfo member) {
+            if (member is PropertyInfo property) return property.PropertyType;
+            if (member is FieldInfo field) return field.FieldType;
+            return null;
+        }
+
+        private static bool IsNullableType(Type type) {
+            if (type == null) return true;
+            if (!type.IsValueType) return true;
+            return Nullable.GetUnderlyingType(type) != null;
+        }
+
+        private static bool ContainsFreeParameter(Expression expression) {
+            var visitor = new FreeParameterVisitor();
+            visitor.Visit(expression);
+            return visitor.HasFreeParameter;
+        }
+
+        private sealed class FreeParameterVisitor : ExpressionVisitor {
+            private readonly HashSet<ParameterExpression> _scopedParameters = new HashSet<ParameterExpression>();
+            public bool HasFreeParameter { get; private set; }
+
+            protected override Expression VisitLambda<T>(Expression<T> node) {
+                foreach (var p in node.Parameters) {
+                    _scopedParameters.Add(p);
+                }
+                var result = base.VisitLambda(node);
+                foreach (var p in node.Parameters) {
+                    _scopedParameters.Remove(p);
+                }
+                return result;
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node) {
+                if (!_scopedParameters.Contains(node)) {
+                    HasFreeParameter = true;
+                }
+                return base.VisitParameter(node);
+            }
+        }
+
+        private static bool TryEvaluateLocalCollectionSource(Expression sourceExpression, out IEnumerable sourceValues) {
+            sourceValues = null;
+            if (sourceExpression == null) {
+                throw new NotSupportedException("Collection source expression is missing for Contains membership.");
+            }
+
+            if (ContainsFreeParameter(sourceExpression)) {
+                throw new NotSupportedException("Collection source expression contains a free parameter reference; only local collections and projections are supported in Contains membership.");
+            }
+
+            if (sourceExpression.Type == typeof(string)) {
+                throw new NotSupportedException("string is not supported as a collection source for Contains membership; use string.Contains for substring matching.");
+            }
+
+            try {
+                var objectMember = Expression.Convert(sourceExpression, typeof(object));
+                var getterLambda = Expression.Lambda<Func<object>>(objectMember);
+                var getter = getterLambda.Compile();
+                object source = getter();
+                if (source == null) {
+                    return true;
+                }
+                if (source is IQueryable) {
+                    throw new NotSupportedException("IQueryable collection sources are not supported in Contains membership; materialize the source locally before parsing.");
+                }
+                if (source is string) {
+                    throw new NotSupportedException("string is not supported as a collection source for Contains membership; use string.Contains for substring matching.");
+                }
+                if (!(source is IEnumerable)) {
+                    throw new NotSupportedException($"Collection source expression evaluated to type '{source.GetType().Name}', which is not IEnumerable.");
+                }
+                sourceValues = (IEnumerable)source;
+                return true;
+            } catch (Exception ex) when (!(ex is NotSupportedException)) {
+                throw new BDadosException($"Collection source expression evaluation failed for Contains membership: {sourceExpression}", ex);
+            }
+        }
+
+        private QueryBuilder BuildEmptyMembershipCondition(bool negated) {
+            return negated ? new QbFmt("1=1") : new QbFmt("1=0");
+        }
+
+        private QueryBuilder BuildMembershipConditionSql(Expression testedExpression, List<object> nonNullValues, int nullCount, bool memberIsNullable, bool negated, string ForceAlias, Type typeOfT, bool fullConditions, ForcedCollectionContext forcedContext) {
+            if (nonNullValues.Count == 0 && !memberIsNullable) {
+                return BuildEmptyMembershipCondition(negated);
+            }
+
+            var columnBuilder = ParseExpression(testedExpression, typeOfT, ForceAlias, null, fullConditions, forcedContext);
+            string columnSql = columnBuilder.GetCommandText().Trim();
+
+            bool negateNullableNonNullMembership = negated && memberIsNullable && nullCount == 0 && nonNullValues.Count > 0;
+            QueryBuilder inner = new QueryBuilder();
+            if (nonNullValues.Count == 0) {
+                if (nullCount > 0 && memberIsNullable) {
+                    inner.Append(columnSql);
+                    inner.Append("IS NULL");
+                } else {
+                    inner.Append(negated ? "1=1" : "1=0");
+                }
+            } else {
+                if (memberIsNullable && (nullCount > 0 || negateNullableNonNullMembership)) {
+                    inner.Append("(");
+                }
+                inner.Append(columnSql);
+                inner.Append(negateNullableNonNullMembership ? "NOT IN(" : "IN(");
+                for (int i = 0; i < nonNullValues.Count; i++) {
+                    if (i > 0) inner.Append(",");
+                    inner.Append($"@{GenerateParameterId}", nonNullValues[i]);
+                }
+                inner.Append(")");
+                if (memberIsNullable && (nullCount > 0 || negateNullableNonNullMembership)) {
+                    inner.Append("OR");
+                    inner.Append(columnSql);
+                    inner.Append("IS NULL");
+                    inner.Append(")");
+                }
+            }
+
+            if (negated && !negateNullableNonNullMembership) {
+                return Qb.Fmt("NOT(") + inner + Qb.Fmt(")");
+            }
+            return inner;
+        }
+
+        #endregion
+
+        private int idGeneration = -1;
+        private readonly HashSet<string> _reservedParameterNames = new HashSet<string>(StringComparer.Ordinal);
+
+        private string GenerateParameterId {
+            get {
+                while (true) {
+                    idGeneration = idGeneration == Int32.MaxValue ? 0 : idGeneration + 1;
+                    string parameterName = $"_p{idGeneration}";
+                    if (_reservedParameterNames.Add(parameterName)) {
+                        return parameterName;
+                    }
+                }
+            }
+        }
+
+        private void ResetParameterReservation(QueryBuilder destination) {
+            idGeneration = -1;
+            _reservedParameterNames.Clear();
+            ReserveDestinationParameterIds(destination);
+        }
+
+        private void ReserveDestinationParameterIds(QueryBuilder destination) {
+            if (destination == null) {
+                return;
+            }
+
+            foreach (string parameterName in destination.GetParameters().Keys) {
+                _reservedParameterNames.Add(parameterName);
+            }
+        }
+
+        private static string EscapeLikeLiteral(string value) {
+            return value?.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_");
+        }
+
+        private static bool TryDecomposeAnyInvocation(MethodCallExpression anyExpression, out Expression collection, out LambdaExpression predicate) {
+            collection = null;
+            predicate = null;
+
+            if (anyExpression.Arguments.Count == 1) {
+                collection = anyExpression.Arguments[0];
+            } else if (anyExpression.Arguments.Count == 2) {
+                collection = anyExpression.Arguments[0];
+                predicate = StripExpression(anyExpression.Arguments[1]) as LambdaExpression;
+            } else {
+                return false;
+            }
+
+            if (collection is MethodCallExpression whereCall && whereCall.Method.DeclaringType == typeof(System.Linq.Enumerable) && whereCall.Method.Name == "Where") {
+                if (whereCall.Arguments.Count == 2) {
+                    predicate = StripExpression(whereCall.Arguments[1]) as LambdaExpression;
+                    collection = whereCall.Arguments[0];
+                } else {
+                    return false;
+                }
+            }
+
+            return collection != null;
+        }
 
         private QueryBuilder ParseExpression(Expression foofun, Type typeOfT, String ForceAlias = null, QueryBuilder strBuilder = null, bool fullConditions = true, ForcedCollectionContext forcedContext = null) {
             //if(strBuilder == null)
@@ -550,53 +886,63 @@ namespace Figlotech.BDados.Helpers {
 
             if (foofun is BinaryExpression bexpr) {
                 var expr = bexpr;
-                if (expr.NodeType == ExpressionType.Equal &&
-                    expr.Right is ConstantExpression rightConst && rightConst.Value == null) {
+                bool rightIsNull = TryGetQueryIndependentValue(expr.Right, out object rightValue) && rightValue == null;
+                bool leftIsNull = TryGetQueryIndependentValue(expr.Left, out object leftValue) && leftValue == null;
+
+                if ((expr.NodeType == ExpressionType.Equal || expr.NodeType == ExpressionType.NotEqual) &&
+                    (rightIsNull || leftIsNull)) {
+                    var operand = rightIsNull ? expr.Left : expr.Right;
                     strBuilder.Append("(");
-                    strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                    strBuilder.Append("IS NULL");
+                    strBuilder.Append(ParseExpression(operand, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                    strBuilder.Append(expr.NodeType == ExpressionType.Equal ? "IS NULL" : "IS NOT NULL");
                     strBuilder.Append(")");
-                } else
-                    if (expr.NodeType == ExpressionType.NotEqual &&
-                        expr.Right is ConstantExpression rightConst2 && rightConst2.Value == null) {
-                        strBuilder.Append("(");
-                        strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                        strBuilder.Append("IS NOT NULL");
-                        strBuilder.Append(")");
-                    } else
-                        if (expr.NodeType == ExpressionType.Equal &&
-                            CanGetValue(expr.Right) &&
-                            GetValue(expr.Right) is string rightValue &&
+                } else if (expr.NodeType == ExpressionType.Equal &&
+                            TryGetQueryIndependentValue(expr.Right, out object rightStringValue) &&
+                            rightStringValue is string rightString &&
                             (expr.Left is MemberExpression)
                         ) {
                             var member = (expr.Left as MemberExpression).Member;
                             var comparisonType = GetCachedAttribute<QueryComparisonAttribute>(member)?.Type;
 
                             strBuilder.Append("(");
-                            strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                            var appendFragment = comparisonType switch {
-                                DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%')",
-                                DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId})",
-                                DataStringComparisonType.StartingWith => $"LIKE CONCAT(@{GenerateParameterId}, '%')",
-                                DataStringComparisonType.ExactValue => $"=@{GenerateParameterId}",
-                                _ => $"=@{GenerateParameterId}"
-                            };
-                            strBuilder.Append(appendFragment, rightValue);
+                            if (comparisonType == DataStringComparisonType.IgnoreCase) {
+                                strBuilder.Append("LOWER(");
+                                strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                                strBuilder.Append($")=LOWER(@{GenerateParameterId})", rightString);
+                            } else {
+                                strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                                var appendFragment = comparisonType switch {
+                                    DataStringComparisonType.Containing => $"LIKE CONCAT('%', @{GenerateParameterId}, '%') ESCAPE '!'",
+                                    DataStringComparisonType.EndingWith => $"LIKE CONCAT('%', @{GenerateParameterId}) ESCAPE '!'",
+                                    DataStringComparisonType.StartingWith => $"LIKE CONCAT(@{GenerateParameterId}, '%') ESCAPE '!'",
+                                    DataStringComparisonType.ExactValue => $"=@{GenerateParameterId}",
+                                    _ => $"=@{GenerateParameterId}"
+                                };
+                                bool usesLikeComparison = comparisonType == DataStringComparisonType.Containing
+                                    || comparisonType == DataStringComparisonType.EndingWith
+                                    || comparisonType == DataStringComparisonType.StartingWith;
+                                strBuilder.Append(appendFragment, usesLikeComparison ? EscapeLikeLiteral(rightString) : rightString);
+                            }
                             strBuilder.Append(")");
                         } else {
+                            string op;
+                            switch (expr.NodeType) {
+                                case ExpressionType.AndAlso: op = "AND"; break;
+                                case ExpressionType.OrElse: op = "OR"; break;
+                                case ExpressionType.Equal: op = "="; break;
+                                case ExpressionType.NotEqual: op = "!="; break;
+                                case ExpressionType.Not: op = "!"; break;
+                                case ExpressionType.GreaterThan: op = ">"; break;
+                                case ExpressionType.GreaterThanOrEqual: op = ">="; break;
+                                case ExpressionType.LessThan: op = "<"; break;
+                                case ExpressionType.LessThanOrEqual: op = "<="; break;
+                                default:
+                                    throw new NotSupportedException($"Binary expression node type '{expr.NodeType}' is not supported in condition expressions.");
+                            }
+
                             strBuilder.Append("(");
                             strBuilder.Append(ParseExpression(expr.Left, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                            strBuilder.Append(
-                                expr.NodeType == ExpressionType.AndAlso ? "AND" :
-                                expr.NodeType == ExpressionType.OrElse ? "OR" :
-                                expr.NodeType == ExpressionType.Equal ? "=" :
-                                expr.NodeType == ExpressionType.NotEqual ? "!=" :
-                                expr.NodeType == ExpressionType.Not ? "!" :
-                                expr.NodeType == ExpressionType.GreaterThan ? ">" :
-                                expr.NodeType == ExpressionType.GreaterThanOrEqual ? ">=" :
-                                expr.NodeType == ExpressionType.LessThan ? "<" :
-                                expr.NodeType == ExpressionType.LessThanOrEqual ? "<=" :
-                                "");
+                            strBuilder.Append(op);
                             strBuilder.Append(ParseExpression(expr.Right, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                             strBuilder.Append(")");
                         }
@@ -664,9 +1010,14 @@ namespace Figlotech.BDados.Helpers {
                         if (foofun is UnaryExpression uexpr) {
                             var expr = uexpr;
                             if (expr.NodeType == ExpressionType.Not) {
-                                strBuilder.Append("!(");
-                                strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                strBuilder.Append(")");
+                                Expression operand = StripExpression(expr.Operand);
+                                if (operand is MethodCallExpression methodCall && TryBuildMembershipCondition(methodCall, typeOfT, ForceAlias, fullConditions, forcedContext, true, out QueryBuilder membershipBuilder)) {
+                                    strBuilder.Append(membershipBuilder);
+                                } else {
+                                    strBuilder.Append("NOT (");
+                                    strBuilder.Append(ParseExpression(expr.Operand, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                                    strBuilder.Append(")");
+                                }
                             }
                             if (expr.NodeType == ExpressionType.Convert) {
                                 //strBuilder.Append($"@{GenerateParameterId}", GetValue(expr));
@@ -681,6 +1032,14 @@ namespace Figlotech.BDados.Helpers {
 
                                     if (expr.Method.DeclaringType == typeof(StringExtensions)) {
                                         if (expr.Method.Name == nameof(StringExtensions.RegExReplace)) {
+                                            var regExReplaceParameters = expr.Method.GetParameters();
+                                            if (!expr.Method.IsStatic
+                                                || regExReplaceParameters.Length != 3
+                                                || regExReplaceParameters[0].ParameterType != typeof(string)
+                                                || regExReplaceParameters[1].ParameterType != typeof(string)
+                                                || regExReplaceParameters[2].ParameterType != typeof(string)) {
+                                                throw new NotSupportedException($"StringExtensions.RegExReplace overload with signature ({String.Join(", ", regExReplaceParameters.Select(parameter => parameter.ParameterType.Name))}) is not supported in condition expressions; only RegExReplace(string, string, string) is supported.");
+                                            }
                                             var retv = Qb.Fmt("REGEXP_REPLACE(")
                                                 + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt(",")
@@ -691,20 +1050,14 @@ namespace Figlotech.BDados.Helpers {
                                             return retv;
                                         }
                                     }
-                                    if (expr.Method.DeclaringType == typeof(String)) {
-                                        if (expr.Method.Name == nameof(String.Replace)) {
-                                            var retv = Qb.Fmt("REPLACE(")
-                                                + ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
-                                                + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
-                                                + Qb.Fmt(",")
-                                                + ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
-                                                + Qb.Fmt(")");
-                                            return retv;
-                                        }
-                                    }
                                     if (expr.Method.DeclaringType == typeof(Int32) || expr.Method.DeclaringType == typeof(Int64)) {
                                         if (expr.Method.Name == nameof(Int32.Parse)) {
+                                            var parseParameters = expr.Method.GetParameters();
+                                            if (!expr.Method.IsStatic
+                                                || parseParameters.Length != 1
+                                                || parseParameters[0].ParameterType != typeof(string)) {
+                                                throw new NotSupportedException($"{expr.Method.DeclaringType.Name}.Parse overload with signature ({String.Join(", ", parseParameters.Select(parameter => parameter.ParameterType.Name))}) is not supported in condition expressions; only Parse(string) is supported.");
+                                            }
                                             var retv = Qb.Fmt("CAST(")
                                                 + ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)
                                                 + Qb.Fmt("AS")
@@ -741,71 +1094,100 @@ namespace Figlotech.BDados.Helpers {
                                         }
                                     }
 
-                                    if (expr.Method.Name == "Any") {
-                                        if (expr.Arguments.Count > 0) {
-                                            if (expr.Arguments[0] is MemberExpression) {
-                                                var pathExpression = (MemberExpression)expr.Arguments[0];
-                                                AggregatePath path;
-                                                string alias;
-                                                if (TryGetLocalAggregatePath(pathExpression, forcedContext, out AggregatePath localPath)) {
-                                                    path = localPath;
-                                                    alias = _resolver.Resolve(path);
-                                                } else {
-                                                    path = GetAggregatePath(pathExpression);
-                                                    alias = _resolver.Resolve(path);
-                                                }
-                                                string identifier = _resolver.ResolveTable(path).Identifier.ColumnName;
-                                                strBuilder.Append($"{alias}.{identifier} IS NOT NULL");
+                                    bool methodHandled = false;
+                                    bool methodIsString = expr.Method.DeclaringType == typeof(String);
 
-                                                LambdaExpression predicate = expr.Arguments.Count > 1
-                                                    ? StripExpression(expr.Arguments[1]) as LambdaExpression
-                                                    : null;
-                                                if (predicate != null && predicate.Parameters.Count == 1) {
-                                                    ForcedCollectionContext collectionContext = GetCollectionContext(pathExpression, predicate, forcedContext);
-                                                    strBuilder.Append(" AND ");
-                                                    strBuilder.Append(ParseExpression(predicate.Body, typeOfT, collectionContext.Alias, strBuilder, fullConditions, collectionContext));
-                                                }
+                                    if (expr.Method.Name == "Any" && expr.Method.DeclaringType == typeof(System.Linq.Enumerable)) {
+                                        methodHandled = true;
+                                        if (TryDecomposeAnyInvocation(expr, out Expression collection, out LambdaExpression predicate)) {
+                                            AggregatePath path;
+                                            string alias;
+                                            if (TryGetLocalAggregatePath(collection, forcedContext, out AggregatePath localPath)) {
+                                                path = localPath;
+                                                alias = _resolver.Resolve(path);
                                             } else {
-                                                strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                                                path = GetAggregatePath(collection);
+                                                alias = _resolver.Resolve(path);
+                                            }
+                                            string identifier = _resolver.ResolveTable(path).Identifier.ColumnName;
+                                            strBuilder.Append($"{alias}.{identifier} IS NOT NULL");
+
+                                            if (predicate != null && predicate.Parameters.Count == 1) {
+                                                ForcedCollectionContext collectionContext = GetCollectionContext(collection, predicate, forcedContext);
+                                                strBuilder.Append(" AND ");
+                                                strBuilder.Append(ParseExpression(predicate.Body, typeOfT, collectionContext.Alias, strBuilder, fullConditions, collectionContext));
                                             }
                                         }
                                     }
-                                    if (expr.Method.Name == "Equals") {
-                                        var memberEx = expr.Object as MemberExpression;
-                                        var pre = GetMemberPrefix(memberEx, ForceAlias, forcedContext);
-                                        var column = memberEx.Member.Name;
-                                        strBuilder.Append($"{pre}.{column}=(");
+                                    if (expr.Method.Name == "Equals" && methodIsString) {
+                                        methodHandled = true;
+                                        if (expr.Object == null) {
+                                            throw new NotSupportedException("Static string.Equals is not supported in condition expressions; use the == operator or instance Equals(string) instead.");
+                                        }
+                                        var equalsParameters = expr.Method.GetParameters();
+                                        if (equalsParameters.Length != 1 || equalsParameters[0].ParameterType != typeof(string)) {
+                                            throw new NotSupportedException($"string.Equals overload with signature ({String.Join(", ", equalsParameters.Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only instance Equals(string) is supported.");
+                                        }
+                                        strBuilder.Append("(");
+                                        strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
+                                        strBuilder.Append(" = ");
                                         strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
                                         strBuilder.Append(")");
                                     }
-                                    if (expr.Method.Name == nameof(String.Contains)) {
+                                    if (expr.Method.Name == nameof(String.Contains) && methodIsString) {
+                                        methodHandled = true;
+                                        var containsParameters = expr.Method.GetParameters();
+                                        if (containsParameters.Length != 1 || containsParameters[0].ParameterType != typeof(string)) {
+                                            throw new NotSupportedException($"string.Contains overload with signature ({String.Join(", ", containsParameters.Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only Contains(string) is supported.");
+                                        }
                                         strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append(", '%')");
+                                        strBuilder.Append($" LIKE CONCAT('%', @{GenerateParameterId}, '%') ESCAPE '!'", EscapeLikeLiteral((string)GetValue(expr.Arguments[0])));
                                     }
-                                    if (expr.Method.Name == nameof(String.StartsWith)) {
+                                    if (expr.Method.Name == nameof(String.StartsWith) && methodIsString) {
+                                        methodHandled = true;
+                                        var startsWithParameters = expr.Method.GetParameters();
+                                        if (startsWithParameters.Length != 1 || startsWithParameters[0].ParameterType != typeof(string)) {
+                                            throw new NotSupportedException($"string.StartsWith overload with signature ({String.Join(", ", startsWithParameters.Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only StartsWith(string) is supported.");
+                                        }
                                         strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append(")");
+                                        strBuilder.Append($" LIKE CONCAT(@{GenerateParameterId}, '%') ESCAPE '!'", EscapeLikeLiteral((string)GetValue(expr.Arguments[0])));
                                     }
-                                    if (expr.Method.Name == nameof(String.EndsWith)) {
+                                    if (expr.Method.Name == nameof(String.EndsWith) && methodIsString) {
+                                        methodHandled = true;
+                                        var endsWithParameters = expr.Method.GetParameters();
+                                        if (endsWithParameters.Length != 1 || endsWithParameters[0].ParameterType != typeof(string)) {
+                                            throw new NotSupportedException($"string.EndsWith overload with signature ({String.Join(", ", endsWithParameters.Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only EndsWith(string) is supported.");
+                                        }
                                         strBuilder.Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append($" LIKE CONCAT('%', ");
-                                        strBuilder.Append(ParseExpression(expr.Arguments[0], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext));
-                                        strBuilder.Append(", '%')");
+                                        strBuilder.Append($" LIKE CONCAT('%', @{GenerateParameterId}) ESCAPE '!'", EscapeLikeLiteral((string)GetValue(expr.Arguments[0])));
                                     }
-                                    if (expr.Method.Name == nameof(String.ToUpper)) {
+                                    if (expr.Method.Name == nameof(String.ToUpper) && methodIsString) {
+                                        methodHandled = true;
+                                        if (expr.Arguments.Count != 0) {
+                                            throw new NotSupportedException($"string.ToUpper overload with {expr.Arguments.Count} arguments is not supported in condition expressions.");
+                                        }
                                         strBuilder.Append($"UPPER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
-                                    if (expr.Method.Name == nameof(String.ToLower)) {
+                                    if (expr.Method.Name == nameof(String.ToLower) && methodIsString) {
+                                        methodHandled = true;
+                                        if (expr.Arguments.Count != 0) {
+                                            throw new NotSupportedException($"string.ToLower overload with {expr.Arguments.Count} arguments is not supported in condition expressions.");
+                                        }
                                         strBuilder.Append($"LOWER(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
-                                    if (expr.Method.Name == nameof(String.Trim)) {
+                                    if (expr.Method.Name == nameof(String.Trim) && methodIsString) {
+                                        methodHandled = true;
+                                        if (expr.Arguments.Count != 0) {
+                                            throw new NotSupportedException($"string.Trim overload with {expr.Arguments.Count} arguments is not supported in condition expressions.");
+                                        }
                                         strBuilder.Append($"TRIM(").Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext)).Append(")");
                                     }
-                                    if (expr.Method.Name == nameof(String.Replace)) {
+                                    if (expr.Method.Name == nameof(String.Replace) && methodIsString) {
+                                        methodHandled = true;
+                                        var replaceParameters = expr.Method.GetParameters();
+                                        if (replaceParameters.Length != 2 || replaceParameters[0].ParameterType != typeof(string) || replaceParameters[1].ParameterType != typeof(string)) {
+                                            throw new NotSupportedException($"string.Replace overload with signature ({String.Join(", ", replaceParameters.Select(p => p.ParameterType.Name))}) is not supported in condition expressions; only Replace(string, string) is supported.");
+                                        }
                                         strBuilder
                                             .Append($"REPLACE(")
                                             .Append(ParseExpression(expr.Object, typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext))
@@ -815,21 +1197,40 @@ namespace Figlotech.BDados.Helpers {
                                             .Append(ParseExpression(expr.Arguments[1], typeOfT, ForceAlias, strBuilder, fullConditions, forcedContext))
                                             .Append(")");
                                     }
-                                    if (expr.Method.Name == "Where") {
+                                    if (expr.Method.Name == "Where" && expr.Method.DeclaringType == typeof(System.Linq.Enumerable)) {
+                                        methodHandled = true;
                                         if (expr.Arguments.Count > 1) {
                                             var predicate = expr.Arguments[1] as LambdaExpression;
                                             var collectionContext = GetCollectionContext(expr.Arguments[0], predicate, forcedContext);
                                             strBuilder.Append(ParseExpression(predicate.Body, typeOfT, collectionContext.Alias, strBuilder, fullConditions, collectionContext));
                                         }
                                     }
-                                    if (expr.Method.Name == "First") {
-                                        if (expr.Arguments.Count > 0) {
+                                    if (expr.Method.Name == "First" && expr.Method.DeclaringType == typeof(System.Linq.Enumerable)) {
+                                        methodHandled = true;
+                                        if (expr.Arguments.Count == 1 && expr.Object == null) {
+                                            // Enumerable.First(collection)
                                             if (TryGetLocalAggregatePath(expr.Arguments[0], forcedContext, out AggregatePath localPath)) {
                                                 strBuilder.Append(_resolver.Resolve(localPath));
                                             } else {
                                                 strBuilder.Append(GetPrefixOfExpression(expr.Arguments[0]));
                                             }
+                                        } else if (expr.Arguments.Count == 0 && expr.Object != null) {
+                                            // collection.First()
+                                            if (TryGetLocalAggregatePath(expr.Object, forcedContext, out AggregatePath localPath)) {
+                                                strBuilder.Append(_resolver.Resolve(localPath));
+                                            } else {
+                                                strBuilder.Append(GetPrefixOfExpression(expr.Object));
+                                            }
+                                        } else {
+                                            throw new NotSupportedException("First(predicate) is not supported in condition expressions; use Any(predicate) or Where(predicate).Any() instead.");
                                         }
+                                    }
+                                    if (!methodHandled && TryBuildMembershipCondition(expr, typeOfT, ForceAlias, fullConditions, forcedContext, false, out QueryBuilder membershipBuilder)) {
+                                        methodHandled = true;
+                                        strBuilder.Append(membershipBuilder);
+                                    }
+                                    if (!methodHandled) {
+                                        throw new NotSupportedException($"Method call '{expr.Method.Name}' on type '{expr.Method.DeclaringType?.Name}' is not supported in condition expressions.");
                                     }
                                 }
             if (foofun is NewExpression newex) {

@@ -55,6 +55,37 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void NegatedAnyUsesStandardNotAroundTheCompleteFrozenExistenceCondition() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            var query = new ConditionParser(plan).ParseExpression<GuidRoot>(x => !x.AggregateList.Any(), fullConditions: true);
+            string sql = query.GetCommandText();
+            string listAlias = plan.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.AggregateList) })];
+
+            Assert.Contains("NOT (", sql, StringComparison.Ordinal);
+            Assert.Matches(@"NOT \(\s*" + Regex.Escape(listAlias + ".Id IS NOT NULL") + @"\s*\)", sql);
+            Assert.DoesNotContain("!(", sql, StringComparison.Ordinal);
+            Assert.Empty(query.GetParameters());
+            AssertOnlyPlanAliases(plan, sql);
+        }
+
+        [Fact]
+        public void NegatedAnyPredicateUsesStandardNotAroundTheCompleteFrozenExistenceAndPredicateCondition() {
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
+            const string expected = "name";
+            var query = new ConditionParser(plan).ParseExpression<GuidRoot>(x => !x.AggregateList.Any(item => item.Name == expected), fullConditions: true);
+            string sql = query.GetCommandText();
+            string listAlias = plan.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.AggregateList) })];
+            KeyValuePair<string, object> parameter = Assert.Single(query.GetParameters());
+
+            Assert.Contains("NOT (", sql, StringComparison.Ordinal);
+            Assert.Matches(@"NOT \(\s*" + Regex.Escape(listAlias + ".Id IS NOT NULL") + @"\s+AND\s+\(\s*" + Regex.Escape(listAlias + ".Name =@" + parameter.Key) + @"\s*\)\s*\)", sql);
+            Assert.DoesNotContain("!(", sql, StringComparison.Ordinal);
+            Assert.Equal(expected, parameter.Value);
+            Assert.Single(Regex.Matches(sql, "@" + Regex.Escape(parameter.Key) + @"(?![A-Za-z0-9_])").Cast<Match>());
+            AssertOnlyPlanAliases(plan, sql);
+        }
+
+        [Fact]
         public void NestedAggregateAndWhereUseTheirFrozenSemanticAliases() {
             DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(SharedNestedObjectRoot), AggregateJoinShape.FullGraph);
             string nested = new ConditionParser(plan).ParseExpression<SharedNestedObjectRoot>(x => x.First!.NestedName == "name").GetCommandText();
@@ -288,7 +319,10 @@ namespace Figlotech.BDados.Tests {
             Assert.Contains("ObjectAggregateId", sql, StringComparison.Ordinal);
             Assert.DoesNotContain("tba.", sql, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotMatch(@"\(\s*(AND|OR)\b", sql);
+            Assert.Equal(2, root.GetParameters().Count);
+            Assert.Equal(2, root.GetParameters().Keys.Distinct().Count());
             Assert.Equal(new[] { allowedId, objectId }.OrderBy(value => value), root.GetParameters().Values.Cast<Guid>().OrderBy(value => value));
+            Assert.All(root.GetParameters().Keys, key => Assert.Contains("@" + key, sql));
         }
 
         [Fact]

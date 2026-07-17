@@ -18,6 +18,33 @@ namespace Figlotech.BDados.Tests {
     public sealed class LongRoot : PlanDataObject<long> {
     }
 
+    public static class ThrowingSource {
+        public static string ThrowingValue {
+            get { throw new NullReferenceException("boom"); }
+        }
+
+        public static string ThrowingMethod() {
+            throw new NullReferenceException("method boom");
+        }
+    }
+
+    public class CustomStringLike : IEquatable<CustomStringLike?> {
+        public string Value { get; set; }
+        public string? Text { get; set; }
+        public CustomStringLike? Custom { get; set; }
+        public CustomStringLike(string value) { Value = value; Text = value; }
+        public bool Contains(string value) => Value.Contains(value);
+        public bool StartsWith(string value) => Value.StartsWith(value);
+        public bool EndsWith(string value) => Value.EndsWith(value);
+        public string ToUpper() => Value.ToUpper();
+        public string ToLower() => Value.ToLower();
+        public string Trim() => Value.Trim();
+        public string Replace(string oldValue, string newValue) => Value.Replace(oldValue, newValue);
+        public bool Equals(CustomStringLike? other) => Value.Equals(other?.Value);
+        public override bool Equals(object? obj) => obj is CustomStringLike c && Equals(c);
+        public override int GetHashCode() => Value.GetHashCode();
+    }
+
     public sealed class GuidRoot : PlanDataObject<Guid> {
         [Field]
         public Guid ScalarAggregateId { get; set; }
@@ -39,6 +66,33 @@ namespace Figlotech.BDados.Tests {
 
         [AggregateList(typeof(ListAggregate), nameof(ListAggregate.ParentId))]
         public List<ListAggregate> AggregateList { get; set; } = new List<ListAggregate>();
+    }
+
+    public sealed class QueryComparisonRoot : PlanDataObject<Guid> {
+        [Field]
+        [QueryComparison(DataStringComparisonType.ExactValue)]
+        public string? ExactValue { get; set; }
+
+        [Field]
+        [QueryComparison(DataStringComparisonType.Containing)]
+        public string? Containing { get; set; }
+
+        [Field]
+        [QueryComparison(DataStringComparisonType.StartingWith)]
+        public string? StartingWith { get; set; }
+
+        [Field]
+        [QueryComparison(DataStringComparisonType.EndingWith)]
+        public string? EndingWith { get; set; }
+
+        [Field]
+        [QueryComparison(DataStringComparisonType.IgnoreCase)]
+        public string? IgnoreCase { get; set; }
+    }
+
+    public sealed class NullableGuidRoot : PlanDataObject<Guid> {
+        [Field]
+        public Guid? NullableAggregateId { get; set; }
     }
 
     public sealed class ScalarAggregate : PlanDataObject<Guid> {
