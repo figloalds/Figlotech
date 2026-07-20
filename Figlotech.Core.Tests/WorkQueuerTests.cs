@@ -845,5 +845,328 @@ namespace Figlotech.Core.Tests {
             Assert.Equal(20, queuer.WorkDone);
             queuer.Dispose();
         }
+
+        [Fact]
+        public async Task EnqueueRacingStop_CompletesOrFaultsWithoutHanging() {
+            for (int i = 0; i < 25; i++) {
+                var queuer = new WorkQueuer($"StopRace_{i}", 1);
+                var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                queuer.EnqueueTask(async () => {
+                    started.TrySetResult(true);
+                    await release.Task;
+                });
+                await started.Task;
+
+                Task stopTask = queuer.Stop(true);
+                WorkJobExecutionRequest request = queuer.EnqueueTask(() => new ValueTask());
+                release.TrySetResult(true);
+
+                Task all = Task.WhenAll(stopTask, ObserveTerminal(request));
+                Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(2))));
+                await all;
+                Assert.NotEqual(TaskStatus.WaitingForActivation, request.TaskCompletionSource.Task.Status);
+                Assert.True(request.TaskCompletionSource.Task.IsCompleted, "A job admitted while Stop races must reach a terminal state.");
+                queuer.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task StartRacingStop_Linearizes() {
+            var lifecycleLockField = typeof(WorkQueuer).GetField("_lifecycleLock", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+            for (int i = 0; i < 25; i++) {
+                var queuer = new WorkQueuer($"StartStopRace_{i}", 1);
+                await queuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+
+                var lifecycleLock = (SemaphoreSlim)lifecycleLockField.GetValue(queuer)!;
+                await lifecycleLock.WaitAsync();
+                try {
+                    var startEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    Task startTask = Task.Run(() => {
+                        startEntered.TrySetResult(true);
+                        queuer.Start();
+                    });
+                    await startEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+                    Assert.NotSame(startTask, await Task.WhenAny(startTask, Task.Delay(100)));
+                    Assert.False(queuer.IsRunning,
+                        "Start must not publish a new run while Stop and enqueue admission are serialized by the lifecycle lock.");
+
+                    lifecycleLock.Release();
+                    lifecycleLock = null;
+
+                    await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    await queuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+                    await queuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+
+                    queuer.Start();
+                    var ran = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    queuer.EnqueueTask(() => {
+                        ran.TrySetResult(true);
+                        return new ValueTask();
+                    });
+                    await ran.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+                    var raceQueuer = new WorkQueuer($"StartStopHeldRace_{i}", 1, init_started: false);
+                    try {
+                        WorkJobExecutionRequest[] heldRequests = Enumerable.Range(0, 2).Select(_ => raceQueuer.EnqueueTask(() => new ValueTask())).ToArray();
+                        var raceGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        Task racingStart = Task.Run(async () => {
+                            await raceGate.Task;
+                            raceQueuer.Start();
+                        });
+                        Task racingStop = Task.Run(async () => {
+                            await raceGate.Task;
+                            await raceQueuer.Stop(true);
+                        });
+                        raceGate.TrySetResult(true);
+
+                        Task terminalRequests = Task.WhenAll(heldRequests.Select(ObserveTerminal));
+                        Task race = Task.WhenAll(racingStart, racingStop, terminalRequests);
+                        Assert.Same(race, await Task.WhenAny(race, Task.Delay(TimeSpan.FromSeconds(2))));
+                        await race;
+                        Assert.All(heldRequests, request => Assert.True(request.TaskCompletionSource.Task.IsCompleted,
+                            "A held request racing Start and Stop must reach a terminal state."));
+                        Assert.Equal(0, raceQueuer.InQueue);
+                        Assert.Equal(0, GetChannelReaderCount(raceQueuer));
+                        await raceQueuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+                    } finally {
+                        raceQueuer.Dispose();
+                    }
+                } finally {
+                    lifecycleLock?.Release();
+                    queuer.Dispose();
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ConcurrentStopCallers_ShareTeardownAndLeaveQueuerStopped() {
+            var queuer = new WorkQueuer("ConcurrentStopShared", 2);
+            for (int i = 0; i < 10; i++) {
+                queuer.EnqueueTask(async () => await Task.Delay(10));
+            }
+
+            Task[] stops = Enumerable.Range(0, 6).Select(_ => queuer.Stop(true)).ToArray();
+            Task all = Task.WhenAll(stops);
+
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(2))));
+            await all;
+            Assert.False(queuer.IsRunning);
+            Assert.False(queuer.Active);
+            await queuer.Stop(true);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task StopWithoutWait_CancelsQueuedRequestsInsteadOfRunningThem() {
+            var queuer = new WorkQueuer("StopWithoutWaitCancels", 1);
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            queuer.EnqueueTask(async () => {
+                started.TrySetResult(true);
+                await release.Task;
+            });
+            await started.Task;
+
+            var queuedExecutions = 0;
+            WorkJobExecutionRequest[] requests = Enumerable.Range(0, 5).Select(_ => queuer.EnqueueTask(() => {
+                Interlocked.Increment(ref queuedExecutions);
+                return new ValueTask();
+            })).ToArray();
+
+            Task stopTask = queuer.Stop(false);
+            release.TrySetResult(true);
+            await stopTask.WaitAsync(TimeSpan.FromSeconds(2));
+            await Task.WhenAll(requests.Select(ObserveTerminal)).WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal(0, queuedExecutions);
+            Assert.All(requests, request => Assert.True(request.TaskCompletionSource.Task.IsCanceled || request.TaskCompletionSource.Task.IsFaulted));
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task DisposedQueuedRequest_DoesNotKillWorker() {
+            var queuer = new WorkQueuer("DisposedQueuedRequest", 1);
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            queuer.EnqueueTask(async () => {
+                started.TrySetResult(true);
+                await release.Task;
+            });
+            await started.Task;
+
+            WorkJobExecutionRequest disposedRequest = queuer.EnqueueTask(() => new ValueTask());
+            disposedRequest.Dispose();
+            var executed = 0;
+            WorkJobExecutionRequest subsequentRequest = queuer.EnqueueTask(() => {
+                Interlocked.Increment(ref executed);
+                return new ValueTask();
+            });
+
+            release.TrySetResult(true);
+            await ObserveTerminal(disposedRequest).WaitAsync(TimeSpan.FromSeconds(2));
+            await subsequentRequest.TaskCompletionSource.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await queuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal(1, executed);
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task StopWithQueuedItems_LeavesNoQueuedWork() {
+            var queuer = new WorkQueuer("StopDrainsChannel", 1);
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            queuer.EnqueueTask(async () => {
+                started.TrySetResult(true);
+                await release.Task;
+            });
+            await started.Task;
+
+            for (int i = 0; i < 10; i++) {
+                queuer.EnqueueTask(() => new ValueTask());
+            }
+
+            Task stopTask = queuer.Stop(true);
+            release.TrySetResult(true);
+            await stopTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal(0, queuer.InQueue);
+            Assert.Equal(0, GetChannelReaderCount(queuer));
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task HeldJob_TerminalllyFaultedOnStopAndDispose() {
+            var stoppedQueuer = new WorkQueuer("HeldJobStop", 1, init_started: false);
+            WorkJobExecutionRequest stoppedRequest = stoppedQueuer.EnqueueTask(() => new ValueTask());
+
+            await stoppedQueuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+            await AssertTerminal(stoppedRequest.TaskCompletionSource.Task);
+            await AssertTerminal(stoppedRequest.WaitForDequeue());
+            Assert.Equal(1, stoppedQueuer.TotalWork);
+            Assert.Equal(1, stoppedQueuer.WorkDone);
+            Assert.Equal(1, stoppedQueuer.Cancelled);
+
+            var disposedQueuer = new WorkQueuer("HeldJobDispose", 1, init_started: false);
+            WorkJobExecutionRequest disposedRequest = disposedQueuer.EnqueueTask(() => new ValueTask());
+
+            await disposedQueuer.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+            await AssertTerminal(disposedRequest.TaskCompletionSource.Task);
+            await AssertTerminal(disposedRequest.WaitForDequeue());
+            Assert.Equal(1, disposedQueuer.TotalWork);
+            Assert.Equal(1, disposedQueuer.WorkDone);
+            Assert.Equal(1, disposedQueuer.Cancelled);
+        }
+
+        [Fact]
+        public async Task EnqueueAsyncBlockedOnFullChannel_DoesNotDeadlockStop() {
+            var queuer = new WorkQueuer("StopAdmissionDeadlock", 1) { ChannelCapacity = 1 };
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            queuer.EnqueueTask(async () => {
+                started.TrySetResult(true);
+                await release.Task;
+            });
+            await started.Task;
+
+            queuer.EnqueueTask(() => new ValueTask());
+            Task<WorkJobExecutionRequest> enqueueTask = queuer.EnqueueTaskAsync(ct => new ValueTask());
+            DateTime reservationDeadline = DateTime.UtcNow.AddSeconds(2);
+            while (queuer.InQueue < 2 && DateTime.UtcNow < reservationDeadline) {
+                await Task.Delay(10);
+            }
+            Assert.True(queuer.InQueue >= 2, "The async enqueue should reserve capacity before waiting to write.");
+            Assert.False(enqueueTask.IsCompleted);
+
+            Task stopTask = queuer.Stop(true);
+            release.TrySetResult(true);
+            Task all = Task.WhenAll(stopTask, ObserveEnqueueTerminal(enqueueTask));
+
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))));
+            await all;
+            Assert.True(enqueueTask.IsCanceled || enqueueTask.IsFaulted,
+                "An enqueue interrupted by Stop is cancelled or faulted after its request has been terminally rejected.");
+            queuer.Dispose();
+        }
+
+        [Fact]
+        public async Task StartWithMissedFireIfMissedSchedule_DoesNotDeadlock() {
+            var queuer = new WorkQueuer("MissedScheduleStart", 1);
+            var activeJobStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseActiveJob = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var missedScheduleRan = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var missedSchedulesField = typeof(WorkQueuer).GetField("_missedSchedules", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+            try {
+                queuer.EnqueueTask(async () => {
+                    activeJobStarted.TrySetResult(true);
+                    await releaseActiveJob.Task;
+                });
+                await activeJobStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+                queuer.ScheduleTask("missed_fire", new WorkJob(() => {
+                    missedScheduleRan.TrySetResult(true);
+                    return new ValueTask();
+                }), new ScheduledTaskOptions {
+                    ScheduledTime = DateTime.UtcNow.AddMilliseconds(100),
+                    RecurrenceInterval = TimeSpan.FromMinutes(1),
+                    FireIfMissed = true
+                });
+
+                Task stopTask = queuer.Stop(true);
+                DateTime missedScheduleDeadline = DateTime.UtcNow.AddSeconds(2);
+                while (((System.Collections.ICollection)missedSchedulesField.GetValue(queuer)!).Count == 0 && DateTime.UtcNow < missedScheduleDeadline) {
+                    await Task.Delay(10);
+                }
+                Assert.True(((System.Collections.ICollection)missedSchedulesField.GetValue(queuer)!).Count > 0,
+                    "The scheduled job should be recorded as missed while Stop is waiting for active work.");
+
+                releaseActiveJob.TrySetResult(true);
+                await stopTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+                Task startTask = Task.Run(() => queuer.Start());
+                Assert.Same(startTask, await Task.WhenAny(startTask, Task.Delay(TimeSpan.FromSeconds(5))));
+                await startTask;
+                await missedScheduleRan.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            } finally {
+                releaseActiveJob.TrySetResult(true);
+                queuer.Unschedule("missed_fire");
+                queuer.Dispose();
+            }
+        }
+
+        private static async Task AssertTerminal(Task task) {
+            try {
+                await task.WaitAsync(TimeSpan.FromSeconds(2));
+            } catch (Exception) {
+            }
+            Assert.True(task.IsFaulted || task.IsCanceled, "Held work must terminally fault or cancel.");
+        }
+
+        private static async Task ObserveTerminal(WorkJobExecutionRequest request) {
+            try {
+                await request.TaskCompletionSource.Task;
+            } catch (Exception) {
+            }
+        }
+
+        private static async Task ObserveEnqueueTerminal(Task<WorkJobExecutionRequest> enqueueTask) {
+            try {
+                WorkJobExecutionRequest request = await enqueueTask;
+                await ObserveTerminal(request);
+            } catch (Exception) {
+            }
+        }
+
+        private static int GetChannelReaderCount(WorkQueuer queuer) {
+            var channelField = typeof(WorkQueuer).GetField("_workChannel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var channel = channelField.GetValue(queuer);
+            if (channel == null) return 0;
+            var reader = channel.GetType().GetProperty("Reader").GetValue(channel);
+            return (int)reader.GetType().GetProperty("Count").GetValue(reader);
+        }
     }
 }
