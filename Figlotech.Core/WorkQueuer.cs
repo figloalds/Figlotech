@@ -386,6 +386,14 @@ namespace Figlotech.Core {
             }
         }
 
+        public Task WaitForIdleAsync() {
+            // Idle is defined by the same condition Stop uses to drain: nothing queued
+            // (neither counted nor still sitting in the channel) and no active jobs.
+            // Awaiting the worker-loop tasks themselves would hang — workers are
+            // long-lived and only exit on Stop/Dispose.
+            return WaitForDrainAsync();
+        }
+
         private async Task WaitForDrainAsync() {
             if (IsDrainComplete()) return;
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
