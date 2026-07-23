@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Figlotech.BDados.DataAccessAbstractions;
@@ -48,6 +49,62 @@ namespace Figlotech.BDados.Tests {
             Assert.Single(roots);
             Assert.Equal("scalar", roots[0].ScalarName);
             Assert.Equal(new[] { "first", "second" }, roots[0].Items.Select(item => item.Name));
+        }
+
+        [Theory]
+        [InlineData(false, OrderingType.Asc, 1, 2)]
+        [InlineData(false, OrderingType.Desc, 2, 1)]
+        [InlineData(true, OrderingType.Asc, 2, 1)]
+        [InlineData(true, OrderingType.Desc, 1, 2)]
+        public async Task AggregateLoadAsyncOrdersLegacyAggregateRootsByRequestedProjectedMember(
+            bool orderByRid, OrderingType orderingType, long firstId, long secondId) {
+            using var accessor = CreateAccessor(out _);
+            await using BDadosTransaction transaction = await accessor.CreateNewTransactionAsync(CancellationToken.None, null);
+            SeedLegacyOrderedAggregates(transaction.Connection);
+
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(LegacyOrderedAggregateRoot), AggregateJoinShape.FullGraph);
+            Assert.Equal(nameof(LegacyOrderedAggregateRoot.RID), plan.RootOrdering.ColumnName);
+
+            var args = new LoadAllArgs<LegacyOrderedAggregateRoot>().Full();
+            if (orderByRid) {
+                args.OrderBy(root => root.RID, orderingType);
+            } else {
+                args.OrderBy(root => root.Id, orderingType);
+            }
+
+            List<LegacyOrderedAggregateRoot> roots = await accessor.AggregateLoadAsync(transaction, args);
+
+            Assert.Equal(new[] { firstId, secondId }, roots.Select(root => root.Id));
+            Assert.All(roots, root => Assert.Equal(2, root.Children.Count));
+            Assert.Equal(new[] { "one-a", "one-b" }, roots.Single(root => root.Id == 1).Children.Select(child => child.Name));
+            Assert.Equal(new[] { "two-a", "two-b" }, roots.Single(root => root.Id == 2).Children.Select(child => child.Name));
+        }
+
+        [Fact]
+        public async Task AggregateLoadAsyncRejectsOrderingByAggregateMember() {
+            using var accessor = CreateAccessor(out _);
+            await using BDadosTransaction transaction = await accessor.CreateNewTransactionAsync(CancellationToken.None, null);
+            SeedLegacyOrderedAggregates(transaction.Connection);
+
+            ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() => accessor.AggregateLoadAsync(transaction,
+                new LoadAllArgs<LegacyOrderedAggregateRoot>().Full().OrderBy(root => root.Children)));
+
+            Assert.Contains("projected member", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("root table", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task AggregateLoadAsyncRejectsShadowedBaseOrderingMember() {
+            using var accessor = CreateAccessor(out _);
+            await using BDadosTransaction transaction = await accessor.CreateNewTransactionAsync(CancellationToken.None, null);
+            SeedShadowedOrderingAggregate(transaction.Connection);
+
+            ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() => accessor.AggregateLoadAsync(transaction,
+                new LoadAllArgs<ShadowedOrderingAggregateRoot>().Full()
+                    .OrderBy(root => ((ShadowedOrderingAggregateRootBase)root).ShadowedColumn)));
+
+            Assert.Contains("projected member", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("root table", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -158,6 +215,24 @@ namespace Figlotech.BDados.Tests {
             Execute(connection, "INSERT INTO CollidingListKeyChild (ChildIdentifier, ParentReference, Name) VALUES ('44444444-4444-4444-4444-444444444444', '" + RootId + "', 'second')");
         }
 
+        private static void SeedLegacyOrderedAggregates(IDbConnection connection) {
+            Execute(connection, "CREATE TABLE LegacyOrderedAggregateRoot (Id INTEGER NOT NULL, UpdatedAt TEXT NULL, CreatedAt TEXT NOT NULL, RID TEXT NOT NULL, IsActive INTEGER NOT NULL, AlteredBy INTEGER NOT NULL, CreatedBy INTEGER NOT NULL)");
+            Execute(connection, "CREATE TABLE LegacyOrderedAggregateChild (Id INTEGER NOT NULL, RootRID TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateRoot (Id, UpdatedAt, CreatedAt, RID, IsActive, AlteredBy, CreatedBy) VALUES (1, NULL, '2026-01-01', 'z-rid', 1, 0, 0)");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateRoot (Id, UpdatedAt, CreatedAt, RID, IsActive, AlteredBy, CreatedBy) VALUES (2, NULL, '2026-01-01', 'a-rid', 1, 0, 0)");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateChild (Id, RootRID, Name) VALUES (11, 'z-rid', 'one-a')");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateChild (Id, RootRID, Name) VALUES (12, 'z-rid', 'one-b')");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateChild (Id, RootRID, Name) VALUES (21, 'a-rid', 'two-a')");
+            Execute(connection, "INSERT INTO LegacyOrderedAggregateChild (Id, RootRID, Name) VALUES (22, 'a-rid', 'two-b')");
+        }
+
+        private static void SeedShadowedOrderingAggregate(IDbConnection connection) {
+            Execute(connection, "CREATE TABLE ShadowedOrderingAggregateRoot (Id INTEGER NOT NULL, ShadowedColumn TEXT NULL)");
+            Execute(connection, "CREATE TABLE ShadowedOrderingAggregateChild (Id INTEGER NOT NULL, RootId INTEGER NOT NULL)");
+            Execute(connection, "INSERT INTO ShadowedOrderingAggregateRoot (Id, ShadowedColumn) VALUES (1, 'derived')");
+            Execute(connection, "INSERT INTO ShadowedOrderingAggregateChild (Id, RootId) VALUES (2, 1)");
+        }
+
         private static void Execute(IDbConnection connection, string sql) {
             using IDbCommand command = connection.CreateCommand();
             command.CommandText = sql;
@@ -179,7 +254,13 @@ namespace Figlotech.BDados.Tests {
                 if (targetMethod == null) {
                     throw new InvalidOperationException("Query generator method was not supplied.");
                 }
-                object? result = targetMethod.Invoke(_inner, args);
+                object? result;
+                try {
+                    result = targetMethod.Invoke(_inner, args);
+                } catch (TargetInvocationException exception) when (exception.InnerException != null) {
+                    ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+                    throw;
+                }
                 if (targetMethod.Name == nameof(IQueryGenerator.GenerateJoinQuery) && args![0] is DefinitiveJoinPlan plan) {
                     Plan = plan;
                     Sql = ((IQueryBuilder)result!).GetCommandText();

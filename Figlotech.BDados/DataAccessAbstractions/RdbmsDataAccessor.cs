@@ -3096,12 +3096,42 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return plan.Relations.Any(relation => relation.BuildKind != AggregateBuildOptions.None);
         }
 
+        private static bool HasSameMetadataIdentity(MemberInfo first, MemberInfo second) {
+            return first.Module == second.Module && first.MetadataToken == second.MetadataToken;
+        }
+
+        private static bool IsSameOrOverriddenProperty(MemberInfo first, MemberInfo second) {
+            if (HasSameMetadataIdentity(first, second)) {
+                return true;
+            }
+            if (!(first is PropertyInfo firstProperty) || !(second is PropertyInfo secondProperty)) {
+                return false;
+            }
+
+            MethodInfo[] firstAccessors = firstProperty.GetAccessors(true);
+            MethodInfo[] secondAccessors = secondProperty.GetAccessors(true);
+            return firstAccessors.Any(firstAccessor => {
+                MethodInfo firstDefinition = firstAccessor.GetBaseDefinition();
+                return secondAccessors.Any(secondAccessor =>
+                    HasSameMetadataIdentity(firstDefinition, secondAccessor.GetBaseDefinition()));
+            });
+        }
+
         private IQueryBuilder BuildAutomaticAggregateQuery<T>(DefinitiveJoinPlan plan, LoadAllArgs<T> args, int? querySkip, int? queryLimit) where T : IDataObject, new() {
             var parser = new ConditionParser(plan);
             var conditions = args.Conditions == null ? Qb.Fmt("TRUE") : parser.ParseExpression(args.Conditions);
             var rootConditions = args.Conditions == null ? Qb.Fmt("TRUE") : parser.ParseExpression(args.Conditions, false);
+            MemberInfo orderingMember = plan.Tables[plan.RootTableIndex].Identifier.Member;
+            if (args.OrderingMember != null) {
+                MemberInfo requestedOrderingMember = GetOrderingMember(args.OrderingMember);
+                orderingMember = plan.Projection.FirstOrDefault(column =>
+                    column.TableIndex == plan.RootTableIndex
+                    && column.DestinationMember != null
+                    && IsSameOrOverriddenProperty(column.DestinationMember, requestedOrderingMember))?.DestinationMember
+                    ?? requestedOrderingMember;
+            }
             return Plugin.QueryGenerator.GenerateJoinQuery(plan, conditions, querySkip, queryLimit,
-                plan.Tables[plan.RootTableIndex].Identifier.Member, args.OrderingType, rootConditions);
+                orderingMember, args.OrderingType, rootConditions);
         }
 
         private DataLoadContext CreateAggregateDataLoadContext(BDadosTransaction transaction, object overrideContext) {

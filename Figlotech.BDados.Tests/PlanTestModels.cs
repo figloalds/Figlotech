@@ -436,6 +436,24 @@ namespace Figlotech.BDados.Tests {
         public new ObjectAggregate? ShadowedAggregate { get; set; }
     }
 
+    public abstract class ShadowedOrderingAggregateRootBase : PlanDataObject<long> {
+        [Field]
+        public string? ShadowedColumn { get; set; }
+    }
+
+    public sealed class ShadowedOrderingAggregateRoot : ShadowedOrderingAggregateRootBase {
+        [Field]
+        public new string? ShadowedColumn { get; set; }
+
+        [AggregateList(typeof(ShadowedOrderingAggregateChild), nameof(ShadowedOrderingAggregateChild.RootId))]
+        public List<ShadowedOrderingAggregateChild> Children { get; set; } = new List<ShadowedOrderingAggregateChild>();
+    }
+
+    public sealed class ShadowedOrderingAggregateChild : PlanDataObject<long> {
+        [Field]
+        public long RootId { get; set; }
+    }
+
     public sealed class RootBoundedCycleParcel : PlanDataObject<Guid> {
         [Field]
         public Guid PaymentId { get; set; }
@@ -523,6 +541,29 @@ namespace Figlotech.BDados.Tests {
     public sealed class RuntimeList : PlanDataObject<Guid> {
         [Field]
         public Guid RootId { get; set; }
+
+        [Field]
+        public string? Name { get; set; }
+    }
+
+    public sealed class LegacyOrderedAggregateRoot : DataObject<LegacyOrderedAggregateRoot> {
+        [AggregateList(typeof(LegacyOrderedAggregateChild), nameof(LegacyOrderedAggregateChild.RootRID))]
+        public List<LegacyOrderedAggregateChild> Children { get; set; } = new List<LegacyOrderedAggregateChild>();
+
+        [Field]
+        public override ulong AlteredBy { get; set; }
+
+        [Field]
+        public override ulong CreatedBy { get; set; }
+
+        protected override IEnumerable<IValidationRule<LegacyOrderedAggregateRoot>> ValidationRules() {
+            yield break;
+        }
+    }
+
+    public sealed class LegacyOrderedAggregateChild : PlanDataObject<long> {
+        [Field]
+        public string RootRID { get; set; } = String.Empty;
 
         [Field]
         public string? Name { get; set; }
