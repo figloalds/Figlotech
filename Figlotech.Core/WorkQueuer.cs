@@ -541,7 +541,7 @@ namespace Figlotech.Core {
                 while (_numberOfActualWorkers < desiredWorkers) {
                     var workerId = Interlocked.Increment(ref _nextWorkerId);
                     Interlocked.Increment(ref _numberOfActualWorkers);
-                    var workerTask = RunWorkerLoop(workerId, token);
+                    var workerTask = Task.Run(() => RunWorkerLoop(workerId, token));
                     _workerTasks.Add(workerTask);
                 }
             }

@@ -272,6 +272,54 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
+        public async Task ScalingWorker_DoesNotRunQueuedJobInlineUnderLifecycleLock() {
+            var initialWorkers = Environment.ProcessorCount;
+            var queuer = new WorkQueuer("ScalingNestedEnqueue", initialWorkers * 2);
+            var blockersStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseBlockers = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var nestedCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var lastScaleField = typeof(WorkQueuer).GetField("_lastWorkerScaleTicks", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var startedCount = 0;
+
+            for (int i = 0; i < initialWorkers; i++) {
+                _ = queuer.EnqueueTask(async () => {
+                    if (Interlocked.Increment(ref startedCount) == initialWorkers) {
+                        blockersStarted.TrySetResult(true);
+                    }
+                    await releaseBlockers.Task;
+                });
+            }
+            await blockersStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            lastScaleField.SetValue(queuer, DateTime.MaxValue.Ticks);
+            _ = queuer.EnqueueTask(() => {
+                _ = queuer.EnqueueTask(() => {
+                    nestedCompleted.TrySetResult(true);
+                    return new ValueTask();
+                });
+                return new ValueTask();
+            });
+            for (int i = 0; i < initialWorkers / 2; i++) {
+                _ = queuer.EnqueueTask(() => new ValueTask());
+            }
+            lastScaleField.SetValue(queuer, 0L);
+
+            Task triggeringEnqueue = Task.Run(() => queuer.EnqueueTask(() => new ValueTask()));
+            Task completed = Task.WhenAll(triggeringEnqueue, nestedCompleted.Task);
+
+            try {
+                Assert.Same(completed, await Task.WhenAny(completed, Task.Delay(TimeSpan.FromSeconds(2))));
+                await completed;
+            } finally {
+                releaseBlockers.TrySetResult(true);
+                if (triggeringEnqueue.IsCompleted) {
+                    await queuer.Stop(true).WaitAsync(TimeSpan.FromSeconds(2));
+                    queuer.Dispose();
+                }
+            }
+        }
+
+        [Fact]
         public async Task ChannelCapacity_ExplicitlySet_IsBounded() {
             var queuer = new WorkQueuer("BoundedTest", 1) { ChannelCapacity = 2 };
             var gate = new TaskCompletionSource<object>();
