@@ -212,7 +212,7 @@ namespace Figlotech.Core.ParallelFlow {
 
         /// <summary>
         /// Samples the flow at regular intervals, taking the most recent item
-        /// Note: Simplified implementation for netstandard2.1 compatibility
+        /// Note: Simplified implementation for net10.0 compatibility
         /// </summary>
         public static FlowBuilder<T> Sample<T>(
             this FlowBuilder<T> flow,

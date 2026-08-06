@@ -21,25 +21,25 @@ pipeline {
     stage('Build') {
       steps {
         echo 'Building...'
-        withDotNet(sdk: 'net6.0') {
+        withDotNet(sdk: 'net10.0') {
           sh 'dotnet pack Figlotech.Core $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.BDados $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.BDados.MySqlDataAccessor $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.BDados.PostgreSQLDataAccessor $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.BDados.SQLiteDataAccessor $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor $BUILD_ARGS'
         }
-        withDotNet(sdk: 'net6.0') { 
+        withDotNet(sdk: 'net10.0') { 
           sh 'dotnet pack Figlotech.ExcelUtil $BUILD_ARGS'
         }
       }
@@ -60,25 +60,25 @@ pipeline {
           environment {
             PUSH_ARGS="--api-key $GITHUB_PAT --source fth-github"
           }
-          withDotNet(sdk: 'net6.0') {
+          withDotNet(sdk: 'net10.0') {
             sh 'dotnet nuget push "./_nuget/Figlotech.Core.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.BDados.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.BDados.MySqlDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.BDados.PostgreSQLDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.BDados.SQLiteDataAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.Core.FileAcessAbstractions.AzureBlobsFileAccessor.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
-          withDotNet(sdk: 'net6.0') { 
+          withDotNet(sdk: 'net10.0') { 
             sh 'dotnet nuget push "./_nuget/Figlotech.ExcelUtil.1.0.$REV.$BUILD_NUMBER.nupkg" $PUSH_ARGS'
           }
         }

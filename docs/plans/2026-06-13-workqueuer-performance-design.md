@@ -48,7 +48,7 @@ Target only `Figlotech.Core/WorkQueuer.cs`.
   This avoids allocating closure/state objects when logging is disabled.
 
 ### 6. Timing and metrics cleanup
-- Use `Stopwatch.GetElapsedTime(startTimestamp, endTimestamp)` on .NET 6+ builds; fall back to a cached `Stopwatch.Frequency` ratio on `netstandard2.1`.
+- Use `Stopwatch.GetElapsedTime(startTimestamp, endTimestamp)` on .NET 6+ builds; fall back to a cached `Stopwatch.Frequency` ratio on `net10.0`.
 - Make `AverageTaskResolutionTime` read an atomic snapshot of both total-resolution ticks and completed count to avoid torn reads.
 
 ### 7. Remove stored ValueTask field

@@ -21,10 +21,10 @@ Use these from the repo root:
   - `dotnet build figlotech.sln`
 - Restore (if needed):
   - `dotnet restore figlotech.sln`
-- Pack (netstandard2.1) via script:
+- Pack (net10.0) via script:
   - `./build.sh` (Linux/macOS)
   - `build-nuget.bat` (Windows)
-- Publish netstandard2.1 artifacts:
+- Publish net10.0 artifacts:
   - `build-netstandard2.0.cmd`
 - Generate local nupkgs:
   - `generate-nupkg.cmd`
@@ -119,7 +119,7 @@ These are inferred from existing code.
 - Avoid unnecessary allocations in hot paths (core utils, BDados).
 
 ## Project-Specific Notes
-- Target frameworks include `netstandard2.1` for libraries and `net6.0` for
+- Target frameworks include `net10.0` for libraries and `net10.0` for
   the `test/` console project.
 - Packaging scripts compute version numbers via `git rev-list --count` and
   store intermediate values in `fitech.version` and `rev`.

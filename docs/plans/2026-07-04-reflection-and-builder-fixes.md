@@ -5,10 +5,10 @@
 **Goal:** Fix 5 correctness bugs and 2 efficiency issues in `ReflectionTool.cs` and `RdbmsDataAccessor.Builder.cs`, identified during static review, with TDD where behavior is unit-testable and build-verification otherwise.
 
 **Architecture:** Two distinct change surfaces:
-1. **`Figlotech.Core/Helpers/ReflectionTool.cs`** — pure reflection helpers. Unit-testable via the existing `Figlotech.Core.Tests` project (xUnit, net6.0).
+1. **`Figlotech.Core/Helpers/ReflectionTool.cs`** — pure reflection helpers. Unit-testable via the existing `Figlotech.Core.Tests` project (xUnit, net10.0).
 2. **`Figlotech.BDados/DataAccessAbstractions/RdbmsDataAccessor.Builder.cs`** — data-access materializer. Hard to unit-test (needs a live `DbCommand`/`IDataReader`), so changes here are verified by solution build + targeted reasoning, not new unit tests.
 
-**Tech Stack:** C# 9+ / netstandard2.1 (libs), net6.0 (tests), xUnit, `System.Text.Json` (new dep for BDados).
+**Tech Stack:** C# 9+ / net10.0 (libs), net10.0 (tests), xUnit, `System.Text.Json` (new dep for BDados).
 
 ---
 
@@ -365,7 +365,7 @@ git commit -m "cleanup(ReflectionTool): remove dead catch-throw in TryCast"
 
 **Step 1: Add package reference**
 
-`netstandard2.1` does not include `System.Text.Json` in-box. Add:
+`net10.0` does not include `System.Text.Json` in-box. Add:
 
 ```xml
 <PackageReference Include="System.Text.Json" Version="6.0.0" />

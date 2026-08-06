@@ -643,7 +643,7 @@ namespace Figlotech.Core {
             }
         }
 
-        public static string DefaultUserAgent = "Figlotech Http Abstraction on netstandard2.1";
+        public static string DefaultUserAgent = "Figlotech Http Abstraction on net10.0";
         public string UserAgent { get; set; } = DefaultUserAgent;
 
         public bool AutoRetryOnStatus0 { get; set; } = true;

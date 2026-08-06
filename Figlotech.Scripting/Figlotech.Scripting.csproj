@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <WarningsAsErrors>CS4014,VSTHRD103;CA2000;CA2213;CA1001</WarningsAsErrors>
     <RepositoryUrl>https://github.com/figloalds/Figlotech.git</RepositoryUrl>
   </PropertyGroup>

@@ -63,7 +63,7 @@ Note: The test project uses BenchmarkDotNet for performance testing and requires
 - **TestConcepts** (Figlotech.ECSEngine) - Experimental ECS engine
 
 ### Target Framework
-All libraries target `netstandard2.1` for broad compatibility.
+All libraries target `net10.0` for broad compatibility.
 
 ## Core Architecture
 

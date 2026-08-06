@@ -320,7 +320,7 @@ Create `Figlotech.BDados.Analyzers.Tests/Figlotech.BDados.Analyzers.Tests.csproj
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

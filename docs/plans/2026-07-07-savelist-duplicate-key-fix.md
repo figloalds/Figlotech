@@ -6,7 +6,7 @@
 
 **Architecture:** The `ridMap`/`idMap` built at `RdbmsDataAccessor.cs:2197-2198` are *fallback lookups* used to match DB-returned IDs back to in-memory objects. They are built with `ToDictionary`, which throws on duplicate keys. Replace with the existing `ToDictionaryIgnoreDuplicates` extension (last-wins semantics), which is already in `Figlotech.Core.Extensions` and already imported by the file. Add a regression test for that extension method since it currently has none.
 
-**Tech Stack:** C# / netstandard2.1, xunit (Figlotech.Core.Tests)
+**Tech Stack:** C# / net10.0, xunit (Figlotech.Core.Tests)
 
 ---
 
