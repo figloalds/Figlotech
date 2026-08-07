@@ -10,8 +10,8 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods {
         public byte[] EncryptionKey { get; private set; }
         public byte[] DecryptionKey { get; private set; }
         public static (TwoWayRsaPair, TwoWayRsaPair) Generate() {
-            var RSA1 = new RSACryptoServiceProvider(2048);
-            var RSA2 = new RSACryptoServiceProvider(2048);
+            using var RSA1 = new RSACryptoServiceProvider(2048);
+            using var RSA2 = new RSACryptoServiceProvider(2048);
 
             var Keypair1 = new TwoWayRsaPair {
                 EncryptionKey = RSA1.ExportCspBlob(false),
@@ -62,13 +62,13 @@ namespace Figlotech.Core.Autokryptex.EncryptionMethods {
         }
 
         public byte[] Decrypt(byte[] en) {
-            var rsa = new RSACryptoServiceProvider();
+            using var rsa = new RSACryptoServiceProvider();
             rsa.ImportCspBlob(KeyPair.DecryptionKey);
             return rsa.Decrypt(en, false);
         }
 
         public byte[] Encrypt(byte[] en) {
-            var rsa = new RSACryptoServiceProvider();
+            using var rsa = new RSACryptoServiceProvider();
             rsa.ImportCspBlob(KeyPair.EncryptionKey);
             return rsa.Encrypt(en, false);
         }

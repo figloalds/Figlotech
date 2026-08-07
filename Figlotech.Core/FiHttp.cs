@@ -311,7 +311,7 @@ namespace Figlotech.Core {
             id += $";IgnoreBadCerts={instance.IgnoreBadCertificates}";
 
             if (!clientCache.ContainsKey(id)) {
-                var handler = new HttpClientHandler();
+                using var handler = new HttpClientHandler();
                 foreach (var item in certs) {
                     handler.ClientCertificates.Add(item);
                 }
@@ -546,7 +546,7 @@ namespace Figlotech.Core {
         }
 
         public async Task<FiHttpResult> SendRequest(HttpMethod method, string url, Func<Stream, Task> streamFunction, string contentType = "application/json", CancellationToken? cancellationToken = null) {
-            var req = CreateRequest(url);
+            using var req = CreateRequest(url);
             req.Method = method;
             using (var ms = new MemoryStream()) {
                 await streamFunction(ms).ConfigureAwait(false);

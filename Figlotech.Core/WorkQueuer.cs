@@ -575,13 +575,16 @@ namespace Figlotech.Core {
 
                     if (_drainOnStop) {
                         if (!channel.Reader.TryRead(out var drainingJob)) {
+                            try { drainingJob?.Dispose(); } catch { }
                             await Task.Delay(2).ConfigureAwait(false);
                             continue;
                         }
-                        try {
-                            await ProcessQueuedJob(drainingJob, workerId).ConfigureAwait(false);
-                        } catch (Exception ex) {
-                            LogWorkerException(workerId, ex);
+                        using (drainingJob) {
+                            try {
+                                await ProcessQueuedJob(drainingJob, workerId).ConfigureAwait(false);
+                            } catch (Exception ex) {
+                                LogWorkerException(workerId, ex);
+                            }
                         }
                         continue;
                     }
@@ -599,14 +602,17 @@ namespace Figlotech.Core {
                         break;
                     }
 
+#pragma warning disable CA2000 // Descartar objetos antes de perder o escopo
                     if (!channel.Reader.TryRead(out var job)) {
                         continue;
                     }
-
-                    try {
-                        await ProcessQueuedJob(job, workerId).ConfigureAwait(false);
-                    } catch (Exception ex) {
-                        LogWorkerException(workerId, ex);
+#pragma warning restore CA2000 // Descartar objetos antes de perder o escopo
+                    using (job) {
+                        try {
+                            await ProcessQueuedJob(job, workerId).ConfigureAwait(false);
+                        } catch (Exception ex) {
+                            LogWorkerException(workerId, ex);
+                        }
                     }
                 }
             } catch (OperationCanceledException) {
@@ -627,10 +633,12 @@ namespace Figlotech.Core {
                     await Task.Delay(2).ConfigureAwait(false);
                     continue;
                 }
-                try {
-                    await ProcessQueuedJob(job, workerId).ConfigureAwait(false);
-                } catch (Exception ex) {
-                    LogWorkerException(workerId, ex);
+                using (job) {
+                    try {
+                        await ProcessQueuedJob(job, workerId).ConfigureAwait(false);
+                    } catch (Exception ex) {
+                        LogWorkerException(workerId, ex);
+                    }
                 }
             }
         }
@@ -804,7 +812,7 @@ namespace Figlotech.Core {
         }
 
         public WorkJobExecutionRequest Enqueue(WorkJob job, CancellationToken? requestCancellation = null) {
-            var request = new WorkJobExecutionRequest(job, requestCancellation) {
+            using var request = new WorkJobExecutionRequest(job, requestCancellation) {
                 EnqueuedTime = DateTime.UtcNow,
                 Status = WorkJobRequestStatus.Queued,
                 WorkQueuer = this
@@ -839,7 +847,7 @@ namespace Figlotech.Core {
         }
 
         public async Task<WorkJobExecutionRequest> EnqueueAsync(WorkJob job, CancellationToken? requestCancellation = null) {
-            var request = new WorkJobExecutionRequest(job, requestCancellation) {
+            using var request = new WorkJobExecutionRequest(job, requestCancellation) {
                 EnqueuedTime = DateTime.UtcNow,
                 Status = WorkJobRequestStatus.Queued,
                 WorkQueuer = this

@@ -313,7 +313,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
         static readonly FiAsyncMultiLock FileLocks = new FiAsyncMultiLock();
         private void LockRegion(String wd, Action act) {
-            using (FileLocks.Lock(wd).GetAwaiter().GetResult()) {
+            using (var handle = FileLocks.LockSync(wd)) {
                 act?.Invoke();
             }
         }

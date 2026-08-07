@@ -141,7 +141,7 @@ public sealed class ResultCache {
         }
         var label = SerializeMethodCallLabel(expression.Body as MethodCallExpression);
         var hash = HashLabel(label);
-        using var l = multilock.Lock(hash).GetAwaiter().GetResult();
+        using var l = multilock.LockSync(hash);
 
         var dict = new Dictionary<string, object>();
         if (await fileSystem.ExistsAsync(hash).ConfigureAwait(false)) {

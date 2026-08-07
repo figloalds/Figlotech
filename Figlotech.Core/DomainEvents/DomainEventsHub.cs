@@ -9,7 +9,9 @@ using System.Threading.Tasks;
 namespace Figlotech.Core.DomainEvents {
     public static class DomainEventsHubExtensions {
         public static IDisposable SubscribeInline<T>(this DomainEventsHub self, Func<T, ValueTask> fn, Func<T, Exception, ValueTask> handler = null) where T : IDomainEvent {
-            return self.SubscribeListener(InlineLambdaListener.Create<T>(fn, handler));
+            IDisposable retv = InlineLambdaListener.Create<T>(fn, handler);
+            self.SubscribeListener(retv as DomainEventListener<T>);
+            return retv;
         }
     }
 

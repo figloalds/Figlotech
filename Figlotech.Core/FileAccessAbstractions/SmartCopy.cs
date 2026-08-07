@@ -37,7 +37,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         public static FileData DecodeFileName(string name) {
             var b64 = name.Replace("-", "+").Replace("_", "/").Replace("~", "=");
             var bytes = Convert.FromBase64String(b64);
-            var br = new BinaryReader(new MemoryStream(bytes));
+            using var br = new BinaryReader(new MemoryStream(bytes));
             var date = br.ReadInt64();
             var length = br.ReadInt64();
             var hashLength = br.ReadInt32();
@@ -334,7 +334,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         private async Task MirrorFromList(string path) {
             HashList = await SmartCopy.GetHashList(remote, true);
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
-            var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
+            using var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
             var bufferSize = (int)options.BufferSize / options.NumWorkers;
             if (bufferSize < 0) bufferSize = 256 * 1024;
             List<FileData> workingList = HashList.Where(f => f.RelativePath.StartsWith(path)).ToList();
@@ -504,7 +504,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         private async Task Mirror(IFileSystem origin, IFileSystem destination, string path, MirrorWay way) {
             int numWorkers = options.Multithreaded ? options.NumWorkers : 1;
-            var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
+            using var wq = new WorkQueuer("SmartCopy_Operation", numWorkers, false);
 
             if (options.UseHashList) {
                 HashList = await SmartCopy.GetHashList(destination, way == MirrorWay.Down);

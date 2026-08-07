@@ -8,10 +8,11 @@ namespace Figlotech.Core.DomainEvents {
         }
     }
 
-    public sealed class InlineLambdaListener<T> : DomainEventListener<T> where T : IDomainEvent {
+    public sealed class InlineLambdaListener<T> : DomainEventListener<T>, IDisposable where T : IDomainEvent {
         public Func<T, ValueTask> OnRaise;
         public Func<T, Exception, ValueTask> OnHandle;
         public DomainEventsHub EventsHub { get; set; }
+        public IDisposable subscription { get; set; }
 
         public InlineLambdaListener(Func<T, ValueTask> action, Func<T, Exception, ValueTask> handler = null) {
             OnRaise = action;
@@ -44,12 +45,16 @@ namespace Figlotech.Core.DomainEvents {
                 Unsubscribe();
             }
             _registeredHub = hub;
-            _registeredHub.SubscribeListener(this);
+            subscription = _registeredHub.SubscribeListener(this);
         }
 
         public void Unsubscribe() {
-            _registeredHub.RemoveListener(this);
+            subscription.Dispose();
             _registeredHub = null;
         }
+
+        public void Dispose() {
+            subscription.Dispose();
+        }
+        }
     }
-}

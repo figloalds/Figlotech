@@ -1620,7 +1620,7 @@ namespace Figlotech.Core {
         public static event Action<Exception> OnUltimatelyUnhandledException;
 
         public static int FreeTcpPort(this Fi __selfie) {
-            TcpListener l = new TcpListener(IPAddress.Loopback, 0);
+            using TcpListener l = new TcpListener(IPAddress.Loopback, 0);
             l.Start();
             int port = ((IPEndPoint)l.LocalEndpoint).Port;
             l.Stop();
