@@ -1,8 +1,9 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
-    public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent {
+    public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent, IDisposable, IAsyncDisposable {
         private string _cachedSerialization;
         FiAsyncLock SerializationLock = new FiAsyncLock();
         public string GetSerializedData() {
@@ -23,6 +24,13 @@ namespace Figlotech.Core.DomainEvents {
             if (_cachedSerialization == null) {
                 _cachedSerialization = JsonConvert.SerializeObject(this);
             }
+        }
+        
+        public void Dispose() {
+            SerializationLock.Dispose();
+        }
+        public async ValueTask DisposeAsync() {
+            await SerializationLock.DisposeAsync().ConfigureAwait(false);
         }
     }
 

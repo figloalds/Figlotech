@@ -19,7 +19,7 @@ namespace Figlotech.BDados {
         public T Object { get; set; }
     }
 
-    public sealed class DelayedPersistenceCache<T> : IAsyncDisposable, IDictionary<string, T> where T : ILegacyDataObject, new() {
+    public sealed class DelayedPersistenceCache<T> : IDisposable, IAsyncDisposable, IDictionary<string, T> where T : ILegacyDataObject, new() {
         private readonly TimedCache<string, PersistenceCacheObject<T>> Dictionary;
         private TimeSpan CacheDuration { get; set; }
         private TimeSpan PersistenceInterval { get; set; }
@@ -110,8 +110,19 @@ namespace Figlotech.BDados {
                     await SaveToPersistentStorage(obj.Object);
                 }
             }
-            // Dispose of the dictionary
-            Dictionary.Clear();
+            try { await Dictionary.DisposeAsync().ConfigureAwait(false); } catch { }
+        }
+        public void Dispose() {
+            if (isDisposed) return;
+            isDisposed = true;
+            // Save all dirty objects to persistent storage
+            foreach (var key in Dictionary.Keys.ToList()) {
+                var obj = Dictionary[key];
+                if (obj.IsDirty) {
+                    SaveToPersistentStorage(obj.Object).ConfigureAwait(false);
+                }
+            }
+            try { Dictionary.Dispose(); } catch { }
         }
 
         public async Task<(bool Success, T Value)> TryGetValueAsync(string key) {

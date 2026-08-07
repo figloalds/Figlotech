@@ -66,7 +66,18 @@ namespace Figlotech.Core.InAppServiceHosting {
 
     }
 
-    public sealed class SelfHost {
+    public sealed class SelfHost : IAsyncDisposable, IDisposable {
+
+        public void Dispose() {
+            running = false;
+            listener.Stop();
+            this.work.Dispose();
+        }
+
+        public async ValueTask DisposeAsync() {
+            await Task.Yield();
+            await this.work.DisposeAsync();
+        }
 
         public static void SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {
             writer.WriteLine($"Access-Control-Allow-Origin: *");

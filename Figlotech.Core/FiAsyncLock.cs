@@ -234,11 +234,23 @@ namespace Figlotech.Core {
     /// within the held lock without re-acquiring.
     /// </para>
     /// </remarks>
-    public sealed class FiAsyncLock {
+    public sealed class FiAsyncLock : IAsyncDisposable, IDisposable {
         readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         // Identity accessor for FiAsyncMultiLock.TryRemoveIfMatch (reference-equality check).
         internal SemaphoreSlim Semaphore => _semaphore;
+
+        /// <summary>
+        /// Asynchronously releases the resources used by the <see cref="FiAsyncLock"/>.
+        /// </summary>
+        public async ValueTask DisposeAsync() {
+            try { _semaphore.Dispose(); } catch { }
+            await Task.CompletedTask;
+        }
+
+        public void Dispose() {
+            _semaphore.Dispose();
+        }
 
         /// <summary>
         /// Acquire the lock with an unbounded wait. <b>NOT reentrant</b> — see class remarks.

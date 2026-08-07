@@ -1854,6 +1854,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     GC.SuppressFinalize(this);
                 }
             }
+            try { _concurrentConnectionsSemaphoreSlim.Dispose(); } catch (Exception) { }
+            try { await ExclusiveOpenConnectionLock.DisposeAsync(); } catch (Exception) { }
         }
         #endregion *****************
         //
@@ -2066,7 +2068,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         public Object ScalarQuery(BDadosTransaction transaction, IQueryBuilder qb) {
             transaction.Step();
-            var dt = Query(transaction, qb);
+            using var dt = Query(transaction, qb);
             return dt.Rows[0][0];
         }
         public bool DeleteWhereRidNotIn<T>(BDadosTransaction transaction, Expression<Func<T, bool>> cnd, List<T> list) where T : IDataObject, new() {
@@ -3511,7 +3513,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return default(T);
             }
             DateTime Inicio = DateTime.Now;
-            DataTable retv = new DataTable();
+            using DataTable retv = new DataTable();
             await using (var command = (DbCommand)await transaction.CreateCommandAsync().ConfigureAwait(false)) {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
@@ -3560,14 +3562,13 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 return new DataTable();
             }
             DateTime Inicio = DateTime.Now;
-            DataTable retv = new DataTable();
+            using DataTable retv = new DataTable();
             using (var command = transaction.CreateCommand()) {
                 VerboseLogQueryParameterization(transaction, query);
                 query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                 // --
                 transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] Build Dataset");
-                DataSet ds;
-                ds = GetDataSet(transaction, command);
+                using var ds = GetDataSet(transaction, command);
                 var elaps = transaction?.Benchmarker?.Mark($"[{Description}:{transaction.Id}] --");
 
                 try {

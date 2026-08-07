@@ -2,9 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public sealed class SelfInitializedCache<TKey, T> : IDictionary<TKey, T> {
+    public sealed class SelfInitializedCache<TKey, T> : IDictionary<TKey, T>, IDisposable, IAsyncDisposable {
         private readonly TimedCache<TKey, T> Dictionary;
         private readonly Func<TKey, T> GenerationLogic;
         private TimeSpan CacheDuration { get; }
@@ -21,6 +22,17 @@ namespace Figlotech.Core {
             this.GenerationLogic = generationLogic;
             this.CacheDuration = duration;
             Dictionary = new TimedCache<TKey, T>(duration);
+        }
+
+        public void Dispose() {
+            if (this.Dictionary != null) {
+                this.Dictionary.Dispose();
+            }
+        }   
+        public async ValueTask DisposeAsync() {
+            if (this.Dictionary != null) {
+                await this.Dictionary.DisposeAsync();
+            }
         }
 
         public T this[TKey key] {

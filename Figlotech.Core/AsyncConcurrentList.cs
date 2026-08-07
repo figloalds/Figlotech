@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    public sealed class AsyncConcurrentList<T> : IEnumerable<T>, IList<T> {
+    public sealed class AsyncConcurrentList<T> : IEnumerable<T>, IList<T>, IDisposable, IAsyncDisposable {
         readonly FiAsyncLock alock = new FiAsyncLock();
         List<T> dmmy { get; set; } = new List<T>();
 
@@ -32,6 +32,14 @@ namespace Figlotech.Core {
                 lock (dmmy)
                     ((IList<T>)dmmy)[index] = value;
             }
+        }
+
+        public void Dispose() {
+            alock.Dispose();
+        }
+
+        public async ValueTask DisposeAsync() {
+            await alock.DisposeAsync().ConfigureAwait(false);
         }
 
         public async Task AddAsync(T item) {

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Figlotech.Core {
 
     public static partial class FiTechCoreExtensions {
-        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>, IAsyncEnumerable<TOut> {
+        public sealed class ParallelFlowStepInOut<TIn, TOut> : IParallelFlowStepIn<TIn>, IParallelFlowStepOut<TOut>, IAsyncEnumerable<TOut>, IDisposable, IAsyncDisposable {
             WorkQueuer queuer { get; set; }
             Queue<TOut> ValueQueue { get; set; } = new Queue<TOut>();
             readonly object _valueQueueLock = new object();
@@ -21,6 +21,16 @@ namespace Figlotech.Core {
 
             public TaskCompletionSource<List<TOut>> TaskCompletionSource { get; set; } = new TaskCompletionSource<List<TOut>>();
             public Task<List<TOut>> TaskObj => TaskCompletionSource.Task;
+
+            public void Dispose() {
+                queuer.Dispose();
+                enumerator.DisposeAsync().ConfigureAwait(false);
+            }
+            public async ValueTask DisposeAsync() {
+                await queuer.DisposeAsync();
+                await enumerator.DisposeAsync();
+            }
+
             public ParallelFlowStepInOut(Func<TIn, Task<TOut>> Act, IParallelFlowStepOut<TIn> parent, int maxParallelism) {
                 this.SimpleAct = Act;
                 this.Parent = parent;

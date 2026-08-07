@@ -1436,6 +1436,7 @@ namespace Figlotech.Core {
             try { DisposeScheduledTasks(); } catch { }
             try { GetOrCreateChannel().Writer.TryComplete(); } catch { }
             try { _runCts?.Dispose(); } catch { }
+            try { _lifecycleLock?.Dispose(); } catch { }
         }
     }
 }

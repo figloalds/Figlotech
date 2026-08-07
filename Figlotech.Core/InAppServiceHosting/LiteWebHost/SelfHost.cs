@@ -23,7 +23,17 @@ namespace Figlotech.Core.InAppServiceHosting.LiteWebHost {
 
     }
 
-    public sealed class SelfHost {
+    public sealed class SelfHost : IAsyncDisposable, IDisposable {
+
+        public async ValueTask DisposeAsync() {
+            if (serverThread != null) {
+                serverThread.Join();
+            }
+            await work.DisposeAsync();
+        }
+        public void Dispose() {
+            work.Dispose();
+        }
 
         public static async Task SendHeaders(StreamWriter writer, Dictionary<string, string> headers) {
             foreach (var header in headers) {

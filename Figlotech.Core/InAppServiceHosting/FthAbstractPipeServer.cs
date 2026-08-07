@@ -1,9 +1,26 @@
 ﻿using Figlotech.Extensions;
+using System;
 using System.IO.Pipes;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Figlotech.Core.InAppServiceHosting {
-    public abstract class FthAbstractPipeServer {
+    public abstract class FthAbstractPipeServer : IAsyncDisposable, IDisposable {
+
+        public async ValueTask DisposeAsync() {
+            Stop();
+            if (serverThread != null) {
+                serverThread.Join();
+            }
+            if (server != null) {
+                await server.DisposeAsync();
+            }
+        }
+        public void Dispose() {
+            if (server != null) {
+                server.Dispose();
+            }
+        }
 
         NamedPipeServerStream server;
         Thread serverThread;
