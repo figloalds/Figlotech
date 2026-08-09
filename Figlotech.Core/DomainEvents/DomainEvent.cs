@@ -3,9 +3,9 @@ using System;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core.DomainEvents {
-    public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent, IDisposable, IAsyncDisposable {
+    public class PreserializableDomainEvent : DomainEvent, IPreserializableDomainEvent {
         private string _cachedSerialization;
-        FiAsyncLock SerializationLock = new FiAsyncLock();
+        object SerializationLock = new object();
         public string GetSerializedData() {
             if (_cachedSerialization != null) {
                 return _cachedSerialization;
@@ -14,23 +14,17 @@ namespace Figlotech.Core.DomainEvents {
             return _cachedSerialization;
         }
         public void ClearSerializedData() {
-            lock (this) {
+            lock (SerializationLock) {
                 _cachedSerialization = null;
             }
         }
 
         public void Serialize() {
-            using var handle = SerializationLock.LockSync();
-            if (_cachedSerialization == null) {
-                _cachedSerialization = JsonConvert.SerializeObject(this);
+            lock (SerializationLock) {
+                if (_cachedSerialization == null) {
+                    _cachedSerialization = JsonConvert.SerializeObject(this);
+                }
             }
-        }
-        
-        public void Dispose() {
-            SerializationLock.Dispose();
-        }
-        public async ValueTask DisposeAsync() {
-            await SerializationLock.DisposeAsync().ConfigureAwait(false);
         }
     }
 
