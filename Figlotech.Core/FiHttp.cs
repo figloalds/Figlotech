@@ -33,7 +33,11 @@ namespace Figlotech.Core {
         public long ContentLength { get; set; }
         public HttpResponseMessage Response { get; set; }
         private MemoryStream CachedResponseBody { get; set; }
-        public Dictionary<String, String> Headers { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<String, String> RequestHeaders { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<String, String> ResponseHeaders { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public object RequestBody { get; set; }
+        public object ResponseBody { get; set; }
 
         public Exception Exception { get; set; }
 
@@ -65,12 +69,12 @@ namespace Figlotech.Core {
             try {
                 var client = caller.HttpClient;
                 var response = await client.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                await retv.Init(response).ConfigureAwait(false);
+                await retv.Init(httpRequestMessage, response).ConfigureAwait(false);
             } catch (WebException ex) {
-                await retv.Init(ex.Response as HttpWebResponse).ConfigureAwait(false);
+                await retv.Init(httpRequestMessage, ex.Response as HttpWebResponse).ConfigureAwait(false);
                 retv.Exception = ex;
             } catch (Exception x) {
-                await retv.Init(null as HttpResponseMessage).ConfigureAwait(false);
+                await retv.Init(httpRequestMessage, null as HttpResponseMessage).ConfigureAwait(false);
                 retv.Exception = x;
             } finally {
                 retv.RequestStopwatch?.Stop();
@@ -78,7 +82,7 @@ namespace Figlotech.Core {
             return retv;
         }
 
-        async Task Init(HttpWebResponse resp) {
+        async Task Init(HttpRequestMessage req, HttpWebResponse resp) {
             if (resp == null) {
                 StatusCode = 0;
                 return;
@@ -90,7 +94,7 @@ namespace Figlotech.Core {
                 response.Headers.Add(header, resp.Headers.GetValues(header));
             }
             response.Content = new StreamContent(resp.GetResponseStream());
-            await Init(response).ConfigureAwait(false);
+            await Init(req, response).ConfigureAwait(false);
         }
 
         object ToMaybeJsonDynamic(string input) {
@@ -106,7 +110,7 @@ namespace Figlotech.Core {
             Formatting = Formatting.Indented,
         };
 
-        async Task Init(HttpResponseMessage resp) {
+        async Task Init(HttpRequestMessage req, HttpResponseMessage resp) {
             if (resp == null) {
                 StatusCode = 0;
                 return;
@@ -119,7 +123,7 @@ namespace Figlotech.Core {
 
             if (this.Caller.Logging != null) {
                 try {
-                    var postData = Response.RequestMessage.Content != null ? ToMaybeJsonDynamic(await Response.RequestMessage.Content.ReadAsStringAsync().ConfigureAwait(false)) : null;
+                    var postData = req.Content != null ? ToMaybeJsonDynamic(await req.Content.ReadAsStringAsync().ConfigureAwait(false)) : null;
                     var respData = ToMaybeJsonDynamic(await this.AsString().ConfigureAwait(false));
 
                     await this.Caller.Logging.FileSystem.WriteAllTextAsync(
@@ -140,9 +144,16 @@ namespace Figlotech.Core {
                 }
             }
 
+            RequestBody = req.Content != null ? await req.Content.ReadAsStringAsync().ConfigureAwait(false) : null;
+            ResponseBody = await AsString().ConfigureAwait(false);
+
+            foreach (var header in resp.RequestMessage.Headers) {
+                string key = header.Key;
+                RequestHeaders[key] = header.Value.FirstOrDefault();
+            }
             foreach (var header in resp.Headers) {
                 string key = header.Key;
-                Headers[key] = header.Value.FirstOrDefault();
+                ResponseHeaders[key] = header.Value.FirstOrDefault();
             }
         }
 
@@ -277,9 +288,9 @@ namespace Figlotech.Core {
         public FiHttpRequestLogging Logging { get; set; } = null;
 
         public bool IgnoreBadCertificates { get; set; } = false;
-        internal static SelfInitializedCache<string, HttpClient> clientCache = new SelfInitializedCache<string, HttpClient>(
+        internal static SelfInitializedCache<string, (HttpClient, HttpClientHandler)> clientCache = new SelfInitializedCache<string, (HttpClient, HttpClientHandler)>(
             s => {
-                return null;
+                return (null, null);
             }, TimeSpan.FromMinutes(120)
         );
 
@@ -311,7 +322,7 @@ namespace Figlotech.Core {
             id += $";IgnoreBadCerts={instance.IgnoreBadCertificates}";
 
             if (!clientCache.ContainsKey(id)) {
-                using var handler = new HttpClientHandler();
+                var handler = new HttpClientHandler();
                 foreach (var item in certs) {
                     handler.ClientCertificates.Add(item);
                 }
@@ -321,9 +332,9 @@ namespace Figlotech.Core {
                 var client = new HttpClient(handler) {
                     Timeout = TimeSpan.FromMinutes(120),
                 };
-                clientCache[id] = client;
+                clientCache[id] = (client, handler);
             }
-            return clientCache[id];
+            return clientCache[id].Item1;
         }
 
         public string SyncKeyCodePassword { get; set; } = null;

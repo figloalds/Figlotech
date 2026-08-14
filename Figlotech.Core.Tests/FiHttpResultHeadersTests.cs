@@ -9,9 +9,9 @@ namespace Figlotech.Core.Tests {
         public void Headers_RetrievesValueUsingCaseInsensitiveKey() {
             var result = CreateFiHttpResult();
 
-            result.Headers["adminsecuritykey"] = "expected-value";
+            result.ResponseHeaders["adminsecuritykey"] = "expected-value";
 
-            Assert.Equal("expected-value", result.Headers["AdminSecurityKey"]);
+            Assert.Equal("expected-value", result.ResponseHeaders["AdminSecurityKey"]);
         }
 
         private static FiHttpResult CreateFiHttpResult() {

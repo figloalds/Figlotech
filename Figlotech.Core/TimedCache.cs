@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -48,7 +49,18 @@ namespace Figlotech.Core {
             await _timer.DisposeAsync().ConfigureAwait(false);
         }
 
-        private static async ValueTask DisposeValueAsync(T value) {
+        private static async ValueTask DisposeValueAsync(object value) {
+            if (value is ITuple tuple) {
+                for (int i = 0; i < tuple.Length; i++) {
+                    var element = tuple[i];
+                    if (element != null) {
+                        // Chamada recursiva para descartar cada elemento individualmente
+                        await DisposeValueAsync(element).ConfigureAwait(false);
+                    }
+                }
+                return;
+            }
+
             if (value is IAsyncDisposable adis) {
                 await adis.DisposeAsync().ConfigureAwait(false);
             } else if (value is IDisposable dis) {
