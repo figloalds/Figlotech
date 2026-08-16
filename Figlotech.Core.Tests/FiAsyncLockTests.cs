@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,6 +58,11 @@ namespace Figlotech.Core.Tests {
 
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => asyncLock.LockWithTimeoutSync(TimeSpan.FromMilliseconds(-2)));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => asyncLock.LockWithTimeoutSync(TimeSpan.FromTicks(-1)));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => asyncLock.LockWithTimeoutSync(
+                    TimeSpan.FromMilliseconds(int.MaxValue).Add(TimeSpan.FromTicks(1))));
         }
 
         [Fact]
@@ -127,31 +133,20 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
-        public async Task MultiLock_AutoRemoveWaitsForPendingAcquisitions() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
+        public async Task MultiLock_PendingAcquisitionKeepsTheKeyLockedUntilItReleases() {
+            var multiLock = new FiAsyncMultiLock();
             var firstHandle = await multiLock.Lock("key");
             var pendingHandle = multiLock.Lock("key", TimeSpan.FromSeconds(2));
 
             await Task.Delay(50);
             firstHandle.Dispose();
 
-            await using var secondHandle = await pendingHandle;
-            Assert.True(multiLock.ContainsKey("key"));
+            var secondHandle = await pendingHandle;
+            await Assert.ThrowsAsync<TimeoutException>(
+                () => multiLock.Lock("key", TimeSpan.FromMilliseconds(50)));
 
             await secondHandle.DisposeAsync();
-            Assert.False(multiLock.ContainsKey("key"));
-        }
-
-        [Fact]
-        public async Task MultiLock_IndexerAcquisitionParticipatesInSafeAutoRemoval() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
-            var keyedLock = multiLock["key"];
-
-            var handle = await keyedLock.Lock();
-            Assert.True(multiLock.ContainsKey("key"));
-
-            handle.Dispose();
-            Assert.False(multiLock.ContainsKey("key"));
+            await using var nextHandle = await multiLock.Lock("key", TimeSpan.FromSeconds(1));
         }
 
         [Fact]
@@ -163,8 +158,8 @@ namespace Figlotech.Core.Tests {
         }
 
         [Fact]
-        public async Task MultiLock_CancelledWaiterReleasesItsAutoRemoveReservation() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
+        public async Task MultiLock_CancelledWaiterDoesNotChangeLockState() {
+            var multiLock = new FiAsyncMultiLock();
             var firstHandle = await multiLock.Lock("key");
             using var cancellation = new CancellationTokenSource();
 
@@ -172,111 +167,48 @@ namespace Figlotech.Core.Tests {
             cancellation.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pendingHandle);
-            Assert.True(multiLock.ContainsKey("key"));
+            await Assert.ThrowsAsync<TimeoutException>(
+                () => multiLock.Lock("key", TimeSpan.FromMilliseconds(50)));
 
             firstHandle.Dispose();
-            Assert.False(multiLock.ContainsKey("key"));
+            await using var nextHandle = await multiLock.Lock("key", TimeSpan.FromSeconds(1));
         }
 
         [Fact]
-        public async Task MultiLock_StaleIndexerValueCannotCreateASecondLockForTheSameKey() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
-            var staleReference = multiLock["key"];
+        public void MultiLock_DoesNotExposeDictionaryOrCleanupMutationApi() {
+            var multiLockType = typeof(FiAsyncMultiLock);
 
-            await using (await multiLock.Lock("key")) {
-            }
-            Assert.False(multiLock.ContainsKey("key"));
-
-            await using var staleHandle = await staleReference.Lock();
-            await Assert.ThrowsAsync<TimeoutException>(
-                () => multiLock.Lock("key", TimeSpan.FromMilliseconds(50)));
+            Assert.False(typeof(IDictionary<string, FiAsyncLock>).IsAssignableFrom(multiLockType));
+            Assert.Null(multiLockType.GetProperty("AutoRemoveLocks"));
+            Assert.Null(multiLockType.GetProperty("Item"));
+            Assert.Null(multiLockType.GetMethod("Add"));
+            Assert.Null(multiLockType.GetMethod("Clear"));
+            Assert.Null(multiLockType.GetMethod("Remove", new[] { typeof(string) }));
         }
 
         [Fact]
-        public async Task MultiLock_RemoveDoesNotSplitAnActiveLock() {
+        public async Task MultiLock_RejectsNullKeys() {
             var multiLock = new FiAsyncMultiLock();
-            await using var handle = await multiLock.Lock("key");
 
-            Assert.False(multiLock.Remove("key"));
-            await Assert.ThrowsAsync<TimeoutException>(
-                () => multiLock.Lock("key", TimeSpan.FromMilliseconds(50)));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => multiLock.Lock(null!));
+            Assert.Throws<ArgumentNullException>(() => multiLock.LockSync(null!));
         }
 
         [Fact]
-        public void MultiLock_RemovePairRequiresBothKeyAndValueToMatch() {
+        public async Task MultiLock_RemovesIdleEntriesAutomatically() {
             var multiLock = new FiAsyncMultiLock();
-            var storedLock = multiLock["key"];
-            using var otherLock = new FiAsyncLock();
 
-            var removed = multiLock.Remove(new KeyValuePair<string, FiAsyncLock>("key", otherLock));
-
-            Assert.False(removed);
-            Assert.Same(storedLock, multiLock["key"]);
-        }
-
-        [Fact]
-        public async Task MultiLock_ClearRemovesIdleEntriesWithoutSplittingActiveEntries() {
-            var multiLock = new FiAsyncMultiLock();
-            var activeHandle = await multiLock.Lock("active");
-            _ = multiLock["idle"];
-
-            multiLock.Clear();
-
-            Assert.True(multiLock.ContainsKey("active"));
-            Assert.False(multiLock.ContainsKey("idle"));
-            await Assert.ThrowsAsync<TimeoutException>(
-                () => multiLock.Lock("active", TimeSpan.FromMilliseconds(50)));
-            activeHandle.Dispose();
-        }
-
-        [Fact]
-        public async Task MultiLock_IndexerCannotReplaceAnActiveEntry() {
-            var multiLock = new FiAsyncMultiLock();
-            var activeHandle = await multiLock.Lock("key");
-            using var replacement = new FiAsyncLock();
-
-            Assert.Throws<InvalidOperationException>(() => multiLock["key"] = replacement);
-            await Assert.ThrowsAsync<TimeoutException>(
-                () => multiLock.Lock("key", TimeSpan.FromMilliseconds(50)));
-            activeHandle.Dispose();
-        }
-
-        [Fact]
-        public async Task MultiLock_UserSuppliedLockCanBeRemovedAndAddedAgain() {
-            var multiLock = new FiAsyncMultiLock();
-            using var suppliedLock = new FiAsyncLock();
-            multiLock.Add("key", suppliedLock);
-
-            Assert.True(multiLock.Remove("key"));
-            multiLock.Add("key", suppliedLock);
-
-            await using var handle = await multiLock.Lock("key", TimeSpan.FromSeconds(1));
-        }
-
-        [Fact]
-        public async Task MultiLock_UserSuppliedLockIsNotAutoRemoved() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
-            using var suppliedLock = new FiAsyncLock();
-            multiLock.Add("key", suppliedLock);
-
-            await using (await multiLock.Lock("key", TimeSpan.FromSeconds(1))) {
+            for (var index = 0; index < 100; index++) {
+                await using (await multiLock.Lock($"key-{index}")) {
+                }
             }
 
-            Assert.True(multiLock.ContainsKey("key"));
+            Assert.Equal(0, GetMultiLockEntryCount(multiLock));
         }
 
         [Fact]
-        public void MultiLock_OwnedLockCannotBeAliasedThroughDictionaryMutation() {
+        public async Task MultiLock_RetirementStressMaintainsMutualExclusion() {
             var multiLock = new FiAsyncMultiLock();
-            var ownedLock = multiLock["first"];
-
-            Assert.Throws<ArgumentException>(() => multiLock.Add("second", ownedLock));
-            Assert.Throws<ArgumentException>(() => multiLock["second"] = ownedLock);
-        }
-
-        [Fact]
-        public async Task MultiLock_AutoRemoveStressMaintainsMutualExclusionAndEvictsIdleKeys() {
-            var multiLock = new FiAsyncMultiLock { AutoRemoveLocks = true };
             var activeCount = 0;
             var maximumActiveCount = 0;
 
@@ -293,7 +225,21 @@ namespace Figlotech.Core.Tests {
             await Task.WhenAll(tasks);
 
             Assert.Equal(1, maximumActiveCount);
-            Assert.False(multiLock.ContainsKey("shared"));
+            Assert.Equal(0, GetMultiLockEntryCount(multiLock));
+        }
+
+        private static int GetMultiLockEntryCount(FiAsyncMultiLock multiLock) {
+            var entriesField = typeof(FiAsyncMultiLock).GetField(
+                "_entries",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find the keyed lock entries.");
+            var entries = entriesField.GetValue(multiLock)
+                ?? throw new InvalidOperationException("Could not read the keyed lock entries.");
+            var countProperty = entries.GetType().GetProperty("Count")
+                ?? throw new InvalidOperationException("Could not read the keyed lock entry count.");
+            return countProperty.GetValue(entries) is int count
+                ? count
+                : throw new InvalidOperationException("The keyed lock entry count is invalid.");
         }
 
         private static void UpdateMaximum(ref int maximum, int candidate) {

@@ -1,19 +1,16 @@
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Figlotech.Core {
-    internal sealed class FiAsyncMultiLockEntry {
+    internal sealed class FiAsyncMultiLockEntry : IDisposable {
+        readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
         int _operationCount;
+        int _isDisposed;
 
-        internal FiAsyncMultiLockEntry(FiAsyncLock asyncLock) {
-            AsyncLock = asyncLock;
-        }
-
-        internal FiAsyncLock AsyncLock { get; }
+        internal SemaphoreSlim Semaphore => _semaphore;
 
         internal bool IsRetired => Volatile.Read(ref _operationCount) < 0;
 
@@ -41,15 +38,21 @@ namespace Figlotech.Core {
         internal bool TryRetire() {
             return Interlocked.CompareExchange(ref _operationCount, -1, 0) == 0;
         }
+
+        public void Dispose() {
+            if (Interlocked.Exchange(ref _isDisposed, 1) == 0) {
+                _semaphore.Dispose();
+            }
+        }
     }
 
     /// <summary>
-    /// Provides independent asynchronous locks selected by string key.
+    /// Provides independent asynchronous locks selected by string key. Keyed entries are private
+    /// and are reclaimed automatically after their last pending or held acquisition is released.
     /// </summary>
-    public sealed class FiAsyncMultiLock : IDictionary<string, FiAsyncLock> {
+    public sealed class FiAsyncMultiLock {
         readonly ConcurrentDictionary<string, FiAsyncMultiLockEntry> _entries;
         long _defaultTimeoutTicks = TimeSpan.FromSeconds(600).Ticks;
-        bool _autoRemoveLocks;
 
         public FiAsyncMultiLock() {
             _entries = new ConcurrentDictionary<string, FiAsyncMultiLockEntry>();
@@ -64,116 +67,6 @@ namespace Figlotech.Core {
             set {
                 FiAsyncLock.ValidateTimeout(value, nameof(value));
                 Interlocked.Exchange(ref _defaultTimeoutTicks, value.Ticks);
-            }
-        }
-
-        /// <summary>
-        /// When true, locks created by this instance are removed and disposed once they have no
-        /// pending or held acquisitions. User-supplied dictionary values are retained because
-        /// their use outside this instance cannot be tracked safely.
-        /// </summary>
-        public bool AutoRemoveLocks {
-            get => Volatile.Read(ref _autoRemoveLocks);
-            set => Volatile.Write(ref _autoRemoveLocks, value);
-        }
-
-        public FiAsyncLock this[string key] {
-            get => GetOrCreateLock(key);
-            set {
-                if (value == null) {
-                    throw new ArgumentNullException(nameof(value));
-                }
-
-                while (true) {
-                    if (!_entries.TryGetValue(key, out var current)) {
-                        ValidateExternalValue(value, nameof(value));
-                        if (_entries.TryAdd(key, new FiAsyncMultiLockEntry(value))) {
-                            return;
-                        }
-                        continue;
-                    }
-                    if (ReferenceEquals(current.AsyncLock, value) && !current.IsRetired) {
-                        return;
-                    }
-                    ValidateExternalValue(value, nameof(value));
-                    if (!current.TryRetire()) {
-                        if (current.IsRetired) {
-                            RemoveRetiredLock(key, current);
-                            continue;
-                        }
-                        throw new InvalidOperationException("Cannot replace an active keyed lock.");
-                    }
-                    var replacement = new FiAsyncMultiLockEntry(value);
-                    if (_entries.TryUpdate(key, replacement, current)) {
-                        DisposeIfOwned(key, current.AsyncLock);
-                        return;
-                    }
-                    DisposeIfOwned(key, current.AsyncLock);
-                }
-            }
-        }
-
-        public ICollection<string> Keys => _entries.Keys;
-
-        public ICollection<FiAsyncLock> Values {
-            get {
-                var values = new List<FiAsyncLock>(_entries.Count);
-                foreach (var entry in _entries.Values) {
-                    values.Add(entry.AsyncLock);
-                }
-                return values.AsReadOnly();
-            }
-        }
-
-        public int Count => _entries.Count;
-
-        public bool IsReadOnly => false;
-
-        public void Add(string key, FiAsyncLock value) {
-            if (value == null) {
-                throw new ArgumentNullException(nameof(value));
-            }
-            ValidateExternalValue(value, nameof(value));
-
-            if (!_entries.TryAdd(key, new FiAsyncMultiLockEntry(value))) {
-                throw new ArgumentException("An item with the same key has already been added.", nameof(key));
-            }
-        }
-
-        public void Add(KeyValuePair<string, FiAsyncLock> item) {
-            Add(item.Key, item.Value);
-        }
-
-        /// <summary>
-        /// Removes all idle entries. Entries with pending or held acquisitions are left in place,
-        /// preventing <see cref="Clear"/> from splitting an active keyed lock.
-        /// </summary>
-        public void Clear() {
-            foreach (var item in _entries) {
-                TryRemoveIdleLock(item.Key, item.Value);
-            }
-        }
-
-        public bool Contains(KeyValuePair<string, FiAsyncLock> item) {
-            return _entries.TryGetValue(item.Key, out var entry)
-                && EqualityComparer<FiAsyncLock>.Default.Equals(entry.AsyncLock, item.Value);
-        }
-
-        public bool ContainsKey(string key) {
-            return _entries.ContainsKey(key);
-        }
-
-        public void CopyTo(KeyValuePair<string, FiAsyncLock>[] array, int arrayIndex) {
-            var snapshot = new List<KeyValuePair<string, FiAsyncLock>>(_entries.Count);
-            foreach (var item in _entries) {
-                snapshot.Add(new KeyValuePair<string, FiAsyncLock>(item.Key, item.Value.AsyncLock));
-            }
-            snapshot.CopyTo(array, arrayIndex);
-        }
-
-        public IEnumerator<KeyValuePair<string, FiAsyncLock>> GetEnumerator() {
-            foreach (var item in _entries) {
-                yield return new KeyValuePair<string, FiAsyncLock>(item.Key, item.Value.AsyncLock);
             }
         }
 
@@ -208,91 +101,10 @@ namespace Figlotech.Core {
             return AcquireSync(key, timeout ?? DefaultTimeout, cancellationToken);
         }
 
-        public bool Remove(string key) {
-            while (_entries.TryGetValue(key, out var current)) {
-                if (!current.TryRetire()) {
-                    if (current.IsRetired) {
-                        RemoveRetiredLock(key, current);
-                        continue;
-                    }
-                    return false;
-                }
-                bool removed = TryRemoveExact(key, current);
-                DisposeIfOwned(key, current.AsyncLock);
-                if (removed) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public bool Remove(KeyValuePair<string, FiAsyncLock> item) {
-            while (_entries.TryGetValue(item.Key, out var current)
-                && EqualityComparer<FiAsyncLock>.Default.Equals(current.AsyncLock, item.Value)) {
-                if (!current.TryRetire()) {
-                    if (current.IsRetired) {
-                        bool removedRetired = TryRemoveExact(item.Key, current);
-                        DisposeIfOwned(item.Key, current.AsyncLock);
-                        return removedRetired;
-                    }
-                    return false;
-                }
-                bool removed = TryRemoveExact(item.Key, current);
-                DisposeIfOwned(item.Key, current.AsyncLock);
-                return removed;
-            }
-            return false;
-        }
-
-        public bool TryGetValue(string key, out FiAsyncLock value) {
-            if (_entries.TryGetValue(key, out var entry)) {
-                value = entry.AsyncLock;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() {
-            return GetEnumerator();
-        }
-
-        internal Task<FiAsyncDisposableLock> AcquireUnboundedAsync(
-            string key,
-            CancellationToken cancellationToken) {
-            return AcquireAsync(key, Timeout.InfiniteTimeSpan, cancellationToken);
-        }
-
-        internal FiAsyncDisposableLock AcquireUnboundedSync(
-            string key,
-            CancellationToken cancellationToken) {
-            return AcquireSync(key, Timeout.InfiniteTimeSpan, cancellationToken);
-        }
-
-        internal void DisposeOwnedLock(string key, FiAsyncLock expectedLock) {
-            while (_entries.TryGetValue(key, out var entry)
-                && ReferenceEquals(entry.AsyncLock, expectedLock)) {
-                if (!entry.TryRetire()) {
-                    if (entry.IsRetired) {
-                        RemoveRetiredLock(key, entry);
-                        break;
-                    }
-                    throw new InvalidOperationException("Cannot dispose an active keyed lock.");
-                }
-                TryRemoveExact(key, entry);
-                break;
-            }
-            expectedLock.DisposeSemaphore();
-        }
-
         internal void ReleaseOperation(string key, FiAsyncMultiLockEntry expectedEntry) {
             int remainingOperations = expectedEntry.Release();
-            if (remainingOperations == 0
-                && AutoRemoveLocks
-                && expectedEntry.AsyncLock.IsOwnedBy(this, key)
-                && expectedEntry.TryRetire()) {
-                TryRemoveExact(key, expectedEntry);
-                expectedEntry.AsyncLock.DisposeSemaphore();
+            if (remainingOperations == 0 && expectedEntry.TryRetire()) {
+                RemoveRetiredEntry(key, expectedEntry);
             }
         }
 
@@ -300,14 +112,14 @@ namespace Figlotech.Core {
             string key,
             TimeSpan timeout,
             CancellationToken cancellationToken) {
+            ValidateArguments(key, timeout, cancellationToken);
             FiAsyncMultiLockEntry entry = ReserveOperation(key);
             try {
-                return await entry.AsyncLock.AcquireAsync(
-                    timeout,
-                    cancellationToken,
-                    this,
-                    key,
-                    entry).ConfigureAwait(false);
+                bool acquired = await entry.Semaphore.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+                if (!acquired) {
+                    throw new TimeoutException("Timed out waiting to acquire the lock.");
+                }
+                return new FiAsyncDisposableLock(entry.Semaphore, this, key, entry);
             } catch {
                 ReleaseOperation(key, entry);
                 throw;
@@ -318,9 +130,13 @@ namespace Figlotech.Core {
             string key,
             TimeSpan timeout,
             CancellationToken cancellationToken) {
+            ValidateArguments(key, timeout, cancellationToken);
             FiAsyncMultiLockEntry entry = ReserveOperation(key);
             try {
-                return entry.AsyncLock.AcquireSync(timeout, cancellationToken, this, key, entry);
+                if (!entry.Semaphore.Wait(timeout, cancellationToken)) {
+                    throw new TimeoutException("Timed out waiting to acquire the lock.");
+                }
+                return new FiAsyncDisposableLock(entry.Semaphore, this, key, entry);
             } catch {
                 ReleaseOperation(key, entry);
                 throw;
@@ -333,12 +149,8 @@ namespace Figlotech.Core {
                 if (entry.TryReserve()) {
                     return entry;
                 }
-                RemoveRetiredLock(key, entry);
+                RemoveRetiredEntry(key, entry);
             }
-        }
-
-        FiAsyncLock GetOrCreateLock(string key) {
-            return GetOrCreateEntry(key).AsyncLock;
         }
 
         FiAsyncMultiLockEntry GetOrCreateEntry(string key) {
@@ -347,55 +159,42 @@ namespace Figlotech.Core {
                     if (!existingEntry.IsRetired) {
                         return existingEntry;
                     }
-                    RemoveRetiredLock(key, existingEntry);
+                    RemoveRetiredEntry(key, existingEntry);
                     continue;
                 }
 
-                var createdLock = new FiAsyncLock(this, key);
-                var createdEntry = new FiAsyncMultiLockEntry(createdLock);
+                var createdEntry = new FiAsyncMultiLockEntry();
                 if (_entries.TryAdd(key, createdEntry)) {
                     return createdEntry;
                 }
-                createdLock.DisposeSemaphore();
+                createdEntry.Dispose();
             }
         }
 
         bool TryRemoveExact(string key, FiAsyncMultiLockEntry expectedEntry) {
-            return ((ICollection<KeyValuePair<string, FiAsyncMultiLockEntry>>)_entries).Remove(
+            return _entries.TryRemove(
                 new KeyValuePair<string, FiAsyncMultiLockEntry>(key, expectedEntry));
         }
 
-        void TryRemoveIdleLock(string key, FiAsyncMultiLockEntry expectedEntry) {
-            if (expectedEntry.TryRetire()) {
-                TryRemoveExact(key, expectedEntry);
-                DisposeIfOwned(key, expectedEntry.AsyncLock);
-            } else if (expectedEntry.IsRetired) {
-                RemoveRetiredLock(key, expectedEntry);
-            }
-        }
-
-        void RemoveRetiredLock(string key, FiAsyncMultiLockEntry expectedEntry) {
+        void RemoveRetiredEntry(string key, FiAsyncMultiLockEntry expectedEntry) {
             TryRemoveExact(key, expectedEntry);
-            DisposeIfOwned(key, expectedEntry.AsyncLock);
+            expectedEntry.Dispose();
         }
 
-        void DisposeIfOwned(string key, FiAsyncLock asyncLock) {
-            if (asyncLock.IsOwnedBy(this, key)) {
-                asyncLock.DisposeSemaphore();
+        static void ValidateArguments(
+            string key,
+            TimeSpan timeout,
+            CancellationToken cancellationToken) {
+            if (key == null) {
+                throw new ArgumentNullException(nameof(key));
             }
-        }
-
-        static void ValidateExternalValue(FiAsyncLock asyncLock, string parameterName) {
-            if (asyncLock.HasOwner) {
-                throw new ArgumentException(
-                    "A lock obtained from a FiAsyncMultiLock cannot be assigned to a dictionary entry.",
-                    parameterName);
-            }
+            FiAsyncLock.ValidateTimeout(timeout, nameof(timeout));
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
     /// <summary>
-    /// Releases an acquired <see cref="FiAsyncLock"/> when disposed.
+    /// Releases an acquired <see cref="FiAsyncLock"/> or <see cref="FiAsyncMultiLock"/> when disposed.
     /// </summary>
     public sealed class FiAsyncDisposableLock : IDisposable, IAsyncDisposable {
         readonly FiAsyncMultiLockEntry _multiLockEntry;
@@ -406,7 +205,7 @@ namespace Figlotech.Core {
 
         /// <summary>
         /// Creates a release handle for a semaphore acquired by the caller.
-        /// Prefer obtaining handles from <see cref="FiAsyncLock"/>.
+        /// Prefer obtaining handles from <see cref="FiAsyncLock"/> or <see cref="FiAsyncMultiLock"/>.
         /// </summary>
         public FiAsyncDisposableLock(SemaphoreSlim semaphore) {
             _semaphore = semaphore ?? throw new ArgumentNullException(nameof(semaphore));
@@ -450,17 +249,11 @@ namespace Figlotech.Core {
     /// acquire the same instance again before releasing it.
     /// </remarks>
     public sealed class FiAsyncLock : IAsyncDisposable, IDisposable {
-        readonly FiAsyncMultiLock _owner;
-        readonly string _ownerKey;
+        static readonly TimeSpan MaximumTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
         readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
         int _isDisposed;
 
         public FiAsyncLock() {
-        }
-
-        internal FiAsyncLock(FiAsyncMultiLock owner, string ownerKey) {
-            _owner = owner;
-            _ownerKey = ownerKey;
         }
 
         /// <summary>
@@ -474,10 +267,7 @@ namespace Figlotech.Core {
         /// Acquires the lock asynchronously with an unbounded wait and cancellation.
         /// </summary>
         public Task<FiAsyncDisposableLock> Lock(CancellationToken cancellationToken) {
-            if (_owner != null) {
-                return _owner.AcquireUnboundedAsync(_ownerKey, cancellationToken);
-            }
-            return AcquireUnboundedAsync(cancellationToken, null, null);
+            return AcquireUnboundedAsync(cancellationToken);
         }
 
         /// <summary>
@@ -491,10 +281,7 @@ namespace Figlotech.Core {
         /// Acquires the lock synchronously with an unbounded wait and cancellation.
         /// </summary>
         public FiAsyncDisposableLock LockSync(CancellationToken cancellationToken) {
-            if (_owner != null) {
-                return _owner.AcquireUnboundedSync(_ownerKey, cancellationToken);
-            }
-            return AcquireUnboundedSync(cancellationToken, null, null);
+            return AcquireUnboundedSync(cancellationToken);
         }
 
         public Task<FiAsyncDisposableLock> LockWithTimeout(TimeSpan timeout) {
@@ -508,10 +295,7 @@ namespace Figlotech.Core {
             TimeSpan timeout,
             CancellationToken cancellationToken) {
             ValidateTimeout(timeout, nameof(timeout));
-            if (_owner != null) {
-                return _owner.Lock(_ownerKey, timeout, cancellationToken);
-            }
-            return AcquireAsync(timeout, cancellationToken, null, null);
+            return AcquireAsync(timeout, cancellationToken);
         }
 
         public FiAsyncDisposableLock LockWithTimeoutSync(TimeSpan timeout) {
@@ -525,17 +309,10 @@ namespace Figlotech.Core {
             TimeSpan timeout,
             CancellationToken cancellationToken) {
             ValidateTimeout(timeout, nameof(timeout));
-            if (_owner != null) {
-                return _owner.LockSync(_ownerKey, timeout, cancellationToken);
-            }
-            return AcquireSync(timeout, cancellationToken, null, null);
+            return AcquireSync(timeout, cancellationToken);
         }
 
         public void Dispose() {
-            if (_owner != null) {
-                _owner.DisposeOwnedLock(_ownerKey, this);
-                return;
-            }
             DisposeSemaphore();
         }
 
@@ -544,77 +321,52 @@ namespace Figlotech.Core {
             return Fi.CompletedValueTask;
         }
 
-        internal async Task<FiAsyncDisposableLock> AcquireAsync(
+        async Task<FiAsyncDisposableLock> AcquireAsync(
             TimeSpan timeout,
-            CancellationToken cancellationToken,
-            FiAsyncMultiLock multiLock,
-            string key,
-            FiAsyncMultiLockEntry multiLockEntry = null) {
+            CancellationToken cancellationToken) {
             ValidateTimeout(timeout, nameof(timeout));
             bool acquired = await _semaphore.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
             if (!acquired) {
                 throw new TimeoutException("Timed out waiting to acquire the lock.");
             }
-            return CreateHandle(multiLock, key, multiLockEntry);
+            return new FiAsyncDisposableLock(_semaphore);
         }
 
-        internal FiAsyncDisposableLock AcquireSync(
+        FiAsyncDisposableLock AcquireSync(
             TimeSpan timeout,
-            CancellationToken cancellationToken,
-            FiAsyncMultiLock multiLock,
-            string key,
-            FiAsyncMultiLockEntry multiLockEntry = null) {
+            CancellationToken cancellationToken) {
             ValidateTimeout(timeout, nameof(timeout));
             if (!_semaphore.Wait(timeout, cancellationToken)) {
                 throw new TimeoutException("Timed out waiting to acquire the lock.");
             }
-            return CreateHandle(multiLock, key, multiLockEntry);
+            return new FiAsyncDisposableLock(_semaphore);
         }
 
-        internal bool IsOwnedBy(FiAsyncMultiLock owner, string key) {
-            return ReferenceEquals(_owner, owner) && string.Equals(_ownerKey, key, StringComparison.Ordinal);
-        }
-
-        internal bool HasOwner => _owner != null;
-
-        internal void DisposeSemaphore() {
+        void DisposeSemaphore() {
             if (Interlocked.Exchange(ref _isDisposed, 1) == 0) {
                 _semaphore.Dispose();
             }
         }
 
         internal static void ValidateTimeout(TimeSpan timeout, string parameterName) {
-            if (timeout < Timeout.InfiniteTimeSpan) {
-                throw new ArgumentOutOfRangeException(parameterName, "Timeout must be non-negative or infinite.");
+            if (timeout != Timeout.InfiniteTimeSpan
+                && (timeout < TimeSpan.Zero || timeout > MaximumTimeout)) {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    "Timeout must be infinite or between zero and Int32.MaxValue milliseconds.");
             }
         }
 
         async Task<FiAsyncDisposableLock> AcquireUnboundedAsync(
-            CancellationToken cancellationToken,
-            FiAsyncMultiLock multiLock,
-            string key,
-            FiAsyncMultiLockEntry multiLockEntry = null) {
+            CancellationToken cancellationToken) {
             await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            return CreateHandle(multiLock, key, multiLockEntry);
+            return new FiAsyncDisposableLock(_semaphore);
         }
 
         FiAsyncDisposableLock AcquireUnboundedSync(
-            CancellationToken cancellationToken,
-            FiAsyncMultiLock multiLock,
-            string key,
-            FiAsyncMultiLockEntry multiLockEntry = null) {
+            CancellationToken cancellationToken) {
             _semaphore.Wait(cancellationToken);
-            return CreateHandle(multiLock, key, multiLockEntry);
-        }
-
-        FiAsyncDisposableLock CreateHandle(
-            FiAsyncMultiLock multiLock,
-            string key,
-            FiAsyncMultiLockEntry multiLockEntry) {
-            if (multiLock == null) {
-                return new FiAsyncDisposableLock(_semaphore);
-            }
-            return new FiAsyncDisposableLock(_semaphore, multiLock, key, multiLockEntry);
+            return new FiAsyncDisposableLock(_semaphore);
         }
     }
 }

@@ -307,7 +307,7 @@ namespace Figlotech.Core.FileAcessAbstractions {
         }
 
         private T LockRegion<T>(String wd, Func<T> act) {
-            lock (FileLocks[wd]) {
+            using (var handle = FileLocks.LockSync(wd)) {
                 return act.Invoke();
             }
         }
