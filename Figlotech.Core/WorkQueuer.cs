@@ -151,6 +151,8 @@ namespace Figlotech.Core {
         public decimal TimeInExecution { get; set; }
         public Dictionary<string, object> AdditionalTelemetryTags { get; set; }
         public StackTrace SchedulingContextStackTrace { get; set; }
+        [JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
         public CancellationTokenSource CancellationTokenSource { get; set;  }
         public WorkJobExecutionStat(WorkJobExecutionRequest x) {
             Description = x.WorkJob.Name;
