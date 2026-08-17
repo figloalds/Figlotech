@@ -582,7 +582,8 @@ namespace Figlotech.Core {
         public static void ScheduleTask(this Fi _selfie, string identifier, DateTime when, WorkJob job, TimeSpan? RecurrenceInterval = null) {
             var options = new ScheduledTaskOptions {
                 ScheduledTime = when,
-                RecurrenceInterval = RecurrenceInterval
+                RecurrenceInterval = RecurrenceInterval,
+                CancellationToken = CancellationToken.None,
             };
             FiTechFireTaskWorker.ScheduleTask(identifier, job, options);
         }

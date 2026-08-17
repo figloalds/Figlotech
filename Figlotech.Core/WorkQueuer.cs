@@ -814,7 +814,7 @@ namespace Figlotech.Core {
         }
 
         public WorkJobExecutionRequest Enqueue(WorkJob job, CancellationToken? requestCancellation = null) {
-            using var request = new WorkJobExecutionRequest(job, requestCancellation) {
+            var request = new WorkJobExecutionRequest(job, requestCancellation) {
                 EnqueuedTime = DateTime.UtcNow,
                 Status = WorkJobRequestStatus.Queued,
                 WorkQueuer = this
