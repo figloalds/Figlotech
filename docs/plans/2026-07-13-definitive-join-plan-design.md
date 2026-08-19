@@ -57,7 +57,7 @@ public enum AggregateJoinShape {
 }
 ```
 
-`ScalarAggregatesOnly` preserves aggregate scalar and far-field joins but omits aggregate object/list graph construction. `FullGraph` includes aggregate objects and lists recursively.
+`ScalarAggregatesOnly` preserves aggregate scalar, far-field, and single-object joins recursively, but omits every aggregate-list edge. `FullGraph` includes aggregate objects and lists recursively.
 
 Public `Linear` options can remain temporarily and map to this enum at the API boundary.
 

@@ -147,23 +147,29 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public void MaterializeScalarShapeHasNoObjectOrListSideEffects() {
+        public void MaterializeScalarShapeBuildsObjectsButLeavesListsEmpty() {
             DefinitiveJoinPlan source = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.ScalarAggregatesOnly);
             CompiledAggregateMaterializerPlan compiled = CompiledAggregateMaterializerPlan.GetOrCreate(source);
             Guid rootId = Guid.Parse("c1111111-1111-1111-1111-111111111111");
             Guid scalarId = Guid.Parse("c2222222-2222-2222-2222-222222222222");
+            Guid objectId = Guid.Parse("c5555555-5555-5555-5555-555555555555");
 
             GuidRoot root = Assert.Single(compiled.Materialize<GuidRoot>(new[] {
                 Row(source,
                     (source.RootTableIndex, nameof(GuidRoot.Id), rootId),
                     (source.RootTableIndex, nameof(GuidRoot.ScalarAggregateId), scalarId),
+                    (source.RootTableIndex, nameof(GuidRoot.ObjectAggregateId), objectId),
                     (TableIndex(source, typeof(ScalarAggregate)), nameof(ScalarAggregate.Id), scalarId),
-                    (TableIndex(source, typeof(ScalarAggregate)), nameof(ScalarAggregate.Name), 9001))
+                    (TableIndex(source, typeof(ScalarAggregate)), nameof(ScalarAggregate.Name), 9001),
+                    (TableIndex(source, typeof(ObjectAggregate)), nameof(ObjectAggregate.Id), objectId),
+                    (TableIndex(source, typeof(ObjectAggregate)), nameof(ObjectAggregate.Name), "object"))
             }));
 
             Assert.Equal(rootId, root.Id);
             Assert.Equal("9001", root.AggregateName);
-            Assert.Null(root.AggregateObject);
+            Assert.NotNull(root.AggregateObject);
+            Assert.Equal(objectId, root.AggregateObject!.Id);
+            Assert.Equal("object", root.AggregateObject.Name);
             Assert.Empty(root.AggregateList);
         }
 

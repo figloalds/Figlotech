@@ -175,16 +175,19 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public void ScalarParserRejectsObjectPathThroughFrozenResolverAfterFullGraphPrewarm() {
+        public void ScalarParserResolvesObjectPathButRejectsListPathAfterFullGraphPrewarm() {
             DefinitiveJoinPlan fullGraph = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.FullGraph);
             var parser = new ConditionParser(AggregateJoinShape.ScalarAggregatesOnly);
-            BDadosException exception = Assert.Throws<BDadosException>(() => parser.ParseExpression<GuidRoot>(x => x.AggregateObject!.Name == "name"));
+            string objectSql = parser.ParseExpression<GuidRoot>(x => x.AggregateObject!.Name == "name").GetCommandText();
+            DefinitiveJoinPlan scalarGraph = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.ScalarAggregatesOnly);
+            BDadosException exception = Assert.Throws<BDadosException>(() => parser.ParseExpression<GuidRoot>(x => x.AggregateList.Any()));
 
             Assert.Equal(typeof(GuidRoot), fullGraph.RootType);
             Assert.Equal(AggregateJoinShape.FullGraph, fullGraph.Shape);
+            Assert.Contains(scalarGraph.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) })] + ".Name", objectSql);
             Assert.Contains(nameof(GuidRoot), exception.ToString());
             Assert.Contains(nameof(AggregateJoinShape.ScalarAggregatesOnly), exception.ToString());
-            Assert.Contains(nameof(GuidRoot.AggregateObject), exception.ToString());
+            Assert.Contains(nameof(GuidRoot.AggregateList), exception.ToString());
         }
 
         [Fact]

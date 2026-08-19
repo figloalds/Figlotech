@@ -1259,13 +1259,26 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
-        private T RunAfterLoad<T>(T target, bool isAggregateLoad, object transferObject = null) {
+        private sealed class AggregateFetchHookContext {
+            public AggregateFetchHookContext(DefinitiveJoinPlan plan, object contextTransferObject) {
+                Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+                ContextTransferObject = contextTransferObject;
+            }
+
+            public DefinitiveJoinPlan Plan { get; }
+            public object ContextTransferObject { get; }
+        }
+
+        private T RunAfterLoad<T>(T target, object transferObject = null, BDadosTransaction transaction = null) {
             if (target is IBusinessObject ibo) {
-                ibo.OnAfterLoad(new DataLoadContext {
-                    DataAccessor = this,
-                    IsAggregateLoad = isAggregateLoad,
-                    ContextTransferObject = transferObject
-                });
+                DataLoadContext context = transferObject is AggregateFetchHookContext aggregateContext
+                    ? CreateAggregateDataLoadContext(transaction, aggregateContext.ContextTransferObject, aggregateContext.Plan)
+                    : new DataLoadContext {
+                        DataAccessor = this,
+                        IsAggregateLoad = false,
+                        ContextTransferObject = transferObject
+                    };
+                ibo.OnAfterLoad(context);
             }
             return target;
         }
@@ -3098,6 +3111,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             return plan.Relations.Any(relation => relation.BuildKind != AggregateBuildOptions.None);
         }
 
+        private static bool HasOneToManyAggregateRelations(DefinitiveJoinPlan plan) {
+            return plan.Relations.Any(relation => relation.BuildKind == AggregateBuildOptions.AggregateList);
+        }
+
         private static bool HasSameMetadataIdentity(MemberInfo first, MemberInfo second) {
             return first.Module == second.Module && first.MetadataToken == second.MetadataToken;
         }
@@ -3136,29 +3153,48 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 orderingMember, args.OrderingType, rootConditions);
         }
 
-        private DataLoadContext CreateAggregateDataLoadContext(BDadosTransaction transaction, object overrideContext) {
+        private DataLoadContext CreateAggregateDataLoadContext(BDadosTransaction transaction, object overrideContext, DefinitiveJoinPlan plan) {
+            if (plan == null) {
+                throw new ArgumentNullException(nameof(plan));
+            }
             return new DataLoadContext {
                 DataAccessor = this,
                 IsAggregateLoad = true,
+                AggregateShape = plan.Shape,
+                IncludesOneToManyAggregations = HasOneToManyAggregateRelations(plan),
                 Transaction = transaction,
                 ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
             };
         }
 
-        private async Task RunAutomaticAggregateListHookAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext) where T : IDataObject, new() {
+        private IAsyncEnumerable<T> FetchAsyncForAggregateFallback<T>(BDadosTransaction transaction, LoadAllArgs<T> args, DefinitiveJoinPlan plan) where T : IDataObject, new() {
+            var parser = new ConditionParser();
+            IQueryBuilder conditions = parser.ParseExpression(args.Conditions);
+            var hookContext = new AggregateFetchHookContext(plan, args.ContextObject);
+            return FetchAsync(transaction, conditions, args.RowSkip, args.RowLimit, args.OrderingMember, args.OrderingType, hookContext);
+        }
+
+        private IEnumerable<T> FetchForAggregateFallback<T>(BDadosTransaction transaction, LoadAllArgs<T> args, DefinitiveJoinPlan plan) where T : IDataObject, new() {
+            var parser = new ConditionParser();
+            IQueryBuilder conditions = parser.ParseExpression(args.Conditions);
+            var hookContext = new AggregateFetchHookContext(plan, args.ContextObject);
+            return Fetch(transaction, conditions, args.RowSkip, args.RowLimit, args.OrderingMember, args.OrderingType, hookContext);
+        }
+
+        private async Task RunAutomaticAggregateListHookAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext, DefinitiveJoinPlan plan) where T : IDataObject, new() {
             if (items.Count == 0 || !CacheImplementsAfterListAggregateLoad[typeof(T)]) {
                 return;
             }
-            var dlc = CreateAggregateDataLoadContext(transaction, overrideContext);
+            var dlc = CreateAggregateDataLoadContext(transaction, overrideContext, plan);
             await ((IBusinessObject<T>)items.First()).OnAfterListAggregateLoadAsync(dlc, items).ConfigureAwait(false);
         }
 
-        private async Task RunAutomaticAggregateHooksAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext) where T : IDataObject, new() {
-            await RunAutomaticAggregateListHookAsync(transaction, items, overrideContext).ConfigureAwait(false);
+        private async Task RunAutomaticAggregateHooksAsync<T>(BDadosTransaction transaction, List<T> items, object overrideContext, DefinitiveJoinPlan plan) where T : IDataObject, new() {
+            await RunAutomaticAggregateListHookAsync(transaction, items, overrideContext, plan).ConfigureAwait(false);
             bool implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
             bool implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
             if (implementsAfterLoad || implementsAfterAggregateLoad) {
-                var dlc = CreateAggregateDataLoadContext(transaction, overrideContext);
+                var dlc = CreateAggregateDataLoadContext(transaction, overrideContext, plan);
                 using var afterLoads = new WorkQueuer("AfterLoads");
                 var requests = new List<WorkJobExecutionRequest>();
                 foreach (T item in items) {
@@ -3201,12 +3237,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
                     transaction?.Benchmarker?.Mark($"Start build AggregateListDirect<{typeof(T).Name}> ({query.Id})");
 
-                    var dlc = new DataLoadContext {
-                        DataAccessor = this,
-                        IsAggregateLoad = true,
-                        Transaction = transaction,
-                        ContextTransferObject = args.ContextObject ?? transaction?.ContextTransferObject
-                    };
+                    DataLoadContext dlc = CreateAggregateDataLoadContext(transaction, args.ContextObject, plan);
 
                     var implementsAfterLoad = CacheImplementsAfterLoad[typeof(T)];
                     var implementsAfterAggregateLoad = CacheImplementsAfterAggregateLoad[typeof(T)];
@@ -3235,7 +3266,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } else {
                 WriteLog(args.Conditions?.ToString());
-                await foreach (var item in FetchAsync<T>(transaction, args).ConfigureAwait(false)) {
+                await foreach (var item in FetchAsyncForAggregateFallback(transaction, args, plan).ConfigureAwait(false)) {
                     yield return item;
                 }
             }
@@ -3249,10 +3280,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             DefinitiveJoinPlan plan = GetAutomaticAggregatePlan(args);
             if (!HasAggregateRelations(plan)) {
                 List<T> fallback = new List<T>();
-                await foreach (T item in FetchAsync<T>(transaction, args).ConfigureAwait(false)) {
+                await foreach (T item in FetchAsyncForAggregateFallback(transaction, args, plan).ConfigureAwait(false)) {
                     fallback.Add(item);
                 }
-                await RunAutomaticAggregateListHookAsync(transaction, fallback, args.ContextObject).ConfigureAwait(false);
+                await RunAutomaticAggregateListHookAsync(transaction, fallback, args.ContextObject, plan).ConfigureAwait(false);
                 return fallback;
             }
 
@@ -3278,7 +3309,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     break;
                 }
             }
-            await RunAutomaticAggregateHooksAsync(transaction, selected, args.ContextObject).ConfigureAwait(false);
+            await RunAutomaticAggregateHooksAsync(transaction, selected, args.ContextObject, plan).ConfigureAwait(false);
             return selected;
         }
 
@@ -3291,7 +3322,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             int? querySkip = args.Linear ? args.RowSkip : null;
             DefinitiveJoinPlan plan = GetAutomaticAggregatePlan(args);
             if (!HasAggregateRelations(plan)) {
-                return Fetch<T>(transaction, args).ToList();
+                return FetchForAggregateFallback(transaction, args, plan).ToList();
             }
 
             using (var command = transaction.CreateCommand()) {
@@ -3408,7 +3439,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     while (await reader.ReadAsync(transaction.CancellationToken).ConfigureAwait(false)) {
                         T obj = materializer(reader);
 
-                        RunAfterLoad(obj, false, transferObject ?? transaction?.ContextTransferObject);
+                        RunAfterLoad(obj, transferObject ?? transaction?.ContextTransferObject, transaction);
                         yield return (obj);
                         c++;
                     }
@@ -3490,7 +3521,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     var swBuild = Stopwatch.StartNew();
                     while (reader.Read()) {
                         T obj = materializer(reader);
-                        RunAfterLoad(obj, false, transferObject ?? transaction?.ContextTransferObject);
+                        RunAfterLoad(obj, transferObject ?? transaction?.ContextTransferObject, transaction);
                         yield return (obj);
                         c++;
                     }

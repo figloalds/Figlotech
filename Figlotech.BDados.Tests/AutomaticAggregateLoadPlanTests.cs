@@ -35,6 +35,29 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void AggregateLoadLinearMaterializesNestedObjectsWithoutQueryingTheirLists() {
+            using var accessor = CreateAccessor(out CapturingGenerator capture);
+            using BDadosTransaction transaction = accessor.CreateNewTransaction(CancellationToken.None, null);
+            SeedLinearNestedObject(transaction.Connection);
+
+            List<SharedNestedObjectRoot> roots = accessor.AggregateLoad(transaction,
+                new LoadAllArgs<SharedNestedObjectRoot>().NoLists().Where(root => root.Id == RootId));
+
+            SharedNestedObjectRoot root = Assert.Single(roots);
+            Assert.NotNull(root.First);
+            Assert.NotNull(root.Second);
+            Assert.Equal("nested scalar", root.First!.NestedName);
+            Assert.Equal("nested scalar", root.Second!.NestedName);
+            Assert.Equal("nested object", root.First.NestedObject!.Name);
+            Assert.Equal("nested object", root.Second.NestedObject!.Name);
+            Assert.Empty(root.First.NestedList);
+            Assert.Empty(root.Second.NestedList);
+            Assert.DoesNotContain(capture.Plan!.Tables, table => table.EntityType == typeof(SharedNestedListItem));
+            Assert.DoesNotContain(capture.Plan.Relations, relation => relation.BuildKind == AggregateBuildOptions.AggregateList);
+            Assert.DoesNotContain(nameof(SharedNestedListItem), capture.Sql!, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task AggregateLoadAsyncUsesCanonicalFullPlanAndMaterializesOrderedLists() {
             using var accessor = CreateAccessor(out CapturingGenerator capture);
             await using BDadosTransaction transaction = await accessor.CreateNewTransactionAsync(CancellationToken.None, null);
@@ -142,6 +165,104 @@ namespace Figlotech.BDados.Tests {
             Assert.True(Array.IndexOf(coroutineLog.ToArray(), "aggregate:" + RootId) < Array.IndexOf(coroutineLog.ToArray(), "load:" + RootId));
         }
 
+        [Theory]
+        [InlineData("sync", true, AggregateJoinShape.ScalarAggregatesOnly, false)]
+        [InlineData("sync", false, AggregateJoinShape.FullGraph, true)]
+        [InlineData("async", true, AggregateJoinShape.ScalarAggregatesOnly, false)]
+        [InlineData("async", false, AggregateJoinShape.FullGraph, true)]
+        [InlineData("coroutine", true, AggregateJoinShape.ScalarAggregatesOnly, false)]
+        [InlineData("coroutine", false, AggregateJoinShape.FullGraph, true)]
+        public async Task AggregateHooksReceiveTheExecutedAggregationQueryShape(
+            string loadPath,
+            bool linear,
+            AggregateJoinShape expectedShape,
+            bool includesOneToManyAggregations) {
+            using var accessor = CreateAccessor(out _);
+            using BDadosTransaction transaction = accessor.CreateNewTransaction(CancellationToken.None, null);
+            SeedContextAwareHook(transaction.Connection);
+            var probe = new AggregateLoadContextProbe();
+            LoadAllArgs<ContextAwareHookRoot> args = new LoadAllArgs<ContextAwareHookRoot>()
+                .LinearIf(linear)
+                .Where(root => root.Id == RootId)
+                .WithContext(probe);
+
+            ContextAwareHookRoot root;
+            switch (loadPath) {
+                case "sync":
+                    root = Assert.Single(accessor.AggregateLoad(transaction, args));
+                    break;
+                case "async":
+                    root = Assert.Single(await accessor.AggregateLoadAsync(transaction, args));
+                    break;
+                case "coroutine":
+                    var roots = new List<ContextAwareHookRoot>();
+                    await foreach (ContextAwareHookRoot item in accessor.AggregateLoadAsyncCoroutinely(transaction, args)) {
+                        roots.Add(item);
+                    }
+                    root = Assert.Single(roots);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(loadPath), loadPath, "Unknown aggregate load path.");
+            }
+
+            Assert.NotNull(root.AggregateObject);
+            Assert.Equal(linear ? 0 : 1, root.AggregateList.Count);
+            Assert.NotEmpty(probe.Contexts);
+            Assert.All(probe.Contexts, context => {
+                Assert.True(context.IsAggregateLoad);
+                Assert.Equal(expectedShape, context.AggregateShape);
+                Assert.Equal(linear, context.IsLinearAggregateLoad);
+                Assert.Equal(includesOneToManyAggregations, context.IncludesOneToManyAggregations);
+                Assert.Same(accessor, context.DataAccessor);
+                Assert.Same(transaction, context.Transaction);
+            });
+        }
+
+        [Theory]
+        [InlineData("sync")]
+        [InlineData("async")]
+        [InlineData("coroutine")]
+        public async Task LinearListOnlyAggregateFallbackPreservesAggregateQueryShapeForHooks(string loadPath) {
+            using var accessor = CreateAccessor(out _);
+            using BDadosTransaction transaction = accessor.CreateNewTransaction(CancellationToken.None, null);
+            SeedContextAwareListOnlyHook(transaction.Connection);
+            var probe = new AggregateLoadContextProbe();
+            LoadAllArgs<ContextAwareListOnlyHookRoot> args = new LoadAllArgs<ContextAwareListOnlyHookRoot>()
+                .NoLists()
+                .Where(root => root.Id == 42L)
+                .WithContext(probe);
+
+            ContextAwareListOnlyHookRoot root;
+            switch (loadPath) {
+                case "sync":
+                    root = Assert.Single(accessor.AggregateLoad(transaction, args));
+                    break;
+                case "async":
+                    root = Assert.Single(await accessor.AggregateLoadAsync(transaction, args));
+                    break;
+                case "coroutine":
+                    var roots = new List<ContextAwareListOnlyHookRoot>();
+                    await foreach (ContextAwareListOnlyHookRoot item in accessor.AggregateLoadAsyncCoroutinely(transaction, args)) {
+                        roots.Add(item);
+                    }
+                    root = Assert.Single(roots);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(loadPath), loadPath, "Unknown aggregate load path.");
+            }
+
+            Assert.Empty(root.AggregateList);
+            Assert.NotEmpty(probe.Contexts);
+            Assert.All(probe.Contexts, context => {
+                Assert.True(context.IsAggregateLoad);
+                Assert.Equal(AggregateJoinShape.ScalarAggregatesOnly, context.AggregateShape);
+                Assert.True(context.IsLinearAggregateLoad);
+                Assert.False(context.IncludesOneToManyAggregations);
+                Assert.Same(accessor, context.DataAccessor);
+                Assert.Same(transaction, context.Transaction);
+            });
+        }
+
         [Fact]
         public async Task AggregateLoadAsyncFallbackPreservesNormalLoadThenListHookWithoutAggregateHook() {
             using var accessor = CreateAccessor(out _);
@@ -193,6 +314,34 @@ namespace Figlotech.BDados.Tests {
             Execute(connection, "INSERT INTO RuntimeScalar (Id, Name) VALUES ('" + ScalarId + "', 'scalar')");
             Execute(connection, "INSERT INTO RuntimeList (Id, RootId, Name) VALUES ('33333333-3333-3333-3333-333333333333', '" + RootId + "', 'first')");
             Execute(connection, "INSERT INTO RuntimeList (Id, RootId, Name) VALUES ('44444444-4444-4444-4444-444444444444', '" + RootId + "', 'second')");
+        }
+
+        private static void SeedLinearNestedObject(IDbConnection connection) {
+            Guid parentId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+            Guid nestedObjectId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+            Execute(connection, "CREATE TABLE SharedNestedObjectRoot (Id TEXT NOT NULL, SharedId TEXT NOT NULL)");
+            Execute(connection, "CREATE TABLE SharedNestedParent (Id TEXT NOT NULL, RootId TEXT NOT NULL, NestedScalarId TEXT NOT NULL, NestedObjectId TEXT NOT NULL)");
+            Execute(connection, "CREATE TABLE ScalarAggregate (Id TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "CREATE TABLE ObjectAggregate (Id TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "INSERT INTO SharedNestedObjectRoot (Id, SharedId) VALUES ('" + RootId + "', '" + parentId + "')");
+            Execute(connection, "INSERT INTO SharedNestedParent (Id, RootId, NestedScalarId, NestedObjectId) VALUES ('" + parentId + "', '" + RootId + "', '" + ScalarId + "', '" + nestedObjectId + "')");
+            Execute(connection, "INSERT INTO ScalarAggregate (Id, Name) VALUES ('" + ScalarId + "', 'nested scalar')");
+            Execute(connection, "INSERT INTO ObjectAggregate (Id, Name) VALUES ('" + nestedObjectId + "', 'nested object')");
+        }
+
+        private static void SeedContextAwareHook(IDbConnection connection) {
+            Guid objectId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+            Execute(connection, "CREATE TABLE ContextAwareHookRoot (Id TEXT NOT NULL, ObjectAggregateId TEXT NOT NULL)");
+            Execute(connection, "CREATE TABLE ObjectAggregate (Id TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "CREATE TABLE ListAggregate (Id TEXT NOT NULL, ParentId TEXT NOT NULL, Name TEXT NULL)");
+            Execute(connection, "INSERT INTO ContextAwareHookRoot (Id, ObjectAggregateId) VALUES ('" + RootId + "', '" + objectId + "')");
+            Execute(connection, "INSERT INTO ObjectAggregate (Id, Name) VALUES ('" + objectId + "', 'object')");
+            Execute(connection, "INSERT INTO ListAggregate (Id, ParentId, Name) VALUES ('33333333-3333-3333-3333-333333333333', '" + RootId + "', 'child')");
+        }
+
+        private static void SeedContextAwareListOnlyHook(IDbConnection connection) {
+            Execute(connection, "CREATE TABLE ContextAwareListOnlyHookRoot (Id INTEGER NOT NULL)");
+            Execute(connection, "INSERT INTO ContextAwareListOnlyHookRoot (Id) VALUES (42)");
         }
 
         private static void SeedHooked(IDbConnection connection) {

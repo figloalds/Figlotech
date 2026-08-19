@@ -35,8 +35,10 @@ namespace Figlotech.BDados.Tests {
             Assert.NotSame(scalar, full);
             Assert.Equal(AggregateJoinShape.ScalarAggregatesOnly, scalar.Shape);
             Assert.Equal(AggregateJoinShape.FullGraph, full.Shape);
-            Assert.DoesNotContain(new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) }), scalar.AliasByPath.Keys);
+            Assert.Contains(new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) }), scalar.AliasByPath.Keys);
             Assert.Contains(new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) }), full.AliasByPath.Keys);
+            Assert.DoesNotContain(new AggregatePath(new[] { nameof(GuidRoot.AggregateList) }), scalar.AliasByPath.Keys);
+            Assert.Contains(new AggregatePath(new[] { nameof(GuidRoot.AggregateList) }), full.AliasByPath.Keys);
         }
 
         [Fact]

@@ -256,12 +256,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             ValidateFrozenAggregateInputs<T>(command, plan, materializer);
             CancellationToken token = transaction?.CancellationToken ?? CancellationToken.None;
             var retv = new List<T>();
-            var dlc = new DataLoadContext {
-                DataAccessor = this,
-                IsAggregateLoad = true,
-                Transaction = transaction,
-                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
-            };
+            DataLoadContext dlc = CreateAggregateDataLoadContext(transaction, overrideContext, plan);
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
             using (DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.KeyInfo, token).ConfigureAwait(false)) {
                 ReaderSchemaValidator.Validate(reader, plan);
@@ -331,12 +326,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public List<T> BuildAggregateListDirect<T>(BDadosTransaction transaction, IDbCommand command, DefinitiveJoinPlan plan, CompiledAggregateMaterializerPlan materializer, object overrideContext) where T : IDataObject, new() {
             ValidateFrozenAggregateInputs<T>(command, plan, materializer);
             var retv = new List<T>();
-            var dlc = new DataLoadContext {
-                DataAccessor = this,
-                IsAggregateLoad = true,
-                Transaction = transaction,
-                ContextTransferObject = overrideContext ?? transaction?.ContextTransferObject
-            };
+            DataLoadContext dlc = CreateAggregateDataLoadContext(transaction, overrideContext, plan);
             transaction?.Benchmarker?.Mark($"Executing query for AggregateListDirect<{typeof(T).Name}>");
             using (IDataReader reader = command.ExecuteReader(CommandBehavior.SingleResult | CommandBehavior.KeyInfo)) {
                 ReaderSchemaValidator.Validate(reader, plan);

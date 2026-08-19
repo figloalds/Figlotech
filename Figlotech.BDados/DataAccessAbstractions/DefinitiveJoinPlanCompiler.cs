@@ -205,13 +205,13 @@ public static class DefinitiveJoinPlanCompiler {
                     EmitAggregateFarField(currentType, currentAlias, currentPath, item2.Member, item2.FarField);
                 }
             }
-            if (_shape == AggregateJoinShape.ScalarAggregatesOnly) {
-                return;
-            }
             foreach (AggregateMetadata item3 in list) {
                 if (item3.Object != null && Applies(item3.Object, isRoot, item3.Member, currentPath)) {
                     EmitAggregateObject(currentType, currentAlias, currentPath, item3.Member, item3.Object, ancestry);
                 }
+            }
+            if (_shape == AggregateJoinShape.ScalarAggregatesOnly) {
+                return;
             }
             foreach (AggregateMetadata item4 in list) {
                 if (item4.List != null && Applies(item4.List, isRoot, item4.Member, currentPath)) {

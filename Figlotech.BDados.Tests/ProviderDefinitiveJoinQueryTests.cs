@@ -451,7 +451,7 @@ namespace Figlotech.BDados.Tests {
 
         [Theory]
         [MemberData(nameof(Generators))]
-        public void AutomaticScalarPlanProjectsOnlyPublishedScalarTopologyAndOrdersByTypedRootIdentifier(string providerName, IQueryGenerator generator) {
+        public void AutomaticScalarPlanProjectsFieldsAndObjectsWithoutListsAndOrdersByTypedRootIdentifier(string providerName, IQueryGenerator generator) {
             Assert.NotEmpty(providerName);
             DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.ScalarAggregatesOnly);
             DefinitiveJoinPlan cached = AutomaticJoinPlanCache.GetOrAdd(typeof(GuidRoot), AggregateJoinShape.ScalarAggregatesOnly);
@@ -476,7 +476,7 @@ namespace Figlotech.BDados.Tests {
             Assert.Same(plan, cached);
             Assert.Equal(compiled.StructuralSignature, plan.StructuralSignature);
             Assert.Equal(AggregateJoinShape.ScalarAggregatesOnly, plan.Shape);
-            Assert.Equal(new[] { typeof(GuidRoot), typeof(ScalarAggregate), typeof(IntermediateAggregate), typeof(FarAggregate) }, plan.Tables.Select(table => table.EntityType));
+            Assert.Equal(new[] { typeof(GuidRoot), typeof(ScalarAggregate), typeof(IntermediateAggregate), typeof(FarAggregate), typeof(ObjectAggregate) }, plan.Tables.Select(table => table.EntityType));
             Assert.Equal(expectedProjection, actualProjection);
             Assert.Equal(plan.Projection.Length, actualProjection.Length);
             Assert.Equal(Enumerable.Range(0, plan.Projection.Length), plan.Projection.Select(column => column.Ordinal));
@@ -499,7 +499,7 @@ namespace Figlotech.BDados.Tests {
                 previousJoinIndex = joinIndex;
             }
             Assert.Equal(plan.Tables.Length - 1, Regex.Matches(first, @"\bLEFT\s+JOIN\b", RegexOptions.IgnoreCase).Count);
-            Assert.Equal(new[] { typeof(ObjectAggregate), typeof(ListAggregate) }, fullOnlyTables.Select(table => table.EntityType));
+            Assert.Equal(new[] { typeof(ListAggregate) }, fullOnlyTables.Select(table => table.EntityType));
             foreach (DefinitiveJoinTable table in fullOnlyTables) {
                 Assert.DoesNotContain("LEFT JOIN " + table.TableName + " AS " + table.Prefix, first, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain(table.Prefix + ".", first, StringComparison.OrdinalIgnoreCase);
@@ -516,6 +516,31 @@ namespace Figlotech.BDados.Tests {
             AssertFinalOrdering(first, "sub." + plan.RootOrdering.ResultAlias + " ASC");
             Assert.DoesNotContain("RID", first, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(first, second);
+        }
+
+        [Theory]
+        [MemberData(nameof(Generators))]
+        public void AutomaticLinearQueryJoinsNestedObjectsButNeverNestedLists(string providerName, IQueryGenerator generator) {
+            Assert.NotEmpty(providerName);
+            DefinitiveJoinPlan plan = AutomaticJoinPlanCache.GetOrAdd(typeof(SharedNestedObjectRoot), AggregateJoinShape.ScalarAggregatesOnly);
+            DefinitiveJoinPlan fullGraph = AutomaticJoinPlanCache.GetOrAdd(typeof(SharedNestedObjectRoot), AggregateJoinShape.FullGraph);
+            string sql = Normalize(generator.GenerateJoinQuery(plan, null).GetCommandText());
+
+            Assert.Equal(new[] { typeof(SharedNestedObjectRoot), typeof(SharedNestedParent), typeof(ScalarAggregate), typeof(ObjectAggregate) }, plan.Tables.Select(table => table.EntityType));
+            Assert.Contains(plan.Relations, relation => relation.BuildKind == AggregateBuildOptions.AggregateObject && relation.TargetMember!.Name == nameof(SharedNestedObjectRoot.First));
+            Assert.Contains(plan.Relations, relation => relation.BuildKind == AggregateBuildOptions.AggregateObject && relation.TargetMember!.Name == nameof(SharedNestedParent.NestedObject));
+            Assert.Contains(plan.Relations, relation => relation.BuildKind == AggregateBuildOptions.AggregateField && relation.TargetMember!.Name == nameof(SharedNestedParent.NestedName));
+            Assert.DoesNotContain(plan.Relations, relation => relation.BuildKind == AggregateBuildOptions.AggregateList);
+
+            foreach (DefinitiveJoinTable table in plan.Tables.Where(table => table != plan.Tables[plan.RootTableIndex])) {
+                string expectedJoin = "LEFT JOIN " + table.TableName + " AS " + table.Prefix + " ON " + table.JoinPredicate;
+                Assert.Equal(1, CountOccurrence(sql, expectedJoin));
+            }
+
+            DefinitiveJoinTable nestedListTable = Assert.Single(fullGraph.Tables.Where(table => table.EntityType == typeof(SharedNestedListItem)));
+            Assert.DoesNotContain(nestedListTable.TableName, sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(nestedListTable.Prefix + ".", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotMatch(@"\bRIGHT\s+JOIN\b", sql);
         }
 
         [Theory]

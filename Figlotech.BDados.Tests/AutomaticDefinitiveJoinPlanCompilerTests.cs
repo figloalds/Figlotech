@@ -16,7 +16,7 @@ namespace Figlotech.BDados.Tests {
 
             Assert.Equal(typeof(GuidRoot), plan.RootType);
             Assert.Equal(0, plan.RootTableIndex);
-            Assert.Equal(4, plan.Tables.Length);
+            Assert.Equal(5, plan.Tables.Length);
             Assert.Equal(typeof(GuidRoot), plan.Tables[0].EntityType);
             Assert.Equal("tba", plan.Tables[0].Alias);
             Assert.Equal("tba", plan.Tables[0].Prefix);
@@ -29,16 +29,17 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public void CompileAutomaticScalarGraphHasLegacyAliasesFarFieldRelationsAndNoObjectListPaths() {
+        public void CompileAutomaticScalarGraphIncludesObjectRelationsAndExcludesListPaths() {
             DefinitiveJoinPlan plan = DefinitiveJoinPlanCompiler.Compile(typeof(GuidRoot), AggregateJoinShape.ScalarAggregatesOnly);
 
-            Assert.Equal(new[] { typeof(GuidRoot), typeof(ScalarAggregate), typeof(IntermediateAggregate), typeof(FarAggregate) }, plan.Tables.Select(x => x.EntityType));
-            Assert.Equal(new[] { "tba", "tbb", "tbc", "tbd" }, plan.Tables.Select(x => x.Alias));
+            Assert.Equal(new[] { typeof(GuidRoot), typeof(ScalarAggregate), typeof(IntermediateAggregate), typeof(FarAggregate), typeof(ObjectAggregate) }, plan.Tables.Select(x => x.EntityType));
+            Assert.Equal(new[] { "tba", "tbb", "tbc", "tbd", "tbe" }, plan.Tables.Select(x => x.Alias));
             Assert.Equal("tbb", plan.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.AggregateName) })]);
             Assert.Equal("tbd", plan.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.FarAggregateName) })]);
-            Assert.DoesNotContain(new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) }), plan.AliasByPath.Keys);
+            Assert.Equal("tbe", plan.AliasByPath[new AggregatePath(new[] { nameof(GuidRoot.AggregateObject) })]);
             Assert.DoesNotContain(new AggregatePath(new[] { nameof(GuidRoot.AggregateList) }), plan.AliasByPath.Keys);
-            Assert.DoesNotContain(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateObject || x.BuildKind == AggregateBuildOptions.AggregateList);
+            Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateObject && x.TargetMember!.Name == nameof(GuidRoot.AggregateObject));
+            Assert.DoesNotContain(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateList);
             Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateField && x.TargetMember!.Name == nameof(GuidRoot.AggregateName) && x.SourceFields.Single() == nameof(ScalarAggregate.Name));
             Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateField && x.TargetMember!.Name == nameof(GuidRoot.FarAggregateName) && x.SourceFields.Single() == nameof(FarAggregate.Name));
             Assert.Contains(plan.Tables[2].ProjectedColumns, x => x == nameof(IntermediateAggregate.FarAggregateId));
@@ -57,9 +58,11 @@ namespace Figlotech.BDados.Tests {
                 "2:0:Id:IntermediateAggregateId:None:-",
                 "2:3:FarAggregateId:Id:None:-",
                 "3:2:Id:FarAggregateId:None:-",
-                "0:3:Id:Id:AggregateField:FarAggregateName"
+                "0:3:Id:Id:AggregateField:FarAggregateName",
+                "0:4:ObjectAggregateId:Id:AggregateObject:AggregateObject",
+                "4:0:Id:ObjectAggregateId:None:-"
             }, RelationSignatures(plan));
-            Assert.Equal(8, plan.Relations.Length);
+            Assert.Equal(10, plan.Relations.Length);
         }
 
         [Fact]
@@ -156,14 +159,28 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public void CompileAutomaticFullGraphRejectsCyclesButScalarGraphDoesNotTraverseThem() {
-            ArgumentException exception = Assert.Throws<ArgumentException>(() => DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.FullGraph));
-            DefinitiveJoinPlan scalar = DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.ScalarAggregatesOnly);
+        public void CompileAutomaticObjectCyclesAreRejectedForBothShapes() {
+            ArgumentException fullException = Assert.Throws<ArgumentException>(() => DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.FullGraph));
+            ArgumentException scalarException = Assert.Throws<ArgumentException>(() => DefinitiveJoinPlanCompiler.Compile(typeof(CyclicAggregateA), AggregateJoinShape.ScalarAggregatesOnly));
 
-            Assert.Contains(nameof(CyclicAggregateA), exception.Message);
-            Assert.Contains(nameof(CyclicAggregateB), exception.Message);
-            Assert.Contains("AggregateB.AggregateA", exception.Message);
-            Assert.Single(scalar.Tables);
+            foreach (ArgumentException exception in new[] { fullException, scalarException }) {
+                Assert.Contains(nameof(CyclicAggregateA), exception.Message);
+                Assert.Contains(nameof(CyclicAggregateB), exception.Message);
+                Assert.Contains("AggregateB.AggregateA", exception.Message);
+            }
+        }
+
+        [Fact]
+        public void CompileAutomaticLinearGraphTraversesObjectsButExcludesEveryNestedList() {
+            DefinitiveJoinPlan plan = DefinitiveJoinPlanCompiler.Compile(typeof(SharedNestedObjectRoot), AggregateJoinShape.ScalarAggregatesOnly);
+
+            Assert.Equal(new[] { typeof(SharedNestedObjectRoot), typeof(SharedNestedParent), typeof(ScalarAggregate), typeof(ObjectAggregate) }, plan.Tables.Select(x => x.EntityType));
+            Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateObject && x.TargetMember!.Name == nameof(SharedNestedObjectRoot.First));
+            Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateObject && x.TargetMember!.Name == nameof(SharedNestedParent.NestedObject));
+            Assert.Contains(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateField && x.TargetMember!.Name == nameof(SharedNestedParent.NestedName));
+            Assert.DoesNotContain(plan.Tables, x => x.EntityType == typeof(SharedNestedListItem));
+            Assert.DoesNotContain(plan.Relations, x => x.BuildKind == AggregateBuildOptions.AggregateList);
+            Assert.DoesNotContain(plan.AliasByPath.Keys, path => path.Segments.Contains(nameof(SharedNestedParent.NestedList)));
         }
 
         [Fact]

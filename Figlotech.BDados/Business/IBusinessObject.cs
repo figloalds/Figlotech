@@ -11,6 +11,22 @@ namespace Figlotech.BDados.Business {
         public IDataAccessor DataAccessor { get; set; }
         public BDadosTransaction Transaction { get; set; }
         public bool IsAggregateLoad { get; set; }
+
+        /// <summary>
+        /// Gets the frozen aggregate shape used to query the data, or null for a non-aggregate load.
+        /// </summary>
+        public AggregateJoinShape? AggregateShape { get; internal set; }
+
+        /// <summary>
+        /// Gets whether the data was queried in linear aggregate mode without aggregate lists.
+        /// </summary>
+        public bool IsLinearAggregateLoad => IsAggregateLoad && AggregateShape == AggregateJoinShape.ScalarAggregatesOnly;
+
+        /// <summary>
+        /// Gets whether the executed query plan contained at least one aggregate-list relation.
+        /// </summary>
+        public bool IncludesOneToManyAggregations { get; internal set; }
+
         public object ContextTransferObject { get; set; }
 
         public T ContextAs<T>() {

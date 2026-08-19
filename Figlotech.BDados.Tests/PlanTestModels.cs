@@ -599,6 +599,71 @@ namespace Figlotech.BDados.Tests {
         public Task OnAfterListAggregateLoadAsync(DataLoadContext ctx, List<ThrowingHookGuidRoot> aggregateLoadResult) => Task.CompletedTask;
     }
 
+    public sealed class AggregateLoadContextProbe {
+        public ConcurrentQueue<DataLoadContext> Contexts { get; } = new ConcurrentQueue<DataLoadContext>();
+
+        public void Record(DataLoadContext context) {
+            Contexts.Enqueue(context);
+        }
+    }
+
+    public sealed class ContextAwareHookRoot : PlanDataObject<Guid>, IBusinessObject<ContextAwareHookRoot> {
+        [Field]
+        public Guid ObjectAggregateId { get; set; }
+
+        [AggregateObject(nameof(ObjectAggregateId))]
+        public ObjectAggregate? AggregateObject { get; set; }
+
+        [AggregateList(typeof(ListAggregate), nameof(ListAggregate.ParentId))]
+        public List<ListAggregate> AggregateList { get; set; } = new List<ListAggregate>();
+
+        public Task<ValidationErrors> ValidateInput() => Task.FromResult<ValidationErrors>(null!);
+        public Task<ValidationErrors> ValidateBusiness() => Task.FromResult<ValidationErrors>(null!);
+        public Task<string> RunValidations() => Task.FromResult(String.Empty);
+        public Task<bool> ValidateAndPersistAsync(string iaToken) => Task.FromResult(false);
+        public Task OnBeforePersistAsync() => Task.CompletedTask;
+        public Task OnAfterPersistAsync() => Task.CompletedTask;
+        public void OnAfterLoad(DataLoadContext ctx) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+        }
+        public Task OnAfterAggregateLoadAsync(DataLoadContext ctx) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+            return Task.CompletedTask;
+        }
+        public Task OnAfterListAggregateLoadAsync(DataLoadContext ctx, List<ContextAwareHookRoot> aggregateLoadResult) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class ContextAwareListOnlyHookRoot : PlanDataObject<long>, IBusinessObject<ContextAwareListOnlyHookRoot> {
+        [AggregateList(typeof(ContextAwareListOnlyHookChild), nameof(ContextAwareListOnlyHookChild.ParentId))]
+        public List<ContextAwareListOnlyHookChild> AggregateList { get; set; } = new List<ContextAwareListOnlyHookChild>();
+
+        public Task<ValidationErrors> ValidateInput() => Task.FromResult<ValidationErrors>(null!);
+        public Task<ValidationErrors> ValidateBusiness() => Task.FromResult<ValidationErrors>(null!);
+        public Task<string> RunValidations() => Task.FromResult(String.Empty);
+        public Task<bool> ValidateAndPersistAsync(string iaToken) => Task.FromResult(false);
+        public Task OnBeforePersistAsync() => Task.CompletedTask;
+        public Task OnAfterPersistAsync() => Task.CompletedTask;
+        public void OnAfterLoad(DataLoadContext ctx) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+        }
+        public Task OnAfterAggregateLoadAsync(DataLoadContext ctx) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+            return Task.CompletedTask;
+        }
+        public Task OnAfterListAggregateLoadAsync(DataLoadContext ctx, List<ContextAwareListOnlyHookRoot> aggregateLoadResult) {
+            ctx.ContextAs<AggregateLoadContextProbe>().Record(ctx);
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class ContextAwareListOnlyHookChild : PlanDataObject<long> {
+        [Field]
+        public long ParentId { get; set; }
+    }
+
     public sealed class HookedGuidRoot : PlanDataObject<Guid>, IBusinessObject<HookedGuidRoot> {
         [AggregateList(typeof(ListAggregate), nameof(ListAggregate.ParentId))]
         public List<ListAggregate> AggregateList { get; set; } = new List<ListAggregate>();
