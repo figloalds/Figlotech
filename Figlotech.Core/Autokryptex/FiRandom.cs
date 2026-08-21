@@ -62,12 +62,16 @@ namespace Figlotech.Core.Autokryptex {
         }
 
         private int Gen() {
-            if (cursor > chunk.Length - sizeof(int)) {
+            if (cursor < 0 || cursor + sizeof(int) > chunk.Length) {
                 InitSeed(Seed++);
             }
+
             var gen = BitConverter.ToInt32(chunk, cursor);
-            while (gen < 0) gen += Int32.MaxValue;
             cursor += sizeof(int);
+
+            while (gen < 0)
+                gen += int.MaxValue;
+
             return gen;
         }
 
