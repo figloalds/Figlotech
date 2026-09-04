@@ -100,7 +100,7 @@ namespace Figlotech.BDados.Tests {
             Assert.DoesNotContain(actualProjection, fragment => Regex.IsMatch(fragment, @"\bRID\b", RegexOptions.IgnoreCase));
 
             DefinitiveJoinTable root = plan.Tables[plan.RootTableIndex];
-            Assert.Matches(@"FROM \(SELECT \* FROM " + Regex.Escape(root.TableName) + @"\s*\) AS " + Regex.Escape(root.Prefix), Normalize(sql));
+            AssertRootSource(providerName, sql, root);
             for (int i = 0; i < plan.Tables.Length; i++) {
                 if (i == plan.RootTableIndex) {
                     continue;
@@ -115,6 +115,21 @@ namespace Figlotech.BDados.Tests {
             Assert.DoesNotContain("RIGHT JOIN", Normalize(sql), StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public void MySqlAvoidsRedundantDerivedTablesForTrivialTrueCondition() {
+            DefinitiveJoinPlan plan = FullGraphPlan();
+            DefinitiveJoinTable root = plan.Tables[plan.RootTableIndex];
+
+            string sql = Normalize(new MySqlQueryGenerator()
+                .GenerateJoinQuery(plan, null, rootConditions: Qb.Fmt("TRUE"))
+                .GetCommandText());
+
+            AssertRootSource("MySQL", sql, root);
+            Assert.DoesNotContain("FROM (SELECT * FROM " + root.TableName, sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(") AS sub", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ORDER BY " + root.Prefix + "." + plan.RootOrdering.ColumnName, sql, StringComparison.Ordinal);
+        }
+
         [Theory]
         [MemberData(nameof(Generators))]
         public void FrozenPlanUsesDeclaredNonzeroRootAndJoinsEveryOtherTableInPlanOrder(string providerName, IQueryGenerator generator) {
@@ -124,7 +139,7 @@ namespace Figlotech.BDados.Tests {
             DefinitiveJoinTable root = plan.Tables[plan.RootTableIndex];
             string[] expectedProjection = plan.Projection.Select(column => plan.Tables[column.TableIndex].Prefix + "." + column.SourceColumn + " AS " + column.ResultAlias).ToArray();
 
-            Assert.Matches(@"FROM \(SELECT \* FROM " + Regex.Escape(root.TableName) + @"\s*\) AS " + Regex.Escape(root.Prefix), sql);
+            AssertRootSource(providerName, sql, root);
             Assert.Equal(expectedProjection, SplitSelectList(ExtractInnerSelectList(sql)));
             int previousJoinIndex = -1;
             for (int i = 0; i < plan.Tables.Length; i++) {
@@ -138,7 +153,7 @@ namespace Figlotech.BDados.Tests {
                 Assert.Equal(1, CountOccurrence(sql, expectedJoin));
                 previousJoinIndex = joinIndex;
             }
-            AssertFinalOrdering(sql, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+            AssertFinalOrdering(sql, RootOrderingSql(providerName, plan) + " ASC");
         }
 
         [Theory]
@@ -146,23 +161,23 @@ namespace Figlotech.BDados.Tests {
         public void FrozenPlanAlwaysOrdersByRootIdentifierAndUsesItAsTieBreaker(string providerName, IQueryGenerator generator) {
             Assert.NotEmpty(providerName);
             DefinitiveJoinPlan plan = FullGraphPlan();
-            string rootOrdering = plan.RootOrdering.ResultAlias;
+            string rootOrdering = RootOrderingSql(providerName, plan);
 
             string defaultOrder = Normalize(generator.GenerateJoinQuery(plan, null).GetCommandText());
-            AssertFinalOrdering(defaultOrder, "sub." + rootOrdering + " ASC");
+            AssertFinalOrdering(defaultOrder, rootOrdering + " ASC");
 
             MemberInfo scalarMember = typeof(GuidRoot).GetProperty(nameof(GuidRoot.ScalarAggregateId))!;
             DefinitiveProjectionColumn scalarProjection = plan.Projection.Single(column => column.TableIndex == plan.RootTableIndex && Equals(column.DestinationMember, scalarMember));
             string userOrder = Normalize(generator.GenerateJoinQuery(plan, null, orderingMember: scalarMember, otype: OrderingType.Desc).GetCommandText());
-            AssertFinalOrdering(userOrder, "sub." + scalarProjection.ResultAlias + " DESC, sub." + rootOrdering + " DESC");
+            AssertFinalOrdering(userOrder, ProjectionOrderingSql(providerName, plan, scalarProjection) + " DESC, " + rootOrdering + " DESC");
 
             DefinitiveProjectionColumn rootIdProjection = plan.Projection.Single(column => column.TableIndex == plan.RootTableIndex && column.SourceColumn == "Id");
             MemberInfo idMember = rootIdProjection.DestinationMember.DeclaringType!.GetProperty(rootIdProjection.DestinationMember.Name)!;
             Assert.NotEqual(typeof(GuidRoot), idMember.DeclaringType);
             Assert.Equal(idMember, rootIdProjection.DestinationMember);
             string idOrder = Normalize(generator.GenerateJoinQuery(plan, null, orderingMember: idMember).GetCommandText());
-            AssertFinalOrdering(idOrder, "sub." + rootOrdering + " ASC");
-            Assert.Single(Regex.Matches(ExtractFinalOrderList(idOrder), Regex.Escape("sub." + rootOrdering)).Cast<Match>());
+            AssertFinalOrdering(idOrder, rootOrdering + " ASC");
+            Assert.Single(Regex.Matches(ExtractFinalOrderList(idOrder), Regex.Escape(rootOrdering)).Cast<Match>());
         }
 
         [Theory]
@@ -177,7 +192,7 @@ namespace Figlotech.BDados.Tests {
 
             string sql = Normalize(generator.GenerateJoinQuery(plan, null, orderingMember: inheritedId).GetCommandText());
 
-            AssertFinalOrdering(sql, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+            AssertFinalOrdering(sql, RootOrderingSql(providerName, plan) + " ASC");
         }
 
         [Theory]
@@ -185,15 +200,20 @@ namespace Figlotech.BDados.Tests {
         public void FrozenPlanPagingFollowsDeterministicOrdering(string providerName, IQueryGenerator generator) {
             Assert.NotEmpty(providerName);
             DefinitiveJoinPlan plan = FullGraphPlan();
-            string rootOrdering = "ORDER BY sub." + plan.RootOrdering.ResultAlias;
+            string rootOrdering = "ORDER BY " + RootOrderingSql(providerName, plan);
 
             string skipped = Normalize(generator.GenerateJoinQuery(plan, null, skip: 3, take: 7).GetCommandText());
             string limited = Normalize(generator.GenerateJoinQuery(plan, null, take: 7).GetCommandText());
 
             AssertPaging(providerName, skipped, 3, 7);
             AssertPaging(providerName, limited, null, 7);
-            Assert.True(skipped.IndexOf(") AS sub", StringComparison.Ordinal) < skipped.IndexOf(rootOrdering, StringComparison.Ordinal));
-            Assert.True(limited.IndexOf(") AS sub", StringComparison.Ordinal) < limited.IndexOf(rootOrdering, StringComparison.Ordinal));
+            if (providerName == "MySQL") {
+                Assert.DoesNotContain(") AS sub", skipped, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(") AS sub", limited, StringComparison.OrdinalIgnoreCase);
+            } else {
+                Assert.True(skipped.IndexOf(") AS sub", StringComparison.Ordinal) < skipped.IndexOf(rootOrdering, StringComparison.Ordinal));
+                Assert.True(limited.IndexOf(") AS sub", StringComparison.Ordinal) < limited.IndexOf(rootOrdering, StringComparison.Ordinal));
+            }
             Assert.True(skipped.IndexOf(rootOrdering, StringComparison.Ordinal) < PagingIndex(skipped));
             Assert.True(limited.IndexOf(rootOrdering, StringComparison.Ordinal) < PagingIndex(limited));
         }
@@ -205,13 +225,13 @@ namespace Figlotech.BDados.Tests {
             DefinitiveJoinPlan plan = FullGraphPlan();
             string sql = Normalize(generator.GenerateJoinQuery(plan, null, skip: 3).GetCommandText());
 
-            AssertFinalOrdering(sql, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+            AssertFinalOrdering(sql, RootOrderingSql(providerName, plan) + " ASC");
             if (providerName == "PostgreSQL") {
                 Assert.Contains("LIMIT " + Int32.MaxValue + " OFFSET 3", sql);
             } else {
                 Assert.Contains("LIMIT 3, " + Int32.MaxValue, sql);
             }
-            Assert.True(sql.IndexOf("ORDER BY sub." + plan.RootOrdering.ResultAlias, StringComparison.Ordinal) < PagingIndex(sql));
+            Assert.True(sql.IndexOf("ORDER BY " + RootOrderingSql(providerName, plan), StringComparison.Ordinal) < PagingIndex(sql));
         }
 
         [Theory]
@@ -485,7 +505,7 @@ namespace Figlotech.BDados.Tests {
                 Assert.Equal(1, CountAliasDeclaration(selectList, column.ResultAlias));
             }
 
-            Assert.Matches(@"FROM \(SELECT \* FROM " + Regex.Escape(root.TableName) + @"\s*\) AS " + Regex.Escape(root.Prefix), first);
+            AssertRootSource(providerName, first, root);
             int previousJoinIndex = -1;
             for (int i = 0; i < plan.Tables.Length; i++) {
                 if (i == plan.RootTableIndex) {
@@ -513,7 +533,7 @@ namespace Figlotech.BDados.Tests {
             Assert.Equal(typeof(Guid), root.Identifier.ClrType);
             Assert.Equal(nameof(GuidRoot.Id), root.Identifier.ColumnName);
             Assert.Equal(root.Identifier.ResultAlias, plan.RootOrdering.ResultAlias);
-            AssertFinalOrdering(first, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+            AssertFinalOrdering(first, RootOrderingSql(providerName, plan) + " ASC");
             Assert.DoesNotContain("RID", first, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(first, second);
         }
@@ -595,7 +615,7 @@ namespace Figlotech.BDados.Tests {
             string rootPrefix = plan.Tables[plan.RootTableIndex].Prefix;
 
             Assert.Contains(rootPrefix + ".Id AS " + plan.RootOrdering.ResultAlias, ExtractInnerSelectList(sql));
-            AssertFinalOrdering(sql, "sub." + plan.RootOrdering.ResultAlias + " ASC");
+            AssertFinalOrdering(sql, RootOrderingSql(providerName, plan) + " ASC");
             Assert.DoesNotContain(rootPrefix + ".RID", sql, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -690,7 +710,36 @@ namespace Figlotech.BDados.Tests {
             Assert.Contains(nameof(DefinitiveJoinPlan), obsolete.Message, StringComparison.Ordinal);
         }
 
+        private static void AssertRootSource(string providerName, string sql, DefinitiveJoinTable root) {
+            string normalized = Normalize(sql);
+            string rootTable = Regex.Escape(root.TableName);
+            string rootPrefix = Regex.Escape(root.Prefix);
+            if (providerName == "MySQL") {
+                Assert.Matches(@"FROM " + rootTable + @"\s+AS " + rootPrefix, normalized);
+                return;
+            }
+
+            Assert.Matches(@"FROM \(SELECT \* FROM " + rootTable + @"\s*\) AS " + rootPrefix, normalized);
+        }
+
+        private static string RootOrderingSql(string providerName, DefinitiveJoinPlan plan) {
+            return providerName == "MySQL"
+                ? plan.Tables[plan.RootTableIndex].Prefix + "." + plan.RootOrdering.ColumnName
+                : "sub." + plan.RootOrdering.ResultAlias;
+        }
+
+        private static string ProjectionOrderingSql(string providerName, DefinitiveJoinPlan plan, DefinitiveProjectionColumn projection) {
+            return providerName == "MySQL"
+                ? plan.Tables[plan.RootTableIndex].Prefix + "." + projection.SourceColumn
+                : "sub." + projection.ResultAlias;
+        }
+
         private static string ExtractInnerSelectList(string sql) {
+            Match direct = Regex.Match(sql, @"^\s*SELECT\s+(?<list>.*?)\s+FROM\s+", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            if (direct.Success && !String.Equals(direct.Groups["list"].Value.Trim(), "sub.*", StringComparison.OrdinalIgnoreCase)) {
+                return direct.Groups["list"].Value.Trim();
+            }
+
             Match match = Regex.Match(sql, @"FROM\s*\(\s*SELECT\s+(?<list>.*?)\s+FROM\s+", RegexOptions.Singleline | RegexOptions.IgnoreCase);
             Assert.True(match.Success, "Expected a joined inner SELECT list.");
             return match.Groups["list"].Value.Trim();
@@ -730,14 +779,19 @@ namespace Figlotech.BDados.Tests {
         private static void AssertFinalOrdering(string sql, string expectedOrder) {
             int subIndex = sql.IndexOf(") AS sub", StringComparison.Ordinal);
             int orderIndex = sql.IndexOf("ORDER BY " + expectedOrder, StringComparison.Ordinal);
-            Assert.True(subIndex >= 0, "Expected the derived joined source to be aliased as sub.");
-            Assert.True(orderIndex > subIndex, "Expected final ordering after the derived joined source.");
+            if (expectedOrder.StartsWith("sub.", StringComparison.Ordinal)) {
+                Assert.True(subIndex >= 0, "Expected the derived joined source to be aliased as sub.");
+                Assert.True(orderIndex > subIndex, "Expected final ordering after the derived joined source.");
+            } else {
+                Assert.True(orderIndex >= 0, "Expected direct ordering on the MySQL root source.");
+                Assert.DoesNotContain(") AS sub", sql, StringComparison.OrdinalIgnoreCase);
+            }
             Assert.Single(Regex.Matches(sql, "ORDER BY", RegexOptions.IgnoreCase).Cast<Match>());
         }
 
         private static string ExtractFinalOrderList(string sql) {
-            Match match = Regex.Match(sql, @"\)\s+AS\s+sub\s+ORDER BY\s+(?<list>.*?)(?:\s+LIMIT|\s+OFFSET|$)", RegexOptions.IgnoreCase);
-            Assert.True(match.Success, "Expected a final ORDER BY clause after the joined subquery.");
+            Match match = Regex.Match(sql, @"ORDER BY\s+(?<list>.*?)(?:\s+LIMIT|\s+OFFSET|$)", RegexOptions.IgnoreCase);
+            Assert.True(match.Success, "Expected a final ORDER BY clause.");
             return match.Groups["list"].Value;
         }
 

@@ -381,20 +381,25 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             }
 
             DefinitiveJoinTable root = plan.Tables[plan.RootTableIndex];
-            QueryBuilder query = new QbFmt("SELECT sub.*");
-            query.Append("FROM (SELECT");
+            QueryBuilder query = new QbFmt("SELECT");
             for (int i = 0; i < plan.Projection.Length; i++) {
                 DefinitiveProjectionColumn column = plan.Projection[i];
                 DefinitiveJoinTable table = plan.Tables[column.TableIndex];
                 query.Append((i > 0 ? "," : String.Empty) + table.Prefix + "." + column.SourceColumn + " AS " + column.ResultAlias);
             }
 
-            query.Append("FROM (SELECT * FROM " + root.TableName);
-            if (rootConditions != null && !rootConditions.IsEmpty) {
+            bool hasEffectiveRootConditions = rootConditions != null
+                && !rootConditions.IsEmpty
+                && (rootConditions.GetParameters().Count > 0
+                    || !String.Equals(rootConditions.GetCommandText().Trim(), "TRUE", StringComparison.OrdinalIgnoreCase));
+            if (hasEffectiveRootConditions) {
+                query.Append("FROM (SELECT * FROM " + root.TableName);
                 query.Append("WHERE");
                 AppendFrozenCondition(query, rootConditions, "root");
+                query.Append(") AS " + root.Prefix);
+            } else {
+                query.Append("FROM " + root.TableName + " AS " + root.Prefix);
             }
-            query.Append(") AS " + root.Prefix);
 
             for (int i = 0; i < plan.Tables.Length; i++) {
                 if (i == plan.RootTableIndex) {
@@ -408,10 +413,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 query.Append("WHERE");
                 AppendFrozenCondition(query, conditions, "join");
             }
-            query.Append(") AS sub");
 
             string direction = otype == OrderingType.Asc ? "ASC" : "DESC";
-            string rootOrdering = "sub." + plan.RootOrdering.ResultAlias;
+            string rootOrdering = root.Prefix + "." + plan.RootOrdering.ColumnName;
             if (orderingMember != null) {
                 DefinitiveProjectionColumn orderingColumn = plan.Projection.FirstOrDefault(column =>
                     column.TableIndex == plan.RootTableIndex
@@ -422,7 +426,7 @@ namespace Figlotech.BDados.MySqlDataAccessor {
                 if (orderingColumn == null) {
                     throw new ArgumentException("Ordering member must be a projected member of the frozen root table.", nameof(orderingMember));
                 }
-                query.Append("ORDER BY sub." + orderingColumn.ResultAlias + " " + direction);
+                query.Append("ORDER BY " + root.Prefix + "." + orderingColumn.SourceColumn + " " + direction);
                 if (!String.Equals(orderingColumn.ResultAlias, plan.RootOrdering.ResultAlias, StringComparison.Ordinal)) {
                     query.Append(", " + rootOrdering + " " + direction);
                 }
