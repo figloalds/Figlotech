@@ -278,7 +278,6 @@ namespace Figlotech.Core.Tests {
             var blockersStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var releaseBlockers = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var nestedCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var lastScaleField = typeof(WorkQueuer).GetField("_lastWorkerScaleTicks", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             var startedCount = 0;
 
             for (int i = 0; i < initialWorkers; i++) {
@@ -291,7 +290,6 @@ namespace Figlotech.Core.Tests {
             }
             await blockersStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            lastScaleField.SetValue(queuer, DateTime.MaxValue.Ticks);
             _ = queuer.EnqueueTask(() => {
                 _ = queuer.EnqueueTask(() => {
                     nestedCompleted.TrySetResult(true);
@@ -302,7 +300,6 @@ namespace Figlotech.Core.Tests {
             for (int i = 0; i < initialWorkers / 2; i++) {
                 _ = queuer.EnqueueTask(() => new ValueTask());
             }
-            lastScaleField.SetValue(queuer, 0L);
 
             Task triggeringEnqueue = Task.Run(() => queuer.EnqueueTask(() => new ValueTask()));
             Task completed = Task.WhenAll(triggeringEnqueue, nestedCompleted.Task);

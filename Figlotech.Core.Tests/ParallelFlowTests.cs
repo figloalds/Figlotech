@@ -9,6 +9,15 @@ namespace Figlotech.Core.Tests {
     public class ParallelFlowTests {
 
         [Fact]
+        public async Task ParallelFlow_ConnectAfterSourceCompletes_PropagatesCompletion() {
+            var source = Fi.Tech.ParallelFlow<int>(Enumerable.Range(1, 5));
+            await source.TaskObj.WaitAsync(TimeSpan.FromSeconds(5));
+            var next = source.Then(x => x * 2);
+            var result = await next.TaskObj.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(new[] { 2, 4, 6, 8, 10 }, result.OrderBy(x => x));
+        }
+
+        [Fact]
         public async Task ParallelFlow_WithEnumerableSource_AwaitsAllItems() {
             var input = Enumerable.Range(1, 10).ToList();
 

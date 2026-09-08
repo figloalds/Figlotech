@@ -104,8 +104,7 @@ namespace Figlotech.Core {
                     maxParallelism = Environment.ProcessorCount;
                 }
                 var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
+                ConnectStep(retv);
                 return retv;
             }
             public ParallelFlowStepInOut<TOut, TNext> Then<TNext>(Action<TOut, FlowYield<TNext>> act)
@@ -120,8 +119,7 @@ namespace Figlotech.Core {
                     maxParallelism = Environment.ProcessorCount;
                 }
                 var retv = new ParallelFlowStepInOut<TOut, TNext>(act, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
+                ConnectStep(retv);
                 return retv;
             }
 
@@ -135,9 +133,19 @@ namespace Figlotech.Core {
                     await act(x).ConfigureAwait(false);
                     return x;
                 }, this, maxParallelism);
-                this.ConnectTo = retv;
-                FlushToConnected();
+                ConnectStep(retv);
                 return retv;
+            }
+            private void ConnectStep(IParallelFlowStepIn<TOut> next) {
+                bool sourceCompleted;
+                lock (_completionLock) {
+                    ConnectTo = next;
+                    FlushToConnected();
+                    sourceCompleted = _completionSourceSet;
+                }
+                // A fast source can drain before Then is called. Propagate its completion
+                // to late connections after flushing the already-produced values.
+                if (sourceCompleted) _ = next.NotifyDoneQueueing();
             }
             public void FlushToConnected() {
                 if (this.ConnectTo != null) {
@@ -159,16 +167,21 @@ namespace Figlotech.Core {
                     await alsoQueueSnapshot.Dequeue().Task.ConfigureAwait(false);
                 }
                 await queuer.Stop(true).ConfigureAwait(false);
-                if (this.ConnectTo != null) {
-                    FlushToConnected();
-                    await this.ConnectTo.NotifyDoneQueueing().ConfigureAwait(false);
-                }
+                IParallelFlowStepIn<TOut> connected;
                 lock (_completionLock) {
-                    if (!_completionSourceSet) {
-                        _completionSourceSet = true;
-                        TaskCompletionSource.SetResult(ValueQueue.ToList());
-                    }
+                    if (_completionSourceSet) return;
+                    _completionSourceSet = true;
+                    connected = ConnectTo;
                 }
+                if (connected != null) {
+                    FlushToConnected();
+                    await connected.NotifyDoneQueueing().ConfigureAwait(false);
+                }
+                List<TOut> results;
+                lock (_valueQueueLock) {
+                    results = ValueQueue.ToList();
+                }
+                TaskCompletionSource.TrySetResult(results);
                 enumerator.Finish();
             }
             public TaskAwaiter<List<TOut>> GetAwaiter() {
