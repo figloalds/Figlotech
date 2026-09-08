@@ -734,7 +734,8 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new QueryBuilder().Append(
                 @"SELECT
                     tc.*,
-                    kcu.COLUMN_NAME, 
+                    kcu.COLUMN_NAME,
+                    kcu.ORDINAL_POSITION,
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_schema ELSE NULL END) AS REFERENCED_TABLE_SCHEMA,
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.table_name ELSE NULL END) AS REFERENCED_TABLE_NAME,
 	                (CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN kcu.column_name ELSE NULL END) AS REFERENCED_COLUMN_NAME

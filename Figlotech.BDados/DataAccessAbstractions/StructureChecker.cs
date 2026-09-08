@@ -9,6 +9,8 @@ using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,7 +29,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             get => Column;
             set => Column = value;
         }
-        public int NON_UNIQUE { get => IsUnique ? 1 : 0; set => IsUnique = value != 0; }
+        public int NON_UNIQUE { get => IsUnique ? 0 : 1; set => IsUnique = value == 0; }
+        public int ORDINAL_POSITION { get; set; }
+        public int SEQ_IN_INDEX { get => ORDINAL_POSITION; set => ORDINAL_POSITION = value; }
         public string INDEX_NAME { get => KeyName; set => KeyName = value; }
 
         public string REFERENCED_COLUMN_NAME { get => RefColumn; set => RefColumn = value; }
@@ -48,13 +52,29 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     case ScStructuralKeyType.ForeignKey:
                         return $"fk_{Table}_{Column}".ToLower();
                     case ScStructuralKeyType.Index:
-                        var colPart = Column?.Replace(",", "_") ?? "";
-                        return $"{(IsUnique ? "uk_" : "idx_")}{Table}_{colPart}".ToLower();
+                        return CreateIndexName(Table, Column, IsUnique);
                     case ScStructuralKeyType.PrimaryKey:
                         return $"pk_{Table.ToLower()}";
                 }
                 return "";
             }
+        }
+
+        internal static string CreateIndexName(string table, string columns, bool isUnique) {
+            const int MaxNameBytes = 63;
+            var prefix = isUnique ? "uk_" : "idx_";
+            var colPart = columns?.Replace(",", "_") ?? "";
+            var naiveName = $"{prefix}{table}_{colPart}".ToLower();
+            // PostgreSQL limits identifiers by bytes, so count UTF-8 rather than characters.
+            if (Encoding.UTF8.GetByteCount(naiveName) <= MaxNameBytes) {
+                return naiveName;
+            }
+
+            // Keep table/column boundaries and normalize independently of the current culture.
+            var identity = $"{table}\0{columns}".ToLowerInvariant();
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
+            // 224 bits of SHA-256 as hex use only portable identifier characters (60 bytes with idx_).
+            return prefix + Convert.ToHexStringLower(hash.AsSpan(0, 28));
         }
 
         public static ScStructuralLink FromFkAttribute(ForeignKeyAttribute FkAtt) {
@@ -515,14 +535,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
             if (a.Type != n.Type)
                 return false;
-            if (a.Type == ScStructuralKeyType.Index && a.Column == null) {
-                a.Column = a.CONSTRAINT_NAME.Substring(a.CONSTRAINT_NAME.LastIndexOf("_") + 1);
-            }
             var cmp = StringComparison.OrdinalIgnoreCase;
             try {
                 switch (a.Type) {
                     case ScStructuralKeyType.Index:
-                        return (a.Table.Equals(n.Table, cmp) && a.KeyName.Equals(n.KeyName, cmp));
+                        return a.KeyName.Equals(n.KeyName, cmp)
+                            && a.IsUnique == n.IsUnique
+                            && a.Column != null && n.Column != null
+                            && a.Column.Split(',').Select(c => c.Trim()).SequenceEqual(
+                                n.Column.Split(',').Select(c => c.Trim()), StringComparer.OrdinalIgnoreCase);
                     case ScStructuralKeyType.ForeignKey:
                         return
                             (a.Table.ToLower() == n.Table.ToLower() && a.KeyName.ToLower() == n.KeyName.ToLower()) || (
@@ -556,7 +577,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             yield return new DropFkScAction(DataAccessor, a, $"Foreign Key {a.KeyName} is not in the Model");
                             break;
                         case ScStructuralKeyType.Index:
-                            if (a.IsUnique)
+                            // PostgreSQL unique indexes are dropped as indexes unless backed by a constraint.
+                            if (a.CONSTRAINT_TYPE == "UNIQUE")
                                 yield return new DropUkScAction(DataAccessor, a.Table, a.KeyName, $"Unique Index {a.KeyName} is not in the Model");
                             else
                                 yield return new DropIdxScAction(DataAccessor, a.Table, a.KeyName, $"Index {a.KeyName} is not in the Model");
@@ -722,7 +744,6 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                                     Table = type.Name,
                                     Column = field.Name,
                                     Type = ScStructuralKeyType.Index,
-                                    KeyName = $"uk_{type.Name.ToLower()}_{field.Name.ToLower()}",
                                     IsUnique = true
                                 });
                             }
@@ -912,9 +933,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         if (!string.IsNullOrEmpty(idxAttr.Name)) {
                             indexLink.KeyName = idxAttr.Name.ToLower();
                         } else {
-                            var prefix = idxAttr.IsUnique ? "uk" : "idx";
-                            var sortedPart = string.Join("_", sortedColumns).ToLower();
-                            indexLink.KeyName = $"{prefix}_{t.Name}_{sortedPart}".ToLower();
+                            indexLink.KeyName = ScStructuralLink.CreateIndexName(t.Name, string.Join(",", sortedColumns), idxAttr.IsUnique);
                         }
                         yield return indexLink;
                     }
@@ -1156,15 +1175,16 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     .QueryGenerator
                     .InformationSchemaQueryKeys(dbName)
             );
-            //fk.RemoveAll(f => String.IsNullOrEmpty(f.RefColumn));
-            //fk.ForEach(a => a.Type = ScStructuralKeyType.ForeignKey);
             retv.AddRange(fk);
             var idx = DataAccessor.Query<ScStructuralLink>(
                  DataAccessor
                      .QueryGenerator
                      .InformationSchemaIndexes(dbName)
              );
-            retv.AddRange(idx.Where(x => !retv.Any(b => b.CONSTRAINT_NAME == x.INDEX_NAME)));
+            // Compare against constraints only, so adding one column never hides the rest of an index.
+            retv.AddRange(idx.Where(x => !fk.Any(b => b.CONSTRAINT_TYPE != "FOREIGN KEY"
+                && string.Equals(b.Table, x.Table, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(b.KeyName, x.KeyName, StringComparison.OrdinalIgnoreCase))));
             retv.ForEach(a => {
                 switch (a.CONSTRAINT_TYPE) {
                     case "PRIMARY KEY":
@@ -1184,7 +1204,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             });
             var wtNames = workingTypes.Select(wt => wt.Name.ToLower());
             retv.RemoveAll(r => !wtNames.Contains(r.Table.ToLower()));
-            return retv;
+            var indexes = retv.Where(r => r.Type == ScStructuralKeyType.Index)
+                .GroupBy(r => new { Table = r.Table.ToLowerInvariant(), KeyName = r.KeyName.ToLowerInvariant() })
+                .Select(group => {
+                    var index = group.First();
+                    index.Column = string.Join(",", group.OrderBy(r => r.ORDINAL_POSITION).Select(r => r.Column));
+                    return index;
+                }).ToList();
+            return retv.Where(r => r.Type != ScStructuralKeyType.Index).Concat(indexes).ToList();
         }
         private List<String> GetInfoSchemaTables() {
             var dbName = DataAccessor.SchemaName;

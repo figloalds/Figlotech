@@ -685,6 +685,7 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                 @"SELECT
 	                tc.*,
                     kcu.COLUMN_NAME,
+                    kcu.ORDINAL_POSITION,
                     ccu.table_schema AS REFERENCED_TABLE_SCHEMA,
                     ccu.table_name AS REFERENCED_TABLE_NAME,
                     ccu.column_name AS REFERENCED_COLUMN_NAME
@@ -697,13 +698,24 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
                     LEFT JOIN information_schema.constraint_column_usage AS ccu
                       ON ccu.constraint_name = tc.constraint_name
                       AND ccu.table_schema = tc.table_schema
+                      AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
                 WHERE tc.CONSTRAINT_CATALOG=@1 AND tc.CONSTRAINT_SCHEMA='public' AND tc.CONSTRAINT_TYPE!='CHECK';", schema);
         }
         public IQueryBuilder InformationSchemaIndexes(string schema) {
             return new QueryBuilder().Append(
-                @"SELECT *, relname AS TABLE_NAME, indexrelname AS CONSTRAINT_NAME, pg_size_pretty(pg_relation_size(indexrelname::text))
-                FROM pg_stat_all_indexes
-                WHERE schemaname = 'public';");
+                @"SELECT t.relname AS TABLE_NAME, ix.relname AS INDEX_NAME,
+                    CASE WHEN i.indisunique THEN 0 ELSE 1 END AS NON_UNIQUE,
+                    COALESCE(a.attname, pg_get_indexdef(i.indexrelid, cols.ordinal_position::int, true)) AS COLUMN_NAME,
+                    cols.ordinal_position AS ORDINAL_POSITION
+                FROM pg_index i
+                JOIN pg_class t ON t.oid = i.indrelid
+                JOIN pg_namespace ns ON ns.oid = t.relnamespace
+                JOIN pg_class ix ON ix.oid = i.indexrelid
+                JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS cols(attnum, ordinal_position)
+                    ON cols.ordinal_position <= i.indnkeyatts
+                LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = cols.attnum
+                WHERE ns.nspname = 'public' AND NOT i.indisprimary
+                ORDER BY t.relname, ix.relname, cols.ordinal_position;");
         }
 
         public IQueryBuilder RenameTable(string tabName, string newName) {
