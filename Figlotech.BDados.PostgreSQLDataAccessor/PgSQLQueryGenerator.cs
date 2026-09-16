@@ -783,9 +783,9 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
             if (!isNullable) {
-                return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+                return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
-                return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
+                return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             }
         }
 

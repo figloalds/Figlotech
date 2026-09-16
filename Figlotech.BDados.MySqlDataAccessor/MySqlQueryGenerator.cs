@@ -819,14 +819,9 @@ namespace Figlotech.BDados.MySqlDataAccessor {
 
         public IQueryBuilder Purge(string table, string column, string refTable, string refColumn, bool isNullable) {
             if (!isNullable) {
-                var lastPart = $"(SELECT {refColumn} FROM {refTable})";
-                if (table == refTable) {
-                    // I don't know why mysql requires this.
-                    lastPart = $"(SELECT {refColumn} FROM (SELECT {refColumn} FROM {refTable}) subquery)";
-                }
-                return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} NOT IN {lastPart}");
+                return new QueryBuilder().Append($"UPDATE {table} SET {column}=NULL WHERE {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             } else {
-                return new QueryBuilder().Append("SELECT 1");
+                return new QueryBuilder().Append($"DELETE FROM {table} WHERE {column} IS NOT NULL AND {column} IS NOT NULL AND {column} NOT IN (SELECT {refColumn} FROM {refTable})");
             }
         }
 
