@@ -1741,6 +1741,9 @@ namespace Figlotech.Core {
         }
 
         public static WorkJobExecutionRequest FireTask(this Fi _selfie, string name, Func<ValueTask> job, Func<Exception, ValueTask> handler = null, Func<bool, ValueTask> then = null) {
+            if(name == "Anonymous_FireTask" && Debugger.IsAttached) {
+                Debugger.Break();
+            }
             var wj = FiTechFireTaskWorker.Enqueue(new WorkJob(
                 job, handler, then
                 ) {

@@ -70,7 +70,7 @@ namespace Figlotech.Core.Autokryptex {
                         break;
                     } catch (Exception) {
                         try {
-                            Fi.Tech.FireAndForget(async () => {
+                            Fi.Tech.FireAndForget("SafeObjectStorage DeleteAsync callback", async () => {
                                 await fileSystem.DeleteAsync(rid).ConfigureAwait(false);
                             });
                         } catch (Exception) {

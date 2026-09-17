@@ -441,19 +441,16 @@ namespace Figlotech.Core.FileAcessAbstractions {
 
         public void AppendAllLinesAsync(String relative, IEnumerable<string> content, Action OnComplete = null) {
             FixRel(ref relative);
-            Fi.Tech.FireAndForget(async () => {
-                await Task.Yield();
-                var WorkingDirectory = AssemblePath(RootDirectory, relative);
-                if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
-                    absMkDirs(Path.GetDirectoryName(WorkingDirectory));
-                }
 
-                LockRegion(WorkingDirectory, () => {
-                    File.AppendAllLines(WorkingDirectory, content);
-                    OnComplete();
-                });
+            var WorkingDirectory = AssemblePath(RootDirectory, relative);
+            if (!Directory.Exists(Path.GetDirectoryName(WorkingDirectory))) {
+                absMkDirs(Path.GetDirectoryName(WorkingDirectory));
+            }
+
+            LockRegion(WorkingDirectory, () => {
+                File.AppendAllLines(WorkingDirectory, content);
+                OnComplete();
             });
-
         }
 
         public async Task<Stream> OpenAsync(string relative, FileMode fileMode, FileAccess fileAccess) {

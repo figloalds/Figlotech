@@ -75,7 +75,7 @@ namespace Figlotech.Core {
                 var src = new TaskCompletionSource<int>();
                 lock (_alsoQueueLock)
                     AlsoQueue.Enqueue(src);
-                Fi.Tech.FireAndForget(async () => {
+                Fi.Tech.FireAndForget("ParallelFlowStepInOut Also callback", async () => {
                     if (this.ConnectTo != null) {
                         await yieldFn(new FlowYield<TOut>(this.ConnectTo, enumerator)).ConfigureAwait(false);
                     } else {

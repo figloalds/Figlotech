@@ -51,30 +51,26 @@ namespace Figlotech.Core {
                 return;
             }
             //Debug.WriteLine(log);
-            Fi.Tech.FireAndForget(async () => {
-                await Task.Yield();
-                if (EnableConsoleLogging)
-                    Console.Error.WriteLine(log);
-                List<String> Lines = new List<String>();
-                lock (this) {
-                    log = Regex.Replace(log, @"\s+", " ");
-                    String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
-                    Lines.AddRange(logLinesCache);
-                    Lines.Add(line);
-                    logLinesCache.Clear();
+            if (EnableConsoleLogging)
+                Console.Error.WriteLine(log);
+            List<String> Lines = new List<String>();
+            lock (this) {
+                log = Regex.Replace(log, @"\s+", " ");
+                String line = DateTime.Now.ToString("HH:mm:ss - ") + log;
+                Lines.AddRange(logLinesCache);
+                Lines.Add(line);
+                logLinesCache.Clear();
+            }
+            var errTreshold = 10;
+            while (errTreshold-- > 0) {
+                try {
+                    FileAccessor.AppendAllLines(
+                        Filename.Value, Lines
+                    );
+                    break;
+                } catch (Exception) {
                 }
-                var errTreshold = 10;
-                while (errTreshold-- > 0) {
-                    try {
-                        FileAccessor.AppendAllLines(
-                            Filename.Value, Lines
-                        );
-                        break;
-                    } catch (Exception) {
-                        await Task.Delay(1000);
-                    }
-                }
-            });
+            }
         }
 
         public void BDadosLogDropLines() {

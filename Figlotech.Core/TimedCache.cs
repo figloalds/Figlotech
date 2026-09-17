@@ -78,7 +78,7 @@ namespace Figlotech.Core {
                 if (cache._isDisposed) {
                     return;
                 }
-                Fi.Tech.FireAndForget(async () => {
+                Fi.Tech.FireAndForget("TimedCache Timer callback", async () => {
                     var keys = cache.Dictionary.Keys;
                     var freed = cache.OnFree != null ? new List<TKey>() : null;
                     foreach (var key in keys) {
@@ -142,7 +142,7 @@ namespace Figlotech.Core {
                     if (Dictionary.TryGetValue(key, out var existing)) {
                         Dictionary.Remove(key);
                         if (existing != null && existing.Object != null) {
-                            Fi.Tech.FireAndForget(async () => {
+                            Fi.Tech.FireAndForget("TimedCache Dispose callback", async () => {
                                 await DisposeValueAsync(existing.Object).ConfigureAwait(false);
                             });
                         }
@@ -151,14 +151,14 @@ namespace Figlotech.Core {
                 }
                 if (Dictionary.TryGetValue(key, out var old)) {
                     if (old != null && !ReferenceEquals(old.Object, value) && old.Object != null) {
-                        Fi.Tech.FireAndForget(async () => {
+                        Fi.Tech.FireAndForget("TimedCache Dispose callback", async () => {
                             await DisposeValueAsync(old.Object).ConfigureAwait(false);
                         });
                     }
                     old.Object = value;
                     old.KeepAlive();
                     if (OnSet != null) {
-                        Fi.Tech.FireAndForget(async () => {
+                        Fi.Tech.FireAndForget("TimedCache OnSet callback", async () => {
                             await OnSet(key, value);
                         });
                     }
@@ -180,7 +180,7 @@ namespace Figlotech.Core {
             if (Dictionary.TryGetValue(key, out var value)) {
                 Dictionary.Remove(key);
                 if (value != null && value.Object != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("TimedCache Dispose callback", async () => {
                         await DisposeValueAsync(value.Object).ConfigureAwait(false);
                     });
                 }
@@ -234,7 +234,7 @@ namespace Figlotech.Core {
             Dictionary.Clear();
             foreach (var item in items) {
                 if (item != null && item.Object != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("TimedCache Dispose callback", async () => {
                         await DisposeValueAsync(item.Object).ConfigureAwait(false);
                     });
                 }

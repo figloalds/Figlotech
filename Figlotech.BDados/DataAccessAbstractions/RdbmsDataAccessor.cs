@@ -1983,7 +1983,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         successfulSaves.AddRange(insertsLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
-                            Fi.Tech.FireAndForget(async () => {
+                            Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                                 await Task.Yield();
                                 OnFailedSave?.Invoke(typeof(T), insertsLegacy.ToArray(), x);
                             });
@@ -2011,7 +2011,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                         successfulSaves.AddRange(updatesLegacy);
                     } catch (Exception x) {
                         if (OnFailedSave != null) {
-                            Fi.Tech.FireAndForget(async () => {
+                            Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                                 await Task.Yield();
                                 OnFailedSave?.Invoke(typeof(T), updatesLegacy.ToArray(), x);
                             });
@@ -2044,7 +2044,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 });
                 transaction.NotifyChange(successfulSaves.ToArray());
                 if (OnSuccessfulSave != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnSuccessfulSave callback", async () => {
                         await Task.Yield();
                         OnSuccessfulSave?.Invoke(typeof(T), successfulSaves.ToArray());
                     }, async ex => {
@@ -2062,7 +2062,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (failedObjects.Any()) {
                 var ex = new BDadosException("Some objects did not persist correctly", transaction.FrameHistory, failedObjects.Cast<IDataObject>().ToList(), null);
                 if (OnFailedSave != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(typeof(T), failedObjects.Select(a => (ILegacyDataObject)a).ToArray(), ex);
                     });
@@ -2674,7 +2674,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray(), x);
                     }, async (xe) => {
@@ -2705,7 +2705,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction.NotifyChange(new[] { input });
 
                     if (OnSuccessfulSave != null) {
-                        Fi.Tech.FireAndForget(async () => {
+                        Fi.Tech.FireAndForget("RdbmsDataAcccessor OnSuccessfulSave callback", async () => {
                             await Task.Yield();
                             OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray());
                         }, async (xe) => {
@@ -2747,7 +2747,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray(), x);
                     }, async (xe) => {
@@ -2769,7 +2769,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (input is ILegacyDataObject legacyInput) {
                     transaction.NotifyChange(new[] { legacyInput });
 
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnSuccessfulSave callback", async () => {
                         await Task.Yield();
                         OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray());
                     }, async (xe) => {
@@ -2952,7 +2952,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray(), x);
                     }, async (xe) => {
@@ -2983,7 +2983,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     transaction.NotifyChange(new[] { input });
 
                     if (OnSuccessfulSave != null) {
-                        Fi.Tech.FireAndForget(async () => {
+                        Fi.Tech.FireAndForget("RdbmsDataAcccessor OnSuccessfulSave callback", async () => {
                             await Task.Yield();
                             OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { input }.ToArray());
                         }, async (xe) => {
@@ -3025,7 +3025,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             } catch (Exception x) {
                 if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray(), x);
                     }, async (xe) => {
@@ -3047,7 +3047,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 if (input is ILegacyDataObject legacyInput) {
                     transaction.NotifyChange(new[] { legacyInput });
 
-                    Fi.Tech.FireAndForget(async () => {
+                    Fi.Tech.FireAndForget("RdbmsDataAcccessor OnSuccessfulSave callback", async () => {
                         await Task.Yield();
                         OnSuccessfulSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray());
                     }, async (xe) => {

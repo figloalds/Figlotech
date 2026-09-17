@@ -139,7 +139,7 @@ namespace Figlotech.Core {
                 return this.Cache[rid];
             }
             set {
-                Fi.Tech.FireAndForget(async () => {
+                Fi.Tech.FireAndForget("FileAssistedCache TryPutTTofile callback", async () => {
                     await this.TryPutTTofile(rid, value);
                 });
                 this.Cache[rid] = value;
@@ -147,7 +147,7 @@ namespace Figlotech.Core {
         }
 
         public void Remove(string? rid) {
-            Fi.Tech.FireAndForget(async () => {
+            Fi.Tech.FireAndForget("FileAssistedCache TryPutTTofile callback", async () => {
                 await this.TryPutTTofile(rid, null);
             });
         }
