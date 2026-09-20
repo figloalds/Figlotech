@@ -172,6 +172,12 @@ Use `ExistsByRIDAsync` / `ExistsByIdAsync` to verify existence without loading a
 ### Data Sync / Replication
 `SendLocalUpdates`, `ReceiveRemoteUpdates*`, and `LoadUpdatedItemsSince` are used for synchronization pipelines and incremental replication using timestamp/rid semantics.
 
+### Binary Backup / Restore
+`Helpers.BDadosBackup` provides reflection-based schemas, raw binary row serialization, and
+transactional backup/restore on non-seeking streams. `BackupIncrementalAsync` exports rows
+whose CreatedAt or UpdatedAt is later than a supplied DateTime, with schemas included once.
+See [usage and format](Helpers/BDadosBackup.md).
+
 ### Events
 The accessor emits notifications for save lifecycle and in-memory changes:
 - `OnSuccessfulSave`

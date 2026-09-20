@@ -23,7 +23,16 @@ namespace Figlotech.BDados.DataAccessAbstractions.Attributes {
         public String Options { get; set; }
         public bool PrimaryKey { get; set; }
         public long Size { get; set; } = 0;
-        public object DefaultValue { get; set; }
+        private object _defaultValue;
+        // Distinguish an explicitly declared null default from an unspecified default.
+        internal bool HasDefaultValue { get; private set; }
+        public object DefaultValue {
+            get => _defaultValue;
+            set {
+                _defaultValue = value;
+                HasDefaultValue = true;
+            }
+        }
         public bool AllowNull { get; set; }
         public bool Unique { get; set; }
         public bool Unsigned { get; set; }
