@@ -457,20 +457,23 @@ namespace Figlotech.BDados.SqliteDataAccessor {
         }
 
         public IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool OmmitPK = true) {
+            return GenerateValuesString(tabelaInput, OmmitPK, "_gv");
+        }
+
+        private IQueryBuilder GenerateValuesString(IDataObject tabelaInput, bool ommitPk, string parameterPrefix) {
             if (!(tabelaInput is ILegacyDataObject)) {
                 return null;
             }
-            var cod = "_gv";
             QueryBuilder Query = new QueryBuilder();
             var fields = GetMembers(tabelaInput.GetType());
-            if (OmmitPK) {
+            if (ommitPk) {
                 fields.RemoveAll(m => m.GetCustomAttribute<PrimaryKeyAttribute>() != null);
             }
             for (int i = 0; i < fields.Count; i++) {
                 Object val = ReflectionTool.GetMemberValue(fields[i], tabelaInput);
                 if (!Query.IsEmpty)
                     Query.Append(", ");
-                Query.Append($"@{cod}{i + 1}", val);
+                Query.Append($"@{parameterPrefix}{i + 1}", val);
             }
             return Query;
 
@@ -542,7 +545,7 @@ namespace Figlotech.BDados.SqliteDataAccessor {
             // -- 
             for (int i = 0; i < workingSet.Count; i++) {
                 Query.Append("(");
-                Query.Append(GenerateValuesString(workingSet[i], OmmitPk));
+                Query.Append(GenerateValuesString(workingSet[i], OmmitPk, $"_gv{i}_"));
                 Query.Append(")");
                 if (i < workingSet.Count - 1)
                     Query.Append(",");

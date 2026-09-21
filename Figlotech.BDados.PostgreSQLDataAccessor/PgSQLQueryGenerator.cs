@@ -46,7 +46,13 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
         }
 
         public IQueryBuilder CreateDatabase(string schemaName) {
-            return new QueryBuilder($"CREATE DATABASE {schemaName}");
+            if (schemaName == null) {
+                throw new ArgumentNullException(nameof(schemaName), "Set PgSQLPluginConfiguration.Database before ensuring the database exists.");
+            }
+            if (string.IsNullOrWhiteSpace(schemaName) || schemaName.Contains('\0')) {
+                throw new ArgumentException("The PostgreSQL database name must not be blank or contain a null character. Set PgSQLPluginConfiguration.Database.", nameof(schemaName));
+            }
+            return new QueryBuilder($"CREATE DATABASE \"{schemaName.Replace("\"", "\"\"")}\"");
         }
 
         public IQueryBuilder CheckExistsById<T>(object Id) where T : IDataObject {
@@ -235,11 +241,8 @@ namespace Figlotech.BDados.PgSQLDataAccessor {
             if (info == null)
                 return "VARCHAR";
             var typeOfField = ReflectionTool.GetTypeOf(field);
-            string tipoDados;
-            if (Nullable.GetUnderlyingType(typeOfField) != null)
-                tipoDados = Nullable.GetUnderlyingType(typeOfField).Name;
-            else
-                tipoDados = typeOfField.Name;
+            typeOfField = Nullable.GetUnderlyingType(typeOfField) ?? typeOfField;
+            string tipoDados = typeOfField.Name;
             if (typeOfField.IsEnum) {
                 return "INT4";
             }
@@ -848,6 +851,11 @@ ALTER COLUMN {member.Name} SET DEFAULT {ConvertDefaultOption(fieldAttribute.Defa
         }
         public IQueryBuilder EnableForeignKeys() {
             return Qb.Fmt("SET session_replication_role = 'origin';");
+        }
+        public IQueryBuilder DisableForeignKeysUntilTransactionEnd() {
+            // Requires superuser or (PostgreSQL 15+) SET privilege on session_replication_role.
+            // SET LOCAL restores the previous value on commit/rollback, including failed restores.
+            return Qb.Fmt("SET LOCAL session_replication_role = 'replica';");
         }
     }
 }

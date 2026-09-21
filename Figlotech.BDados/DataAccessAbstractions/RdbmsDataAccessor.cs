@@ -823,8 +823,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw new BDadosException("Error trying to open connection in a Disposed RdbmsDataAccessor");
             }
 
+            var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
             await using (var conn = (DbConnection)await this.GetNewOpenSchemalessConnectionAsync(CancellationToken.None).ConfigureAwait(false)) {
-                var query = Plugin.QueryGenerator.CreateDatabase(Plugin.SchemaName);
                 using (var command = conn.CreateCommand()) {
                     query.ApplyToCommand(command, Plugin.ProcessParameterValue);
 

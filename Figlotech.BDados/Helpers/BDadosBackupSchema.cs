@@ -18,16 +18,20 @@ namespace Figlotech.BDados.Helpers {
 
         public static BDadosBackupSchema Create(Type type) {
             ArgumentNullException.ThrowIfNull(type);
-            var schema = new BDadosBackupSchema { TableName = type.Name, ModelName = type.FullName };
+            var schema = new BDadosBackupSchema { Version = 2, TableName = type.Name, ModelName = type.FullName };
             foreach (var member in GetMembers(type).OrderBy(m => m.Name, StringComparer.Ordinal)) {
                 var field = member.GetCustomAttribute<FieldAttribute>(true);
                 var memberType = GetMemberType(member);
                 var valueType = Nullable.GetUnderlyingType(memberType) ?? memberType;
                 var foreignKey = member.GetCustomAttribute<ForeignKeyAttribute>(true);
+                var dataType = BDadosBackupCodec.GetDataType(valueType);
+                var binaryType = dataType == BDadosBackupDataType.BinarySerializable ? BDadosBackupBinaryType.Get(valueType) : null;
                 schema.Columns.Add(new BDadosBackupColumn {
                     // BDados query generators use CLR type/member names as table/column names.
                     Name = member.Name,
-                    DataType = BDadosBackupCodec.GetDataType(valueType),
+                    DataType = dataType,
+                    BinaryType = binaryType != null ? valueType.FullName : null,
+                    FixedLength = binaryType != null ? binaryType.FixedLength : BDadosBackupCodec.GetFixedLength(dataType),
                     IsNullable = !memberType.IsValueType || Nullable.GetUnderlyingType(memberType) != null,
                     EnumType = valueType.IsEnum ? valueType.FullName : null,
                     DatabaseType = field.Type,
@@ -67,7 +71,7 @@ namespace Figlotech.BDados.Helpers {
         }
 
         internal void Validate() {
-            if (Version != 1 || string.IsNullOrWhiteSpace(TableName) || Columns == null || Columns.Count == 0) {
+            if ((Version != 1 && Version != 2) || string.IsNullOrWhiteSpace(TableName) || Columns == null || Columns.Count == 0) {
                 throw new InvalidDataException("Unsupported or incomplete backup schema.");
             }
             var names = new HashSet<string>(StringComparer.Ordinal);
@@ -76,12 +80,19 @@ namespace Figlotech.BDados.Helpers {
                     || !Enum.IsDefined(column.DataType)) {
                     throw new InvalidDataException($"Invalid or duplicate column in table '{TableName}'.");
                 }
+                if (column.DataType == BDadosBackupDataType.BinarySerializable
+                    ? Version < 2 || string.IsNullOrWhiteSpace(column.BinaryType) || column.FixedLength < 0
+                    : column.BinaryType != null || column.FixedLength != (Version == 1 ? null : BDadosBackupCodec.GetFixedLength(column.DataType))) {
+                    throw new InvalidDataException($"Invalid binary metadata for '{TableName}.{column.Name}'.");
+                }
             }
         }
 
         internal static MemberInfo[] GetMembers(Type type) {
             return type.GetMembers(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => (m is FieldInfo || m is PropertyInfo) && m.GetCustomAttribute<FieldAttribute>(true) != null).ToArray();
+                .Where(m => m is FieldInfo field && !field.IsInitOnly
+                    || m is PropertyInfo property && property.SetMethod != null)
+                .Where(m => m.GetCustomAttribute<FieldAttribute>(true) != null).ToArray();
         }
 
         internal static Type GetMemberType(MemberInfo member) {
@@ -101,6 +112,10 @@ namespace Figlotech.BDados.Helpers {
         public BDadosBackupDataType DataType { get; set; }
         public bool IsNullable { get; set; }
         public string EnumType { get; set; }
+        /// <summary>CLR full name of a custom binary type; never used to load or resolve assemblies.</summary>
+        public string BinaryType { get; set; }
+        /// <summary>Payload bytes without a row-level length prefix; null means variable-length.</summary>
+        public int? FixedLength { get; set; }
         public string DatabaseType { get; set; }
         public long Size { get; set; }
         public int Precision { get; set; }
@@ -119,6 +134,6 @@ namespace Figlotech.BDados.Helpers {
         Boolean = 1, Byte = 2, SByte = 3, Int16 = 4, UInt16 = 5, Int32 = 6, UInt32 = 7,
         Int64 = 8, UInt64 = 9, Single = 10, Double = 11, Decimal = 12, Char = 13,
         String = 14, Bytes = 15, Guid = 16, DateTime = 17, DateTimeOffset = 18,
-        TimeSpan = 19, DateOnly = 20, TimeOnly = 21
+        TimeSpan = 19, DateOnly = 20, TimeOnly = 21, BinarySerializable = 22
     }
 }

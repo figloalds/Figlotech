@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
+using Figlotech.Core.Interfaces;
 
 namespace Figlotech.BDados.Helpers {
     /// <summary>Binds a schema once, then reads/writes rows without repeating schema or reflection discovery.</summary>
@@ -16,6 +17,8 @@ namespace Figlotech.BDados.Helpers {
         private readonly BDadosBackupDataType[] _dataTypes;
         private readonly bool[] _nullable;
         private readonly bool[] _targetNullable;
+        private readonly int?[] _fixedLengths;
+        private readonly BDadosBackupBinaryType[] _binaryTypes;
         private readonly string[] _columnNames;
         private readonly bool _forImport;
         private readonly (MemberInfo Member, object Value)[] _missingDefaults;
@@ -38,6 +41,8 @@ namespace Figlotech.BDados.Helpers {
             _dataTypes = new BDadosBackupDataType[_members.Length];
             _nullable = new bool[_members.Length];
             _targetNullable = new bool[_members.Length];
+            _fixedLengths = new int?[_members.Length];
+            _binaryTypes = new BDadosBackupBinaryType[_members.Length];
             _columnNames = schema.Columns.Select(c => c.Name).ToArray();
             var mapped = forImport ? BDadosBackupMapping.Bind(_columnNames, members, m => m.Name,
                 m => m.GetCustomAttribute<OldNameAttribute>(true)?.Name) : null;
@@ -45,6 +50,7 @@ namespace Figlotech.BDados.Helpers {
                 var column = schema.Columns[i];
                 _dataTypes[i] = column.DataType;
                 _nullable[i] = column.IsNullable;
+                _fixedLengths[i] = column.FixedLength;
                 var member = forImport ? mapped[i] : members.SingleOrDefault(m => m.Name == column.Name);
                 if (member == null && forImport) continue; // Removed column: consume its bytes without assigning it.
                 if (member == null) {
@@ -57,6 +63,13 @@ namespace Figlotech.BDados.Helpers {
                     : GetDataType(valueType) != column.DataType || nullable != column.IsNullable
                         || (valueType.IsEnum ? valueType.FullName : null) != column.EnumType) {
                     throw new InvalidDataException($"Incompatible member '{type.Name}.{column.Name}'.");
+                }
+                if (column.DataType == BDadosBackupDataType.BinarySerializable) {
+                    var binaryType = BDadosBackupBinaryType.Get(valueType);
+                    if (column.BinaryType != valueType.FullName || column.FixedLength != binaryType.FixedLength) {
+                        throw new InvalidDataException($"Incompatible binary metadata for '{type.Name}.{column.Name}'.");
+                    }
+                    _binaryTypes[i] = binaryType;
                 }
                 _members[i] = member;
                 _valueTypes[i] = valueType;
@@ -102,6 +115,23 @@ namespace Figlotech.BDados.Helpers {
             using var writer = new BinaryWriter(buffer, Utf8, true);
             for (int i = 0; i < _members.Length; i++) {
                 object value = _members[i] is PropertyInfo property ? property.GetValue(instance) : ((FieldInfo)_members[i]).GetValue(instance);
+                if (_binaryTypes[i] != null) {
+                    WriteBinaryValue(writer, i, value, maxBytes);
+                    continue;
+                }
+                if (_fixedLengths[i].HasValue) {
+                    long fixedSize = (value == null ? 0 : _fixedLengths[i].Value) + (_nullable[i] ? 1L : 0L);
+                    if (buffer.Position + fixedSize > maxBytes) {
+                        throw new InvalidDataException("Row exceeds the configured byte limit.");
+                    }
+                    if (_nullable[i]) writer.Write((byte)(value == null ? 0 : 1));
+                    if (value == null) continue;
+                    if (_valueTypes[i].IsEnum) {
+                        value = Convert.ChangeType(value, Enum.GetUnderlyingType(_valueTypes[i]), CultureInfo.InvariantCulture);
+                    }
+                    WriteValue(writer, _dataTypes[i], value);
+                    continue;
+                }
                 if (buffer.Length + 4 > maxBytes) {
                     throw new InvalidDataException("Row exceeds the configured byte limit.");
                 }
@@ -132,6 +162,30 @@ namespace Figlotech.BDados.Helpers {
             return buffer.ToArray();
         }
 
+        private void WriteBinaryValue(BinaryWriter writer, int index, object value, int maxBytes) {
+            int? fixedLength = _fixedLengths[index];
+            int prefixLength = fixedLength.HasValue ? (_nullable[index] ? 1 : 0) : 4;
+            if (writer.BaseStream.Position + prefixLength + (value != null ? fixedLength.GetValueOrDefault() : 0L) > maxBytes) {
+                throw new InvalidDataException("Row exceeds the configured byte limit.");
+            }
+            if (value == null) {
+                if (!_nullable[index]) throw new InvalidDataException($"Null value for '{_columnNames[index]}'.");
+                if (fixedLength.HasValue) writer.Write((byte)0);
+                else writer.Write(-1);
+                return;
+            }
+            byte[] payload = ((IBinarySerializable)value).ToBytes();
+            if (payload == null || fixedLength.HasValue && payload.Length != fixedLength.Value) {
+                throw new InvalidDataException($"Invalid binary payload length for '{_columnNames[index]}'.");
+            }
+            if (writer.BaseStream.Position + prefixLength + payload.Length > maxBytes) {
+                throw new InvalidDataException("Row exceeds the configured byte limit.");
+            }
+            if (!fixedLength.HasValue) writer.Write(payload.Length);
+            else if (_nullable[index]) writer.Write((byte)1);
+            writer.Write(payload);
+        }
+
         internal object Import(byte[] bytes) {
             ArgumentNullException.ThrowIfNull(bytes);
             using var buffer = new MemoryStream(bytes, false);
@@ -139,7 +193,18 @@ namespace Figlotech.BDados.Helpers {
             object instance = Activator.CreateInstance(_type);
             try {
                 for (int i = 0; i < _members.Length; i++) {
-                    int length = reader.ReadInt32();
+                    int length;
+                    if (_fixedLengths[i].HasValue) {
+                        length = _fixedLengths[i].Value;
+                        if (_nullable[i]) {
+                            length = reader.ReadByte() switch {
+                                0 => -1, 1 => length,
+                                _ => throw new InvalidDataException($"Invalid null marker for '{_columnNames[i]}'.")
+                            };
+                        }
+                    } else {
+                        length = reader.ReadInt32();
+                    }
                     object value;
                     if (length == -1 && _nullable[i]) {
                         value = null;
@@ -152,7 +217,19 @@ namespace Figlotech.BDados.Helpers {
                             buffer.Position = end;
                             continue;
                         }
-                        value = ReadValue(reader, _dataTypes[i], length);
+                        if (_binaryTypes[i] != null) {
+                            var binaryValue = _binaryTypes[i].CreateInstance();
+                            try {
+                                // Keep the interface box so mutations made by struct implementations survive.
+                                binaryValue.FromBytes(reader.ReadBytes(length));
+                            } catch (Exception exception) when (exception is ArgumentException || exception is FormatException
+                                || exception is OverflowException || exception is InvalidDataException) {
+                                throw new InvalidDataException($"Invalid binary value for '{_type.Name}.{_columnNames[i]}'.", exception);
+                            }
+                            value = binaryValue;
+                        } else {
+                            value = ReadValue(reader, _dataTypes[i], length);
+                        }
                         if (buffer.Position != end) {
                             throw new InvalidDataException($"Invalid value length for '{_columnNames[i]}'.");
                         }
@@ -195,6 +272,7 @@ namespace Figlotech.BDados.Helpers {
         }
 
         internal static BDadosBackupDataType GetDataType(Type type) {
+            if (typeof(IBinarySerializable).IsAssignableFrom(type)) return BDadosBackupDataType.BinarySerializable;
             if (type.IsEnum) type = Enum.GetUnderlyingType(type);
             if (type == typeof(byte[])) return BDadosBackupDataType.Bytes;
             if (type == typeof(Guid)) return BDadosBackupDataType.Guid;
@@ -219,6 +297,20 @@ namespace Figlotech.BDados.Helpers {
                 TypeCode.String => BDadosBackupDataType.String,
                 TypeCode.DateTime => BDadosBackupDataType.DateTime,
                 _ => throw new NotSupportedException($"Backup does not support persisted type '{type.FullName}'.")
+            };
+        }
+
+        internal static int? GetFixedLength(BDadosBackupDataType type) {
+            return type switch {
+                BDadosBackupDataType.Boolean or BDadosBackupDataType.Byte or BDadosBackupDataType.SByte => 1,
+                BDadosBackupDataType.Int16 or BDadosBackupDataType.UInt16 or BDadosBackupDataType.Char => 2,
+                BDadosBackupDataType.Int32 or BDadosBackupDataType.UInt32 or BDadosBackupDataType.Single or BDadosBackupDataType.DateOnly => 4,
+                BDadosBackupDataType.Int64 or BDadosBackupDataType.UInt64 or BDadosBackupDataType.Double
+                    or BDadosBackupDataType.TimeSpan or BDadosBackupDataType.TimeOnly => 8,
+                BDadosBackupDataType.DateTime => 9, // Ticks plus Kind, preserving the existing value representation.
+                BDadosBackupDataType.DateTimeOffset => 10, // Ticks plus offset minutes.
+                BDadosBackupDataType.Decimal or BDadosBackupDataType.Guid => 16,
+                _ => null
             };
         }
 

@@ -58,6 +58,12 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         IQueryBuilder CheckExistsByRID<T>(string RID) where T : IDataObject;
         IQueryBuilder DisableForeignKeys();
         IQueryBuilder EnableForeignKeys();
+        /// <summary>
+        /// Disables foreign-key checks on the current connection until its active transaction commits
+        /// or rolls back, restoring the previous setting automatically. Returns null when unsupported;
+        /// callers must then use DisableForeignKeys/EnableForeignKeys for session-scoped cleanup.
+        /// </summary>
+        IQueryBuilder DisableForeignKeysUntilTransactionEnd() => null;
         string GetDatabaseType(MemberInfo field, FieldAttribute fieldAtt);
         string GetDatabaseTypeWithLength(MemberInfo field, FieldAttribute fieldAtt);
         string GetColumnDefinition(MemberInfo columnMember, FieldAttribute info = null);

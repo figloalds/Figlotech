@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Data;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
@@ -65,12 +67,24 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public void RawRowsHaveOnlyLengthsAndValuesAndRejectInvalidLengths() {
+        public void FixedSizeRawRowsOmitLengthsAndRejectTruncationOrTrailingBytes() {
             var schema = BDadosBackup.CreateSchema<OneValue>();
             byte[] bytes = BDadosBackup.Export(new OneValue { Number = 42 }, schema);
-            Assert.Equal(new byte[] { 4, 0, 0, 0, 42, 0, 0, 0 }, bytes);
+            Assert.Equal(2, schema.Version);
+            Assert.Equal(4, schema.Columns[0].FixedLength);
+            Assert.Equal(new byte[] { 42, 0, 0, 0 }, bytes);
             Assert.Throws<InvalidDataException>(() => BDadosBackup.Import<OneValue>(schema, bytes[..^1]));
             Assert.Throws<InvalidDataException>(() => BDadosBackup.Import<OneValue>(schema, bytes.Concat(new byte[1]).ToArray()));
+        }
+
+        [Fact]
+        public void LegacySchemaStillReadsAndWritesLengthPrefixedRows() {
+            var schema = BDadosBackupSchema.Deserialize("""
+                {"Version":1,"TableName":"OneValue","Columns":[{"Name":"Number","DataType":6,"IsNullable":false}]}
+                """u8.ToArray());
+            byte[] bytes = { 4, 0, 0, 0, 42, 0, 0, 0 };
+            Assert.Equal(42, BDadosBackup.Import<OneValue>(schema, bytes).Number);
+            Assert.Equal(bytes, BDadosBackup.Export(new OneValue { Number = 42 }, schema));
             foreach (int length in new[] { -1, -2, 0, 3, int.MaxValue }) {
                 BinaryPrimitives.WriteInt32LittleEndian(bytes, length);
                 Assert.Throws<InvalidDataException>(() => BDadosBackup.Import<OneValue>(schema, bytes));
@@ -78,9 +92,104 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public void AllBuiltinFixedSizesAreStoredOnceInSchemaIncludingNullableValues() {
+            (object Value, int Length)[] samples = {
+                (true, 1), ((byte)7, 1), ((sbyte)-7, 1), ((short)-7, 2), ((ushort)7, 2), ('x', 2),
+                (42, 4), (42U, 4), (1.25f, 4), (DateOnly.MaxValue, 4),
+                (42L, 8), (42UL, 8), (1.25d, 8), (TimeSpan.MinValue, 8), (TimeOnly.MaxValue, 8),
+                (decimal.MaxValue, 16), (Guid.NewGuid(), 16), (WideEnum.High, 8),
+                (new DateTime(638000000000000123, DateTimeKind.Local), 9),
+                (new DateTimeOffset(638000000000000123, TimeSpan.FromHours(5.5)), 10)
+            };
+            foreach (var sample in samples) {
+                foreach (bool nullable in new[] { false, true }) {
+                    Type valueType = nullable ? typeof(Nullable<>).MakeGenericType(sample.Value.GetType()) : sample.Value.GetType();
+                    Type modelType = typeof(BDadosBackupBinarySerializationTests.Scalar<>).MakeGenericType(valueType);
+                    var schema = BDadosBackup.CreateSchema(modelType);
+                    Assert.Equal(sample.Length, schema.Columns[0].FixedLength);
+                    object instance = Activator.CreateInstance(modelType)!;
+                    var property = modelType.GetProperty("Value")!;
+                    property.SetValue(instance, sample.Value);
+                    byte[] bytes = BDadosBackup.Export(instance, schema);
+                    Assert.Equal(sample.Length + (nullable ? 1 : 0), bytes.Length);
+                    Assert.Equal(sample.Value, property.GetValue(BDadosBackup.Import(modelType, schema, bytes)));
+                    if (nullable) {
+                        Assert.Equal(1, bytes[0]);
+                        property.SetValue(instance, null);
+                        Assert.Equal(new byte[] { 0 }, BDadosBackup.Export(instance, schema));
+                        Assert.Null(property.GetValue(BDadosBackup.Import(modelType, schema, new byte[] { 0 })));
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public async Task LegacyArchiveRestoresWithOriginalSchemaAndFieldFraming() {
+            // Build an independent v1 fixture without calling the current schema or row writer.
+            byte[] schema = """
+                {"Version":1,"TableName":"Row","Columns":[
+                    {"Name":"Id","DataType":8,"IsNullable":false},
+                    {"Name":"Text","DataType":14,"IsNullable":true}]}
+                """u8.ToArray();
+            using var header = new MemoryStream();
+            using (var writer = new BinaryWriter(header, Encoding.UTF8, true)) {
+                writer.Write(1);
+                writer.Write(3);
+                writer.Write("Row"u8);
+                writer.Write(schema.Length);
+                writer.Write(schema);
+            }
+            byte[] headerBytes = header.ToArray();
+            using var archive = new MemoryStream();
+            using (var writer = new BinaryWriter(archive, Encoding.UTF8, true)) {
+                writer.Write("FGBACKUP"u8);
+                writer.Write(1);
+                writer.Write(headerBytes.Length);
+                writer.Write(headerBytes);
+                writer.Write(SHA256.HashData(headerBytes));
+                writer.Write(18); // Row: (4 + 8) ID bytes, (4 + 2) text bytes.
+                writer.Write(8);
+                writer.Write(42L);
+                writer.Write(2);
+                writer.Write("hi"u8);
+                writer.Write(-1);
+                writer.Write(1L);
+                writer.Write("FGBEND01"u8);
+                writer.Write(SHA256.HashData(archive.ToArray()));
+            }
+            using var input = new ForwardStream(true, archive.ToArray());
+            var target = AccessorProxy.Create();
+            await new BDadosBackup(target.Accessor).RestoreAsync(input, new[] { typeof(Row) });
+            var row = Assert.IsType<Row>(Assert.Single(target.Saved));
+            Assert.Equal(42, row.Id);
+            Assert.Equal("hi", row.Text);
+            Assert.Equal(1, target.Commits);
+        }
+
+        [Fact]
+        public void ReadonlyFieldsAndGetterOnlyPropertiesAreOmittedFromBackup() {
+            var schema = BDadosBackup.CreateSchema<ReadOnlyModel>();
+            Assert.Equal(nameof(ReadOnlyModel.Mutable), Assert.Single(schema.Columns).Name);
+            byte[] bytes = BDadosBackup.Export(new ReadOnlyModel { Mutable = 42 }, schema);
+            var restored = BDadosBackup.Import<ReadOnlyModel>(schema, bytes);
+            Assert.Equal(42, restored.Mutable);
+            Assert.Equal(1, restored.Value);
+            Assert.NotNull(restored.Frozen);
+        }
+
+        [Fact]
+        public void RestoreSkipsArchivedColumnsThatAreNowReadonly() {
+            var schema = BDadosBackup.CreateSchema<PreviouslyWritableModel>();
+            byte[] bytes = BDadosBackup.Export(new PreviouslyWritableModel { Mutable = 42, Value = 99, Frozen = 10 }, schema);
+            var restored = BDadosBackup.Import<ReadOnlyModel>(schema, bytes);
+            Assert.Equal(42, restored.Mutable);
+            Assert.Equal(1, restored.Value);
+            Assert.NotNull(restored.Frozen);
+        }
+
+        [Fact]
         public void InvalidSchemasAndUnsupportedMembersFailExplicitly() {
             Assert.Throws<NotSupportedException>(() => BDadosBackup.CreateSchema<Unsupported>());
-            Assert.Throws<NotSupportedException>(() => BDadosBackup.CreateSchema<ReadOnlyModel>());
             Assert.Throws<InvalidDataException>(() => BDadosBackupSchema.Deserialize("null"u8.ToArray()));
             Assert.Throws<InvalidDataException>(() => BDadosBackupSchema.Deserialize("{"u8.ToArray()));
             var schema = BDadosBackup.CreateSchema<OneValue>();
@@ -174,7 +283,7 @@ namespace Figlotech.BDados.Tests {
             byte[] bytes = await MakeBackup();
             var target = AccessorProxy.Create();
             using var input = new ForwardStream(true, bytes);
-            await Assert.ThrowsAsync<InvalidDataException>(() => new BDadosBackup(target.Accessor).RestoreAsync(input, Array.Empty<Type>()));
+            await Assert.ThrowsAsync<InvalidDataException>(() => new BDadosBackup(target.Accessor).RestoreAsync(input, Array.Empty<Type>(), ignoreMissingTables: false));
             Assert.Equal(0, target.Transactions);
             target.FailSave = true;
             using var failingInput = new ForwardStream(true, bytes);
@@ -276,7 +385,18 @@ namespace Figlotech.BDados.Tests {
         public enum WideEnum : ulong { High = ulong.MaxValue }
         public class OneValue { [Field] public int Number { get; set; } }
         public class Unsupported { [Field] public object? Value { get; set; } }
-        public class ReadOnlyModel { [Field] public int Value => 1; }
+        public class ReadOnlyModelBase {
+            [Field(DefaultValue = 7)] public int Value => 1;
+            [Field] public readonly object Frozen = new object();
+        }
+        public class ReadOnlyModel : ReadOnlyModelBase {
+            [Field] public int Mutable { get; set; }
+        }
+        public class PreviouslyWritableModel {
+            [Field] public int Value { get; set; }
+            [Field] public int Frozen;
+            [Field] public int Mutable { get; set; }
+        }
 
         internal sealed class SharedSqlitePlugin : IRdbmsPluginAdapter {
             public SharedSqlitePlugin(string connectionString) { ConnectionString = connectionString; }
@@ -305,6 +425,12 @@ namespace Figlotech.BDados.Tests {
             public int Commits { get; private set; }
             public int Rollbacks { get; private set; }
             public bool FailSave { get; set; }
+            public List<(Type Type, IDataObject[] Rows)> SavedBatches { get; } = new();
+            public int FailBatch { get; set; }
+            public Action? AfterSaveBatch { get; set; }
+            public IQueryGenerator QueryGenerator { get; set; } = new SqliteQueryGenerator();
+            public List<string> ExecutedCommands { get; } = new();
+            public Func<string, Exception?>? ExecuteFailure { get; set; }
             public static AccessorProxy Create() => (AccessorProxy)(object)DispatchProxy.Create<IRdbmsDataAccessor, AccessorProxy>();
 
             protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) {
@@ -319,9 +445,23 @@ namespace Figlotech.BDados.Tests {
                         var type = targetMethod.GetGenericArguments()[0];
                         return typeof(AccessorProxy).GetMethod(nameof(Enumerate), BindingFlags.Static | BindingFlags.NonPublic)!
                             .MakeGenericMethod(type).Invoke(null, new object[] { Rows[type] });
-                    case "SaveItemAsync":
-                        Saved.Add((IDataObject)args![1]!);
-                        return Task.FromResult(!FailSave);
+                    case "get_QueryGenerator":
+                        return QueryGenerator;
+                    case "ExecuteAsync":
+                        var command = ((IQueryBuilder)args![1]!).GetCommandText();
+                        ExecutedCommands.Add(command);
+                        var failure = ExecuteFailure?.Invoke(command);
+                        if (failure != null) return Task.FromException<int>(failure);
+                        return Task.FromResult(0);
+                    case "SaveListAsync":
+                        var rows = ((System.Collections.IEnumerable)args![1]!).Cast<IDataObject>().ToArray();
+                        var savedType = targetMethod.GetGenericArguments()[0];
+                        Assert.All(rows, row => Assert.Equal(savedType, row.GetType()));
+                        Assert.False((bool)args[2]!);
+                        SavedBatches.Add((savedType, rows));
+                        Saved.AddRange(rows);
+                        AfterSaveBatch?.Invoke();
+                        return Task.FromResult(!FailSave && SavedBatches.Count != FailBatch);
                     default: throw new NotSupportedException(targetMethod.Name);
                 }
             }

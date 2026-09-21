@@ -8,6 +8,9 @@ namespace Figlotech.BDados.Helpers {
         private static bool IsNumeric(BDadosBackupDataType type) => type >= BDadosBackupDataType.Byte && type <= BDadosBackupDataType.Decimal;
 
         internal static bool CanConvert(BDadosBackupDataType source, BDadosBackupDataType target) {
+            if (source == BDadosBackupDataType.BinarySerializable || target == BDadosBackupDataType.BinarySerializable) {
+                return source == target;
+            }
             return source == target
                 || IsNumeric(source) && IsNumeric(target)
                 || source == BDadosBackupDataType.Boolean && IsNumeric(target)

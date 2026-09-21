@@ -2,7 +2,9 @@
 
 `BDadosBackup` accepts an `IRdbmsDataAccessor` and an explicit list of model types.
 Only public instance fields/properties marked `[Field]` are exported, including inherited
-members. Properties must be readable and writable; readonly fields and indexers are rejected.
+members. Readonly fields and properties without setters are omitted, including inherited members.
+Remaining properties must be readable; indexers are rejected. On restore, archived columns whose
+current members are readonly are skipped like removed columns.
 Models need a public parameterless constructor. Database operations additionally require
 `IDataObject` and reject `[ViewOnly]` models and duplicate table names.
 
@@ -20,6 +22,24 @@ var tables = new[] { typeof(Customer), typeof(Order) };
 await new BDadosBackup(sourceAccessor).BackupAsync(outputStream, tables, cancellationToken);
 await new BDadosBackup(targetAccessor).RestoreAsync(inputStream, tables, cancellationToken);
 ```
+
+Restore saves batches of 1,000 rows per table by default. Configure the options after
+construction or supply an options instance to the constructor:
+
+```csharp
+var bkp = new BDadosBackup(targetAccessor);
+bkp.Options.RestoreChunkSize = 500;
+await bkp.RestoreAsync(inputStream, tables, cancellationToken);
+
+var configured = new BDadosBackup(targetAccessor,
+    new BDadosBackupOptions { RestoreChunkSize = 2000 });
+```
+
+Each backup instance creates its own default options when none are supplied. A supplied
+options instance is retained. `RestoreChunkSize` must be positive and is read once when
+restore starts; changes during restoration apply to the next operation. A final partial
+batch is saved at each table boundary; empty or skipped tables do not issue saves.
+All batches remain in the same restore transaction.
 
 ## Timestamp incrementals
 
@@ -62,12 +82,61 @@ more permissive.
 
 Supported values are Boolean, all signed/unsigned integer primitives, Single, Double,
 Decimal, Char, String, byte[], Guid, DateTime, DateTimeOffset, TimeSpan, DateOnly, TimeOnly,
-and enums using their underlying integer representation. Nullable value types are supported.
+enums using their underlying integer representation, and custom `IBinarySerializable` values.
+Nullable value types are supported.
 Null and empty strings/arrays remain distinct. DateTime ticks and Kind, DateTimeOffset ticks
 and offset, and decimal bits are preserved. Unsupported types fail explicitly; no fallback
 object serialization or assembly loading occurs.
 
-## Version 1 format
+## Custom binary values
+
+Implement `Figlotech.Core.Interfaces.IBinarySerializable` on a concrete struct or a class
+with a public parameterless constructor. `ToBytes()` returns the payload without framing;
+`FromBytes(byte[])` replaces the new instance's state and should reject invalid payloads.
+Null values bypass both methods. `ToBytes()` must not return null.
+
+```csharp
+using System;
+using System.Buffers.Binary;
+using Figlotech.Core.Interfaces;
+
+public struct TimeField : IBinarySerializable {
+    public long Ticks { get; set; }
+    public static bool IsFixedLength => true;
+    public static int Length => 8;
+
+    public byte[] ToBytes() {
+        var bytes = new byte[Length];
+        BinaryPrimitives.WriteInt64LittleEndian(bytes, Ticks);
+        return bytes;
+    }
+
+    public void FromBytes(byte[] bytes) {
+        ArgumentNullException.ThrowIfNull(bytes);
+        if (bytes.Length != Length) throw new ArgumentException("Expected eight bytes.", nameof(bytes));
+        Ticks = BinaryPrimitives.ReadInt64LittleEndian(bytes);
+    }
+}
+```
+
+The interface's static virtual properties default to `IsFixedLength = false` and `Length = 0`;
+variable-length types only need the two instance methods. Static interface members require
+C# 11 or later (Core now uses C# 11). The static metadata is cached per CLR type and stored in
+the schema, so row processing does not repeatedly discover it. Fixed length must be non-negative
+and every emitted payload must have that exact size; zero-byte payloads are allowed.
+
+Custom columns store `BinaryType` (the CLR full name) and `FixedLength` (null for variable-length).
+Restoration requires matching custom type identity and length metadata on the caller's model;
+custom values are not automatically converted to strings, byte arrays or other custom types.
+Keep the custom payload representation stable across versions. Removed columns can still be
+skipped using only the archive metadata, without constructing or resolving the old custom type.
+
+## Archive and schema versions
+
+The outer archive protocol remains version 1. New schemas have `Version = 2` and use compact
+fixed-size field framing. Version 1 schemas/archives remain readable, and explicitly exporting
+against an existing version 1 schema retains its original length-prefixed layout. Older readers
+reject version 2 schemas before restoring any rows.
 
 All integers and numeric values use little-endian encoding. All byte lengths exclude their
 own prefix. Text and schemas use strict UTF-8 without a BOM. The archive is:
@@ -88,10 +157,22 @@ Each table data section contains repeated Int32 row lengths and raw row bytes. I
 terminates the table, followed by an Int64 actual row count. Empty tables have the same
 terminator followed by a zero count. Counts do not need to be known before streaming starts.
 
-A raw row contains, for each column in schema order, an Int32 value length and the value
-bytes. A length of `-1` means null and has no payload. Strings and byte arrays contain their
-raw bytes, with no extra internal length prefix. There are no member names, type tags, or
-schema bytes in a row. Boolean is one byte (0/1); Char is a UInt16 UTF-16 code unit; Guid is
+A raw row contains values in schema order. With a version 2 schema:
+
+- A column with `FixedLength` writes exactly that many payload bytes, without a length prefix.
+  Nullable fixed-size columns first write one marker byte: `0` for null (no payload), `1` for
+  a non-null payload. Other marker values are invalid.
+- Variable-length columns (String, byte[], and variable-length custom values) write an Int32
+  byte length and the raw payload. Length `-1` means null and has no payload.
+
+All built-in fixed-size columns record their byte size once in the schema: Boolean/Byte/SByte
+use 1; Int16/UInt16/Char use 2; Int32/UInt32/Single/DateOnly use 4;
+Int64/UInt64/Double/TimeSpan/TimeOnly use 8; DateTime uses 9; DateTimeOffset uses 10;
+Decimal/Guid use 16. Enums use the size of their underlying integer type. Schema validation
+rejects incorrect sizes. Version 1 schemas always use an Int32 length prefix for every field.
+
+There are no member names, type tags, or schema bytes in a row. Boolean is one byte (0/1);
+Char is a UInt16 UTF-16 code unit; Guid is
 the 16-byte .NET `Guid.ToByteArray()` layout; Decimal is the 16-byte `BinaryWriter` layout.
 DateTime is Int64 ticks plus one byte Kind; DateTimeOffset is Int64 ticks plus Int16 offset
 minutes; TimeSpan/TimeOnly are Int64 ticks; DateOnly is an Int32 day number.
@@ -102,7 +183,8 @@ protocol may follow it on the same stream.
 
 ## Streaming and persistence
 
-Only the header and one row at a time are buffered. The default limits are 16 MiB for the
+Backup buffers the header and one encoded row at a time. Restore additionally buffers up to
+`Options.RestoreChunkSize` decoded rows. The default limits are 16 MiB for the
 header and 64 MiB per row; constructor arguments can override these. Readers validate lengths
 before allocating payload buffers and handle short reads. The supplied streams need only
 support asynchronous reading or writing. They remain open; flushing the destination is the
@@ -111,7 +193,9 @@ caller's responsibility. Failed exports leave incomplete archives that cannot be
 Each operation uses one accessor transaction with Serializable isolation by default; an
 optional isolation argument allows provider-specific choices. Backup fetches all rows
 without the accessor's default query limit. Restore binds reflected members once per table,
-then deserializes and saves each row through `SaveItemAsync`. Length/count/checksum failures,
+then deserializes and saves batches through `SaveListAsync<T>` using the concrete destination
+model type. The accessor may further divide batches to meet provider limits; its current
+non-legacy model implementation saves each item internally. Length/count/checksum failures,
 truncation, cancellation, and failed saves abort restoration through the accessor transaction.
 Providers must support transactions for database rollback guarantees.
 
@@ -120,7 +204,32 @@ order when constraints require it; that order is preserved in the archive. Regis
 on restore is irrelevant. Create/update the destination DDL using its current models and
 provider before restoring. The backup's database type, size, precision and other DDL metadata
 are descriptive; they are not imposed on the destination engine. Cyclic foreign-key handling
-is not performed.
+is provider-dependent.
+
+### PostgreSQL foreign-key checks during restore
+
+Restore executes `SET LOCAL session_replication_role = 'replica'` on the same connection
+and transaction as the saves. PostgreSQL restores the previous session setting on commit
+or rollback; restore does not issue an enable command inside a failed transaction. This
+preserves the original database error instead of masking it with SQLSTATE `25P02`
+(transaction already aborted).
+
+The restore login needs superuser privileges, or on PostgreSQL 15 and later an administrator
+can grant the narrower parameter privilege (replace `restore_user` with the actual role):
+
+```sql
+GRANT SET ON PARAMETER session_replication_role TO restore_user;
+```
+
+Database/table ownership alone is insufficient. A missing privilege produces SQLSTATE
+`42501`; inspect the inner exception of `BDadosException` for the original PostgreSQL error.
+The replica setting also suppresses ordinary triggers/rules, not just foreign keys, and
+restoring the setting does not retroactively validate the imported relationships. Ensure the
+archive and destination data are consistent, including tables omitted from the restore.
+
+References: [PostgreSQL SET](https://www.postgresql.org/docs/current/sql-set.html),
+[session_replication_role](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-SESSION-REPLICATION-ROLE),
+[PostgreSQL 15 GRANT](https://www.postgresql.org/docs/15/sql-grant.html).
 
 ## Restoring an older model version
 

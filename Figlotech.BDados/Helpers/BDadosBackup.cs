@@ -18,29 +18,37 @@ namespace Figlotech.BDados.Helpers {
     /// <summary>
     /// Versioned binary backups of explicitly selected BDados models. Streams remain open and need
     /// only support asynchronous writing (backup) or reading (restore), never seeking.
-    /// Restore uses SaveItemAsync in one transaction; normal accessor identity/persistence policies apply.
+    /// Restore uses SaveListAsync in one transaction; normal accessor identity/persistence policies apply.
     /// </summary>
     public sealed class BDadosBackup {
         private static readonly byte[] Magic = "FGBACKUP"u8.ToArray();
         private static readonly byte[] EndMagic = "FGBEND01"u8.ToArray();
         private static readonly MethodInfo FetchMethod = typeof(BDadosBackup).GetMethod(nameof(FetchRowsAsync), BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo SaveChunkMethod = typeof(BDadosBackup).GetMethod(nameof(SaveRestoreChunkAsync), BindingFlags.NonPublic | BindingFlags.Instance);
         private readonly IRdbmsDataAccessor _accessor;
         public int MaxHeaderBytes { get; }
         public int MaxRowBytes { get; }
+        public BDadosBackupOptions Options { get; }
 
-        public BDadosBackup(IRdbmsDataAccessor accessor, int maxHeaderBytes = 16 * 1024 * 1024, int maxRowBytes = 64 * 1024 * 1024) {
+        public BDadosBackup(IRdbmsDataAccessor accessor, int maxHeaderBytes = 16 * 1024 * 1024, int maxRowBytes = 64 * 1024 * 1024)
+            : this(accessor, null, maxHeaderBytes, maxRowBytes) {
+        }
+
+        public BDadosBackup(IRdbmsDataAccessor accessor, BDadosBackupOptions options,
+            int maxHeaderBytes = 16 * 1024 * 1024, int maxRowBytes = 64 * 1024 * 1024) {
             ArgumentNullException.ThrowIfNull(accessor);
             if (maxHeaderBytes < 4) throw new ArgumentOutOfRangeException(nameof(maxHeaderBytes));
             if (maxRowBytes < 4) throw new ArgumentOutOfRangeException(nameof(maxRowBytes));
             _accessor = accessor;
             MaxHeaderBytes = maxHeaderBytes;
             MaxRowBytes = maxRowBytes;
+            Options = options ?? new BDadosBackupOptions();
         }
 
         public static BDadosBackupSchema CreateSchema<T>() => BDadosBackupSchema.Create<T>();
         public static BDadosBackupSchema CreateSchema(Type type) => BDadosBackupSchema.Create(type);
 
-        /// <summary>Exports only length-prefixed field values in schema order; no schema or names are included.</summary>
+        /// <summary>Exports field values using the schema's framing; no schema or names are included.</summary>
         public static byte[] Export(object instance, BDadosBackupSchema schema) {
             ArgumentNullException.ThrowIfNull(instance);
             return new BDadosBackupCodec(instance.GetType(), schema).Export(instance);
@@ -115,17 +123,19 @@ namespace Figlotech.BDados.Helpers {
         }
 
         /// <summary>
-        /// Reads one complete backup and saves each row in one transaction. All schemas are validated
+        /// Reads one complete backup and saves rows in batches within one transaction. All schemas are validated
         /// against caller-supplied types before any writes; corrupt/truncated backups fail the transaction.
         /// OldName aliases, removed/added columns and compatible CLR type changes are supported.
         /// Set ignoreMissingTables to skip tables deliberately removed from the current model.
         /// Does not create tables, clear existing data, or instantiate types named by the archive.
         /// </summary>
         public async Task RestoreAsync(Stream source, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
-            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = false) {
+            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = true) {
             ArgumentNullException.ThrowIfNull(source);
             if (!source.CanRead) throw new ArgumentException("The backup stream must be readable.", nameof(source));
             cancellationToken.ThrowIfCancellationRequested();
+            int chunkSize = Options.RestoreChunkSize;
+            if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(Options.RestoreChunkSize), "Restore chunk size must be positive.");
             var registered = GetTableTypes(tableTypes);
             using var wire = new Wire(source, cancellationToken);
             if (!(await wire.ReadAsync(Magic.Length)).AsSpan().SequenceEqual(Magic)) {
@@ -145,6 +155,7 @@ namespace Figlotech.BDados.Helpers {
             var mappedTypes = BDadosBackupMapping.Bind(schemas.Select(s => s.TableName).ToArray(), registered,
                 t => t.Name, t => t.GetCustomAttribute<OldNameAttribute>(true)?.Name);
             var codecs = new BDadosBackupCodec[schemas.Length];
+            var saveChunks = new Func<BDadosTransaction, List<IDataObject>, Task<bool>>[schemas.Length];
             for (int i = 0; i < schemas.Length; i++) {
                 var type = mappedTypes[i];
                 if (type == null && ignoreMissingTables) continue;
@@ -152,40 +163,73 @@ namespace Figlotech.BDados.Helpers {
                     throw new InvalidDataException($"No restore model registered for table '{schemas[i].TableName}'.");
                 }
                 codecs[i] = new BDadosBackupCodec(type, schemas[i], forImport: true);
+                saveChunks[i] = SaveChunkMethod.MakeGenericMethod(type)
+                    .CreateDelegate<Func<BDadosTransaction, List<IDataObject>, Task<bool>>>(this);
             }
             await _accessor.AccessAsync(async transaction => {
-                for (int i = 0; i < schemas.Length; i++) {
-                    long count = 0;
-                    while (true) {
-                        int length = await wire.ReadInt32Async();
-                        if (length == -1) break;
-                        CheckLength(length, MaxRowBytes, "row");
-                        byte[] row = await wire.ReadAsync(length);
-                        count = checked(count + 1);
-                        if (codecs[i] == null) continue; // Still read, hash and count skipped tables.
-                        var item = (IDataObject)codecs[i].Import(row);
-                        // Legacy saves otherwise overwrite the restored UpdatedAt timestamp.
-                        if (item is ILegacyDataObject legacy) legacy.IsReceivedFromSync = true;
-                        cancellationToken.ThrowIfCancellationRequested();
-                        if (!await _accessor.SaveItemAsync(transaction, item)) {
-                            throw new InvalidDataException($"Saving row {count} of '{schemas[i].TableName}' failed.");
+                var generator = _accessor.QueryGenerator;
+                var transactionScopedDisable = generator.DisableForeignKeysUntilTransactionEnd();
+                await _accessor.ExecuteAsync(transaction, transactionScopedDisable ?? generator.DisableForeignKeys());
+                try {
+
+                    for (int i = 0; i < schemas.Length; i++) {
+                        long count = 0;
+                        var chunk = new List<IDataObject>();
+                        while (true) {
+                            int length = await wire.ReadInt32Async();
+                            if (length == -1) break;
+                            CheckLength(length, MaxRowBytes, "row");
+                            byte[] row = await wire.ReadAsync(length);
+                            count = checked(count + 1);
+                            if (codecs[i] == null) continue; // Still read, hash and count skipped tables.
+                            var item = (IDataObject)codecs[i].Import(row);
+                            // Legacy saves otherwise overwrite the restored UpdatedAt timestamp.
+                            if (item is ILegacyDataObject legacy) legacy.IsReceivedFromSync = true;
+                            cancellationToken.ThrowIfCancellationRequested();
+                            chunk.Add(item);
+                            if (chunk.Count == chunkSize) {
+                                if (!await saveChunks[i](transaction, chunk)) {
+                                    throw new InvalidDataException($"Saving restore batch ending at row {count} of '{schemas[i].TableName}' failed.");
+                                }
+                                cancellationToken.ThrowIfCancellationRequested();
+                                chunk.Clear();
+                            }
+                        }
+                        if (await wire.ReadInt64Async() != count) {
+                            throw new InvalidDataException($"Row count mismatch in table '{schemas[i].TableName}'.");
+                        }
+                        if (chunk.Count > 0) {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (!await saveChunks[i](transaction, chunk)) {
+                                throw new InvalidDataException($"Saving restore batch ending at row {count} of '{schemas[i].TableName}' failed.");
+                            }
+                            cancellationToken.ThrowIfCancellationRequested();
                         }
                     }
-                    if (await wire.ReadInt64Async() != count) {
-                        throw new InvalidDataException($"Row count mismatch in table '{schemas[i].TableName}'.");
+                    if (!(await wire.ReadAsync(EndMagic.Length)).AsSpan().SequenceEqual(EndMagic)) {
+                        throw new InvalidDataException("Missing backup completion marker.");
                     }
-                }
-                if (!(await wire.ReadAsync(EndMagic.Length)).AsSpan().SequenceEqual(EndMagic)) {
-                    throw new InvalidDataException("Missing backup completion marker.");
-                }
-                byte[] expectedHash = wire.GetHash();
-                byte[] actualHash = new byte[32];
-                await source.ReadExactlyAsync(actualHash, cancellationToken);
-                if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash)) {
-                    throw new InvalidDataException("Backup checksum mismatch.");
+                    byte[] expectedHash = wire.GetHash();
+                    byte[] actualHash = new byte[32];
+                    await source.ReadExactlyAsync(actualHash, cancellationToken);
+                    if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash)) {
+                        throw new InvalidDataException("Backup checksum mismatch.");
+                    }
+                } finally {
+                    // PostgreSQL rejects further commands after a SQL error. Its transaction-local
+                    // setting is restored by commit/rollback, so cleanup must not mask that error.
+                    if (transactionScopedDisable == null) {
+                        await _accessor.ExecuteAsync(transaction, generator.EnableForeignKeys());
+                    }
                 }
             }, cancellationToken, isolationLevel);
             cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        private Task<bool> SaveRestoreChunkAsync<T>(BDadosTransaction transaction, List<IDataObject> chunk) where T : IDataObject {
+            // Preserve the concrete table type so the accessor selects its bulk save path.
+            chunk = chunk.GroupBy(x=> x.Id).Select(g => g.First()).ToList(); // Remove duplicates by Id, if any.
+            return _accessor.SaveListAsync(transaction, chunk.Cast<T>().ToList());
         }
 
         private async IAsyncEnumerable<IDataObject> FetchRowsAsync<T>(BDadosTransaction transaction, IQueryBuilder conditions,
