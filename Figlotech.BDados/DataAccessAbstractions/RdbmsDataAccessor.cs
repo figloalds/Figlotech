@@ -95,7 +95,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private List<ILegacyDataObject> ObjectsToNotify { get; set; } = new List<ILegacyDataObject>();
         public Action OnTransactionEnding { get; internal set; }
-        private List<(Func<Task> Action, Func<Exception, Task> Handler)> ActionsToExecuteAfterSuccess { get; set; } = new List<(Func<Task> Action, Func<Exception, Task> Handler)>();
+        private readonly List<(Func<Task> Action, Func<Exception, Task> Handler)> ActionsToExecuteAfterSuccess = new List<(Func<Task> Action, Func<Exception, Task> Handler)>();
+        private bool _successActionsPending;
 
         List<IDbCommand> _commands { get; set; } = new List<IDbCommand>();
 
@@ -106,22 +107,30 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             }
         }
 
+        /// <summary>
+        /// Runs after successful completion and disposal of the database transaction and connection.
+        /// Commit alone does not run callbacks; EndTransaction or Dispose completes them in registration order.
+        /// </summary>
         public void ExecuteWhenSuccess(Action fn, Action<Exception> handler = null) {
-            lock (ActionsToExecuteAfterSuccess)
-                ActionsToExecuteAfterSuccess.Add((async () => {
-                    await Task.Run(() => {
-                        fn();
-                    });
-                }, async (x) => {
-                    await Task.Run(() => {
-                        handler(x);
-                    });
-                }
-                ));
+            if (fn == null) {
+                throw new ArgumentNullException(nameof(fn));
+            }
+            ExecuteWhenSuccess(() => Task.Run(fn), handler == null ? null : x => Task.Run(() => handler(x)));
         }
+        /// <summary>
+        /// Runs after successful completion and disposal of the database transaction and connection.
+        /// EndTransactionAsync and DisposeAsync await callbacks in registration order.
+        /// </summary>
         public void ExecuteWhenSuccess(Func<Task> fn, Func<Exception, Task> handler = null) {
-            lock (ActionsToExecuteAfterSuccess)
+            if (fn == null) {
+                throw new ArgumentNullException(nameof(fn));
+            }
+            lock (ActionsToExecuteAfterSuccess) {
+                if (isDisposed || isTransactionEnded) {
+                    throw new BDadosException("Trying to register a callback on a transaction that has already been disposed or ended.");
+                }
                 ActionsToExecuteAfterSuccess.Add((fn, handler));
+            }
         }
 
         public void NotifyChange(ILegacyDataObject[] ido) {
@@ -268,7 +277,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         internal CancellationTokenSource _cancellationTokenSource { get; set; } = new CancellationTokenSource();
         public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
-        private void ApplySuccessActions() {
+        private void ApplySuccessMutations() {
             Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
             for (int i = 0; i < AutoMutateTargets.Count; i++) {
                 ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
@@ -282,58 +291,48 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 }
             }
             AutoMutateTargets.Clear();
-            lock (ActionsToExecuteAfterSuccess) {
-                for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
-                    var fn = ActionsToExecuteAfterSuccess[i];
-                    try {
-                        var task = fn.Action?.Invoke();
-                        if (task != null) {
-                            // WARNING: This blocks the calling thread on async handlers.
-                            // Use CommitAsync() instead of Commit() when handlers are async to avoid thread-pool starvation.
-                            task.GetAwaiter().GetResult();
-                        }
-                    } catch (Exception x) {
-                        Debugger.Break();
-                        try {
-                            var task = fn.Handler?.Invoke(x);
-                            if (task != null) {
-                                // WARNING: Same blocking behavior as above.
-                                task.GetAwaiter().GetResult();
-                            }
-                        } catch (Exception ex) {
-                            Fi.Tech.SwallowException(ex);
-                        }
-                    }
-                }
-                ActionsToExecuteAfterSuccess.Clear();
-            }
-
         }
 
-        private async ValueTask ApplySuccessActionsAsync() {
-            Dictionary<object, bool> MutatedObjects = new Dictionary<object, bool>();
-            for (int i = 0; i < AutoMutateTargets.Count; i++) {
-                ReflectionTool.SetMemberValue(AutoMutateTargets[i].Member, AutoMutateTargets[i].Target, AutoMutateTargets[i].Value);
-                if (!MutatedObjects.ContainsKey(AutoMutateTargets[i].Target)) {
-                    MutatedObjects.Add(AutoMutateTargets[i].Target, true);
-                    if (AutoMutateTargets[i].Target is ILegacyDataObject legacy) {
-                        legacy.UpdatedAt = DateTime.UtcNow;
-                    } else {
-                        AutoMutateTargets[i].Target.UpdatedAt = DateTime.UtcNow;
+        private (Func<Task> Action, Func<Exception, Task> Handler)[] TakeSuccessActions() {
+            lock (ActionsToExecuteAfterSuccess) {
+                var actions = _successActionsPending && !IsRolledBack && !Errored
+                    ? ActionsToExecuteAfterSuccess.ToArray()
+                    : Array.Empty<(Func<Task> Action, Func<Exception, Task> Handler)>();
+                _successActionsPending = false;
+                ActionsToExecuteAfterSuccess.Clear();
+                return actions;
+            }
+        }
+
+        private void RunSuccessActions() {
+            foreach (var fn in TakeSuccessActions()) {
+                try {
+                    // Synchronous cleanup blocks on async callbacks. Prefer async cleanup for these callbacks.
+                    fn.Action?.Invoke()?.GetAwaiter().GetResult();
+                } catch (Exception x) {
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
+                    try {
+                        fn.Handler?.Invoke(x)?.GetAwaiter().GetResult();
+                    } catch (Exception ex) {
+                        Fi.Tech.SwallowException(ex);
                     }
                 }
             }
-            AutoMutateTargets.Clear();
+        }
 
-            for (int i = 0; i < ActionsToExecuteAfterSuccess.Count; i++) {
-                var fn = ActionsToExecuteAfterSuccess[i];
+        private async ValueTask RunSuccessActionsAsync() {
+            foreach (var fn in TakeSuccessActions()) {
                 try {
                     var task = fn.Action?.Invoke();
                     if (task != null) {
                         await task.ConfigureAwait(false);
                     }
                 } catch (Exception x) {
-                    Debugger.Break();
+                    if (Debugger.IsAttached) {
+                        Debugger.Break();
+                    }
                     try {
                         var task = fn.Handler?.Invoke(x);
                         if (task != null) {
@@ -344,7 +343,17 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                     }
                 }
             }
-            ActionsToExecuteAfterSuccess.Clear();
+        }
+
+        private void CompleteCommit() {
+            IsCommited = true;
+            ApplySuccessMutations();
+            LoggerActivity?.SetStatus(ActivityStatusCode.Ok);
+            lock (ObjectsToNotify) {
+                DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
+                ObjectsToNotify.Clear();
+            }
+            _successActionsPending = true;
         }
 
         public void Commit() {
@@ -352,73 +361,46 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Debugger.Break();
                 throw new BDadosException("Trying to commit a transaction that has already been disposed or ended.");
             }
-            if (Transaction?.Connection?.State == ConnectionState.Open) {
-                lock (_commands) {
-                    if (_commands.Count == 0) {
-                        // Nothing to commit 
-                        // Weird
-                        return;
-                    }
+            if (IsCommited || IsRolledBack) {
+                return;
+            }
+            if (Connection?.State != ConnectionState.Open) {
+                throw new BDadosException("Trying to commit a transaction whose connection is not open.");
+            }
+            try {
+                if (Transaction != null && WriteOperationsCount > 0) {
+                    Transaction.Commit();
                 }
-                if (IsCommited || IsRolledBack) {
-                    Debugger.Break();
-                    return;
-                    // This transaction has already been committed or rolled back
-                }
-                if (WriteOperationsCount > 0) {
-                    Transaction?.Commit();
-                }
-                if (ActionsToExecuteAfterSuccess.Count > 0 || AutoMutateTargets.Count > 0) {
-                    ApplySuccessActions();
-                }
-                IsCommited = true;
-                lock (ObjectsToNotify) {
-                    DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
-                    ObjectsToNotify.Clear();
-                }
+                CompleteCommit();
+            } catch (Exception x) {
+                MarkAsErrored(x);
+                throw;
             }
         }
 
-        bool _hasOnAfterSuccessBeenRun = false;
         public async ValueTask CommitAsync() {
             if (isDisposed || isTransactionEnded) {
                 Debugger.Break();
                 throw new BDadosException("Trying to commit a transaction that has already been disposed or ended.");
             }
             if (IsCommited || IsRolledBack) {
-                Debugger.Break();
                 return;
-                // This transaction has already been committed or rolled back
             }
-            if (Transaction?.Connection?.State == ConnectionState.Open) {
-                lock (_commands) {
-                    if (_commands.Count == 0) {
-                        // Nothing to commit 
-                        // Weird
-                        return;
-                    }
-                }
-                if (WriteOperationsCount > 0) {
+            if (Connection?.State != ConnectionState.Open) {
+                throw new BDadosException("Trying to commit a transaction whose connection is not open.");
+            }
+            try {
+                if (Transaction != null && WriteOperationsCount > 0) {
                     if (Transaction is DbTransaction tsn) {
                         await tsn.CommitAsync(this.CancellationToken).ConfigureAwait(false);
                     } else {
                         Transaction?.Commit();
                     }
                 }
-                IsCommited = true;
-            }
-            if (!_hasOnAfterSuccessBeenRun) {
-                _hasOnAfterSuccessBeenRun = true;
-                if (ActionsToExecuteAfterSuccess.Count > 0 || AutoMutateTargets.Count > 0) {
-                    await ApplySuccessActionsAsync().ConfigureAwait(false);
-                }
-                LoggerActivity?.SetStatus(ActivityStatusCode.Ok);
-                if (ObjectsToNotify.Count > 0) {
-                    lock (ObjectsToNotify) {
-                        DataAccessor.RaiseForChangeIn(ObjectsToNotify.ToArray());
-                        ObjectsToNotify.Clear();
-                    }
-                }
+                CompleteCommit();
+            } catch (Exception x) {
+                MarkAsErrored(x);
+                throw;
             }
         }
 
@@ -427,13 +409,14 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Debugger.Break();
                 throw new BDadosException("Trying to rollback a transaction that has already been disposed or ended.");
             }
+            _successActionsPending = false;
             for (var i = AutoMutateRollbacks.Count - 1; i >= 0; i--) {
                 ReflectionTool.SetMemberValue(AutoMutateRollbacks[i].Member, AutoMutateRollbacks[i].Target, AutoMutateRollbacks[i].Value);
             }
             if (Transaction?.Connection?.State == ConnectionState.Open) {
                 Transaction?.Rollback();
-                IsRolledBack = true;
             }
+            IsRolledBack = true;
             lock (ObjectsToNotify)
                 ObjectsToNotify.Clear();
         }
@@ -442,14 +425,15 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 Debugger.Break();
                 throw new BDadosException("Trying to rollback a transaction that has already been disposed or ended.");
             }
+            _successActionsPending = false;
             if (Transaction?.Connection?.State == ConnectionState.Open) {
                 if (Transaction is DbTransaction tsn) {
                     await tsn.RollbackAsync(this.CancellationToken).ConfigureAwait(false);
                 } else {
                     Transaction?.Rollback();
                 }
-                IsRolledBack = true;
             }
+            IsRolledBack = true;
             lock (ObjectsToNotify)
                 ObjectsToNotify.Clear();
         }
@@ -458,45 +442,48 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             if (isDisposed || isTransactionEnded) {
                 return;
             }
-            if (OnTransactionEnding != null) {
-                this.OnTransactionEnding.Invoke();
+            try {
+                OnTransactionEnding?.Invoke();
+            } catch (Exception x) {
+                MarkAsErrored(x);
+                throw;
+            } finally {
+                try {
+                    Transaction?.Dispose();
+                } finally {
+                    Transaction = null;
+                    DisposeConnectionIfNotYetDisposedSync();
+                    CompleteTransactionEnd();
+                }
             }
-            if (Transaction is DbTransaction tsn) {
-                tsn.Dispose();
-            } else {
-                Transaction?.Dispose();
-            }
-            Transaction = null;
-            DisposeConnectionIfNotYetDisposedSync();
-            Connection = null;
-            if (!usingExternalBenchmarker) {
-                LoggerActivity?.AddTag("Status", string.Join("\r\n", Benchmarker?.VerboseLog()));
-            }
-            LoggerActivity?.SetEndTime(DateTime.UtcNow);
-            LoggerActivity?.Dispose();
-            LoggerActivity = null;
-            lock (this.DataAccessor.ActiveConnections) {
-                this.DataAccessor.ActiveConnections.Remove(Id);
-            }
-            isTransactionEnded = true;
-
-            this.DataAccessor.WriteLog($"Transaction Closed {Id}");
+            RunSuccessActions();
         }
         public async ValueTask EndTransactionAsync() {
             if (isDisposed || isTransactionEnded) {
                 return;
             }
-            if (OnTransactionEnding != null) {
-                this.OnTransactionEnding.Invoke();
+            try {
+                OnTransactionEnding?.Invoke();
+            } catch (Exception x) {
+                MarkAsErrored(x);
+                throw;
+            } finally {
+                try {
+                    if (Transaction is DbTransaction tsn) {
+                        await tsn.DisposeAsync().ConfigureAwait(false);
+                    } else {
+                        Transaction?.Dispose();
+                    }
+                } finally {
+                    Transaction = null;
+                    await DisposeConnectionIfNotYetDisposed().ConfigureAwait(false);
+                    CompleteTransactionEnd();
+                }
             }
-            if (Transaction is DbTransaction tsn) {
-                await tsn.DisposeAsync().ConfigureAwait(false);
-            } else {
-                Transaction?.Dispose();
-            }
-            Transaction = null;
-            await DisposeConnectionIfNotYetDisposed();
-            Connection = null;
+            await RunSuccessActionsAsync().ConfigureAwait(false);
+        }
+
+        private void CompleteTransactionEnd() {
             if (!usingExternalBenchmarker) {
                 LoggerActivity?.AddTag("Status", string.Join("\r\n", Benchmarker?.VerboseLog()));
             }
@@ -506,7 +493,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             lock (this.DataAccessor.ActiveConnections) {
                 this.DataAccessor.ActiveConnections.Remove(Id);
             }
-            isTransactionEnded = true;
+            lock (ActionsToExecuteAfterSuccess) {
+                isTransactionEnded = true;
+            }
 
             this.DataAccessor.WriteLog($"Transaction Closed {Id}");
         }
@@ -641,7 +630,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.ObjectsToNotify = null;
                 this.LoggerActivity = null;
                 this.OnTransactionEnding = null;
-                this.ActionsToExecuteAfterSuccess = null;
+                lock (ActionsToExecuteAfterSuccess) {
+                    ActionsToExecuteAfterSuccess.Clear();
+                }
                 this._cancellationTokenSource = null;
                 this._commands = null;
                 this._lock = null;
@@ -695,7 +686,9 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 this.ObjectsToNotify = null;
                 this.LoggerActivity = null;
                 this.OnTransactionEnding = null;
-                this.ActionsToExecuteAfterSuccess = null;
+                lock (ActionsToExecuteAfterSuccess) {
+                    ActionsToExecuteAfterSuccess.Clear();
+                }
                 this._cancellationTokenSource = null;
                 this._commands = null;
                 this._lock = null;
