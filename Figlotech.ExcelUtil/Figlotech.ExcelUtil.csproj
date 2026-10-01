@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Figlotech.Core\Figlotech.Core.csproj" />
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
+    <InternalsVisibleTo Include="Figlotech.ExcelUtil.Tests" />
   </ItemGroup>
 
   <!-- GIMMICKY PRECOMPILER CONSTANTS -->

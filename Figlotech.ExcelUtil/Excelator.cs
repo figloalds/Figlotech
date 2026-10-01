@@ -361,12 +361,49 @@ namespace Figlotech.ExcelUtil {
         }
 
         public void AdjustCols() {
-            try {
-                for (int c = 0; c < _currentWorkSheet.Dimension.Columns + 1; c++) {
-                    _currentWorkSheet.Column(c + 1).AutoFit();
+            var worksheet = _currentWorkSheet;
+            if (worksheet == null) {
+                throw new InvalidOperationException("Select or create a worksheet before adjusting columns.");
+            }
+            var dimension = worksheet.Dimension;
+            if (dimension == null) {
+                return;
+            }
+
+            // EPPlus 4 measures point-sized fonts at the bitmap's DPI, but divides
+            // by font metrics defined at 96 DPI. Its fixed padding is not scaled.
+            using var bitmap = new Bitmap(1, 1);
+            var dpi = bitmap.HorizontalResolution;
+            // EPPlus range endpoints are 1-based; Dimension.Columns is only a count.
+            worksheet.Cells[dimension.Start.Row, dimension.Start.Column,
+                dimension.End.Row, dimension.End.Column].AutoFitColumns();
+            if (Math.Abs(dpi - 96f) < 0.01f) {
+                return;
+            }
+
+            var filteredColumns = new HashSet<int>();
+            void IncludeFilter(ExcelAddressBase address) {
+                if (address == null) {
+                    return;
                 }
-            } catch (Exception x) {
-                Fi.Tech.WriteLine("EXCELATOR", $"AutoFit threw an exception {x.Message}");
+                for (int column = address.Start.Column; column <= address.End.Column; column++) {
+                    filteredColumns.Add(column);
+                }
+            }
+            IncludeFilter(worksheet.AutoFilterAddress);
+            foreach (var table in worksheet.Tables) {
+                if (table.ShowHeader && table.ShowFilter) {
+                    IncludeFilter(table.Address);
+                }
+            }
+
+            var fontWidth = (double)_pack.Workbook.MaxFontWidth;
+            for (int column = dimension.Start.Column; column <= dimension.End.Column; column++) {
+                var excelColumn = worksheet.Column(column);
+                if (!excelColumn.Hidden) {
+                    excelColumn.Width = ExcelColumnWidth.NormalizeDpi(excelColumn.Width,
+                        worksheet.DefaultColWidth, fontWidth, dpi, filteredColumns.Contains(column));
+                }
             }
         }
 
