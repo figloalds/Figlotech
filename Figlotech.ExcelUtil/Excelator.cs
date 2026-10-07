@@ -370,17 +370,14 @@ namespace Figlotech.ExcelUtil {
                 return;
             }
 
-            // EPPlus 4 measures point-sized fonts at the bitmap's DPI, but divides
-            // by font metrics defined at 96 DPI. Its fixed padding is not scaled.
+            // Match the drawing context used by EPPlus. On libgdiplus a new
+            // bitmap can report zero DPI while its Graphics uses a valid fallback.
             using var bitmap = new Bitmap(1, 1);
-            var dpi = bitmap.HorizontalResolution;
+            using var graphics = Graphics.FromImage(bitmap);
+            var dpi = graphics.DpiX;
             // EPPlus range endpoints are 1-based; Dimension.Columns is only a count.
             worksheet.Cells[dimension.Start.Row, dimension.Start.Column,
                 dimension.End.Row, dimension.End.Column].AutoFitColumns();
-            if (Math.Abs(dpi - 96f) < 0.01f) {
-                return;
-            }
-
             var filteredColumns = new HashSet<int>();
             void IncludeFilter(ExcelAddressBase address) {
                 if (address == null) {

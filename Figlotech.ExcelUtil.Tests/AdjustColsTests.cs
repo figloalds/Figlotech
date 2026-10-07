@@ -1,6 +1,9 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
+using System.IO.Compression;
+using System.Xml.Linq;
 using OfficeOpenXml;
 using Xunit;
 
@@ -30,6 +33,59 @@ namespace Figlotech.ExcelUtil.Tests {
         public void ShortColumnsKeepTheDefaultMinimum() {
             Assert.Equal(9.140625, ExcelColumnWidth.NormalizeDpi(9.853668212890625,
                 9.140625, 7, 192, false));
+        }
+
+        [Theory]
+        [InlineData(0f)]
+        [InlineData(-96f)]
+        [InlineData(float.NaN)]
+        [InlineData(float.PositiveInfinity)]
+        public void InvalidDpiPreservesTheUnscaledWidth(float dpi) {
+            Assert.Equal(40, ExcelColumnWidth.NormalizeDpi(40, 9.140625, 7, dpi, false));
+        }
+
+        [Theory]
+        [InlineData(0d)]
+        [InlineData(-7d)]
+        [InlineData(double.NaN)]
+        [InlineData(double.PositiveInfinity)]
+        public void InvalidFontMetricsPreserveTheUnscaledWidth(double fontWidth) {
+            Assert.Equal(40, ExcelColumnWidth.NormalizeDpi(40, 9.140625, fontWidth, 192, false));
+        }
+
+        [Theory]
+        [InlineData(double.NaN, 9.140625, 96f)]
+        [InlineData(double.PositiveInfinity, 9.140625, 192f)]
+        [InlineData(0d, 0d, 96f)]
+        [InlineData(-10d, double.NaN, 192f)]
+        [InlineData(double.NaN, double.PositiveInfinity, 96f)]
+        [InlineData(40d, 9.140625, float.Epsilon)]
+        public void InvalidOrExtremeWidthsAlwaysProduceFiniteVisibleColumns(
+            double width, double minimumWidth, float dpi) {
+            var actual = ExcelColumnWidth.NormalizeDpi(width, minimumWidth, 7, dpi, false);
+            Assert.True(double.IsFinite(actual));
+            Assert.InRange(actual, 1, 255);
+        }
+
+        [Fact]
+        public void ZeroDpiCannotSerializeInvalidWidthsAcrossUsedColumns() {
+            using var package = new ExcelPackage();
+            var sheet = package.Workbook.Worksheets.Add("Data");
+            for (int column = 1; column <= 34; column++) {
+                sheet.Cells[1, column].Value = "Visible data";
+                sheet.Column(column).Width = ExcelColumnWidth.NormalizeDpi(40, 9.140625, 7, 0, false);
+            }
+            using var output = new MemoryStream();
+            package.SaveAs(output);
+            output.Position = 0;
+            using var zip = new ZipArchive(output, ZipArchiveMode.Read);
+            using var xmlStream = zip.GetEntry("xl/worksheets/sheet1.xml").Open();
+            var xml = XDocument.Load(xmlStream);
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            foreach (var column in xml.Root.Element(ns + "cols").Elements(ns + "col")) {
+                var width = double.Parse(column.Attribute("width").Value, CultureInfo.InvariantCulture);
+                Assert.Equal(40, width);
+            }
         }
 
         [WindowsFact]
