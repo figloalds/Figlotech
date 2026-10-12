@@ -230,6 +230,41 @@ namespace Figlotech.BDados.Tests {
             }
         }
 
+        [Theory]
+        [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)]
+        public async Task LaterCommitProvesCorruptionWhenMiddleSealAndTrailerAreDamaged(int laterDamage) {
+            var (original, all) = await Fixture();
+            using var archive = new MemoryStream(); await archive.WriteAsync(all);
+            var backup = new BDadosBackup(Source().Accessor);
+            await backup.AppendIncrementalAsync(archive, Tables, Cutoff);
+            byte[] corrupt = archive.ToArray();
+            corrupt.AsSpan(original.Length + 48, 24).Clear();
+            corrupt[all.Length - 64] ^= 1;
+            if (laterDamage == 1) corrupt[all.Length + 72 + 20] ^= 1;
+            if (laterDamage == 2) corrupt[all.Length] ^= 1;
+            if (laterDamage == 3) corrupt.AsSpan(all.Length + 48, 24).Clear();
+            using var input = new MemoryStream(); await input.WriteAsync(corrupt);
+            var target = AccessorProxy.Create();
+            var restore = new BDadosBackup(target.Accessor);
+            await Assert.ThrowsAsync<InvalidDataException>(() => restore.InspectAppendableAsync(input));
+            await Assert.ThrowsAsync<InvalidDataException>(() => restore.RestoreAppendableAsync(input, Tables, allowIncompleteTail: true));
+            Assert.Equal(0, target.Transactions);
+            await Assert.ThrowsAsync<InvalidDataException>(() => backup.AppendIncrementalAsync(input, Tables, Cutoff, recoverIncompleteTail: true));
+            Assert.Equal(corrupt, input.ToArray());
+        }
+
+        [Fact]
+        public async Task TornCompletePrefixWithPersistedBodyFailsClosed() {
+            var (original, all) = await Fixture();
+            byte[] torn = all[..^64];
+            // A device may persist the payload before some prefix bytes on the first durable flush.
+            torn[original.Length] ^= 1;
+            using var input = new MemoryStream(torn);
+            var target = AccessorProxy.Create(); var backup = new BDadosBackup(target.Accessor);
+            await Assert.ThrowsAsync<InvalidDataException>(() => backup.RestoreAppendableAsync(input, Tables, allowIncompleteTail: true));
+            Assert.Equal(0, target.Transactions);
+        }
+
         [Fact]
         public async Task ProducerAndCopyFailuresCancelAllPipelineParticipants() {
             var (original, _) = await Fixture();

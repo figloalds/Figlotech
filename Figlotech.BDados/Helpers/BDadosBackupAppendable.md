@@ -153,6 +153,23 @@ search uses bounded overlapping buffers and validates linkage, sequence, length,
 CRC and both magics; merely finding magic text inside user payload is not a commit.
 A complete invalid prefix or trailer, or any invalid committed payload, is corruption
 and throws. It never silently selects an older good checkpoint instead.
+When a damaged seal requires a commit-evidence scan, a later structurally valid
+trailer also proves that the suspect middle block cannot be an uncommitted tail.
+The scan checks both trailer magics and its CRC, physical offsets/length, later
+sequence and contiguous predecessor position. That evidence is grounds to refuse
+recovery even when the later prefix, seal or payload is damaged. It never permits
+restoring an unvalidated block. Requiring intact later data before recognizing its
+commit record would silently discard committed corruption. A fabricated CRC-valid
+trailer with matching absolute geometry can cause conservative refusal; this format
+does not authenticate hostile input.
+
+There is no durability barrier between the initial prefix and its payload. Before
+the first successful durable flush, a device may persist payload bytes but tear the
+prefix. If the resulting complete-sized prefix fails validation, recovery refuses
+the ambiguous suffix, even with explicit recovery enabled. Earlier committed bytes
+are preserved, but automatic tail recovery is not guaranteed for arbitrary reordered
+sector writes. Byte-prefix truncation/torn-backfill tests model ordered logical
+writes; the separate torn-prefix test verifies this conservative refusal.
 
 An incomplete tail is reported explicitly. Restore and append reject it by default.
 To recover, inspect first and deliberately pass `allowIncompleteTail: true` to

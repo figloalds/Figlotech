@@ -266,10 +266,24 @@ namespace Figlotech.BDados.Helpers {
                     byte[] candidate = buffer.AsSpan(i, TrailerSize).ToArray();
                     if (ValidTrailer(candidate) && GetLong(candidate, 8) == start && GetLong(candidate, 16) == state.LastTrailer
                         && GetLong(candidate, 24) == state.BlockCount && GetLong(candidate, 32) == position + i - start - BlockHeaderSize) return true;
+                    // A later checkpoint proves that this is damaged history, even if this block's own
+                    // seal and trailer are both damaged. Never discard later committed deltas as tail.
+                    if (IsLaterCommitEvidence(candidate, position + i, start, state)) return true;
                 }
                 position += count - TrailerSize + 1;
             }
             return false;
+        }
+
+        private static bool IsLaterCommitEvidence(byte[] trailer, long trailerOffset, long suspectStart, BDadosBackupArchiveInfo state) {
+            if (!ValidTrailer(trailer)) return false;
+            long blockStart = GetLong(trailer, 8), length = GetLong(trailer, 32);
+            if (blockStart <= suspectStart || blockStart > trailerOffset - BlockHeaderSize || length < 0
+                || length != trailerOffset - blockStart - BlockHeaderSize || GetLong(trailer, 24) <= state.BlockCount
+                || GetLong(trailer, 16) != blockStart - TrailerSize || GetLong(trailer, 16) < suspectStart + BlockHeaderSize) return false;
+            // This is evidence to REFUSE recovery, not permission to restore this block. Requiring
+            // its prefix/seal/payload to remain intact would silently discard committed corruption.
+            return true;
         }
 
         private static bool ValidTrailer(byte[] trailer) => trailer.AsSpan(0, 8).SequenceEqual(TrailerMagic)
