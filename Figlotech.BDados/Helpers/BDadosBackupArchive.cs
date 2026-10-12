@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Figlotech.Core.FileAcessAbstractions;
 
 namespace Figlotech.BDados.Helpers {
     /// <summary>Validated checkpoint and explicit recovery information. CRC is not authentication.</summary>
@@ -16,6 +17,9 @@ namespace Figlotech.BDados.Helpers {
         public long CommittedLength { get; internal set; }
         public long IncompleteTailBytes { get; internal set; }
         public bool HasIncompleteTail => IncompleteTailBytes != 0;
+        /// <summary>UTC export-start cursor of the latest validated committed block.
+        /// Timestamp-based continuation is not a guarantee against backdated changes or late commits.</summary>
+        public DateTime Cursor { get; internal set; }
         internal long LastTrailer { get; set; } = -1;
         internal byte[] SchemaHash { get; set; }
     }
@@ -51,26 +55,40 @@ namespace Figlotech.BDados.Helpers {
             } finally { gate.Release(); }
         }
 
-        /// <summary>Appends changed rows using the existing strict timestamp predicate. Does not track deletes or
-        /// infer a safe watermark. Table order and schemas must equal the base snapshot. Recovery truncates only
-        /// a validated uncommitted tail, and must be explicitly requested.</summary>
-        public async Task<BDadosBackupArchiveInfo> AppendIncrementalAsync(Stream archive, IEnumerable<Type> tableTypes, DateTime since,
+        /// <summary>Appends using the cursor of the latest validated committed snapshot or increment.
+        /// Source timestamps must use UTC.</summary>
+        public Task<BDadosBackupArchiveInfo> AppendIncrementalAsync(Stream archive, IEnumerable<Type> tableTypes,
             CancellationToken cancellationToken = default, IsolationLevel isolationLevel = IsolationLevel.Serializable,
             bool recoverIncompleteTail = false) {
+            return AppendIncrementalCoreAsync(archive, tableTypes, null, cancellationToken, isolationLevel, recoverIncompleteTail);
+        }
+
+        /// <summary>Appends changed rows using an explicit strict timestamp predicate. Does not track deletes or
+        /// guarantee a safe watermark. Table order and schemas must equal the base snapshot. Recovery truncates only
+        /// a validated uncommitted tail, and must be explicitly requested.</summary>
+        public Task<BDadosBackupArchiveInfo> AppendIncrementalAsync(Stream archive, IEnumerable<Type> tableTypes, DateTime since,
+            CancellationToken cancellationToken = default, IsolationLevel isolationLevel = IsolationLevel.Serializable,
+            bool recoverIncompleteTail = false) {
+            return AppendIncrementalCoreAsync(archive, tableTypes, since, cancellationToken, isolationLevel, recoverIncompleteTail);
+        }
+
+        private async Task<BDadosBackupArchiveInfo> AppendIncrementalCoreAsync(Stream archive, IEnumerable<Type> tableTypes, DateTime? since,
+            CancellationToken cancellationToken, IsolationLevel isolationLevel, bool recoverIncompleteTail) {
             RequireArchiveStream(archive, true);
             var gate = ArchiveLocks.GetValue(archive, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(cancellationToken);
             try {
                 var types = GetTableTypes(tableTypes);
-                foreach (var type in types) CreateIncrementalCondition(type, since);
                 var state = await InspectArchiveCoreAsync(archive, cancellationToken);
+                DateTime cutoff = since ?? state.Cursor;
+                foreach (var type in types) CreateIncrementalCondition(type, cutoff);
                 if (!SHA256.HashData(CreateHeader(types.Select(BDadosBackupSchema.Create).ToArray())).AsSpan().SequenceEqual(state.SchemaHash)) {
                     throw new InvalidDataException("Append requires the same ordered tables and schemas as the base snapshot.");
                 }
                 RequireCompleteOrRecovery(state, recoverIncompleteTail);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (state.HasIncompleteTail) archive.SetLength(state.CommittedLength);
-                return await WriteArchiveBlockAsync(archive, types, since, state, cancellationToken, isolationLevel);
+                return await WriteArchiveBlockAsync(archive, types, cutoff, state, cancellationToken, isolationLevel);
             } finally { gate.Release(); }
         }
 
@@ -119,7 +137,27 @@ namespace Figlotech.BDados.Helpers {
             return await BackupAppendableAsync(archive, tableTypes, cancellationToken, isolationLevel);
         }
 
+        /// <summary>Creates a v2 file through the filesystem without replacing an existing file.
+        /// The provider must return a readable/writable/seekable stream and honor CreateNew.
+        /// Sharing and durability depend on the provider; caller must ensure exclusive access.</summary>
+        public async Task<BDadosBackupArchiveInfo> BackupAppendableFileAsync(IFileSystem fs, string relativePath, IEnumerable<Type> tableTypes,
+            CancellationToken cancellationToken = default, IsolationLevel isolationLevel = IsolationLevel.Serializable) {
+            ArgumentNullException.ThrowIfNull(fs);
+            ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var archive = await fs.OpenAsync(relativePath, FileMode.CreateNew, FileAccess.ReadWrite);
+            return await BackupAppendableAsync(archive, tableTypes, cancellationToken, isolationLevel);
+        }
+
         /// <summary>Exclusively opens the existing v2 file for validation and durable append.</summary>
+        public async Task<BDadosBackupArchiveInfo> AppendIncrementalFileAsync(string path, IEnumerable<Type> tableTypes,
+            CancellationToken cancellationToken = default, IsolationLevel isolationLevel = IsolationLevel.Serializable, bool recoverIncompleteTail = false) {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            await using var archive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None, 65536, FileOptions.Asynchronous);
+            return await AppendIncrementalAsync(archive, tableTypes, cancellationToken, isolationLevel, recoverIncompleteTail);
+        }
+
+        /// <summary>Exclusively opens the existing v2 file for validation and durable append with an explicit cutoff.</summary>
         public async Task<BDadosBackupArchiveInfo> AppendIncrementalFileAsync(string path, IEnumerable<Type> tableTypes, DateTime since,
             CancellationToken cancellationToken = default, IsolationLevel isolationLevel = IsolationLevel.Serializable, bool recoverIncompleteTail = false) {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -141,10 +179,12 @@ namespace Figlotech.BDados.Helpers {
         private async Task<BDadosBackupArchiveInfo> WriteArchiveBlockAsync(Stream archive, Type[] types, DateTime? since,
             BDadosBackupArchiveInfo previous, CancellationToken token, IsolationLevel isolation) {
             long start = previous.CommittedLength;
+            // Capture before any database reads, never after export: concurrent changes may need replaying.
+            DateTime cursor = DateTime.UtcNow;
             byte[] prefix = new byte[BlockPrefixSize];
             BlockMagic.CopyTo(prefix, 0); PutInt(prefix, 8, since.HasValue ? 2 : 1); PutInt(prefix, 12, 2);
             PutLong(prefix, 16, previous.BlockCount); PutLong(prefix, 24, previous.LastTrailer);
-            PutLong(prefix, 32, since?.Ticks ?? 0); PutInt(prefix, 40, (int)(since?.Kind ?? DateTimeKind.Unspecified));
+            PutLong(prefix, 32, cursor.Ticks); PutInt(prefix, 40, (int)cursor.Kind);
             PutCrc(prefix, 44, BackupCrc32.Compute(prefix.AsSpan(0, 44)));
             archive.Position = start;
             await archive.WriteAsync(prefix, token);
@@ -169,7 +209,7 @@ namespace Figlotech.BDados.Helpers {
             await archive.WriteAsync(trailer, token);
             await FlushArchiveAsync(archive, token);
             return new BDadosBackupArchiveInfo { BlockCount = previous.BlockCount + 1, CommittedLength = archive.Position,
-                LastTrailer = end, SchemaHash = previous.SchemaHash };
+                LastTrailer = end, SchemaHash = previous.SchemaHash, Cursor = cursor };
         }
 
         private async Task<BDadosBackupArchiveInfo> InspectArchiveCoreAsync(Stream archive, CancellationToken token) {
@@ -190,8 +230,8 @@ namespace Figlotech.BDados.Helpers {
                 if (!block.AsSpan(0, 8).SequenceEqual(BlockMagic) || GetInt(block, 12) != 2
                     || kind != (state.BlockCount == 0 ? 1 : 2) || GetLong(block, 16) != state.BlockCount
                     || GetLong(block, 24) != state.LastTrailer || GetCrc(block, 44) != BackupCrc32.Compute(block.AsSpan(0, 44))
-                    || GetLong(block, 32) < 0 || GetLong(block, 32) > DateTime.MaxValue.Ticks || GetInt(block, 40) < 0 || GetInt(block, 40) > 2
-                    || (kind == 1 && (GetLong(block, 32) != 0 || GetInt(block, 40) != 0))) {
+                    || GetLong(block, 32) < 0 || GetLong(block, 32) > DateTime.MaxValue.Ticks
+                    || GetInt(block, 40) != (int)DateTimeKind.Utc) {
                     throw new InvalidDataException("Corrupt block prefix or checkpoint linkage.");
                 }
                 bool sealedBlock = block.AsSpan(64, 8).SequenceEqual(SealMagic)
@@ -226,6 +266,7 @@ namespace Figlotech.BDados.Helpers {
                 state.BlockCount++;
                 state.LastTrailer = trailerOffset;
                 state.CommittedLength = trailerOffset + TrailerSize;
+                state.Cursor = new DateTime(GetLong(block, 32), DateTimeKind.Utc);
             }
             if (state.BlockCount == 0) throw new InvalidDataException("Archive has no committed base snapshot.");
             state.IncompleteTailBytes = fileLength - state.CommittedLength;

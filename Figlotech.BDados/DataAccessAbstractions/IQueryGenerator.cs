@@ -9,6 +9,9 @@ using System.Reflection;
 namespace Figlotech.BDados.DataAccessAbstractions {
     public delegate void BuildHelper(IQueryBuildHelper qh);
     public interface IQueryGenerator {
+        /// <summary>Explicit opt-in to the supported backup persistence/constraint protocol.</summary>
+        BackupSqlDialect BackupDialect => BackupSqlDialect.Unsupported;
+        string QuoteBackupIdentifier(string name) => throw new NotSupportedException("This provider does not support safe backup restoration.");
         IQueryBuilder CreateDatabase(string schemaName);
         IQueryBuilder GenerateSingleInsertQuery(IDataObject tabelaInput);
         IQueryBuilder GenerateSingleObjectUpdateQuery(IDataObject tabelaInput);

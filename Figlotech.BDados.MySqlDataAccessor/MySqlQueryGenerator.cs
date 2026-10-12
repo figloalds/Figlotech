@@ -28,6 +28,11 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 namespace Figlotech.BDados.MySqlDataAccessor {
     public sealed class MySqlQueryGenerator : IQueryGenerator {
+        public BackupSqlDialect BackupDialect => BackupSqlDialect.MySQL;
+        public string QuoteBackupIdentifier(string name) {
+            ArgumentNullException.ThrowIfNull(name);
+            return "`" + name.Replace("`", "``") + "`";
+        }
 
         public bool CanRetrieveIdOnInsert => true;
 

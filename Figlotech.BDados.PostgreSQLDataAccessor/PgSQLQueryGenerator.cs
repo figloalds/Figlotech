@@ -25,6 +25,11 @@ using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.PgSQLDataAccessor {
     public sealed class PgSQLQueryGenerator : IQueryGenerator {
+        public BackupSqlDialect BackupDialect => BackupSqlDialect.PostgreSQL;
+        public string QuoteBackupIdentifier(string name) {
+            ArgumentNullException.ThrowIfNull(name);
+            return QuoteIdent(name);
+        }
         private static readonly HashSet<string> ReservedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
             "USER", "GROUP", "ORDER", "SELECT", "INSERT", "UPDATE", "DELETE",
             "TABLE", "INDEX", "PRIMARY", "FOREIGN", "KEY", "REFERENCES", "UNIQUE",

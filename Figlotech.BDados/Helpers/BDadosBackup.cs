@@ -12,13 +12,14 @@ using System.Threading.Tasks;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.Core.Interfaces;
+using Figlotech.Core;
 using Figlotech.Data;
 
 namespace Figlotech.BDados.Helpers {
     /// <summary>
     /// Versioned binary backups of explicitly selected BDados models. Caller streams remain open.
     /// Legacy APIs support forward-only streams; appendable container APIs require seeking.
-    /// Restore uses SaveListAsync in one transaction; normal accessor identity/persistence policies apply.
+    /// Restore uses the accessor's transaction-scoped restoration mode to preserve stored values.
     /// </summary>
     public sealed partial class BDadosBackup {
         private static readonly byte[] Magic = "FGBACKUP"u8.ToArray();
@@ -71,6 +72,25 @@ namespace Figlotech.BDados.Helpers {
             return BackupCoreAsync(destination, tableTypes, null, cancellationToken, isolationLevel);
         }
 
+        /// <summary>Writes and flushes a sibling temporary file before publishing the completed archive.</summary>
+        public async Task BackupFileAsync(string path, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
+            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool overwrite = false) {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            string target = Path.GetFullPath(path);
+            string temporary = Path.Combine(Path.GetDirectoryName(target), $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.partial");
+            try {
+                await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous)) {
+                    await BackupAsync(stream, tableTypes, cancellationToken, isolationLevel);
+                    await stream.FlushAsync(cancellationToken);
+                    stream.Flush(flushToDisk: true);
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporary, target, overwrite);
+            } finally {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
+        }
+
         /// <summary>
         /// Writes a self-contained incremental containing rows whose CreatedAt or UpdatedAt is
         /// strictly greater than since. Timestamp attributes override the conventional member names.
@@ -101,6 +121,11 @@ namespace Figlotech.BDados.Helpers {
             await wire.WriteAsync(header);
             await wire.WriteAsync(SHA256.HashData(header));
             await _accessor.AccessAsync(async transaction => {
+                if (transaction != null) {
+                    transaction.BackupMode = true;
+                    transaction.Benchmarker = new Benchmarker("Backup") { Active = false };
+                }
+                await BDadosRestoreSession.RequireTransactionalTablesAsync(_accessor, transaction, types);
                 for (int i = 0; i < types.Length; i++) {
                     long count = 0;
                     var rows = (IAsyncEnumerable<IDataObject>)FetchMethod.MakeGenericMethod(types[i])
@@ -129,13 +154,19 @@ namespace Figlotech.BDados.Helpers {
         /// Set ignoreMissingTables to skip tables deliberately removed from the current model.
         /// Does not create tables, clear existing data, or instantiate types named by the archive.
         /// </summary>
-        public async Task RestoreAsync(Stream source, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
-            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = true) {
-            await RestoreCoreAsync(source, tableTypes, cancellationToken, isolationLevel, ignoreMissingTables,
-                null, false, false);
+        public Task RestoreAsync(Stream source, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
+            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = false) {
+            return RestoreWithReportAsync(source, tableTypes, cancellationToken, isolationLevel, ignoreMissingTables);
         }
 
-        private async Task RestoreCoreAsync(Stream source, IEnumerable<Type> tableTypes,
+        /// <summary>Restores atomically and returns mappings/counts only after successful completion.</summary>
+        public async Task<BDadosBackupRestoreReport> RestoreWithReportAsync(Stream source, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
+            IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = false) {
+            return await RestoreCoreAsync(source, tableTypes, cancellationToken, isolationLevel, ignoreMissingTables,
+                null, false, Options.RequireEmptyTables);
+        }
+
+        private async Task<BDadosBackupRestoreReport> RestoreCoreAsync(Stream source, IEnumerable<Type> tableTypes,
             CancellationToken cancellationToken, IsolationLevel isolationLevel, bool ignoreMissingTables,
             BDadosTransaction sharedTransaction, bool useSharedTransaction, bool requireEmpty) {
             ArgumentNullException.ThrowIfNull(source);
@@ -143,6 +174,14 @@ namespace Figlotech.BDados.Helpers {
             cancellationToken.ThrowIfCancellationRequested();
             int chunkSize = Options.RestoreChunkSize;
             if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(Options.RestoreChunkSize), "Restore chunk size must be positive.");
+            long chunkBytes = Options.RestoreChunkBytes;
+            if (chunkBytes <= 0) throw new ArgumentOutOfRangeException(nameof(Options.RestoreChunkBytes));
+            int maxKeys = Options.MaxTrackedKeys;
+            if (maxKeys <= 0) throw new ArgumentOutOfRangeException(nameof(Options.MaxTrackedKeys));
+            long maxKeyBytes = Options.MaxTrackedKeyBytes;
+            if (maxKeyBytes <= 0) throw new ArgumentOutOfRangeException(nameof(Options.MaxTrackedKeyBytes));
+            var ignoredTables = new HashSet<string>(Options.IgnoredTables, StringComparer.OrdinalIgnoreCase);
+            BDadosRestoreSession.RequireSupportedProvider(_accessor.QueryGenerator);
             var registered = GetTableTypes(tableTypes);
             using var wire = new Wire(source, cancellationToken);
             if (!(await wire.ReadAsync(Magic.Length)).AsSpan().SequenceEqual(Magic)) {
@@ -160,27 +199,53 @@ namespace Figlotech.BDados.Helpers {
             }
             var schemas = ReadHeader(header);
             var mappedTypes = BDadosBackupMapping.Bind(schemas.Select(s => s.TableName).ToArray(), registered,
-                t => t.Name, t => t.GetCustomAttribute<OldNameAttribute>(true)?.Name);
+                t => t.Name, BDadosBackupMapping.Aliases);
             var codecs = new BDadosBackupCodec[schemas.Length];
+            var bindings = new BDadosRestoreBinding[schemas.Length];
+            var results = new BDadosBackupTableResult[schemas.Length];
             var saveChunks = new Func<BDadosTransaction, List<IDataObject>, Task<bool>>[schemas.Length];
             for (int i = 0; i < schemas.Length; i++) {
                 var type = mappedTypes[i];
-                if (type == null && ignoreMissingTables) continue;
+                results[i] = new BDadosBackupTableResult {
+                    SourceTable = schemas[i].TableName, DestinationTable = type?.Name,
+                    Skipped = ignoredTables.Contains(schemas[i].TableName) || type == null && ignoreMissingTables,
+                    IgnoredColumns = Array.Empty<string>(), DefaultedColumns = Array.Empty<string>()
+                };
+                if (results[i].Skipped) continue;
                 if (type == null) {
                     throw new InvalidDataException($"No restore model registered for table '{schemas[i].TableName}'.");
                 }
                 codecs[i] = new BDadosBackupCodec(type, schemas[i], forImport: true);
+                bindings[i] = new BDadosRestoreBinding(type, codecs[i], _accessor.QueryGenerator);
+                results[i].IgnoredColumns = codecs[i].IgnoredColumns;
+                results[i].DefaultedColumns = codecs[i].DefaultedColumns;
                 saveChunks[i] = SaveChunkMethod.MakeGenericMethod(type)
                     .CreateDelegate<Func<BDadosTransaction, List<IDataObject>, Task<bool>>>(this);
             }
             async ValueTask RestoreTransactionAsync(BDadosTransaction transaction) {
-                var generator = _accessor.QueryGenerator;
-                var transactionScopedDisable = generator.DisableForeignKeysUntilTransactionEnd();
-                await _accessor.ExecuteAsync(transaction, transactionScopedDisable ?? generator.DisableForeignKeys());
+                if (transaction != null) {
+                    transaction.RestorationMode = true;
+                    transaction.Benchmarker = new Benchmarker("Restore") { Active = false };
+                }
+                var types = bindings.Where(b => b != null).Select(b => b.Type).ToArray();
+                var session = new BDadosRestoreSession(_accessor, transaction);
+                Exception restoreError = null;
                 try {
-
+                    await session.BeginAsync(types);
+                    if (requireEmpty) {
+                        foreach (var type in types) {
+                            var query = Qb.Fmt($"SELECT COUNT(*) AS Value FROM {_accessor.QueryGenerator.QuoteBackupIdentifier(type.Name)}");
+                            if ((await _accessor.QueryAsync<ValueBox<long>>(transaction, query)).Single().Value != 0) {
+                                throw new InvalidDataException($"Restore requires empty destination table '{type.Name}'.");
+                            }
+                        }
+                    }
                     for (int i = 0; i < schemas.Length; i++) {
+                        if (transaction != null) transaction.RestorationBinding = bindings[i];
                         long count = 0;
+                        long bufferedBytes = 0;
+                        long trackedKeyBytes = 0;
+                        var keys = new HashSet<object>(BackupKeyComparer.Instance);
                         var chunk = new List<IDataObject>();
                         while (true) {
                             int length = await wire.ReadInt32Async();
@@ -189,17 +254,29 @@ namespace Figlotech.BDados.Helpers {
                             byte[] row = await wire.ReadAsync(length);
                             count = checked(count + 1);
                             if (codecs[i] == null) continue; // Still read, hash and count skipped tables.
+                            if (chunk.Count > 0 && bufferedBytes + length > chunkBytes) {
+                                if (!await saveChunks[i](transaction, chunk)) throw new InvalidDataException($"Saving '{schemas[i].TableName}' failed.");
+                                chunk.Clear();
+                                bufferedBytes = 0;
+                            }
                             var item = (IDataObject)codecs[i].Import(row);
+                            if (keys.Count >= maxKeys) throw new InvalidDataException($"Restore identity limit exceeded for '{schemas[i].TableName}'. Increase MaxTrackedKeys to restore this table.");
+                            object key = bindings[i].GetKey(item);
+                            trackedKeyBytes = checked(trackedKeyBytes + 64 + (key is string text ? text.Length * 2L : key is byte[] data ? data.Length : 0));
+                            if (trackedKeyBytes > maxKeyBytes) throw new InvalidDataException($"Restore identity byte limit exceeded for '{schemas[i].TableName}'. Increase MaxTrackedKeyBytes to restore this table.");
+                            if (!keys.Add(key)) throw new InvalidDataException($"Duplicate primary key at row {count} of '{schemas[i].TableName}'.");
                             // Legacy saves otherwise overwrite the restored UpdatedAt timestamp.
                             if (item is ILegacyDataObject legacy) legacy.IsReceivedFromSync = true;
                             cancellationToken.ThrowIfCancellationRequested();
                             chunk.Add(item);
+                            bufferedBytes += length;
                             if (chunk.Count == chunkSize) {
                                 if (!await saveChunks[i](transaction, chunk)) {
                                     throw new InvalidDataException($"Saving restore batch ending at row {count} of '{schemas[i].TableName}' failed.");
                                 }
                                 cancellationToken.ThrowIfCancellationRequested();
                                 chunk.Clear();
+                                bufferedBytes = 0;
                             }
                         }
                         if (await wire.ReadInt64Async() != count) {
@@ -212,6 +289,8 @@ namespace Figlotech.BDados.Helpers {
                             }
                             cancellationToken.ThrowIfCancellationRequested();
                         }
+                        results[i].RowsRead = count;
+                        results[i].RowsSaved = results[i].Skipped ? 0 : count;
                     }
                     if (!(await wire.ReadAsync(EndMagic.Length)).AsSpan().SequenceEqual(EndMagic)) {
                         throw new InvalidDataException("Missing backup completion marker.");
@@ -222,22 +301,26 @@ namespace Figlotech.BDados.Helpers {
                     if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash)) {
                         throw new InvalidDataException("Backup checksum mismatch.");
                     }
+                    await session.ValidateAsync(types);
+                    foreach (var binding in bindings.Where(b => b != null)) await session.SynchronizeSequenceAsync(binding);
+                } catch (Exception exception) {
+                    restoreError = exception;
+                    throw;
                 } finally {
-                    // PostgreSQL rejects further commands after a SQL error. Its transaction-local
-                    // setting is restored by commit/rollback, so cleanup must not mask that error.
-                    if (transactionScopedDisable == null) {
-                        await _accessor.ExecuteAsync(transaction, generator.EnableForeignKeys());
+                    try {
+                        await session.EndAsync();
+                    } catch (Exception cleanupError) when (restoreError != null) {
+                        throw new AggregateException("Restore failed and session settings could not be restored.", restoreError, cleanupError);
                     }
                 }
             }
             if (useSharedTransaction) await RestoreTransactionAsync(sharedTransaction);
             else await _accessor.AccessAsync(RestoreTransactionAsync, cancellationToken, isolationLevel);
-            cancellationToken.ThrowIfCancellationRequested();
+            return new BDadosBackupRestoreReport { Tables = Array.AsReadOnly(results) };
         }
 
         private Task<bool> SaveRestoreChunkAsync<T>(BDadosTransaction transaction, List<IDataObject> chunk) where T : IDataObject {
             // Preserve the concrete table type so the accessor selects its bulk save path.
-            chunk = chunk.GroupBy(x=> x.Id).Select(g => g.First()).ToList(); // Remove duplicates by Id, if any.
             return _accessor.SaveListAsync(transaction, chunk.Cast<T>().ToList());
         }
 
@@ -274,7 +357,7 @@ namespace Figlotech.BDados.Helpers {
         private static Type[] GetTableTypes(IEnumerable<Type> tableTypes) {
             ArgumentNullException.ThrowIfNull(tableTypes);
             var result = tableTypes.ToArray();
-            var names = new HashSet<string>(StringComparer.Ordinal);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var type in result) {
                 if (type == null || !typeof(IDataObject).IsAssignableFrom(type) || !type.IsClass || type.IsAbstract
                     || type.ContainsGenericParameters || type.GetConstructor(Type.EmptyTypes) == null) {
@@ -317,7 +400,7 @@ namespace Figlotech.BDados.Helpers {
                     throw new InvalidDataException("Invalid backup table count.");
                 }
                 var schemas = new BDadosBackupSchema[count];
-                var names = new HashSet<string>(StringComparer.Ordinal);
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < count; i++) {
                     string name = BDadosBackupCodec.Utf8.GetString(ReadHeaderBlock(reader));
                     schemas[i] = BDadosBackupSchema.Deserialize(ReadHeaderBlock(reader));
@@ -343,6 +426,18 @@ namespace Figlotech.BDados.Helpers {
         private static void CheckLength(int length, int maximum, string description) {
             if (length < 0 || length > maximum) {
                 throw new InvalidDataException($"Invalid backup {description} length ({length}); maximum is {maximum} bytes.");
+            }
+        }
+
+        private sealed class BackupKeyComparer : IEqualityComparer<object> {
+            internal static readonly BackupKeyComparer Instance = new BackupKeyComparer();
+            public new bool Equals(object left, object right) => left is byte[] a && right is byte[] b
+                ? a.AsSpan().SequenceEqual(b) : object.Equals(left, right);
+            public int GetHashCode(object value) {
+                if (value is not byte[] bytes) return value.GetHashCode();
+                var hash = new HashCode();
+                hash.AddBytes(bytes);
+                return hash.ToHashCode();
             }
         }
 

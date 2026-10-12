@@ -1,6 +1,7 @@
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.Helpers;
 using Figlotech.BDados.PgSQLDataAccessor;
+using Figlotech.BDados.MySqlDataAccessor;
 using Figlotech.BDados.SqliteDataAccessor;
 using Xunit;
 using static Figlotech.BDados.Tests.BDadosBackupTests;
@@ -15,7 +16,7 @@ namespace Figlotech.BDados.Tests {
 
             await new BDadosBackup(target.Accessor).RestoreAsync(input, new[] { typeof(Row) });
 
-            Assert.Equal("SET LOCAL session_replication_role = 'replica';", Assert.Single(target.ExecutedCommands));
+            Assert.Equal(new[] { "SET LOCAL session_replication_role = 'replica';", "LOCK TABLE Row IN SHARE ROW EXCLUSIVE MODE" }, target.ExecutedCommands);
             Assert.Single(target.Saved);
             Assert.Equal(1, target.Commits);
         }
@@ -34,7 +35,7 @@ namespace Figlotech.BDados.Tests {
                 new BDadosBackup(target.Accessor).RestoreAsync(input, new[] { typeof(Row) }));
 
             Assert.Same(original, error);
-            Assert.Single(target.ExecutedCommands);
+            Assert.Equal(2, target.ExecutedCommands.Count);
             Assert.Equal(1, target.Rollbacks);
             Assert.Empty(target.Saved);
         }
@@ -59,7 +60,7 @@ namespace Figlotech.BDados.Tests {
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        public async Task SessionScopedProvidersStillEnableChecks(bool failSave) {
+        public async Task SqliteDefersChecksWithinTransaction(bool failSave) {
             var target = AccessorProxy.Create();
             target.FailSave = failSave;
             using var input = new MemoryStream(await CreateArchiveAsync());
@@ -71,7 +72,7 @@ namespace Figlotech.BDados.Tests {
                 await backup.RestoreAsync(input, new[] { typeof(Row) });
             }
 
-            Assert.Equal(new[] { "PRAGMA foreign_keys = OFF;", "PRAGMA foreign_keys = ON;" }, target.ExecutedCommands);
+            Assert.Equal(new[] { "PRAGMA defer_foreign_keys = ON;" }, target.ExecutedCommands);
         }
 
         [Fact]
@@ -81,6 +82,36 @@ namespace Figlotech.BDados.Tests {
             Assert.Equal("SET session_replication_role = 'origin';", postgres.EnableForeignKeys().GetCommandText());
             IQueryGenerator sqlite = new SqliteQueryGenerator();
             Assert.Null(sqlite.DisableForeignKeysUntilTransactionEnd());
+        }
+
+        [Theory]
+        [InlineData(false, 0L)]
+        [InlineData(true, 1L)]
+        public async Task MySqlRestoresOriginalSessionSettingsOnSuccessAndFailure(bool fail, long previousChecks) {
+            var target = AccessorProxy.Create();
+            target.QueryGenerator = new MySqlQueryGenerator();
+            target.PreviousForeignKeys = previousChecks;
+            target.PreviousSqlMode = "ANSI_QUOTES";
+            target.FailSave = fail;
+            using var archive = new MemoryStream(await CreateArchiveAsync());
+            var backup = new BDadosBackup(target.Accessor);
+            if (fail) await Assert.ThrowsAsync<InvalidDataException>(() => backup.RestoreAsync(archive, new[] { typeof(Row) }));
+            else await backup.RestoreAsync(archive, new[] { typeof(Row) });
+            Assert.Contains("NO_AUTO_VALUE_ON_ZERO", Assert.IsType<string>(Assert.Single(target.ExecutedQueries[0].GetParameters()).Value));
+            var restored = target.ExecutedQueries.Last().GetParameters().Values;
+            Assert.Contains(previousChecks, restored);
+            Assert.Contains("ANSI_QUOTES", restored);
+        }
+
+        [Fact]
+        public async Task MySqlNonTransactionalTablesFailBeforeWrites() {
+            var target = AccessorProxy.Create();
+            target.QueryGenerator = new MySqlQueryGenerator();
+            target.StorageEngine = "MyISAM";
+            using var archive = new MemoryStream(await CreateArchiveAsync());
+            await Assert.ThrowsAsync<InvalidDataException>(() => new BDadosBackup(target.Accessor).RestoreAsync(archive, new[] { typeof(Row) }));
+            Assert.Empty(target.SavedBatches);
+            Assert.Empty(target.ExecutedCommands);
         }
 
         private static async Task<byte[]> CreateArchiveAsync() {

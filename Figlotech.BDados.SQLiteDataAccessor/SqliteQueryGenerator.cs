@@ -26,6 +26,11 @@ using System.Text.RegularExpressions;
 
 namespace Figlotech.BDados.SqliteDataAccessor {
     public sealed class SqliteQueryGenerator : IQueryGenerator {
+        public BackupSqlDialect BackupDialect => BackupSqlDialect.SQLite;
+        public string QuoteBackupIdentifier(string name) {
+            ArgumentNullException.ThrowIfNull(name);
+            return "\"" + name.Replace("\"", "\"\"") + "\"";
+        }
 
         public bool CanRetrieveIdOnInsert => true;
 

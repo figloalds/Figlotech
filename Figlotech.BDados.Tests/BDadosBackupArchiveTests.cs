@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Figlotech.BDados.DataAccessAbstractions;
 using Figlotech.BDados.DataAccessAbstractions.Attributes;
 using Figlotech.BDados.Helpers;
+using Figlotech.Core.FileAcessAbstractions;
 using Figlotech.Core.Interfaces;
 using Microsoft.Data.Sqlite;
 using Xunit;
@@ -47,21 +48,87 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
+        public async Task AutomaticAppendUsesLatestPersistedCursorIncludingEmptyIncrements() {
+            var source = Source();
+            var backup = new BDadosBackup(source.Accessor);
+            using var archive = new FaultStream(Array.Empty<byte>());
+            DateTime? firstBlockWrite = null;
+            archive.AfterWrite = () => { if (archive.Length > 64) firstBlockWrite ??= DateTime.UtcNow; };
+            DateTime before = DateTime.UtcNow;
+            var snapshot = await backup.BackupAppendableAsync(archive, Tables);
+            Assert.Equal(DateTimeKind.Utc, snapshot.Cursor.Kind);
+            Assert.InRange(snapshot.Cursor, before, firstBlockWrite!.Value);
+            Assert.Equal(snapshot.Cursor, (await backup.InspectAppendableAsync(archive)).Cursor);
+            source.Rows[typeof(ArchiveRow)] = Array.Empty<IDataObject>();
+            var previous = snapshot;
+            for (int i = 0; i < 2; i++) {
+                // A fresh instance can continue using only the archive, with no in-memory checkpoint.
+                var next = await new BDadosBackup(source.Accessor).AppendIncrementalAsync(archive, Tables);
+                var parameters = source.FetchConditions.Last()!.GetParameters();
+                Assert.Equal(2, parameters.Count);
+                Assert.All(parameters.Values, value => Assert.Equal(previous.Cursor, Assert.IsType<DateTime>(value)));
+                Assert.Equal(next.Cursor, (await backup.InspectAppendableAsync(archive)).Cursor);
+                Assert.Equal(previous.BlockCount + 1, next.BlockCount);
+                previous = next;
+            }
+            var target = AccessorProxy.Create();
+            Assert.Equal(previous.Cursor, (await new BDadosBackup(target.Accessor).RestoreAppendableAsync(archive, Tables)).Cursor);
+            Assert.Single(target.Saved);
+        }
+
+        [Fact]
+        public async Task IncompleteAppendKeepsLatestIncrementCursor() {
+            var (_, all) = await Fixture();
+            using var archive = new FaultStream(all) { FailFlush = 1 };
+            var source = Source(); var backup = new BDadosBackup(source.Accessor);
+            var latest = await backup.InspectAppendableAsync(archive);
+            await Assert.ThrowsAsync<IOException>(() => backup.AppendIncrementalAsync(archive, Tables));
+            var interrupted = await backup.InspectAppendableAsync(archive);
+            Assert.True(interrupted.HasIncompleteTail);
+            Assert.Equal(2, interrupted.BlockCount);
+            Assert.Equal(latest.Cursor, interrupted.Cursor);
+            archive.FailFlush = 0;
+            await backup.AppendIncrementalAsync(archive, Tables, recoverIncompleteTail: true);
+            Assert.All(source.FetchConditions.Last()!.GetParameters().Values,
+                value => Assert.Equal(latest.Cursor, Assert.IsType<DateTime>(value)));
+            Assert.Equal(all, archive.ToArray()[..all.Length]);
+        }
+
+        [Fact]
+        public async Task FileAppendReadsCursorAfterReopening() {
+            string path = Path.Combine(Path.GetTempPath(), "figlotech-cursor-" + Guid.NewGuid().ToString("N") + ".fgb");
+            try {
+                var source = Source();
+                var snapshot = await new BDadosBackup(source.Accessor).BackupAppendableFileAsync(path, Tables);
+                var appended = await new BDadosBackup(source.Accessor).AppendIncrementalFileAsync(path, Tables);
+                Assert.All(source.FetchConditions.Last()!.GetParameters().Values,
+                    value => Assert.Equal(snapshot.Cursor, Assert.IsType<DateTime>(value)));
+                await using var archive = File.OpenRead(path);
+                Assert.Equal(appended.Cursor, (await new BDadosBackup(source.Accessor).InspectAppendableAsync(archive)).Cursor);
+            } finally { File.Delete(path); }
+        }
+
+        [Fact]
         public async Task EveryTruncatedAppendRecoversOnlyWithExplicitPermissionAndCanAppendAgain() {
             var (original, all) = await Fixture();
+            using var baseArchive = new MemoryStream(original);
+            var snapshot = await new BDadosBackup(Source().Accessor).InspectAppendableAsync(baseArchive);
             for (int length = original.Length + 1; length < all.Length; length++) {
                 using var archive = new MemoryStream(); await archive.WriteAsync(all.AsMemory(0, length));
                 var target = AccessorProxy.Create(); var backup = new BDadosBackup(target.Accessor);
                 var state = await backup.InspectAppendableAsync(archive);
                 Assert.Equal(1, state.BlockCount); Assert.Equal(original.Length, state.CommittedLength);
+                Assert.Equal(snapshot.Cursor, state.Cursor);
                 Assert.Equal(length - original.Length, state.IncompleteTailBytes);
                 await Assert.ThrowsAsync<InvalidDataException>(() => backup.RestoreAppendableAsync(archive, Tables));
                 Assert.Equal(0, target.Transactions);
                 await backup.RestoreAppendableAsync(archive, Tables, allowIncompleteTail: true);
                 Assert.Single(target.Saved);
                 var source = Source(); var writer = new BDadosBackup(source.Accessor);
-                await Assert.ThrowsAsync<InvalidDataException>(() => writer.AppendIncrementalAsync(archive, Tables, Cutoff));
-                await writer.AppendIncrementalAsync(archive, Tables, Cutoff, recoverIncompleteTail: true);
+                await Assert.ThrowsAsync<InvalidDataException>(() => writer.AppendIncrementalAsync(archive, Tables));
+                await writer.AppendIncrementalAsync(archive, Tables, recoverIncompleteTail: true);
+                Assert.All(source.FetchConditions.Last()!.GetParameters().Values,
+                    value => Assert.Equal(snapshot.Cursor, Assert.IsType<DateTime>(value)));
                 Assert.Equal(original, archive.ToArray()[..original.Length]);
                 Assert.Equal(2, (await writer.InspectAppendableAsync(archive)).BlockCount);
             }
@@ -366,6 +433,32 @@ namespace Figlotech.BDados.Tests {
             using var archive = new MemoryStream(); await archive.WriteAsync(all);
             await Assert.ThrowsAsync<InvalidDataException>(() => new BDadosBackup(Source().Accessor).AppendIncrementalAsync(archive, Array.Empty<Type>(), Cutoff));
             Assert.Equal(all, archive.ToArray());
+        }
+
+        [Fact]
+        public async Task FileSystemBackupCreatesRestorableArchiveWithoutReplacingExistingFile() {
+            string directory = Path.Combine(Path.GetTempPath(), "figlotech-fs-archive-" + Guid.NewGuid().ToString("N"));
+            var fs = new FileAccessor(directory);
+            const string relativePath = "archive.fgb";
+            try {
+                var source = Source();
+                var backup = new BDadosBackup(source.Accessor);
+                var snapshot = await backup.BackupAppendableFileAsync(fs, relativePath, Tables);
+                byte[] original = await fs.ReadAllBytesAsync(relativePath);
+                await Assert.ThrowsAsync<IOException>(() => backup.BackupAppendableFileAsync(fs, relativePath, Tables));
+                Assert.Equal(original, await fs.ReadAllBytesAsync(relativePath));
+                await using var archive = await fs.OpenAsync(relativePath, FileMode.Open, FileAccess.Read);
+                var target = AccessorProxy.Create();
+                var restored = await new BDadosBackup(target.Accessor).RestoreAppendableAsync(archive, Tables);
+                Assert.Equal(1, restored.BlockCount);
+                Assert.Equal(snapshot.Cursor, restored.Cursor);
+                Assert.Equal(snapshot.CommittedLength, restored.CommittedLength);
+                Assert.Equal(((ArchiveRow)source.Rows[typeof(ArchiveRow)].Single()).Payload,
+                    Assert.IsType<ArchiveRow>(Assert.Single(target.Saved)).Payload);
+            } finally {
+                File.Delete(Path.Combine(directory, relativePath));
+                Directory.Delete(directory);
+            }
         }
 
         [Fact]

@@ -6,6 +6,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
     public interface IRdbmsPluginAdapter {
         IDbConnection GetNewConnection();
         IDbConnection GetNewSchemalessConnection();
+        /// <summary>Closes an unsafe session. Pooled providers must also prevent its reuse.</summary>
+        void DiscardConnection(IDbConnection connection) {
+            ArgumentNullException.ThrowIfNull(connection);
+            connection.Close();
+        }
         IQueryGenerator QueryGenerator { get; }
         void SetConfiguration(IDictionary<string, object> a);
         [Obsolete("ContinuousConnection is not consumed by RdbmsDataAccessor and will be removed in a future version.")]

@@ -22,6 +22,12 @@ namespace Figlotech.BDados.Helpers {
         private readonly string[] _columnNames;
         private readonly bool _forImport;
         private readonly (MemberInfo Member, object Value)[] _missingDefaults;
+        internal MemberInfo[] RestoreMembers => _members.Where(m => m != null)
+            .Concat(_missingDefaults.Select(entry => entry.Member)).Distinct().ToArray();
+
+        internal bool HasSourceMember(MemberInfo member) => _members.Contains(member);
+        internal string[] IgnoredColumns => _columnNames.Where((name, i) => _members[i] == null).ToArray();
+        internal string[] DefaultedColumns => BDadosBackupSchema.GetMembers(_type).Where(m => !_members.Contains(m)).Select(m => m.Name).ToArray();
 
         internal BDadosBackupCodec(Type type, BDadosBackupSchema schema, bool forImport = false) {
             ArgumentNullException.ThrowIfNull(type);
@@ -45,7 +51,7 @@ namespace Figlotech.BDados.Helpers {
             _binaryTypes = new BDadosBackupBinaryType[_members.Length];
             _columnNames = schema.Columns.Select(c => c.Name).ToArray();
             var mapped = forImport ? BDadosBackupMapping.Bind(_columnNames, members, m => m.Name,
-                m => m.GetCustomAttribute<OldNameAttribute>(true)?.Name) : null;
+                BDadosBackupMapping.Aliases) : null;
             for (int i = 0; i < _members.Length; i++) {
                 var column = schema.Columns[i];
                 _dataTypes[i] = column.DataType;
@@ -66,7 +72,8 @@ namespace Figlotech.BDados.Helpers {
                 }
                 if (column.DataType == BDadosBackupDataType.BinarySerializable) {
                     var binaryType = BDadosBackupBinaryType.Get(valueType);
-                    if (column.BinaryType != valueType.FullName || column.FixedLength != binaryType.FixedLength) {
+                    if ((column.BinaryType != valueType.FullName && !BDadosBackupMapping.Aliases(valueType).Contains(column.BinaryType))
+                        || column.FixedLength != binaryType.FixedLength) {
                         throw new InvalidDataException($"Incompatible binary metadata for '{type.Name}.{column.Name}'.");
                     }
                     _binaryTypes[i] = binaryType;
@@ -234,9 +241,10 @@ namespace Figlotech.BDados.Helpers {
                             throw new InvalidDataException($"Invalid value length for '{_columnNames[i]}'.");
                         }
                     }
-                    // Old NULLs for now non-nullable value types keep initializer/constructor
-                    // defaults. Field.DefaultValue applies only when the column is absent.
-                    if (_members[i] == null || value == null && !_targetNullable[i]) continue;
+                    if (_members[i] == null) continue;
+                    if (value == null && !_targetNullable[i]) {
+                        throw new InvalidDataException($"Cannot restore NULL into required member '{_type.Name}.{_members[i].Name}'. An explicit data migration is required.");
+                    }
                     if (value != null) {
                         try {
                             value = BDadosBackupValueConverter.ConvertValue(value, _valueTypes[i]);

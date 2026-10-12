@@ -74,7 +74,7 @@ namespace Figlotech.BDados.Helpers {
             if ((Version != 1 && Version != 2) || string.IsNullOrWhiteSpace(TableName) || Columns == null || Columns.Count == 0) {
                 throw new InvalidDataException("Unsupported or incomplete backup schema.");
             }
-            var names = new HashSet<string>(StringComparer.Ordinal);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var column in Columns) {
                 if (column == null || string.IsNullOrWhiteSpace(column.Name) || !names.Add(column.Name)
                     || !Enum.IsDefined(column.DataType)) {

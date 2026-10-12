@@ -21,6 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures\BDadosBackup\v2-row.fgb" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Figlotech.BDados\Figlotech.BDados.csproj" />
     <ProjectReference Include="..\Figlotech.BDados.MySqlDataAccessor\Figlotech.BDados.MySqlDataAccessor.csproj" />
     <ProjectReference Include="..\Figlotech.BDados.SqliteDataAccessor\Figlotech.BDados.SqliteDataAccessor.csproj" />

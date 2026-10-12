@@ -40,6 +40,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         public Benchmarker Benchmarker { get; set; }
         private FiAsyncLock _lock { get; set; } = new FiAsyncLock();
         internal RdbmsDataAccessor DataAccessor { get; set; }
+        // Data transfer must preserve stored values and must not retain or notify model instances.
+        internal bool RestorationMode { get; set; }
+        internal bool BackupMode { get; set; }
+        internal BDadosRestoreBinding RestorationBinding { get; set; }
         public ConnectionState ConnectionState => Connection.State;
         public Object ContextTransferObject { get; set; }
 
@@ -61,9 +65,11 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         private List<(MemberInfo Member, IDataObject Target, object Value)> AutoMutateRollbacks = new List<(MemberInfo Member, IDataObject Target, object Value)>();
 
         public void AddMutateTarget(MemberInfo Member, IDataObject Target, object Value) {
+            if (RestorationMode) return;
             AutoMutateTargets.Add((Member, Target, Value));
         }
         public void AddMutateRollback(MemberInfo Member, IDataObject Target, object Value) {
+            if (RestorationMode) return;
             AutoMutateRollbacks.Add((Member, Target, Value));
         }
 
@@ -134,6 +140,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         public void NotifyChange(ILegacyDataObject[] ido) {
+            if (RestorationMode) return;
             if (Transaction == null) {
                 DataAccessor.RaiseForChangeIn(ido);
             } else {
@@ -231,7 +238,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(retv, this.DataAccessor.Plugin.ProcessParameterValue);
             }
             lock (this._commands) {
-                this._commands.Add(retv);
+                if (!RestorationMode && !BackupMode) this._commands.Add(retv);
             }
             if (forWrite) {
                 NumberOfWriteCommandsCreated++;
@@ -250,12 +257,25 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 query.ApplyToCommand(retv, this.DataAccessor.Plugin.ProcessParameterValue);
             }
             lock (this._commands) {
-                this._commands.Add(retv);
+                if (!RestorationMode && !BackupMode) this._commands.Add(retv);
             }
             if (forWrite) {
                 NumberOfWriteCommandsCreated++;
             }
             return retv;
+        }
+
+        internal async Task ExecuteRestoreCleanupAsync(IQueryBuilder query) {
+            // Session settings must be restored even after cancellation of the work token.
+            using var command = Connection.CreateCommand();
+            command.Transaction = Transaction;
+            command.CommandTimeout = 30;
+            query.ApplyToCommand(command, DataAccessor.Plugin.ProcessParameterValue);
+            if (command is DbCommand asyncCommand) {
+                await asyncCommand.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+            } else {
+                command.ExecuteNonQuery();
+            }
         }
         public void BeginTransaction(IsolationLevel ilev = IsolationLevel.ReadUncommitted) {
             Transaction = Connection?.BeginTransaction(ilev);
@@ -428,7 +448,8 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             _successActionsPending = false;
             if (Transaction?.Connection?.State == ConnectionState.Open) {
                 if (Transaction is DbTransaction tsn) {
-                    await tsn.RollbackAsync(this.CancellationToken).ConfigureAwait(false);
+                    // Cancellation of work must never cancel its rollback.
+                    await tsn.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 } else {
                     Transaction?.Rollback();
                 }
@@ -1263,6 +1284,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
         }
 
         private T RunAfterLoad<T>(T target, object transferObject = null, BDadosTransaction transaction = null) {
+            if (transaction?.BackupMode == true || transaction?.RestorationMode == true) return target;
             if (target is IBusinessObject ibo) {
                 DataLoadContext context = transferObject is AggregateFetchHookContext aggregateContext
                     ? CreateAggregateDataLoadContext(transaction, aggregateContext.ContextTransferObject, aggregateContext.Plan)
@@ -1652,6 +1674,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             await transaction.RollbackAsync().ConfigureAwait(false);
                             b.Mark($"[{Description}:{transaction.Id}] End Rollback");
                             WriteLog($"[{Description}:{transaction.Id}] Rollback OK ");
+                            throw new OperationCanceledException(transaction.CancellationToken);
                         } else {
                             WriteLog($"[{Description}:{transaction.Id}] Committing");
                             b.Mark($"[{Description}:{transaction.Id}] Begin Commit");
@@ -1660,7 +1683,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                             WriteLog($"[{Description}:{transaction.Id}] Commited OK ");
                         }
                         return retv;
-                    } catch (TaskCanceledException x) {
+                    } catch (OperationCanceledException) {
                         if (!transaction.IsRolledBack && !transaction.IsCommited) {
                             await transaction.RollbackAsync().ConfigureAwait(false);
                         }
@@ -1881,7 +1904,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
             await transaction.StepAsync().ConfigureAwait(false);
             bool retv = true;
 
-            if (!typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
+            if (transaction.RestorationMode || !typeof(ILegacyDataObject).IsAssignableFrom(typeof(T))) {
                 foreach (var item in rs) {
                     await SaveItemAsync(transaction, item).ConfigureAwait(false);
                 }
@@ -2619,7 +2642,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.MarkAsErrored(ex);
                 throw ex;
             }
-            if (input is ILegacyDataObject legacy) {
+            if (!transaction.RestorationMode && input is ILegacyDataObject legacy) {
                 return await SaveLegacyItemAsync(transaction, legacy).ConfigureAwait(false);
             }
 
@@ -2715,31 +2738,34 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private async Task<bool> SaveGenericItemAsync(BDadosTransaction transaction, IDataObject input) {
             var t = input.GetType();
-            var now = Fi.Tech.GetUtcTime();
-            if (input.CreatedAt == default(DateTime)) {
-                input.CreatedAt = now;
+            bool restoring = transaction.RestorationMode;
+            if (!restoring) {
+                var now = Fi.Tech.GetUtcTime();
+                if (input.CreatedAt == default(DateTime)) input.CreatedAt = now;
+                input.UpdatedAt = now;
             }
-            input.UpdatedAt = now;
 
             var initialId = input.Id;
-            var exists = !IsDefaultId(input.Id) && await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
-            EnsureApplicationGeneratedId(input);
+            var exists = restoring
+                ? transaction.RestorationBinding.ExistsWithoutCollision(await QueryAsync<ValueBox<object>>(transaction, transaction.RestorationBinding.Exists(input)).ConfigureAwait(false), input)
+                : !IsDefaultId(input.Id) && await ExistsByIdAsync(transaction, t, input.Id).ConfigureAwait(false);
+            if (!restoring) EnsureApplicationGeneratedId(input);
             transaction.AddMutateRollback(ReflectionTool.GetMember(t, FiTechBDadosExtensions.RidColumnNameOf[t]), input, initialId);
 
             try {
                 if (exists) {
-                    var query = Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
+                    var query = restoring ? transaction.RestorationBinding.Save(input, true) : Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
                     await ExecuteAsync(transaction, query).ConfigureAwait(false);
                 } else {
-                    var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
-                    if (ShouldApplyInsertReturningId(input, query)) {
+                    var query = restoring ? transaction.RestorationBinding.Save(input, false) : Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
+                    if (!restoring && ShouldApplyInsertReturningId(input, query)) {
                         await ApplyInsertReturningIdAsync(transaction, input, query).ConfigureAwait(false);
                     } else {
                         await ExecuteAsync(transaction, query).ConfigureAwait(false);
                     }
                 }
             } catch (Exception x) {
-                if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
+                if (!restoring && OnFailedSave != null && input is ILegacyDataObject legacyInput) {
                     Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray(), x);
@@ -2754,6 +2780,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw new BDadosException("Error Saving Item", x);
             }
 
+            if (restoring) {
+                await transaction.RestorationBinding.VerifyAsync(this, transaction, input).ConfigureAwait(false);
+                return true;
+            }
             if (IsDefaultId(input.Id)) {
                 await TryLoadLastInsertIdAsync(transaction, input).ConfigureAwait(false);
             }
@@ -2993,31 +3023,34 @@ namespace Figlotech.BDados.DataAccessAbstractions {
 
         private bool SaveGenericItem(BDadosTransaction transaction, IDataObject input) {
             var t = input.GetType();
-            var now = Fi.Tech.GetUtcTime();
-            if (input.CreatedAt == default(DateTime)) {
-                input.CreatedAt = now;
+            bool restoring = transaction.RestorationMode;
+            if (!restoring) {
+                var now = Fi.Tech.GetUtcTime();
+                if (input.CreatedAt == default(DateTime)) input.CreatedAt = now;
+                input.UpdatedAt = now;
             }
-            input.UpdatedAt = now;
 
             var initialId = input.Id;
-            var exists = !IsDefaultId(input.Id) && ExistsById(transaction, t, input.Id);
-            EnsureApplicationGeneratedId(input);
+            var exists = restoring
+                ? transaction.RestorationBinding.ExistsWithoutCollision(Query<ValueBox<object>>(transaction, transaction.RestorationBinding.Exists(input)), input)
+                : !IsDefaultId(input.Id) && ExistsById(transaction, t, input.Id);
+            if (!restoring) EnsureApplicationGeneratedId(input);
             transaction.AddMutateRollback(ReflectionTool.GetMember(t, FiTechBDadosExtensions.RidColumnNameOf[t]), input, initialId);
 
             try {
                 if (exists) {
-                    var query = Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
+                    var query = restoring ? transaction.RestorationBinding.Save(input, true) : Plugin.QueryGenerator.GenerateSingleObjectUpdateQuery(input);
                     Execute(transaction, query);
                 } else {
-                    var query = Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
-                    if (ShouldApplyInsertReturningId(input, query)) {
+                    var query = restoring ? transaction.RestorationBinding.Save(input, false) : Plugin.QueryGenerator.GenerateSingleInsertQuery(input);
+                    if (!restoring && ShouldApplyInsertReturningId(input, query)) {
                         ApplyInsertReturningId(transaction, input, query);
                     } else {
                         Execute(transaction, query);
                     }
                 }
             } catch (Exception x) {
-                if (OnFailedSave != null && input is ILegacyDataObject legacyInput) {
+                if (!restoring && OnFailedSave != null && input is ILegacyDataObject legacyInput) {
                     Fi.Tech.FireAndForget("RdbmsDataAcccessor OnFailedSave callback", async () => {
                         await Task.Yield();
                         OnFailedSave?.Invoke(input.GetType(), new List<ILegacyDataObject> { legacyInput }.ToArray(), x);
@@ -3032,6 +3065,10 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 throw new BDadosException("Error Saving Item", x);
             }
 
+            if (restoring) {
+                transaction.RestorationBinding.Verify(this, transaction, input);
+                return true;
+            }
             if (IsDefaultId(input.Id)) {
                 TryLoadLastInsertId(transaction, input);
             }
@@ -3061,7 +3098,7 @@ namespace Figlotech.BDados.DataAccessAbstractions {
                 transaction?.MarkAsErrored(ex);
                 throw ex;
             }
-            if (input is ILegacyDataObject legacy) {
+            if (!transaction.RestorationMode && input is ILegacyDataObject legacy) {
                 return SaveLegacyItem(transaction, legacy);
             }
 

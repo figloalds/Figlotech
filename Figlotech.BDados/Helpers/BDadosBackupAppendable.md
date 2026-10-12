@@ -9,16 +9,38 @@ seekable streams (also writable for creation/append). They never close caller st
 var backup = new BDadosBackup(accessor);
 Type[] tables = { typeof(Customer), typeof(Order) };
 await backup.BackupAppendableFileAsync(path, tables, cancellationToken);
-// Explicit application-selected cutoff, in the source database's time convention:
-await backup.AppendIncrementalFileAsync(path, tables, since, cancellationToken);
+// Resume from the cursor in the latest committed snapshot or increment:
+await backup.AppendIncrementalFileAsync(path, tables, cancellationToken);
 await backup.RestoreFileAsync(path, tables, cancellationToken);
 ```
+
+To create an archive through an `IFileSystem`, use
+`await backup.BackupAppendableFileAsync(fs, relativePath, tables, cancellationToken)`.
+This overload opens with `FileMode.CreateNew` and `FileAccess.ReadWrite` and disposes
+the returned stream. The provider must honor create-new semantics and return a
+readable, writable, seekable stream. Sharing depends on the provider; callers must
+ensure exclusive access throughout creation.
 
 `RestoreFileAsync` detects v1 versus v2. `RestoreAppendableAsync` restores v2
 streams and returns `BDadosBackupArchiveInfo`. `InspectAppendableAsync` validates
 v2 without accessing the database and returns `BlockCount`, `CommittedLength`,
-`IncompleteTailBytes` and `HasIncompleteTail`. Stream creation is
+`IncompleteTailBytes`, `HasIncompleteTail` and `Cursor`. Stream creation is
 `BackupAppendableAsync`; stream append is `AppendIncrementalAsync`.
+
+Every new snapshot and increment stores a UTC `Cursor` captured before exporting
+its rows. The overloads without `since` validate the archive and use the latest
+committed block's cursor as the next query cutoff, under the same exclusive lock
+used to append. Empty increments also save a cursor. Incomplete tails never advance
+it; explicit recovery resumes from the last committed block. Inspection and restore
+return that same cursor. A corrupt committed block is an error, not permission to
+fall back to an older cursor.
+
+The explicit `since` overload remains available for conservative overlapping
+cutoffs and source databases that do not use UTC timestamps:
+
+```csharp
+await backup.AppendIncrementalFileAsync(path, tables, since, cancellationToken);
+```
 
 Creation requires an empty stream; file creation uses `CreateNew` and never replaces
 an existing file. Failed initial creation may leave an unusable partial file; no
@@ -33,11 +55,13 @@ Restore merges by primary key and preserves timestamps. **Deletes are not record
 deleted source rows remain in the restored result. This is not CDC or a guaranteed
 point-in-time database replica. Backdated changes, unchanged/null timestamps,
 timestamp precision collisions and transactions committing after an application
-cutoff can be missed. The library does not advance an automatic watermark or claim
-a gap-free interval. The caller must choose conservative overlapping cutoffs and
-periodic full snapshots appropriate to its writers. Overlap is safe for ordinary
-upserts; it cannot recover missing deletes. The stored cutoff preserves ticks and
-DateTimeKind without timezone conversion and is descriptive, not a continuity proof.
+cutoff can be missed. The stored cursor is the export-start time, not the export-end
+time or a database commit watermark; exports can also include rows newer than it.
+Automatic continuation requires source timestamps in UTC and clocks consistent with
+the backup host. It does not claim a gap-free interval. Use explicit conservative
+overlapping cutoffs and periodic full snapshots appropriate to the writers when
+needed. Overlap is safe for ordinary upserts; it cannot recover missing deletes.
+Explicit query cutoffs are used without timezone conversion.
 
 The ordered table list and exact serialized schemas must match the base for every
 append; a model/schema change requires a new base file. Existing restore mappings
@@ -45,7 +69,7 @@ still support importing that fixed archived schema into a changed destination mo
 
 ## Binary format
 
-All numbers are little-endian. Offsets, lengths, sequence and cutoff ticks are signed
+All numbers are little-endian. Offsets, lengths, sequence and timestamp ticks are signed
 64-bit integers; kinds/versions are signed 32-bit; CRCs are unsigned 32-bit.
 CRC-32/ISO-HDLC uses reflected polynomial `0xEDB88320`, initial value and final XOR
 `0xFFFFFFFF` (check vector `123456789` = `CBF43926`). SHA-256 is retained inside v1
@@ -73,8 +97,8 @@ The immutable prefix occupies 48 bytes:
 | 12 | Version = 2 |
 | 16 | Sequence, starting at 0 |
 | 24 | Absolute previous trailer offset; -1 for the base |
-| 32 | Explicit cutoff ticks, zero for base |
-| 40 | Cutoff DateTimeKind (0..2), zero for base |
+| 32 | Export-start cursor ticks, for both snapshots and increments |
+| 40 | Cursor DateTimeKind = UTC (1) |
 | 44 | CRC of prefix bytes 0..43 |
 
 The 24-byte seal at block offset 48 is initially all zero. After streaming the
@@ -124,7 +148,7 @@ file before retrying. A complete valid trailer may already represent a committed
 append even if the call threw. Replaying a delta normally merges the same keys but
 creates another checkpoint; callers must not infer "nothing happened" from an error.
 
-File APIs hold `FileShare.None` from validation through final flush/restore. Calls
+Local-path file APIs hold `FileShare.None` from validation through final flush/restore. Calls
 through these APIs on the same Stream object serialize via a per-stream gate;
 different wrappers/handles require caller coordination. The caller must prohibit
 external writes, seeks, disposal and concurrent use of the accessor throughout a

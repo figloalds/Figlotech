@@ -48,6 +48,12 @@ namespace Figlotech.BDados.MySqlDataAccessor {
             return new MySqlConnection(Config.GetConnectionString());
         }
 
+        public void DiscardConnection(IDbConnection connection) {
+            ArgumentNullException.ThrowIfNull(connection);
+            if (connection is MySqlConnection mysql) MySqlConnection.ClearPool(mysql);
+            connection.Close();
+        }
+
         public string ConnectionString {
             get => Config.GetConnectionString();
         }

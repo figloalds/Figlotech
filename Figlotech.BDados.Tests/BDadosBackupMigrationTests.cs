@@ -15,7 +15,7 @@ namespace Figlotech.BDados.Tests {
     public class BDadosBackupMigrationTests {
         [Fact]
         public void OlderRowsMapRenamesSkipDeletedColumnsAndRetainNewDefaults() {
-            var old = new OldCustomer { Id = 45, Name = "customer", Deleted = new byte[] { 1, 2, 3 }, Count = 72, Optional = null };
+            var old = new OldCustomer { Id = 45, Name = "customer", Deleted = new byte[] { 1, 2, 3 }, Count = 72, Optional = 99 };
             var schema = BDadosBackup.CreateSchema<OldCustomer>();
             var bytes = BDadosBackup.Export(old, schema);
             var current = BDadosBackup.Import<Customer>(BDadosBackupSchema.Deserialize(schema.Serialize()), bytes);
@@ -28,6 +28,8 @@ namespace Figlotech.BDados.Tests {
             old.Optional = 32;
             current = BDadosBackup.Import<Customer>(schema, BDadosBackup.Export(old, schema));
             Assert.Equal(32, current.Optional);
+            old.Optional = null;
+            Assert.Throws<InvalidDataException>(() => BDadosBackup.Import<Customer>(schema, BDadosBackup.Export(old, schema)));
         }
 
         [Fact]
@@ -130,7 +132,7 @@ namespace Figlotech.BDados.Tests {
         public async Task OldTableNamesRestoreAndDeliberatelyRemovedTablesCanBeSkipped() {
             var source = AccessorProxy.Create();
             source.Rows[typeof(OtherRow)] = new IDataObject[] { new OtherRow { Id = 1, Text = "removed table" } };
-            source.Rows[typeof(OldCustomer)] = new IDataObject[] { new OldCustomer { Id = 42, Name = "kept" } };
+            source.Rows[typeof(OldCustomer)] = new IDataObject[] { new OldCustomer { Id = 42, Name = "kept", Optional = 99 } };
             using var output = new ForwardStream(false);
             await new BDadosBackup(source.Accessor).BackupAsync(output, new[] { typeof(OtherRow), typeof(OldCustomer) });
             byte[] bytes = output.Bytes;
@@ -173,7 +175,7 @@ namespace Figlotech.BDados.Tests {
             command.CommandText = "CREATE TABLE Customer (Id INTEGER PRIMARY KEY, DisplayName TEXT, Count INTEGER, Optional INTEGER NOT NULL, Added INTEGER NOT NULL, NewText TEXT)";
             await command.ExecuteNonQueryAsync();
             var source = AccessorProxy.Create();
-            source.Rows[typeof(OldCustomer)] = new IDataObject[] { new OldCustomer { Id = 89, Name = "migrated", Count = 123, Optional = null } };
+            source.Rows[typeof(OldCustomer)] = new IDataObject[] { new OldCustomer { Id = 89, Name = "migrated", Count = 123, Optional = 99 } };
             using var output = new ForwardStream(false);
             await new BDadosBackup(source.Accessor).BackupAsync(output, new[] { typeof(OldCustomer) });
             using var target = new RdbmsDataAccessor(new SharedSqlitePlugin(connectionString));
@@ -190,7 +192,7 @@ namespace Figlotech.BDados.Tests {
         public void DestinationGeneratorUsesCurrentModelAndClrValues(string engine) {
             var schema = BDadosBackup.CreateSchema<OldCustomer>();
             schema.Columns.Single(c => c.Name == "Name").DatabaseType = "MYSQL_SPECIFIC_TYPE";
-            var restored = BDadosBackup.Import<Customer>(schema, BDadosBackup.Export(new OldCustomer { Id = 42, Count = uint.MaxValue }, schema));
+            var restored = BDadosBackup.Import<Customer>(schema, BDadosBackup.Export(new OldCustomer { Id = 42, Count = uint.MaxValue, Optional = 99 }, schema));
             IQueryGenerator generator = engine switch {
                 "MySQL" => new MySqlQueryGenerator(),
                 "PostgreSQL" => new PgSQLQueryGenerator(),

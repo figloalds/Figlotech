@@ -430,6 +430,10 @@ namespace Figlotech.BDados.Tests {
             public Action? AfterSaveBatch { get; set; }
             public IQueryGenerator QueryGenerator { get; set; } = new SqliteQueryGenerator();
             public List<string> ExecutedCommands { get; } = new();
+            public List<IQueryBuilder> ExecutedQueries { get; } = new();
+            public long PreviousForeignKeys { get; set; } = 1;
+            public string PreviousSqlMode { get; set; } = "STRICT_TRANS_TABLES";
+            public string StorageEngine { get; set; } = "InnoDB";
             public Func<string, Exception?>? ExecuteFailure { get; set; }
             public static AccessorProxy Create() => (AccessorProxy)(object)DispatchProxy.Create<IRdbmsDataAccessor, AccessorProxy>();
 
@@ -447,9 +451,13 @@ namespace Figlotech.BDados.Tests {
                             .MakeGenericMethod(type).Invoke(null, new object[] { Rows[type] });
                     case "get_QueryGenerator":
                         return QueryGenerator;
+                    case "QueryAsync":
+                        return typeof(AccessorProxy).GetMethod(nameof(QueryResult), BindingFlags.Instance | BindingFlags.NonPublic)!
+                            .MakeGenericMethod(targetMethod.GetGenericArguments()[0]).Invoke(this, new object[] { ((IQueryBuilder)args![1]!).GetCommandText() });
                     case "ExecuteAsync":
                         var command = ((IQueryBuilder)args![1]!).GetCommandText();
                         ExecutedCommands.Add(command);
+                        ExecutedQueries.Add((IQueryBuilder)args[1]!);
                         var failure = ExecuteFailure?.Invoke(command);
                         if (failure != null) return Task.FromException<int>(failure);
                         return Task.FromResult(0);
@@ -481,6 +489,19 @@ namespace Figlotech.BDados.Tests {
             private static async IAsyncEnumerable<T> Enumerate<T>(IDataObject[] rows) {
                 await Task.Yield();
                 foreach (var row in rows) yield return (T)row;
+            }
+
+            private Task<List<T>> QueryResult<T>(string sql) where T : new() {
+                var rows = new List<T>();
+                if (typeof(T) == typeof(Figlotech.Core.ValueBox<long>)) rows.Add((T)(object)new Figlotech.Core.ValueBox<long> { Value = 0 });
+                if (typeof(T) == typeof(Figlotech.Core.ValueBox<string>)) rows.Add((T)(object)new Figlotech.Core.ValueBox<string> { Value = StorageEngine });
+                if (sql.Contains("@@SESSION.foreign_key_checks")) {
+                    var state = new T();
+                    typeof(T).GetProperty("ForeignKeys")!.SetValue(state, PreviousForeignKeys);
+                    typeof(T).GetProperty("SqlMode")!.SetValue(state, PreviousSqlMode);
+                    rows.Add(state);
+                }
+                return Task.FromResult(rows);
             }
         }
 

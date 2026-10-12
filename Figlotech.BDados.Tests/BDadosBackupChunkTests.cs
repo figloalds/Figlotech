@@ -147,7 +147,7 @@ namespace Figlotech.BDados.Tests {
         }
 
         [Fact]
-        public async Task LegacyModelsUseBulkSaveAndPreserveRestoredTimestampsInSqlite() {
+        public async Task LegacyModelsUseTypedSaveAndPreserveRestoredTimestampsInSqlite() {
             string connectionString = $"Data Source=bulk-restore-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
             await using var keeper = new SqliteConnection(connectionString);
             await keeper.OpenAsync();
@@ -161,7 +161,7 @@ namespace Figlotech.BDados.Tests {
             }).ToArray();
             using var output = new ForwardStream(false);
             await new BDadosBackup(source.Accessor).BackupAsync(output, new[] { typeof(LegacyRow) });
-            // Verify the restore binding passes the concrete legacy type and sync flag to the bulk API.
+            // Verify the restore binding passes the concrete legacy type and sync flag to the list API.
             var proxy = AccessorProxy.Create();
             using var proxyInput = new ForwardStream(true, output.Bytes);
             await new BDadosBackup(proxy.Accessor).RestoreAsync(proxyInput, new[] { typeof(LegacyRow) });

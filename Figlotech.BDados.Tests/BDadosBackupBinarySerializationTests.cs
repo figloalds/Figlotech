@@ -30,7 +30,7 @@ namespace Figlotech.BDados.Tests {
             bytes = BDadosBackup.Export(new Scalar<FixedValue?>(), schema);
             Assert.Equal(new byte[] { 0 }, bytes);
             Assert.Null(BDadosBackup.Import<Scalar<FixedValue?>>(schema, bytes).Value);
-            Assert.Equal(0, BDadosBackup.Import<Scalar<FixedValue>>(schema, bytes).Value.Number);
+            Assert.Throws<InvalidDataException>(() => BDadosBackup.Import<Scalar<FixedValue>>(schema, bytes));
         }
 
         [Fact]

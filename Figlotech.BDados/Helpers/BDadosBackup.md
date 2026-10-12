@@ -21,6 +21,14 @@ Customer copy = BDadosBackup.Import<Customer>(storedSchema, rowBytes);
 var tables = new[] { typeof(Customer), typeof(Order) };
 await new BDadosBackup(sourceAccessor).BackupAsync(outputStream, tables, cancellationToken);
 await new BDadosBackup(targetAccessor).RestoreAsync(inputStream, tables, cancellationToken);
+
+// Publish a completed, flushed archive through a sibling temporary file.
+await new BDadosBackup(sourceAccessor).BackupFileAsync("backup.fgb", tables, cancellationToken);
+
+// Prefer an explicit recovery policy and inspect the report after commit.
+var restorer = new BDadosBackup(targetAccessor, new BDadosBackupOptions { RequireEmptyTables = true });
+restorer.Options.IgnoredTables.Add("IntentionallyRemovedTable");
+BDadosBackupRestoreReport report = await restorer.RestoreWithReportAsync(inputStream, tables, cancellationToken);
 ```
 
 Restore saves batches of 1,000 rows per table by default. Configure the options after
@@ -39,7 +47,12 @@ Each backup instance creates its own default options when none are supplied. A s
 options instance is retained. `RestoreChunkSize` must be positive and is read once when
 restore starts; changes during restoration apply to the next operation. A final partial
 batch is saved at each table boundary; empty or skipped tables do not issue saves.
-All batches remain in the same restore transaction.
+All batches remain in the same restore transaction. `RestoreChunkBytes` additionally limits
+each batch to 16 MiB of encoded rows by default; a single larger row can occupy its own batch.
+Decoded objects can be larger than their encoded representation. Duplicate keys are tracked
+across batches per table, with limits of `MaxTrackedKeys = 1_000_000` and
+`MaxTrackedKeyBytes = 64 MiB` (an estimate including key payloads and entry overhead).
+Exceeding either limit fails and rolls back; increase the configured limits for larger tables.
 
 ## Timestamp incrementals
 
@@ -69,8 +82,11 @@ require these timestamp mappings.
 The cutoff is passed unchanged, including its Kind and precision; use the source database's
 time convention. This method exports current rows created or updated since a cutoff; it does
 not track deletions, record the cutoff in the archive, or manage backup chains/watermarks.
-Keep that bookkeeping alongside the archive. Restore uses the existing save behavior described
-below, including its identity and timestamp policies.
+Keep that bookkeeping alongside the archive. This is a changed-row export, not a complete
+point-in-time recovery chain. Strict timestamp cutoffs can miss equal timestamps and
+late-committing changes. A reliable chain needs commit-aware watermarks/change tracking and
+deletion records outside this API; do not advance a watermark to the backup completion time.
+Restore preserves the archived identities and timestamps as described below.
 
 The schema stores ordered column names, wire types, CLR nullability, enum identity, and
 mapping metadata (database type, size, precision, nullability, keys, uniqueness, unsignedness,
@@ -126,9 +142,13 @@ the schema, so row processing does not repeatedly discover it. Fixed length must
 and every emitted payload must have that exact size; zero-byte payloads are allowed.
 
 Custom columns store `BinaryType` (the CLR full name) and `FixedLength` (null for variable-length).
-Restoration requires matching custom type identity and length metadata on the caller's model;
+Restoration requires matching custom type identity (or a retained `[BackupAlias]` containing
+its old full CLR name) and length metadata on the caller's model;
 custom values are not automatically converted to strings, byte arrays or other custom types.
-Keep the custom payload representation stable across versions. Removed columns can still be
+Keep the custom payload representation stable across versions. Aliases do not convert binary
+layouts: changing a payload requires a version tag inside the payload and a `FromBytes` reader
+that understands every historical version. Equal payload sizes cannot prove semantic compatibility.
+Removed columns can still be
 skipped using only the archive metadata, without constructing or resolving the old custom type.
 
 ## Archive and schema versions
@@ -189,22 +209,57 @@ header and 64 MiB per row; constructor arguments can override these. Readers val
 before allocating payload buffers and handle short reads. The supplied streams need only
 support asynchronous reading or writing. They remain open; flushing the destination is the
 caller's responsibility. Failed exports leave incomplete archives that cannot be restored.
+`BackupFileAsync` supplies an optional file workflow: write a unique sibling temporary file,
+flush it to disk, close it, then move it to the requested path. It does not overwrite an existing
+file unless `overwrite: true`; failed writes leave the previous file intact. Filesystem rename
+and crash-durability guarantees depend on the destination filesystem/storage service.
 
 Each operation uses one accessor transaction with Serializable isolation by default; an
 optional isolation argument allows provider-specific choices. Backup fetches all rows
 without the accessor's default query limit. Restore binds reflected members once per table,
 then deserializes and saves batches through `SaveListAsync<T>` using the concrete destination
-model type. The accessor may further divide batches to meet provider limits; its current
-non-legacy model implementation saves each item internally. Length/count/checksum failures,
+model type. An internal `BDadosTransaction.RestorationMode` routes legacy and generic objects
+through the existing generic save methods, preserving keys, CreatedAt and UpdatedAt. A small
+shared SQL binding supplies exactly the mapped/defaulted columns and bypasses ordinary
+identity generation, RID reconciliation, NoUpdate policies and application save notifications.
+The backup transaction likewise bypasses OnAfterLoad hooks. Ordinary accessor operations
+outside these modes retain their existing behavior.
+
+Restore reads each saved row back and checks supplied values, detecting database rounding,
+truncation and immediate trigger changes. It also rejects key collisions caused by changed
+database equality/collations instead of silently merging different keys. This currently uses
+an existence query, a write, and a verification query per row; restoration prioritizes
+correctness over the legacy bulk-save throughput. Transaction callbacks, rollback object lists,
+command history and per-row benchmark history do not retain transferred objects. The bounded
+identity index retains keys only. Length/count/checksum failures,
 truncation, cancellation, and failed saves abort restoration through the accessor transaction.
-Providers must support transactions for database rollback guarantees.
+Providers must support transactions for database rollback guarantees. Cancellation does not
+cancel rollback or MySQL session cleanup. If MySQL session cleanup itself fails, the plugin
+clears the affected connection pool and closes the unsafe connection. Only providers explicitly implementing the backup
+dialect/identifier contract can restore; SQLite, PostgreSQL and MySQL are supported. MySQL
+source and destination tables must use InnoDB.
 
 Create destination tables before restoring. Supply backup types in foreign-key dependency
 order when constraints require it; that order is preserved in the archive. Registration order
 on restore is irrelevant. Create/update the destination DDL using its current models and
 provider before restoring. The backup's database type, size, precision and other DDL metadata
-are descriptive; they are not imposed on the destination engine. Cyclic foreign-key handling
-is provider-dependent.
+are descriptive; they are not imposed on the destination engine. Restore never creates or
+clears tables. By default it merges by the preserved primary key and leaves unrelated rows
+in place; set `RequireEmptyTables = true` for recovery into empty tables. Restores should run
+against an isolated destination with application writers stopped.
+
+Each model must have one persisted primary key supplied by the archive. Missing keys,
+duplicate keys (even across batches), and custom binary primary keys are rejected. Keys are
+never synthesized from constructors or application generators. `RestoreWithReportAsync`
+returns source/destination tables, skipped tables, ignored/defaulted columns, rows read and
+rows restored/merged only after successful completion. The archive format is unchanged.
+
+SQLite uses transaction-scoped `PRAGMA defer_foreign_keys = ON` and runs
+`pragma_foreign_key_check` before committing, even when connection-level enforcement was off.
+MySQL saves and restores both foreign_key_checks and sql_mode, enables strict conversion and
+NO_AUTO_VALUE_ON_ZERO during restoration, and validates actual affected foreign keys before
+commit. Validation includes composite keys. MySQL and SQLite database triggers still run;
+triggers with external effects or changes to other rows need an explicit recovery policy.
 
 ### PostgreSQL foreign-key checks during restore
 
@@ -224,8 +279,13 @@ GRANT SET ON PARAMETER session_replication_role TO restore_user;
 Database/table ownership alone is insufficient. A missing privilege produces SQLSTATE
 `42501`; inspect the inner exception of `BDadosException` for the original PostgreSQL error.
 The replica setting also suppresses ordinary triggers/rules, not just foreign keys, and
-restoring the setting does not retroactively validate the imported relationships. Ensure the
-archive and destination data are consistent, including tables omitted from the restore.
+restoring the setting does not retroactively validate the imported relationships. BDadosBackup
+therefore explicitly checks actual foreign-key constraints involving restored tables before
+commit, including composite MATCH FULL constraints and references to omitted tables. Restored
+tables are locked against concurrent writes. Ascending SERIAL/IDENTITY sequences are advanced
+without moving them backward, using transactional ALTER SEQUENCE RESTART; sequence privileges
+are also required. Descending or exhausted sequences fail explicitly. Restore supports
+GENERATED ALWAYS identities through OVERRIDING SYSTEM VALUE.
 
 References: [PostgreSQL SET](https://www.postgresql.org/docs/current/sql-set.html),
 [session_replication_role](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-SESSION-REPLICATION-ROLE),
@@ -240,19 +300,26 @@ and convert into the current model. The existing version 1 archive format is unc
   destination class or member maps renamed tables and columns, consistent with the structure
   checker. Current names take priority if an archive contains both current and historical
   column names. Ambiguous names/aliases fail rather than depending on reflection order.
+  Add repeatable `[BackupAlias("OlderName")]` attributes to retain all historical names without
+  changing the DDL checker's OldName behavior. Two historical source columns targeting one
+  destination member fail when no current-name match disambiguates them.
 - Removed columns are consumed using their byte lengths without assigning them. Added columns
   use the current model's explicitly specified `[Field(DefaultValue = ...)]`, taking precedence
-  over constructor/property initializers. When no default is specified, the initializer is
-  retained. This includes newly required fields, inherited attributes and public fields.
+  over constructor/property initializers. Standalone Import retains initializers when no
+  attribute default is specified. Database restoration instead omits those absent columns
+  from INSERT/UPDATE: database defaults (including SQL expressions) apply on insert, and
+  existing values remain unchanged on merge. A CLR initializer is not a database default.
+  Newly required columns need an explicit Field default or an actual destination SQL default.
   Defaults are read and converted once per table from the destination class; they are not
   serialized into the backup schema. Explicit null defaults apply to reference/nullable types.
   Defaults never replace a value already supplied by the archive, including nulls and values
   mapped through `[OldName]`. Invalid or unconvertible defaults fail before database writes,
   naming the affected member. No DDL or SQL-expression evaluation is attempted: defaults must
   be literal values convertible to the CLR member type, not expressions such as CURRENT_TIMESTAMP.
-- Nullable/non-nullable changes are accepted. Old non-null values are converted normally;
-  old nulls assigned to non-nullable value types retain the constructor/initializer default.
-  Old nulls assigned to reference/nullable types remain null.
+- Old non-null values can be restored into nullable or non-nullable members. An archived
+  NULL remains distinct from an absent column: NULL-to-non-nullable value types fails, and
+  reference/nullable values remain NULL subject to the database's NOT NULL constraint.
+  A default never replaces a supplied NULL; an explicit data migration is required.
 - Enum type and namespace renames are accepted. Numeric values, including undefined values
   and flags, are retained with checked conversion to the destination underlying integer type.
   Enum member renumbering is a semantic migration and cannot be inferred from these archives.
@@ -266,41 +333,31 @@ and convert into the current model. The existing version 1 archive format is unc
   an explicit offset. Binary arrays are not guessed to be strings or GUIDs.
 - Newly added tables in the destination do not need to exist in the backup. Unknown archive
   tables fail by default to catch incomplete registration. To deliberately omit removed
-  tables, pass `ignoreMissingTables: true`; their bytes, row counts and checksums are still read
+  tables, prefer `Options.IgnoredTables`. The broader `ignoreMissingTables: true` remains available;
+  their bytes, row counts and checksums are still read
   and checked, without saving those rows.
 
 ```csharp
-[OldName("CustomerV1")]
+[OldName("CustomerV2"), BackupAlias("CustomerV1")]
 public class Customer : BaseDataObject<long> {
     [Field, PrimaryKey] public override long Id { get; set; }
     [Field, OldName("Name")] public string DisplayName { get; set; }
     [Field(DefaultValue = 10)] public int NewlyRequiredValue { get; set; }
 }
 
-await new BDadosBackup(targetAccessor).RestoreAsync(
-    inputStream, currentModelTypes, cancellationToken, ignoreMissingTables: true);
+await new BDadosBackup(targetAccessor).RestoreAsync(inputStream, currentModelTypes, cancellationToken);
 ```
 
-`OldNameAttribute` records one historical name. Several consecutive renames cannot be
-inferred if the oldest backup name is absent from the destination's name/alias. Unrelated
+`OldNameAttribute` records one historical name. Keep permanent BackupAlias entries for earlier
+names, and do not reuse a historical table/column name for unrelated data. Unrelated
 semantic changes (such as a changed unit of measure or a replacement key scheme) also need
 an explicit application migration rather than automatic conversion.
 
 ## Engine migration considerations
 
-Restore follows normal accessor save policies: it does not clear existing rows, force
-auto-increment IDs, or bypass `[NoUpdate]` and other persistence policies. Use reliable IDs
-or application-generated keys where relationships must survive provider identity generation.
-Legacy objects are marked `IsReceivedFromSync` to preserve their update timestamp; generic
-`IDataObject` saves still apply the accessor's normal timestamp behavior. The standalone
-`Export`/`Import` codec preserves all supported mapped values exactly when their types and
-nullability have not changed.
-
-In particular, the MySQL and PostgreSQL insert generators omit database-generated primary
-keys unless the model implements `IApplicationGeneratedId<TId>`. Do not assume numeric IDs
-will remain equal after migration; preserve relations through reliable/application-generated
-keys or handle remapping explicitly. For explicitly inserted sequence-backed keys, reseed the
-destination sequence as part of the DDL migration before normal inserts resume.
+Restore preserves numeric IDs without requiring IApplicationGeneratedId. SQLite and InnoDB
+advance counters on explicit inserts; PostgreSQL sequences are synchronized before commit.
+Application save methods retain their ordinary identity policies outside RestorationMode.
 
 Temporal SQL column types, time zones, constraints, collations, timestamp precision and
 provider parameter support remain destination concerns. The codec does not change a
@@ -308,4 +365,29 @@ DateTime's Kind or invent a time zone. PostgreSQL's existing parameter adapter a
 Int32-backed enums and formats UInt64 values as strings; using other enum backings or unsigned
 numeric columns there can require an adapter/model migration, even though the binary codec
 can represent those values. These restore compatibility changes do not alter global provider
-save behavior.
+save behavior. Stored DateTime ticks are compared during readback; SQL engines generally do
+not retain DateTime.Kind. DateTimeOffset offsets must survive exactly. Compatible DDL also
+means no incompatible precision/length reductions, new uniqueness collisions, invalid foreign
+keys, generated-column conflicts, or changed enum/unit meanings. Readback verifies each row's
+supplied fields immediately; it does not validate arbitrary application semantics or subsequent
+cross-row trigger effects. Defaults omitted from the archive are supplied by the destination.
+
+## Compatibility and verification
+
+Unknown tables now fail by default, supplied NULLs are no longer replaced with CLR defaults,
+and constructor-only defaults do not override database defaults. Rebuild callers to pick up
+the new optional-argument default for ignoreMissingTables; previously compiled calls can
+still explicitly pass the old value. Prefer explicit options for recovery procedures.
+
+Run `dotnet test Figlotech.BDados.Tests/Figlotech.BDados.Tests.csproj --filter FullyQualifiedName~BDadosBackup`.
+The suite includes SQLite integration, independent v1 framing tests, and a checked-in v2
+archive produced by commit `51600ff5f06476e165b1c9bcf8ca6d504b481389` before these fixes
+(`Fixtures/BDadosBackup/v2-row.fgb`, SHA-256
+`6A5CAF2E12BD2A4F9ECD7AF0E340BCC3EF36E0B2A51391D193B70DE51AF74B91`). Do not regenerate historical
+fixtures with the current writer. Add released archives to the corpus when formats evolve.
+
+Set FIGLOTECH_TEST_POSTGRES or FIGLOTECH_TEST_MYSQL to test-server connection strings to run
+provider integration tests. Those tests create and remove uniquely named PostgreSQL schemas
+or MySQL databases; use isolated servers with the necessary creation/restore privileges.
+Without those settings, the corresponding tests are explicitly skipped. Periodic recovery
+drills against representative production-sized backups remain an operational requirement.
