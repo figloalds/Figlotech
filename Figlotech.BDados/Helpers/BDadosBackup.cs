@@ -16,11 +16,11 @@ using Figlotech.Data;
 
 namespace Figlotech.BDados.Helpers {
     /// <summary>
-    /// Versioned binary backups of explicitly selected BDados models. Streams remain open and need
-    /// only support asynchronous writing (backup) or reading (restore), never seeking.
+    /// Versioned binary backups of explicitly selected BDados models. Caller streams remain open.
+    /// Legacy APIs support forward-only streams; appendable container APIs require seeking.
     /// Restore uses SaveListAsync in one transaction; normal accessor identity/persistence policies apply.
     /// </summary>
-    public sealed class BDadosBackup {
+    public sealed partial class BDadosBackup {
         private static readonly byte[] Magic = "FGBACKUP"u8.ToArray();
         private static readonly byte[] EndMagic = "FGBEND01"u8.ToArray();
         private static readonly MethodInfo FetchMethod = typeof(BDadosBackup).GetMethod(nameof(FetchRowsAsync), BindingFlags.NonPublic | BindingFlags.Instance);
@@ -131,6 +131,13 @@ namespace Figlotech.BDados.Helpers {
         /// </summary>
         public async Task RestoreAsync(Stream source, IEnumerable<Type> tableTypes, CancellationToken cancellationToken = default,
             IsolationLevel isolationLevel = IsolationLevel.Serializable, bool ignoreMissingTables = true) {
+            await RestoreCoreAsync(source, tableTypes, cancellationToken, isolationLevel, ignoreMissingTables,
+                null, false, false);
+        }
+
+        private async Task RestoreCoreAsync(Stream source, IEnumerable<Type> tableTypes,
+            CancellationToken cancellationToken, IsolationLevel isolationLevel, bool ignoreMissingTables,
+            BDadosTransaction sharedTransaction, bool useSharedTransaction, bool requireEmpty) {
             ArgumentNullException.ThrowIfNull(source);
             if (!source.CanRead) throw new ArgumentException("The backup stream must be readable.", nameof(source));
             cancellationToken.ThrowIfCancellationRequested();
@@ -166,7 +173,7 @@ namespace Figlotech.BDados.Helpers {
                 saveChunks[i] = SaveChunkMethod.MakeGenericMethod(type)
                     .CreateDelegate<Func<BDadosTransaction, List<IDataObject>, Task<bool>>>(this);
             }
-            await _accessor.AccessAsync(async transaction => {
+            async ValueTask RestoreTransactionAsync(BDadosTransaction transaction) {
                 var generator = _accessor.QueryGenerator;
                 var transactionScopedDisable = generator.DisableForeignKeysUntilTransactionEnd();
                 await _accessor.ExecuteAsync(transaction, transactionScopedDisable ?? generator.DisableForeignKeys());
@@ -222,7 +229,9 @@ namespace Figlotech.BDados.Helpers {
                         await _accessor.ExecuteAsync(transaction, generator.EnableForeignKeys());
                     }
                 }
-            }, cancellationToken, isolationLevel);
+            }
+            if (useSharedTransaction) await RestoreTransactionAsync(sharedTransaction);
+            else await _accessor.AccessAsync(RestoreTransactionAsync, cancellationToken, isolationLevel);
             cancellationToken.ThrowIfCancellationRequested();
         }
 
