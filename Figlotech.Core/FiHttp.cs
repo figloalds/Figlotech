@@ -18,14 +18,6 @@ using System.Threading.Tasks;
 
 namespace Figlotech.Core {
 
-    public sealed class FiHttpRequestLogging {
-        public IFileSystem FileSystem { get; set; }
-        public string RelativePath { get; set; }
-
-        public bool IncludeRequestHeaders { get; set; }
-        public bool IncludeResponseHeaders { get; set; }
-    }
-
     public sealed class FiHttpResult : IDisposable {
         public HttpStatusCode StatusCode { get; set; }
         public String StatusDescription { get; set; }
@@ -79,7 +71,25 @@ namespace Figlotech.Core {
             } finally {
                 retv.RequestStopwatch?.Stop();
             }
+            await retv.WriteLog(httpRequestMessage).ConfigureAwait(false);
             return retv;
+        }
+
+        /// <summary>Also logs failures without a response (timeout, connection error), which support usually asks for.</summary>
+        async Task WriteLog(HttpRequestMessage req) {
+            if (Caller?.Logging == null) {
+                return;
+            }
+            try {
+                var requestBody = RequestBody as string;
+                if (requestBody == null && req.Content != null) {
+                    requestBody = await req.Content.ReadAsStringAsync().ConfigureAwait(false);
+                }
+                var responseBody = Response != null ? await AsString().ConfigureAwait(false) : null;
+                await Caller.Logging.WriteAsync(req, requestBody, Response, responseBody, Elapsed, Exception).ConfigureAwait(false);
+            } catch (Exception x) {
+                Fi.Tech.SwallowException(x);
+            }
         }
 
         async Task Init(HttpRequestMessage req, HttpWebResponse resp) {
@@ -97,19 +107,6 @@ namespace Figlotech.Core {
             await Init(req, response).ConfigureAwait(false);
         }
 
-        object ToMaybeJsonDynamic(string input) {
-            try {
-                return JsonConvert.DeserializeObject(input);
-            } catch {
-                return input;
-            }
-        }
-
-        static readonly JsonSerializerSettings LoggerSerializerSettings = new JsonSerializerSettings {
-            NullValueHandling = NullValueHandling.Ignore,
-            Formatting = Formatting.Indented,
-        };
-
         async Task Init(HttpRequestMessage req, HttpResponseMessage resp) {
             if (resp == null) {
                 StatusCode = 0;
@@ -120,29 +117,6 @@ namespace Figlotech.Core {
             StatusDescription = resp.ReasonPhrase;
             ContentType = resp.Content.Headers.ContentType?.MediaType;
             ContentLength = resp.Content.Headers.ContentLength ?? 0;
-
-            if (this.Caller.Logging != null) {
-                try {
-                    var postData = req.Content != null ? ToMaybeJsonDynamic(await req.Content.ReadAsStringAsync().ConfigureAwait(false)) : null;
-                    var respData = ToMaybeJsonDynamic(await this.AsString().ConfigureAwait(false));
-
-                    await this.Caller.Logging.FileSystem.WriteAllTextAsync(
-                        $"{this.Caller.Logging.RelativePath}/{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:HHmmssfff}{IntEx.GenerateShortRid()}-{(int)StatusCode}-{this.Response.RequestMessage.Method}-{this.Response.RequestMessage.RequestUri.PathAndQuery.Replace("/", "-").RegExReplace("\\W", "-")}.json",
-                        JsonConvert.SerializeObject(new {
-                            Method = Response.RequestMessage.Method.ToString(),
-                            Uri = Response.RequestMessage.RequestUri.ToString(),
-                            StatusCode = (int)StatusCode,
-                            ElapsedMilliseconds = Elapsed.TotalMilliseconds,
-                            RequestHeaders = Caller.Logging.IncludeRequestHeaders ? Response.RequestMessage.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
-                            ResponseHeaders = Caller.Logging.IncludeResponseHeaders ? Response.Headers.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault()) : null,
-                            RequestBody = postData,
-                            ResponseBody = respData
-                        }, LoggerSerializerSettings)
-                    ).ConfigureAwait(false);
-                } catch (Exception x) {
-                    Fi.Tech.SwallowException(x);
-                }
-            }
 
             RequestBody = req.Content != null ? await req.Content.ReadAsStringAsync().ConfigureAwait(false) : null;
             ResponseBody = await AsString().ConfigureAwait(false);
